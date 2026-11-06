@@ -227,7 +227,7 @@ class MainActivity : Activity(), fr.prisme.tv.nat.NativeUi.Host {
         @JavascriptInterface fun setTyping(on: Boolean) { typing = on }
 
         // Interface native (films et séries)
-        @JavascriptInterface fun nativeOk(): Boolean = true
+        @JavascriptInterface fun nativeOk(): Boolean = !nat.dead
         @JavascriptInterface fun nativeShow(tab: String) = main.post { nat.show(tab) }
         @JavascriptInterface fun nativeOpen(id: String) = main.post { nat.openDetail(id, true) }
         @JavascriptInterface fun nativeHide() = main.post { nat.toWeb() }

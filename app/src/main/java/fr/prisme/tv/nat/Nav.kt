@@ -98,6 +98,12 @@ abstract class Screen(val ui: NativeUi) : FrameLayout(ui.ctx) {
 
     fun line(): Line? = lines.getOrNull(li)
 
+    /** Tâche différée protégée (une erreur désactive l'interface native au lieu de fermer l'appli) */
+    fun later(delay: Long = 0, f: () -> Unit) {
+        val r = Runnable { ui.safe(javaClass.simpleName) { f() } }
+        if (delay > 0) postDelayed(r, delay) else post(r)
+    }
+
     fun key(code: Int): Boolean {
         val L = line() ?: return false
         if (L.count == 0) { val n = nextLine(li, 1); if (n >= 0) { go(n); return true } }
@@ -210,7 +216,8 @@ class RowSection(ctx: android.content.Context, title: String, small: String? = n
     }
 
     fun add(v: View, gap: Float = 26f) {
-        val lp = LayoutParams(K.WRAP, K.WRAP)
+        val old = v.layoutParams as? ViewGroup.LayoutParams
+        val lp = if (old != null) LayoutParams(old.width, old.height) else LayoutParams(K.WRAP, K.WRAP)
         if (inner.childCount > 0) lp.leftMargin = K.px(gap)
         inner.addView(v, lp)
     }

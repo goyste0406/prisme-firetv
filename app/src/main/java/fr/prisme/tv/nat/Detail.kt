@@ -28,7 +28,7 @@ class DetailScreen(ui: NativeUi, val itemId: String, val fromWeb: Boolean) : Scr
     private var epLineIndex = -1
     private var epSection: RowSection? = null
     private var preloaded = false
-    private val preloadRun = Runnable { startPreload() }
+    private val preloadRun = Runnable { ui.safe("préchargement") { startPreload() } }
 
     init {
         sv.isVerticalScrollBarEnabled = false
@@ -60,7 +60,7 @@ class DetailScreen(ui: NativeUi, val itemId: String, val fromWeb: Boolean) : Scr
             li = oldLi.coerceIn(0, maxOf(0, lines.size - 1))
             lines.forEachIndexed { i, l -> l.idx = (oldIdx.getOrNull(i) ?: 0).coerceIn(0, maxOf(0, l.count - 1)) }
         }
-        post {
+        later {
             if (!first) sv.scrollTo(0, oldScroll)
             if (ui.top() === this) apply(true)
         }

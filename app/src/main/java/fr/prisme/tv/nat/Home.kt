@@ -74,7 +74,7 @@ class HomeScreen(ui: NativeUi) : Screen(ui) {
     private var heroItem: JSONObject? = null
     private var firstRowLine = 1
     override val vscroll: ScrollView get() = sv
-    private val heroRun = Runnable { heroItem?.let { setHero(it) } }
+    private val heroRun = Runnable { ui.safe("aperçu") { heroItem?.let { setHero(it) } } }
     private val clockRun = object : Runnable {
         override fun run() { clock.text = SimpleDateFormat("HH:mm", Locale.FRANCE).format(Date()); postDelayed(this, 20000) }
     }
@@ -131,7 +131,7 @@ class HomeScreen(ui: NativeUi) : Screen(ui) {
         tabs.select(t)
         tabLine.idx = if (t == "series") 1 else 0
         if (focusTabs) { li = 0; sv.scrollTo(0, 0) }
-        if (changed) load(focusTabs) else post { apply(true) }
+        if (changed) load(focusTabs) else { later { apply(true) }; onShown() }
     }
 
     fun reload() { load(false, keep = true) }
@@ -207,7 +207,7 @@ class HomeScreen(ui: NativeUi) : Screen(ui) {
         } else {
             li = if (focusTabs || lines.size < 2) 0 else 1
         }
-        post {
+        later {
             if (keep) sv.scrollTo(0, oldScroll)
             if (visibility == View.VISIBLE && ui.top() === this) apply(true)
         }

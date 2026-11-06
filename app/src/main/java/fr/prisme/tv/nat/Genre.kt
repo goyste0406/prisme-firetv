@@ -90,7 +90,7 @@ class GenreScreen(ui: NativeUi, private val ty: String, private val key: String)
             adapter.notifyDataSetChanged()
             rv.scrollToPosition(0)
             if (items.isEmpty()) li = 0
-            post { if (ui.top() === this) apply(true) }
+            later { if (ui.top() === this) apply(true) }
         }
     }
 

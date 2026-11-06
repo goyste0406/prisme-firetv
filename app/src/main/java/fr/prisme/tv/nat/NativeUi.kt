@@ -65,6 +65,9 @@ class NativeUi(val host: Host, val web: WebView) {
     val stack = ArrayList<Screen>()
     var visible = false
         private set
+    /** Après une erreur inattendue, l'interface native se désactive et l'ancienne prend le relais */
+    var dead = false
+        private set
     private var home: HomeScreen? = null
     private var bgUrl = ""
     private val bgRun = Runnable { applyBgImage() }
@@ -109,15 +112,30 @@ class NativeUi(val host: Host, val web: WebView) {
             if (s == null) { cb(null); return@js }
             work.execute {
                 val o = try { JSONObject(s) } catch (e: Exception) { null }
-                main.post { cb(o) }
+                main.post { safe("données") { cb(o) } }
             }
         }
     }
 
     fun q(s: String): String = JSONObject.quote(s)
 
+    fun safe(where: String, f: () -> Unit) {
+        if (dead) return
+        try { f() } catch (e: Throwable) { fail(where, e) }
+    }
+
+    private fun fail(where: String, e: Throwable) {
+        dead = true
+        android.util.Log.e("prisme", "interface native : $where", e)
+        try { setVisible(false) } catch (_: Throwable) {}
+        val m = "$where : ${e.javaClass.simpleName} ${e.message ?: ""}".take(200)
+        js("NAT.dead=true;NAT.vis=false;LOG(${q("Interface native désactivée · $m")});toast('Nouvelle interface indisponible, retour à l\'ancienne');S.stack=[{t:'home'}];S.modal=null;render('tab-'+S.tab)")
+    }
+
     // ------------------------------------------------------------------ affichage
-    fun show(tab: String) {
+    fun show(tab: String) = safe("affichage") { show0(tab) }
+
+    private fun show0(tab: String) {
         val h = home ?: HomeScreen(this).also { home = it }
         if (tab == "films" || tab == "series") {
             while (stack.size > 1) popSilently()
@@ -132,7 +150,7 @@ class NativeUi(val host: Host, val web: WebView) {
             t.visibility = View.VISIBLE
             t.applyBackground()
             t.onShown()
-            t.post { t.restoreFocus() }
+            t.later { t.restoreFocus() }
         }
     }
 
@@ -162,7 +180,7 @@ class NativeUi(val host: Host, val web: WebView) {
         stack.add(s)
         layer.addView(s, K.lp(K.MATCH, K.MATCH))
         s.applyBackground()
-        s.post { s.apply(true) }
+        s.later { s.apply(true) }
     }
 
     fun pop() {
@@ -182,7 +200,9 @@ class NativeUi(val host: Host, val web: WebView) {
         s.onHidden(); layer.removeView(s)
     }
 
-    fun openDetail(id: String, fromWeb: Boolean = false) {
+    fun openDetail(id: String, fromWeb: Boolean = false) = safe("fiche") { openDetail0(id, fromWeb) }
+
+    private fun openDetail0(id: String, fromWeb: Boolean) {
         if (stack.isEmpty()) { val h = home ?: HomeScreen(this).also { home = it }; stack.add(h); layer.addView(h, K.lp(K.MATCH, K.MATCH)); h.openTab(if (id.startsWith("s")) "series" else "films", false) }
         setVisible(true)
         push(DetailScreen(this, id, fromWeb))
@@ -192,6 +212,13 @@ class NativeUi(val host: Host, val web: WebView) {
 
     // ------------------------------------------------------------------ télécommande
     fun onKey(e: KeyEvent): Boolean {
+        if (dead) return false
+        var r = false
+        safe("télécommande") { r = onKey0(e) }
+        return r || dead
+    }
+
+    private fun onKey0(e: KeyEvent): Boolean {
         val code = e.keyCode
         val handled = when (code) {
             KeyEvent.KEYCODE_DPAD_UP, KeyEvent.KEYCODE_DPAD_DOWN, KeyEvent.KEYCODE_DPAD_LEFT, KeyEvent.KEYCODE_DPAD_RIGHT,
@@ -222,7 +249,7 @@ class NativeUi(val host: Host, val web: WebView) {
         if (stack.size > 1) {
             val fromWeb = (t as? DetailScreen)?.fromWeb == true
             pop()
-            if (fromWeb) toWeb()
+            if (fromWeb) { js("nativeApi.resume()"); toWeb() }
             return
         }
         host.exitApp()
@@ -245,14 +272,16 @@ class NativeUi(val host: Host, val web: WebView) {
     }
 
     /** Première image de la vidéo affichée : on laisse la place au lecteur */
-    fun onFirstFrame() {
-        if (loading.visibility != View.VISIBLE) return
+    fun onFirstFrame() = safe("lecture") {
+        if (loading.visibility != View.VISIBLE) return@safe
         loading.hide()
         toWeb()
     }
 
     /** Messages envoyés par la couche de données */
-    fun event(kind: String, data: String) {
+    fun event(kind: String, data: String) = safe("événement $kind") { event0(kind, data) }
+
+    private fun event0(kind: String, data: String) {
         val o = try { if (data.isEmpty()) JSONObject() else JSONObject(data) } catch (e: Exception) { JSONObject() }
         when (kind) {
             "detail" -> stack.filterIsInstance<DetailScreen>().filter { it.itemId == o.optString("id") }.forEach { it.update(o) }
@@ -261,6 +290,7 @@ class NativeUi(val host: Host, val web: WebView) {
             "playfail" -> { loading.hide(); toast(o.optString("msg")) }
             "toast" -> toast(o.optString("msg"))
             "home" -> home?.reload()
+            "started" -> if (loading.visibility == View.VISIBLE) main.postDelayed({ safe("lecture") { if (loading.visibility == View.VISIBLE) { loading.hide(); toWeb() } } }, 700)
         }
     }
 

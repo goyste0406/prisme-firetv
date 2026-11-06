@@ -1,8 +1,8 @@
 /* ========================= INTERFACE NATIVE (films et séries, version 2) =========================
    L'interface native (Kotlin) affiche l'accueil, les genres et les fiches ; elle demande ses données ici.
    Le catalogue, les sources, la qualité, les favoris et la lecture restent gérés par cette couche. */
-const NAT={ok:NATIVE&&typeof Prisme.nativeOk==="function",vis:false,detail:"",pre:null,gv:0,pt:null};
-const natOn=()=>NAT.ok&&!S.set.legacy&&inApp();
+const NAT={ok:NATIVE&&typeof Prisme.nativeOk==="function",dead:false,vis:false,detail:"",pre:null,gv:0,pt:null};
+const natOn=()=>NAT.ok&&!NAT.dead&&!S.set.legacy&&inApp();
 const tmS=(u,sz)=>u?String(u).replace(/(image\.tmdb\.org\/t\/p\/)(original|w\d+)\//,"$1"+sz+"/"):"";
 function natShow(tab){if(!NAT.ok)return;NAT.vis=true;Prisme.nativeShow(tab||"")}
 
@@ -146,7 +146,7 @@ function natFail(msg){LOG("Lecture impossible · "+msg);if(P&&P.nat){Prisme.nati
 /* Appelé à chaque tour du lecteur : true = la suite de tick() est ignorée */
 function natTick(st){
  if(!P)return true;
- if(!P.started&&(st.playing||(st.pos>0&&!st.buffering))){P.started=true;P.retry=0}
+ if(!P.started&&(st.playing||(st.pos>0&&!st.buffering))){P.started=true;P.retry=0;if(P.nat)Prisme.nativeEvent("started","")}
  if(P.retryAt){if(Date.now()<P.retryAt)return true;P.retryAt=0;P.err=0;Prisme.play(streamUrl(),Math.round((P.pos||0)*1000),P.kind==="live");return true}
  if(st.error&&!P.err){
   const code=+((String(st.error).match(/(?:Response code|code)[: ]+(\d{3})/i)||[])[1]||0);
