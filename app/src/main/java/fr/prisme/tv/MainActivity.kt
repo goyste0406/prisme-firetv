@@ -42,6 +42,7 @@ class MainActivity : Activity() {
 
     private lateinit var web: WebView
     private lateinit var player: Player
+    private val prober = Prober()
     private val main = Handler(Looper.getMainLooper())
     private val host = "appassets.androidplatform.net"
     @Volatile private var typing = false
@@ -156,6 +157,9 @@ class MainActivity : Activity() {
         @JavascriptInterface fun setSub(index: Int) = main.post { player.selectTrack(androidx.media3.common.C.TRACK_TYPE_TEXT, index) }
         @JavascriptInterface fun setFormat(mode: String) = main.post { player.setFormat(mode) }
         @JavascriptInterface fun state(): String = player.stateJson
+        @JavascriptInterface fun probe(id: String, url: String) = prober.probe(id, url)
+        @JavascriptInterface fun probeResult(id: String): String = prober.result(id)
+        @JavascriptInterface fun probeForget(id: String) = prober.forget(id)
 
         // Mises à jour
         @JavascriptInterface fun canInstall(): Boolean =

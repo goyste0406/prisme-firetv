@@ -47,10 +47,26 @@ FN("provCat", 'function provCat(pl,it){const s=it&&it.src.find(s=>s.pl===pl.id);
 FN("provKey", 'function provKey(pl,key){if(key.startsWith("ch:"))return "l:"+provCat(pl,CH[key.slice(3)]);const it=ALL[key];return it.type+":"+provCat(pl,it)}')
 FN("catCount", 'function catCount(pl,type,k){const L=type==="l"?CHS:type==="f"?FILMS:SERIES;return L.filter(i=>i.src.some(s=>s.pl===pl.id&&s.cat===k)).length}\nfunction plCats(pl,t){const D=DATA[pl.id];if(!D)return[];const m=t==="l"?D.lc:t==="f"?D.vc:D.sc,seen=new Set();return Object.values(m).map(n=>[catKey(n),n]).filter(([k])=>!seen.has(k)&&seen.add(k))}')
 R('const qr=q=>({"4K":4,"1080p":3,"720p":2,"SD":1})[q]||0;', 'const qr=q=>({"4K":4,"1080p":3,"Auto":2.5,"720p":2,"SD":1})[q]||0;')
-FN("variants", '''function variants(pl,key){const ch=key.startsWith("ch:"),it=ch?CH[key.slice(3)]:ALL[key];if(!it)return[];
- return it.src.filter(s=>s.pl===pl.id).map((s,i)=>({id:pl.id+"|"+s.sid,i,p:pl,q:s.q,tag:s.tag||"",sid:s.sid,ext:s.ext||"ts",name:s.name,
-  codec:"détecté à la lecture",audio:[ch?"Selon la chaîne":s.tag==="MULTI"?"Multi-langues (VF + VO)":s.tag==="VOSTFR"||s.tag==="VO"?"Version originale":"Français (VF)"],
-  subs:[s.tag==="VOSTFR"?"Français":"Selon le fichier"],size:"—"}))}''')
+FN("variants", '''function variants(pl,key){const ch=key.startsWith("ch:"),it=ch?CH[key.slice(3)]:ALL[key];if(!it)return[];const kind=ch?"l":it.type==="f"?"v":"s";
+ return it.src.filter(s=>s.pl===pl.id).map((s,i)=>{const k=qkey(pl.id,kind,s.sid),qi=QUAL[k]&&QUAL[k].ok?QUAL[k]:null,pend=!!QPEND[k],fail=!!(QUAL[k]&&!QUAL[k].ok);
+  const q=qi?qi.q:(s.q!=="Auto"?s.q:(pend?"Analyse…":fail?"Inconnue":"Auto"));
+  const tagAudio=ch?"Selon la chaîne":s.tag==="MULTI"?"Multi-langues (VF + VO)":s.tag==="VOSTFR"||s.tag==="VO"?"Version originale":"Français (VF)";
+  return {id:pl.id+"|"+s.sid,i,p:pl,q,qi,hdr:!!(qi&&qi.hdr),tag:s.tag||"",sid:s.sid,ext:s.ext||"ts",name:s.name,
+   codec:qi?`${qi.vc||"Vidéo"} · ${qi.w}×${qi.h}${qi.fps?" · "+qi.fps+" i/s":""}${qi.hdr?" · HDR":""}`:pend?"Analyse du flux en cours…":fail?"Analyse impossible (flux injoignable ou connexion déjà utilisée)":"Qualité lue dans le nom du flux",
+   audio:qi&&qi.audio&&qi.audio.length?qi.audio.map(a=>[a.lang||"Langue non précisée",[a.codec,a.ch].filter(Boolean).join(" ")].filter(Boolean).join(" · ")):[tagAudio],
+   subs:qi&&qi.subs?(qi.subs.length?qi.subs.map(x=>x.lang||"Piste sans langue"):["Aucun"]):[s.tag==="VOSTFR"?"Français":"Non communiqués"],size:"—"}})}''')
+R('<span class="qb q${v.q}">${v.q==="4K"?"4K HDR":v.q}</span><span class="pn">', '<span class="qb q${v.q}">${v.q==="4K"&&v.hdr?"4K HDR":v.q}</span><span class="pn">')
+R('<dt>Fichier</dt><dd>${esc(v.size)} · .${v.ext}</dd>', '<dt>Format</dt><dd>.${esc(v.ext)}${v.qi?" · infos "+esc(v.qi.from||""):""}</dd>')
+R('function modalHtml(){const m=S.modal,', 'function modalHtml(){if(!P)setTimeout(()=>analyze(S.modal&&S.modal.k||""),30);const m=S.modal,')
+R('mt==="chs"?(P?chsHtml():""):modalHtml()', 'mt==="chs"?(P?chsHtml():""):mt==="ctry"?ctryHtml():modalHtml()')
+R('lcat:S.lcat,', 'lcat:S.lcat,ctry:S.ctry,')
+FN("liveList", '''function chansC(){return memo("cc"+S.ctry,()=>chans().filter(c=>S.ctry==="*"||c.country===S.ctry))}
+function liveList(){const C=chansC();return S.lcat==="all"?C:S.lcat==="fav"?chans().filter(c=>isFav("ch:"+c.id)):C.filter(c=>c.genre===S.lcat)}
+function ctryHtml(){const L=[["*",CHS.length],...COUNTRIES];return `<div class="modal"><div class="mbox" style="width:600px"><div class="kick">TV en direct</div><h2>Pays des chaînes</h2><div class="tcol sy" style="max-height:440px">${L.map(([k,n])=>`<div class="trk ${k===S.ctry?"on":""}" data-f data-fid="cy-${k}" data-act="setctry:${k}" ${k===S.ctry?"data-default":""}><span>${esc(k==="*"?"Tous les pays":PAYS[k]||k)}<small>${n} chaîne${n>1?"s":""}</small></span>${k===S.ctry?'<span class="ck">✓</span>':""}</div>`).join("")}</div><div class="mfoot">Les genres se mettent à jour selon le pays choisi</div></div></div>`}''')
+R('const cats=LCATS.filter(([k])=>k==="all"||k==="fav"||!rowHidden("l",k)).map(([k,l])=>{const C=chans(),n=k==="all"?C.length:k==="fav"?C.filter(c=>isFav("ch:"+c.id)).length:C.filter(c=>c.cat===k).length;',
+  'const C=chansC(),cnt=k=>k==="all"?C.length:k==="fav"?chans().filter(c=>isFav("ch:"+c.id)).length:C.filter(c=>c.genre===k).length;\n const cats=(COUNTRIES.length>1?`<div class="lcat" data-f data-fid="lcat-ctry" data-row="lcats" data-act="ctry"><span>${esc(S.ctry==="*"?"Tous les pays":PAYS[S.ctry]||S.ctry)}</span><small>changer ›</small></div>`:"")+LCATS.filter(([k])=>k==="all"||k==="fav"||cnt(k)>0).map(([k,l])=>{const n=cnt(k);')
+R('  case "srcplay":', '  case "ctry":S.modal={type:"ctry",ret:"lcat-ctry"};render("cy-"+S.ctry);break;\n  case "setctry":S.ctry=v;S.modal=null;S.lcat="all";save();render("lcat-ctry");break;\n  case "srcplay":')
+R('function detailHtml(it){\n', 'function detailHtml(it){\n setTimeout(()=>analyze(it.id),60);\n')
 # appareil réel + versions
 RX(r'const APP=\{ver:"1\.0\.0".*?\nconst LATEST=\{.*?\n', '''const APPV=NATIVE?JSON.parse(Prisme.appVersion()):{name:"web",code:0};
 const APP={ver:APPV.name,code:APPV.code,repo:"github.com/goyste0406/prisme-firetv"};
@@ -100,7 +116,8 @@ R('const top=[...list].sort((a,b)=>b.tmdb-a.tmdb).slice(0,10);', 'const top=list
 R('cats.forEach(([k,l])=>{if(k!=="nolan"&&rowHidden(ty,k))return;', 'cats.slice(0,40).forEach(([k,l])=>{if(rowHidden(ty,k))return;')
 R("'<div class=\"syn\">Aucun contenu : activez une playlist dans Réglages.</div>'", "'<div class=\"syn\">Aucun contenu pour l\\'instant : vérifie tes playlists dans Réglages.</div>'")
 R(' const chs=L.map(c=>{const e=epgAt(c);return `<div class="lch"', ' L.slice(0,30).forEach(c=>epg(c));\n const chs=L.slice(0,400).map(c=>{const e=epgAt(c);return `<div class="lch"')
-R('<span class="num">${c.num}</span><span class="logo" style="--c:${c.col}">${esc(c.n)}</span>', '<span class="num">${c.num}</span>${logoHtml(c)}')
+R('<span class="num">${c.num}</span><span class="logo" style="--c:${c.col}">${esc(c.n)}</span>', '<span class="num">${c.rank<999?c.rank:c.num}</span>${logoHtml(c)}')
+R('<div class="lcats" data-col="1">', '<div class="lcats sy" data-col="1">')
 R(' const c=CH[S.lch]&&L.includes(CH[S.lch])?CH[S.lch]:(L[0]||CHS[0]);', ' const c=CH[S.lch]&&L.includes(CH[S.lch])?CH[S.lch]:(L[0]||CHS[0]);if(c)S.lch=c.id;')
 R('<div class="lpanel" id="lpanel">${panelHtml(c)}</div>', '<div class="lpanel" id="lpanel">${c?panelHtml(c):\'<div class="empty">Aucune chaîne dans tes playlists.</div>\'}</div>')
 R('<span class="livebadge">EN DIRECT</span><span class="logo" style="--c:${c.col}">${esc(c.n)}</span><div class="wm">Aperçu simulé · ${esc(c.n)} ${c.q}</div>',
@@ -146,7 +163,7 @@ R('<section class="row" data-anchor><h3>Distribution</h3><div class="sx">${it.ca
   '${it.cast.length?`<section class="row" data-anchor><h3>Distribution</h3><div class="sx">${it.cast.map(([a,r])=>castCard(a,r,"cast")).join("")}</div></section>`:""}')
 R('x.type===it.type&&x.g.some(g=>it.g.includes(g))).slice(0,12);', 'x.type===it.type&&(it.g.length?x.g.some(g=>it.g.includes(g)):x.cat[0]===it.cat[0])).slice(0,12);')
 FN("epsHtml", '''function epsHtml(it,ss){if(!it.info)return '<div class="empty" style="padding-left:6px">Chargement des épisodes…</div>';const sn=(it.seasons||[])[ss-1],L=(it.eps||{})[sn]||[];
- return L.map(e=>`<div class="ep" data-f data-fid="ep-${ss}-${e.num}" data-row="eps" data-act="play:${it.id}:${ss}:${e.num}"><div class="eth" style="--a:${it.c[0]};--b:${it.c[1]};--x:${20+(e.num*37)%60}%">${e.img?`<img src="${esc(e.img)}" alt="" loading="lazy" onerror="this.remove()" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover">`:""}<span>S${sn} · E${e.num}</span></div><div class="et">${esc(e.t)}</div><div class="ed">${e.dur?e.dur+" min":""}</div></div>`).join("")}
+ return L.map(e=>`<div class="ep" data-f data-fid="ep-${ss}-${e.num}" data-row="eps" data-act="play:${it.id}:${ss}:${e.num}"><div class="eth" style="--a:${it.c[0]};--b:${it.c[1]};--x:${20+(e.num*37)%60}%">${e.img?`<img src="${esc(e.img)}" alt="" loading="lazy" onerror="this.remove()" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover">`:""}<span>S${sn} · E${e.num}</span>${e.q?`<b class="qb q${e.q}" style="position:absolute;right:10px;top:10px;z-index:1;height:22px;font-size:11px">${e.q}</b>`:""}</div><div class="et">${esc(e.t)}</div><div class="ed">${e.dur?e.dur+" min":""}</div></div>`).join("")}
 function curEpOf(it,ss,ep){return ((it.eps||{})[(it.seasons||[])[ss-1]]||[]).find(e=>e.num===ep)}
 function curEp(){return P&&ALL[P.id]&&ALL[P.id].type==="s"?curEpOf(ALL[P.id],P.ss,P.ep):null}
 function nextEp(it){const L=(it.eps||{})[(it.seasons||[])[P.ss-1]]||[],i=L.findIndex(e=>e.num===P.ep);if(i>=0&&i<L.length-1)return {ss:P.ss,ep:L[i+1].num};const n=((it.eps||{})[(it.seasons||[])[P.ss]]||[])[0];return n?{ss:P.ss+1,ep:n.num}:null}''')

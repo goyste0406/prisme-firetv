@@ -11,9 +11,9 @@ android {
         applicationId = "fr.prisme.tv"
         minSdk = 26
         targetSdk = 34
-        // Incrémenter versionCode et versionName à chaque nouvelle version publiée (1.0.0 = build 1)
-        versionCode = 1
-        versionName = "1.0.0"
+        // Incrémenter versionCode et versionName à chaque nouvelle version publiée
+        versionCode = 2
+        versionName = "1.1.0"
     }
 
     signingConfigs {

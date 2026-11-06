@@ -18,7 +18,7 @@ SERIES = [{"series_id": 500 + i, "name": "FR| " + n, "cover": "", "plot": p, "ca
               ("Lupin", "Assane Diop, gentleman cambrioleur, venge son père.", "Omar Sy, Ludivine Sagnier, Antoine Gouy", "George Kay", "Policier, Drame", "2021-01-08", "7.7", "11"),
               ("Le Bureau des Légendes", "Au cœur de la DGSE.", "Mathieu Kassovitz, Sara Giraudeau", "Éric Rochant", "Espionnage", "2015-04-27", "8.0", "11"),
               ("Breaking Bad", "Un professeur de chimie bascule.", "Bryan Cranston, Aaron Paul", "Vince Gilligan", "Drame", "2008-01-20", "8.9", "12")])]
-CHANNELS = ["TF1 FHD", "France 2 FHD", "France 3 HD", "Canal+ FHD", "France 5 HD", "M6 FHD", "Arte HD", "W9 HD", "TMC HD", "BFM TV FHD", "CNEWS HD", "LCI HD", "franceinfo FHD", "L'Equipe HD", "beIN Sports 1 FHD", "TF1 4K", "TF1 HD"]
+CHANNELS = ["TF1 ᶠᴴᴰ", "Gulli HD", "Disney Channel FHD", "Canal J", "RMC Découverte HD", "National Geographic FHD", "RMC Sport 1 FHD", "Ciné+ Frisson HD", "M6 Music HD", "France 3 Bretagne HD", "UK| Sky Sports Main Event FHD", "UK| BBC One HD", "TF1 FHD", "France 2 FHD", "France 3 HD", "Canal+ FHD", "France 5 HD", "M6 FHD", "Arte HD", "W9 HD", "TMC HD", "BFM TV FHD", "CNEWS HD", "LCI HD", "franceinfo FHD", "L'Equipe HD", "beIN Sports 1 FHD", "TF1 4K", "TF1 HD"]
 LIVE = [{"num": i + 1, "name": "FR| " + n, "stream_id": 1000 + i, "stream_icon": "", "epg_channel_id": "", "category_id": "22" if any(x in n for x in ("BFM", "CNEWS", "LCI", "franceinfo")) else "23" if any(x in n for x in ("Equipe", "beIN")) else "21", "tv_archive": 0} for i, n in enumerate(CHANNELS)]
 
 def short_epg(sid):
@@ -50,7 +50,9 @@ class H(BaseHTTPRequestHandler):
         if a == "get_series_info": r = series_info(int(q.get("series_id")))
         if a == "get_vod_info":
             v = next(x for x in VOD if str(x["stream_id"]) == q.get("vod_id"))
-            r = {"info": {"plot": "Synopsis de " + v["name"], "cast": "Omar Sy, François Cluzet, Audrey Fleurot", "director": "Réalisateur Démo", "genre": "Comédie, Drame", "duration_secs": 6720, "rating": v["rating"], "releasedate": "2011-11-02"}, "movie_data": {}}
+            r = {"info": {"plot": "Synopsis de " + v["name"], "cast": "Omar Sy, François Cluzet, Audrey Fleurot", "director": "Réalisateur Démo", "genre": "Comédie, Drame", "duration_secs": 6720, "rating": v["rating"], "releasedate": "2011-11-02",
+                 "video": ({"codec_name": "hevc", "width": 3840, "height": 1608, "avg_frame_rate": "24000/1001", "color_transfer": "smpte2084"} if "4K" in v["name"] else {"codec_name": "h264", "width": 1920, "height": 800, "avg_frame_rate": "24000/1001"}) if v["stream_id"] % 3 else [],
+                 "audio": {"codec_name": "eac3", "channels": 6, "tags": {"language": "fre"}}}, "movie_data": {}}
         self.send(r)
     def send(self, obj, code=200):
         body = json.dumps(obj).encode()
