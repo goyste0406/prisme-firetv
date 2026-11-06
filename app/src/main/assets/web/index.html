@@ -768,8 +768,10 @@ let AUTOCHK=false;
 function base(pl,key){const it=key.startsWith("ch:")?CH[key.slice(3)]:ALL[key];return !!it&&it.src.some(s=>s.pl===pl.id)}
 function provCat(pl,it){const s=it&&it.src.find(s=>s.pl===pl.id);return s?s.cat:""}
 function provKey(pl,key){if(key.startsWith("ch:"))return "l:"+provCat(pl,CH[key.slice(3)]);const it=ALL[key];return it.type+":"+provCat(pl,it)}
-function has(pl,key){return base(pl,key)&&!(pl.hidden||[]).includes(provKey(pl,key))}
-function catCount(pl,type,k){const L=type==="l"?CHS:type==="f"?FILMS:SERIES;return L.filter(i=>i.src.some(s=>s.pl===pl.id&&s.cat===k)).length}
+const HS={};function hidSet(pl){const a=pl.hidden||[];let h=HS[pl.id];if(!h||h.a!==a||h.n!==a.length)h=HS[pl.id]={a,n:a.length,s:new Set(a)};return h.s}
+function has(pl,key){return base(pl,key)&&!hidSet(pl).has(provKey(pl,key))}
+function anySrc(key){for(const p of S.playlists)if(p.on&&has(p,key))return true;return false}
+function catCount(pl,type,k){return plStats(pl)[type][k]||0}
 function plCats(pl,t){const D=DATA[pl.id];if(!D)return[];const m=t==="l"?D.lc:t==="f"?D.vc:D.sc,seen=new Set();return Object.values(m).map(n=>[catKey(n),n]).filter(([k])=>!seen.has(k)&&seen.add(k))}
 function rowHidden(type,k){const on=S.playlists.filter(p=>p.on);return on.length>0&&on.every(p=>(p.hidden||[]).includes(type+":"+k))}
 const qr=q=>({"4K":4,"1080p":3,"Auto":2.5,"720p":2,"SD":1})[q]||0;
@@ -796,9 +798,12 @@ function srcs(key){return S.playlists.filter(p=>p.on&&has(p,key)).flatMap(p=>var
 function pickSrc(key){const L=srcs(key);return L.find(x=>x.id===S.srcSel[key]&&compat(x))||L.find(compat)||L[0]}
 const srcId=key=>(pickSrc(key)||{}).id;
 const memo=(k,f)=>{if(MEMO[k]&&MEMO[k].v===CATV)return MEMO[k].r;const r=f();MEMO[k]={v:CATV,r};return r};
-const films=()=>memo("f",()=>FILMS.filter(i=>srcs(i.id).length)),series=()=>memo("s",()=>SERIES.filter(i=>srcs(i.id).length)),chans=()=>memo("c",()=>CHS.filter(c=>srcs("ch:"+c.id).length));
-const acred=a=>(CRED[a]||[]).filter(([id])=>srcs(id).length);
-function counts(pl){return {c:CHS.filter(c=>has(pl,"ch:"+c.id)).length,f:FILMS.filter(i=>has(pl,i.id)).length,s:SERIES.filter(i=>has(pl,i.id)).length}}
+const films=()=>memo("f",()=>FILMS.filter(i=>anySrc(i.id))),series=()=>memo("s",()=>SERIES.filter(i=>anySrc(i.id))),chans=()=>memo("c",()=>CHS.filter(c=>anySrc("ch:"+c.id)));
+const acred=a=>(CRED[a]||[]).filter(([id])=>anySrc(id));
+function plStats(pl){return memo("pls"+pl.id,()=>{const r={l:{},f:{},s:{},c:0,ff:0,ss:0};
+ const run=(L,t,pre,tot)=>{for(const i of L){let s=null;for(const x of i.src)if(x.pl===pl.id){s=x;break}if(!s)continue;r[t][s.cat]=(r[t][s.cat]||0)+1;if(has(pl,pre+i.id))r[tot]++}};
+ run(CHS,"l","ch:","c");run(FILMS,"f","","ff");run(SERIES,"s","","ss");return r})}
+function counts(pl){const r=plStats(pl);return {c:r.c,f:r.ff,s:r.ss}}
 const isFav=k=>S.favs.includes(k);
 function toggleFav(k,label){dirty();if(isFav(k)){S.favs=S.favs.filter(x=>x!==k);toast(`Retiré des favoris : ${label}`)}else{S.favs.push(k);toast(`Ajouté aux favoris : ${label}`)}save()}
 
@@ -859,7 +864,7 @@ function ratings(it,max=3,full=false){const on=(S.set&&S.set.meta)||{};return ME
 const ADDC={v:-1,m:{}};
 function added(id){if(ADDC.v!==CATV){ADDC.v=CATV;ADDC.m={}}if(id in ADDC.m)return ADDC.m[id];return ADDC.m[id]=added0(id)}
 function added0(id){const it=ALL[id];if(!it)return null;let best=null;const now=Date.now();
- it.src.forEach(s=>{const p=S.playlists.find(x=>x.id===s.pl&&x.on);if(!p||!s.added||(p.hidden||[]).includes(it.type+":"+s.cat))return;const d=Math.max(0,Math.floor((now-s.added*1000)/86400000));if(!best||d<best.d)best={d,p}});return best}
+ it.src.forEach(s=>{const p=S.playlists.find(x=>x.id===s.pl&&x.on);if(!p||!s.added||hidSet(p).has(it.type+":"+s.cat))return;const d=Math.max(0,Math.floor((now-s.added*1000)/86400000));if(!best||d<best.d)best={d,p}});return best}
 const isRecent=id=>{const a=added(id);return !!a&&a.d<=10};
 const agoTxt=d=>d===0?"aujourd'hui":d===1?"hier":`il y a ${d} jours`;
 function trendScore(i){const L=TREND[i.type]||[],r=L.indexOf(i);if(r>=0)return 1000-r;const a=added(i.id);return (a?Math.max(0,45-a.d):0)+(i.tmdb||0)*.4+(i.y>=new Date().getFullYear()-1?15:0)}
@@ -959,9 +964,19 @@ function searchHtml(){
  return `<div class="srch"><div><div class="qbox">${S.q?esc(S.q):'<span class="ph">Rechercher</span>'}<span class="caret"></span></div><div class="kb" data-col="1">${kb}</div></div><div class="res sy" id="res" data-col="2">${res}</div></div>`;
 }
 function sw(on){return `<span class="sw ${on?"on":""}"></span>`}
-function settingsHtml(){
+const SSEC_IC={"Mes playlists":"▤","Catalogue":"▦","Guide":"▥","À propos":"⟳","Appareil":"▢","Lecteur":"▶","Notes":"★","Général":"⚙"};
+function settingsParts(){const tp=document.createElement("template");tp.innerHTML=settingsFull();const root=tp.content.firstElementChild;
+ return {root,secs:[...root.querySelectorAll(":scope>section")]}}
+function settingsHtml(){const {root,secs}=settingsParts();
+ const rows=secs.map((s,i)=>{const h=s.querySelector("h3"),t=h?h.textContent:"Rubrique";const n=s.querySelectorAll("[data-f]").length;
+  return `<div class="it" data-f data-fid="ss-${i}" data-act="sset:${i}"><span>${esc(t)}</span><span>${n} réglage${n>1?"s":""} ›</span></div>`}).join("");
+ return `<div class="set sy" id="set"><section data-anchor><h3>Réglages</h3><div class="grp">${rows}</div></section><div style="height:30px"></div></div>`}
+function ssetHtml(i){const {secs}=settingsParts();const s=secs[i];if(!s)return "";
+ const h=s.querySelector("h3");const title=h?h.textContent:"";if(h)h.remove();
+ return `<div class="set sy" id="set" style="top:60px"><section data-anchor><div class="kick" style="margin-left:18px">Réglages</div><h2 style="margin:6px 0 14px 18px;font-size:40px;font-weight:700;letter-spacing:-.02em">${esc(title)}</h2></section>${s.outerHTML}<div style="height:30px"></div></div>`}
+function settingsFull(){
  const st=S.set,on=S.playlists.filter(p=>p.on);
- const dup=[...FILMS,...SERIES].filter(i=>srcs(i.id).length>1).length+CHS.filter(c=>srcs("ch:"+c.id).length>1).length;
+ const dup=memo("dup",()=>FILMS.filter(i=>i.src.length>1).length+SERIES.filter(i=>i.src.length>1).length+CHS.filter(c=>c.src.length>1).length);
  const pls=S.playlists.map(p=>{const c=counts(p),exp=new Date(p.exp||Date.now()+86400000*214).toLocaleDateString("fr-FR",{day:"numeric",month:"short",year:"numeric"});
   return `<div class="it tall" data-f data-fid="pl-${p.id}" data-act="plm:${p.id}"><span style="min-width:0">${esc(p.name)}<small>${esc(p.url)} · ${esc(p.user)} · expire le ${exp}${(p.hidden||[]).length?` · ${p.hidden.length} catégorie${p.hidden.length>1?"s":""} masquée${p.hidden.length>1?"s":""}`:""}</small></span><span style="display:flex;align-items:center;gap:16px;max-width:none;flex:0 0 auto;overflow:visible">${c.c} chaînes · ${c.f} films · ${c.s} séries ${sw(p.on)}</span></div>`}).join("");
  return `<div class="set sy" id="set">
@@ -1041,6 +1056,7 @@ function diagHtml(){if(!Object.keys(DIAGA).length&&S.playlists.length){DIAGA._=1
   <div class="it" data-f data-fid="dg-ref" data-act="diag:ref" data-default><span>Actualiser cette page</span><span>›</span></div>
  </div></section>
  <section><h3>Journal (${LOGS.length})</h3><div class="grp">${LOGS.map(([t,m],i)=>`<div class="it tall lg" data-f data-fid="lg-${i}"><span>${esc(m)}</span><span>${new Date(t).toLocaleTimeString("fr-FR")}</span></div>`).join("")||'<div class="it"><span>Rien pour l\'instant</span><span></span></div>'}</div></section><div style="height:30px"></div></div>`}
+let PLDIRTY=false,PLSAVE=null;
 function plmHtml(id){
  const p=S.playlists.find(x=>x.id===id);if(!p)return"";const c=counts(p),hid=p.hidden||[];
  const exp=new Date(p.exp||Date.now()+86400000*214).toLocaleDateString("fr-FR",{day:"numeric",month:"long",year:"numeric"});
@@ -1294,6 +1310,7 @@ function render(fid){
  else if(t.t==="plm") html=plmHtml(t.id);
  else if(t.t==="cat") html=catHtml(t);
  else if(t.t==="diag") html=diagHtml();
+ else if(t.t==="sset") html=ssetHtml(t.i);
  else if(t.t==="player") html=P?playerHtml():"";
  if(S.modal&&inApp()&&S.modal.type==="upd")html+=updHtml();
  else if(S.modal&&inApp()){const mt=S.modal.type;html+=mt==="tracks"?(P?tracksHtml():""):mt==="fmt"?(P?fmtHtml():""):mt==="guide"?(P?guideHtml():""):mt==="chs"?(P?chsHtml():""):mt==="ctry"?ctryHtml():modalHtml()}
@@ -1309,7 +1326,7 @@ function bgFor(t){
  else if(t.t==="detail") setBg(ALL[t.id].c,ALL[t.id].bd);
  else if(t.t==="actor"){const h=hash(t.id)%360;setBg([`#${hsl(h,45,40)}`,`#${hsl(h,40,10)}`])}
  else if(t.t==="home"&&S.tab==="live") setBg([(CH[S.lch]||{col:"#1e4fd8"}).col,"#08080c"]);
- else if(t.t==="plm"||t.t==="cat"||t.t==="diag"||(t.t==="home"&&(S.tab==="search"||S.tab==="settings"))) setBg(["#2b3245","#0a0b10"]);
+ else if(t.t==="plm"||t.t==="cat"||t.t==="diag"||t.t==="sset"||(t.t==="home"&&(S.tab==="search"||S.tab==="settings"))) setBg(["#2b3245","#0a0b10"]);
  else if(t.t==="home"){const l=S.tab==="films"?films():series();setBg(l[0]?l[0].c:["#2b3245","#0a0b10"],l[0]&&l[0].bd)}
  {const tk=$("#f-tmdb");if(tk)tk.addEventListener("change",()=>{S.set.tmdbKey=tk.value.trim();save();toast(S.set.tmdbKey?"Clé TMDB enregistrée":"Clé TMDB supprimée");loadTrends()})}
 }
@@ -1406,6 +1423,7 @@ function back(){
  const t=topS();
  if(t.t==="player"&&P&&P.nat){stopPlayer();S.stack.pop();natShow("");return}
  if(S.retNat&&t.t!=="player"&&S.stack.length<=2&&natOn()){S.retNat=false;S.stack=[{t:"home"}];natShow("");return}
+ if(t.t==="plm"&&PLDIRTY){PLDIRTY=false;clearTimeout(PLSAVE);save();bump();dirty()}
  if(t.t==="player"){stopPlayer()}
  if(S.stack.length>1){S.stack.pop();const tp=topS();if(tp.dom&&tp.ver===DIRTY+"|"+CATV){restore(tp);return}tp.dom=null;render(tp.last);return}
  if(inApp()&&F&&F.dataset.row!=="tabs"){const tb=view.querySelector(`[data-fid="tab-${S.tab}"]`);if(tb){setFocus(tb);const r=$("#rows");if(r)r.scrollTo({top:0,behavior:"smooth"});return}}
@@ -1421,6 +1439,7 @@ function act(a){
  switch(k){
   case "tab": move("down");break;
   case "open": if(natOn()&&ALL[v]){NAT.vis=true;Prisme.nativeOpen(v);break}push({t:"detail",id:v});break;
+  case "sset": push({t:"sset",i:+v});break;
   case "ocat": push({t:"cat",ty:v,k:w,sort:"new"});break;
   case "csort":{const t=topS();if(t.t==="cat"&&t.sort!==v){t.sort=v;render("cs-"+v)}break}
   case "diag": if(v==="clrq"){Object.keys(QUAL).forEach(k=>delete QUAL[k]);try{localStorage.removeItem("prisme-q")}catch(e){}toast("Analyses effacées : elles seront refaites");render("dg-clrq")}
@@ -1470,10 +1489,12 @@ function act(a){
    else if(m.k.startsWith("ch:")){const id=m.k.slice(3);push({t:"player"});S.stack[S.stack.length-2].last=ret;startPlayer({kind:"live",id,src:v,playing:true});render(null)}
    else act("play:"+m.k);break}
   case "plm":push({t:"plm",id:v});break;
-  case "hide":{dirty();const pl=S.playlists.find(p=>p.id===v);if(!pl)break;pl.hidden=pl.hidden||[];const hk=w+":"+x,lbl=[...LCATS,...FCATS,...SCATS].find(c=>c[0]===x);
-   if(pl.hidden.includes(hk))pl.hidden=pl.hidden.filter(k=>k!==hk);else pl.hidden.push(hk);bump();save();render(F.dataset.fid);
-   toast(`${pl.hidden.includes(hk)?"Masquée":"Affichée"} : ${lbl?lbl[1]:x} (${pl.name})`);break}
-  case "hideall":{const pl=S.playlists.find(p=>p.id===v);pl.hidden=[];bump();save();render(F.dataset.fid);toast("Toutes les catégories sont affichées");break}
+  case "hide":{const pl=S.playlists.find(p=>p.id===v);if(!pl)break;pl.hidden=pl.hidden||[];const hk=w+":"+x;
+   const h=!pl.hidden.includes(hk);if(h)pl.hidden.push(hk);else pl.hidden=pl.hidden.filter(k=>k!==hk);
+   PLDIRTY=true;clearTimeout(PLSAVE);PLSAVE=setTimeout(save,1200);
+   const el=F;if(el){const s=el.querySelector(".sw");if(s)s.classList.toggle("on",!h);const sm=el.querySelector("small");if(sm)sm.textContent=sm.textContent.replace(/ · masquée$/,"")+(h?" · masquée":"")}
+   break}
+  case "hideall":{const pl=S.playlists.find(p=>p.id===v);pl.hidden=[];PLDIRTY=false;bump();dirty();save();render(F.dataset.fid);toast("Toutes les catégories sont affichées");break}
   case "plref":{const pl=S.playlists.find(p=>p.id===v);toast(`Actualisation de ${pl.name}…`);loadPlaylist(pl).then(()=>{buildCatalog();save();render(F&&F.dataset.fid);toast(`${pl.name} à jour`)}).catch(e=>toast("Échec : "+e.message));break}
   case "form":S.form.epg=!S.form.epg;render("f-epg");break;
   case "addpl":S.adding=true;S.showPw=false;S.form={name:"Playlist "+(S.playlists.length+1),url:"http://",user:"",pass:"",epg:true};render("f-url");break;
