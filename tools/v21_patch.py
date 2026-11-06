@@ -153,3 +153,53 @@ async function plApply(){
  if(NAT.vis)Prisme.nativeEvent("catalog","");
  const t=topS();if(t.t!=="player")render(F&&F.dataset.fid)}
 function plmHtml(id){''')
+
+# ---------------------------------------------------------------- 2.1.7 : choix des catégories avant de charger une playlist
+# téléchargement sélectif : seules les catégories gardées sont demandées (une par une si peu nombreuses)
+R(' const SK={get_live_streams:"live",get_vod_streams:"vod",get_series:"series"};', ''' const SK={get_live_streams:"live",get_vod_streams:"vod",get_series:"series"};
+ if(pick){const ok=await pick(D);if(!ok)throw new Error("ajout annulé")}
+ const hset=new Set(pl.hidden||[]);''')
+R(' step(2);D.live=await fillCats(pl,"get_live_streams",D.lc,await all("get_live_streams",mL,90000),mL,D);',
+  ''' const sel=async(action,map,to,t,cm)=>{const ids=Object.keys(cm||{});
+  const vis=ids.filter(k=>!hset.has(t+":"+catKey(cm[k]))&&(S.set.adult||!isAdultCat(cm[k])));
+  if(!hset.size||vis.length>80||vis.length>=ids.length*0.6)return all(action,map,to);
+  D.sel=true;const out=[],seen=new Set();
+  for(const c of vis){try{const r=await getJSON(api(pl,action,"&category_id="+encodeURIComponent(c)),60000,SK[action]||"");
+   (Array.isArray(r)?r:Object.values(r||{}).filter(x=>x&&typeof x==="object")).forEach(x=>{const m=map(x);if(!m.cat)m.cat=String(c);if(!seen.has(m.id)){seen.add(m.id);out.push(m)}})}
+   catch(e){LOG(`${pl.name} · ${action} catégorie ${c} : ${e.message}`)}}
+  LOG(`${pl.name} · ${SK[action]} : ${vis.length} catégories gardées sur ${ids.length}, chargées une par une`);return out};
+ step(2);D.live=await fillCats(pl,"get_live_streams",D.lc,await sel("get_live_streams",mL,90000,"l",D.lc),mL,D);''')
+R('D.vod=await fillCats(pl,"get_vod_streams",D.vc,await all("get_vod_streams",mV,150000),mV,D);', 'D.vod=await fillCats(pl,"get_vod_streams",D.vc,await sel("get_vod_streams",mV,150000,"f",D.vc),mV,D);')
+R('D.ser=await fillCats(pl,"get_series",D.sc,await all("get_series",mS,150000),mS,D);', 'D.ser=await fillCats(pl,"get_series",D.sc,await sel("get_series",mS,150000,"s",D.sc),mS,D);')
+R('async function fillCats(pl,action,cats,list,map,D){\n if(list.length)return list;', 'async function fillCats(pl,action,cats,list,map,D){\n if(list.length||D.sel)return list;')
+R('async function loadPlaylist(pl,step=()=>{}){', 'async function loadPlaylist(pl,step=()=>{},pick=null){')
+# ajout : écran de choix des catégories entre l'authentification et le téléchargement
+R('try{await loadPlaylist(pl,mark);mark(5);const nfr=frOnly(pl);if(nfr){LOG(`${pl.name} : ${nfr} catégories non francophones masquées`);const D=DATA[pl.id];if(pruneHidden(pl,D))IDB.put("pl:"+pl.id,D)}S.playlists.push(pl);buildCatalog();mark(6);if(nfr)setTimeout(()=>toast(`${nfr} catégories non francophones masquées · modifiable dans la playlist`),2600);',
+  'try{await loadPlaylist(pl,mark,D=>pickCats(pl,D));mark(5);S.playlists.push(pl);buildCatalog();mark(6);')
+R(' }catch(e){S.loading=false;render("f-url");toast("Connexion impossible : "+e.message)}',
+  ' }catch(e){S.loading=false;S.pick=null;render("f-url");toast(e.message==="ajout annulé"?"Ajout de la playlist annulé":"Connexion impossible : "+e.message)}')
+R(' else if(!inApp()) html=S.loading?loadingHtml():loginHtml();', ' else if(!inApp()) html=S.pick?pickHtml():S.loading?loadingHtml():loginHtml();')
+R('function back(){\n', 'function back(){\n if(S.pick){const r=S.pick.res;S.pick=null;S.loading=true;r(false);return}\n')
+R('function plmHtml(id){', '''function pickCats(pl,D){return new Promise(res=>{
+ const h=new Set();for(const [t,m] of [["l",D.lc],["f",D.vc],["s",D.sc]])for(const n of Object.values(m||{}))if(foreignCat(n))h.add(t+":"+catKey(n));
+ S.pick={pl,D,res,h};S.loading=false;render()})}
+function pickList(t){const P2=S.pick,m=t==="l"?P2.D.lc:t==="f"?P2.D.vc:P2.D.sc,seen=new Set();
+ return Object.values(m||{}).filter(n=>S.set.adult||!isAdultCat(n)).map(n=>[catKey(n),n]).filter(([k])=>!seen.has(k)&&seen.add(k))}
+function pickCount(){const P2=S.pick;let a=0,b=0;for(const t of ["l","f","s"])for(const [k] of pickList(t)){b++;if(!P2.h.has(t+":"+k))a++}return [a,b]}
+function pickHtml(){const P2=S.pick;const [a,b]=pickCount();
+ const sec=(t,label)=>{const L=pickList(t);if(!L.length)return "";return `<section data-anchor><h3>${label} · ${L.length}</h3><div class="grp">${L.map(([k,n])=>`<div class="it" data-f data-fid="pk-${t}-${k}" data-act="pk:${t}:${k}"><span>${esc(n)}</span>${sw(!P2.h.has(t+":"+k))}</div>`).join("")}</div></section>`};
+ return `<div class="set sy" id="set" style="top:40px"><section data-anchor><div class="kick" style="margin-left:18px">Nouvelle playlist · ${esc(P2.pl.name)}</div><h2 style="margin:6px 0 6px 18px;font-size:40px;font-weight:700;letter-spacing:-.02em">Catégories à charger</h2>
+  <p style="margin:0 0 14px 18px;color:rgba(255,255,255,.65);font-size:17px">Seules les catégories cochées seront téléchargées. Tu pourras changer ce choix plus tard dans la playlist.</p><div class="grp">
+  <div class="it tall" data-f data-fid="pk-go" data-act="pkgo" data-default><span>Continuer et charger<small id="pkn">${a} catégorie${a>1?"s":""} cochée${a>1?"s":""} sur ${b}</small></span><span>›</span></div>
+  <div class="it tall" data-f data-fid="pk-fr" data-act="pkfr"><span>Garder uniquement le contenu francophone<small>Décoche les catégories d'un autre pays ou d'une autre langue</small></span><span>›</span></div>
+  <div class="it" data-f data-fid="pk-all" data-act="pkall"><span>Tout cocher</span><span>›</span></div>
+  <div class="it" data-f data-fid="pk-none" data-act="pknone"><span>Tout décocher</span><span>›</span></div>
+ </div></section>${sec("l","Catégories TV en direct")}${sec("f","Catégories films")}${sec("s","Catégories séries")}<div style="height:30px"></div></div>`}
+function pickRefresh(){const [a,b]=pickCount();const n=$("#pkn");if(n)n.textContent=`${a} catégorie${a>1?"s":""} cochée${a>1?"s":""} sur ${b}`}
+function plmHtml(id){''')
+R('  case "sset":', '''  case "pk":{const P2=S.pick;if(!P2)break;const hk=v+":"+w;if(P2.h.has(hk))P2.h.delete(hk);else P2.h.add(hk);const s=F&&F.querySelector(".sw");if(s)s.classList.toggle("on",!P2.h.has(hk));pickRefresh();break}
+  case "pkfr":{const P2=S.pick;if(!P2)break;for(const [t,m] of [["l",P2.D.lc],["f",P2.D.vc],["s",P2.D.sc]])for(const n of Object.values(m||{})){const k=t+":"+catKey(n);if(foreignCat(n))P2.h.add(k);else P2.h.delete(k)}render(F.dataset.fid);break}
+  case "pkall":{if(S.pick){S.pick.h.clear();render(F.dataset.fid)}break}
+  case "pknone":{const P2=S.pick;if(!P2)break;for(const t of ["l","f","s"])for(const [k] of pickList(t))P2.h.add(t+":"+k);render(F.dataset.fid);break}
+  case "pkgo":{const P2=S.pick;if(!P2)break;P2.pl.hidden=[...P2.h];S.pick=null;S.loading=true;render();P2.res(true);break}
+  case "sset":''')
