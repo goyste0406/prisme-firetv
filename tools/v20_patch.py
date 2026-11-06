@@ -23,11 +23,11 @@ R('  case "open": push({t:"detail",id:v});break;',
 R(' bgFor(t);\n afterRender(t,fid);\n}',
   ' bgFor(t);\n afterRender(t,fid);\n if(natOn()&&!NAT.vis&&!S.booting&&!S.modal&&t.t==="home"&&(S.tab==="films"||S.tab==="series"))natShow(S.tab);\n}')
 # données → fiche native
-R(' it.loading=false;\n', ' it.loading=false;natPush(it.id);if((it.g||[]).length)natGenreBump();\n')
+R(' it.loading=false;\n', ' it.loading=false;natPush(it.id);if((it.g||[]).length)natGenreBump();if(!it.s||!it.bd)tmdbFill(it);\n')
 R('function refreshQual(){', 'function refreshQual(){natPush(NAT.detail);')
 R('if(url)paintPhoto(n,url)}', 'if(url){paintPhoto(n,url);natPush(NAT.detail)}}')
 R('if(P){setTimeout(pumpProbe,3000);return}', 'if(P||NAT.pre){setTimeout(pumpProbe,3000);return}')
-R(' if(!CH[S.lch]&&CHS[0])S.lch=CHS[0].id;\n}', ' if(!CH[S.lch]&&CHS[0])S.lch=CHS[0].id;\n if(NAT.vis)setTimeout(()=>Prisme.nativeEvent("catalog",""),50);\n}')
+R(' if(!CH[S.lch]&&CHS[0])S.lch=CHS[0].id;\n}', ' if(!CH[S.lch]&&CHS[0])S.lch=CHS[0].id;\n if(NAT.vis)setTimeout(()=>Prisme.nativeEvent("catalog",""),50);\n setTimeout(()=>{if(typeof tgRun==="function")tgRun()},30000);\n}')
 # réglage : revenir à l'ancienne interface
 R('<div class="it tall" data-f data-fid="set-lite" data-act="set:lite">',
   '<div class="it tall" data-f data-fid="set-probe" data-act="set:probe"><span>Analyser les flux avant la lecture<small>Mesure la qualité réelle (4K, 1080p…) · ouvre une connexion chez le fournisseur : à éviter avec un abonnement 1 écran</small></span>${sw(st.probe)}</div>\n  <div class="it tall" data-f data-fid="set-preload" data-act="set:preload"><span>Préchargement depuis la fiche<small>Démarrage plus rapide · ouvre une connexion à l\'avance</small></span>${sw(st.preload)}</div>\n  ${NAT.ok?`<div class="it tall" data-f data-fid="set-legacy" data-act="set:legacy"><span>Ancienne interface pour les films et séries<small>À activer seulement en cas de problème avec la nouvelle interface</small></span>${sw(st.legacy)}</div>`:""}\n  <div class="it tall" data-f data-fid="set-lite" data-act="set:lite">')
@@ -58,3 +58,9 @@ R('''  ${it("dg-q",`Analyse de la qualité vidéo''', '''  ${S.playlists.map(p=>
   ${it("dg-q",`Analyse de la qualité vidéo''')
 R('''   else if(v==="ref")render(F&&F.dataset.fid);''','''   else if(v==="ref"){Object.keys(DIAGA).forEach(k=>delete DIAGA[k]);render(F&&F.dataset.fid)}
    else if(v==="test")diagTest();''')
+
+# À propos : mention TMDB ; Diagnostic : avancement du rangement des genres
+R('  <div class="it tall"><span>Canal de mise à jour<small>',
+  '  <div class="it tall"><span>Données de films et séries<small>Ce produit utilise l\'API TMDB mais n\'est ni approuvé ni certifié par TMDB</small></span><span>TMDB</span></div>\n  <div class="it tall"><span>Canal de mise à jour<small>')
+R('  ${it("dg-q",`Analyse de la qualité vidéo',
+  '  ${it("dg-tg",`Genres TMDB<small>${S.set.tmdbKey?`${Object.keys(TG).length} titres vérifiés · ${Object.values(TG).filter(v=>v[0]!=="-").length} classés${TGS.run?` · en cours (${TGS.done} sur ${TGS.todo})`:""}`:"clé TMDB absente"}</small>`,S.set.tmdbBuiltin?"clé intégrée":S.set.tmdbKey?"clé saisie":"")}\n  ${it("dg-q",`Analyse de la qualité vidéo')

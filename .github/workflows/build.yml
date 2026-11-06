@@ -27,6 +27,12 @@ jobs:
           find app/src/main/assets/fonts -size -1k -delete
           ls -la app/src/main/assets/fonts
 
+      - name: Clé TMDB (secret facultatif, jamais affichée)
+        env:
+          TMDB: ${{ secrets.TMDB_API_KEY }}
+        run: |
+          if [ -n "$TMDB" ]; then printf '%s' "$TMDB" > app/src/main/assets/tmdb.txt; echo "Clé TMDB intégrée"; else echo "Pas de clé TMDB"; fi
+
       - uses: actions/setup-java@v4
         with:
           distribution: temurin

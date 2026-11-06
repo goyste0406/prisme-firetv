@@ -290,6 +290,7 @@ class NativeUi(val host: Host, val web: WebView) {
             "playfail" -> { loading.hide(); toast(o.optString("msg")) }
             "toast" -> toast(o.optString("msg"))
             "home" -> home?.reload()
+            "actor" -> stack.filterIsInstance<ActorScreen>().filter { it.aid == o.optString("id") }.forEach { it.fill(o) }
             "started" -> if (loading.visibility == View.VISIBLE) main.postDelayed({ safe("lecture") { if (loading.visibility == View.VISIBLE) { loading.hide(); toWeb() } } }, 700)
         }
     }

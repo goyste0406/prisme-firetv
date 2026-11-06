@@ -7,3 +7,5 @@ local.properties
 .idea/
 
 !keystore/prisme-release.jks
+app/src/main/assets/tmdb.txt
+app/src/main/assets/fonts/

@@ -187,7 +187,7 @@ abstract class Screen(val ui: NativeUi) : FrameLayout(ui.ctx) {
 }
 
 /** Rangée défilante horizontale avec titre, au format des rangées de l'appli */
-class RowSection(ctx: android.content.Context, title: String, small: String? = null, padTop: Float = 22f) : LinearLayout(ctx) {
+class RowSection(ctx: android.content.Context, title: String, small: String? = null, padTop: Float = 22f, padX: Float = 64f) : LinearLayout(ctx) {
     val scroller = HorizontalScrollView(ctx)
     val inner = LinearLayout(ctx)
     val head = K.text(ctx, 20f, K.white(0.78f), 600)
@@ -204,7 +204,7 @@ class RowSection(ctx: android.content.Context, title: String, small: String? = n
             sp.setSpan(android.text.style.ForegroundColorSpan(K.white(0.45f)), st, sp.length, 0)
         }
         head.text = sp
-        addView(head, LayoutParams(K.MATCH, K.WRAP).apply { leftMargin = K.px(64) })
+        addView(head, LayoutParams(K.MATCH, K.WRAP).apply { leftMargin = K.px(padX) })
         scroller.isHorizontalScrollBarEnabled = false
         scroller.overScrollMode = View.OVER_SCROLL_NEVER
         scroller.clipChildren = false; scroller.clipToPadding = false
@@ -212,7 +212,7 @@ class RowSection(ctx: android.content.Context, title: String, small: String? = n
         scroller.descendantFocusability = ViewGroup.FOCUS_BLOCK_DESCENDANTS
         inner.orientation = HORIZONTAL
         inner.clipChildren = false; inner.clipToPadding = false
-        inner.setPadding(K.px(64), K.px(16), K.px(64), K.px(14))
+        inner.setPadding(K.px(padX), K.px(16), K.px(64), K.px(14))
         scroller.addView(inner, FrameLayout.LayoutParams(K.WRAP, K.WRAP))
         addView(scroller, LayoutParams(K.MATCH, K.WRAP))
     }

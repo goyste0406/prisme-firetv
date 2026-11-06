@@ -233,6 +233,7 @@ class HomeScreen(ui: NativeUi) : Screen(ui) {
             tabWrap.alpha = 1f; brand.alpha = 1f; clock.alpha = 1f
             when (t.key) {
                 "films", "series" -> if (t.key != ty) openTab(t.key, focusTabs = true)
+                "search" -> {}
                 else -> ui.webTab(t.key)
             }
             return
@@ -253,7 +254,7 @@ class HomeScreen(ui: NativeUi) : Screen(ui) {
         when (v) {
             is PosterCard -> v.item?.let { ui.openDetail(it.optString("id")) }
             is Tile -> ui.push(GenreScreen(ui, if (ty == "series") "s" else "f", v.key))
-            is TabItem -> go(1)
+            is TabItem -> if (v.key == "search") ui.push(SearchScreen(ui)) else go(1)
         }
     }
 

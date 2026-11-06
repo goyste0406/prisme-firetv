@@ -28,6 +28,7 @@ const GDEF={
 function catLabels(ty){return memo("cl"+ty,()=>{const m={};(ty==="f"?FCATS:SCATS).forEach(([k,n])=>m[k]=n);return m})}
 function genreKeys(it){
  if(it._gv===NAT.gv+"|"+CATV&&it._gk)return it._gk;
+ const tk=typeof tgKeys==="function"?tgKeys(it):null;if(tk){it._gk=tk;it._gv=NAT.gv+"|"+CATV;return tk}
  const D=GDEF[it.type],cl=catLabels(it.type),out=[];
  const txt=[...(it.g||[]),...it.cat.map(k=>cl[k]||"")].map(x=>norm(String(x)));
  for(const g of D){if(g[4]&&txt.some(t=>g[4].test(t)))out.push(g[0])}
@@ -73,6 +74,7 @@ window.nativeApi={
   NAT.detail=id;
   if(!it.info&&!it.loading&&Date.now()-(it._lt||0)>60000){it._lt=Date.now();loadInfo(it)}
   setTimeout(()=>{if(!P)analyze(id)},80);
+  setTimeout(()=>{if(!it.loading&&(!it.s||!it.bd))tmdbFill(it)},it.info?200:4000);
   const o=natData(id);
   NAT.last=JSON.stringify(o);return NAT.last;
  },
@@ -171,3 +173,64 @@ function natTick(st){
  if(P&&!P.started&&!st.error&&P.nat&&!P.slowMsg&&Date.now()-(P.t0||0)>10000){P.slowMsg=1;Prisme.nativeEvent("loading",JSON.stringify({msg:"Le serveur met du temps à répondre…"}))}
  if(P&&!P.started&&!st.error&&P.nat&&Date.now()-(P.t0||0)>25000){P.t0=Date.now();P.slowMsg=0;if(natSwitch("délai dépassé"))return true;if(!P.slowFail){P.slowFail=1;return false}if(natFail("la vidéo ne démarre pas (pas de réponse du serveur)"))return true}
  return false}
+
+/* ========================= ÉTAPE 2 : TMDB, genres réels, recherche et acteurs natifs ========================= */
+/* Clé TMDB intégrée à l'appli à la compilation (secret GitHub) : utilisée si aucune clé n'est saisie */
+if(NATIVE&&typeof Prisme.tmdbKey==="function"&&!S.set.tmdbKey){try{const k=Prisme.tmdbKey();if(k){S.set.tmdbKey=k;S.set.tmdbBuiltin=true;save()}}catch(e){}}
+
+/* Genres TMDB rangés en arrière-plan, sans aucune demande au fournisseur IPTV, gardés sur l'appareil */
+const TGM={f:{28:"action",12:"aventure",16:"animation",35:"comedie",80:"policier",99:"documentaire",18:"drame",10751:"familial",14:"fantastique",36:"histoire",27:"horreur",10402:"musique",9648:"mystere",10749:"romance",878:"sf",10770:"telefilm",53:"thriller",10752:"guerre",37:"western"},
+ s:{10759:"action",16:"animation",35:"comedie",80:"policier",99:"documentaire",18:"drame",10751:"familial",10762:"jeunesse",9648:"mystere",10763:"actu",10764:"realite",10765:"sf",10766:"feuilleton",10767:"talk",10768:"guerre",37:"western"}};
+let TG={};const TGS={run:false,done:0,found:0,todo:0,loaded:false,lastBump:0,dirty:0};
+const nap=ms=>new Promise(r=>setTimeout(r,ms));
+let TGSAVE=null;function tgSave(){clearTimeout(TGSAVE);TGSAVE=setTimeout(()=>{IDB.put("tg",TG).catch(()=>{})},8000)}
+function tgKeys(it){const v=TG[it.id];if(!v||v[0]==="-")return null;const g=v.split(":")[1]||"";if(!g)return null;
+ const M=TGM[it.type],out=[];g.split(",").forEach(x=>{const k=M[x];if(k&&!out.includes(k))out.push(k)});return out.length?out:null}
+function tgBump(force){if(!TGS.dirty)return;if(!force&&Date.now()-TGS.lastBump<180000)return;TGS.lastBump=Date.now();TGS.dirty=0;NAT.gv++;if(NAT.vis)Prisme.nativeEvent("home","")}
+async function tgRun(){
+ if(TGS.run||!S.set.tmdbKey)return;TGS.run=true;
+ try{
+  if(!TGS.loaded){try{TG=(await IDB.get("tg"))||{}}catch(e){TG={}}TGS.loaded=true;NAT.gv++;if(NAT.vis)Prisme.nativeEvent("home","")}
+  const d=i=>{const a=added(i.id);return a?a.d:1e9};
+  const todo=[...films(),...series()].filter(i=>!(i.id in TG)).sort((a,b)=>d(a)-d(b));
+  TGS.todo=todo.length;let fails=0;
+  for(const it of todo){
+   if(!S.set.tmdbKey||!ALL[it.id])continue;
+   while(P)await nap(5000);
+   try{
+    if(it.tmdbId&&it.tmdbId!=="0"){const r=await tmdb((it.type==="f"?"movie/":"tv/")+it.tmdbId);
+     TG[it.id]=r&&r.genres?it.tmdbId+":"+r.genres.map(g=>g.id).join(","):"-";
+     if(r){if(!it.s&&r.overview)it.s=r.overview;if(!it.bd&&r.backdrop_path)it.bd="https://image.tmdb.org/t/p/w1280"+r.backdrop_path;if(!it.tmdb&&r.vote_average)it.tmdb=Math.round(r.vote_average*10)}}
+    else{const y=it.y?(it.type==="f"?"&year=":"&first_air_date_year=")+it.y:"";
+     const r=await tmdb(`search/${it.type==="f"?"movie":"tv"}?query=${encodeURIComponent(String(it.t).slice(0,80))}${y}`);
+     const m=r&&r.results&&r.results[0];TG[it.id]=m?m.id+":"+(m.genre_ids||[]).join(","):"-";
+     if(m){it.tmdbId=String(m.id);if(!it.bd&&m.backdrop_path)it.bd="https://image.tmdb.org/t/p/w1280"+m.backdrop_path;if(!it.tmdb&&m.vote_average)it.tmdb=Math.round(m.vote_average*10)}}
+    if(TG[it.id][0]!=="-")TGS.found++;fails=0;
+   }catch(e){fails++;if(/401/.test(e.message)){LOG("TMDB refuse la clé API : rangement des genres arrêté");break}
+    if(/429/.test(e.message)||fails>5){await nap(30000);fails=0}}
+   TGS.done++;TGS.dirty++;tgSave();tgBump(false);
+   await nap(230);
+  }
+  tgBump(true);if(TGS.done)LOG(`Genres TMDB : ${TGS.found} titres classés sur ${TGS.done} vérifiés`);
+ }finally{TGS.run=false}}
+setTimeout(()=>tgRun(),20000);
+
+/* Résumé et fond depuis TMDB quand le fournisseur ne les donne pas */
+async function tmdbFill(it){
+ if(!S.set.tmdbKey||it._tf||(it.s&&it.bd))return;it._tf=1;
+ try{let id=it.tmdbId;
+  if(!id||id==="0"){const y=it.y?(it.type==="f"?"&year=":"&first_air_date_year=")+it.y:"";const r=await tmdb(`search/${it.type==="f"?"movie":"tv"}?query=${encodeURIComponent(String(it.t).slice(0,80))}${y}`);const m=r&&r.results&&r.results[0];if(!m)return;id=it.tmdbId=String(m.id)}
+  const r=await tmdb((it.type==="f"?"movie/":"tv/")+id);if(!r)return;
+  if(!it.s&&r.overview)it.s=r.overview;if(!it.bd&&r.backdrop_path)it.bd="https://image.tmdb.org/t/p/w1280"+r.backdrop_path;
+  if(!it.tmdb&&r.vote_average)it.tmdb=Math.round(r.vote_average*10);if(!(it.g||[]).length&&r.genres)it.g=r.genres.map(g=>g.name).slice(0,3);
+  if(!it.d&&r.runtime)it.d=r.runtime;
+  natPush(it.id)}catch(e){}}
+
+/* Recherche native */
+nativeApi.search=function(q){const old=S.q;S.q=String(q||"");let r;try{r=searchResults()}finally{S.q=old}wantPhotos(r.a.slice(0,20).map(a=>A[a]).filter(Boolean));
+ return JSON.stringify({films:r.f.slice(0,60).map(i=>nI(i)),series:r.s.slice(0,60).map(i=>nI(i)),actors:r.a.slice(0,20).map(a=>({id:a,n:A[a],r:`${acred(a).length} titre${acred(a).length>1?"s":""}`,ph:photoOf(A[a])})),nf:r.f.length,ns:r.s.length})};
+/* Page acteur native */
+function natActor(aid){const n=A[aid]||"",cr=acred(aid);return {id:aid,n,ph:photoOf(n),count:cr.length,items:cr.map(([id,r])=>Object.assign(nI(ALL[id]),{role:r||""}))}}
+nativeApi.actor=function(aid){const n=A[aid]||"";if(n)wantPhotos([n]);
+ if(S.set.tmdbKey&&!ACTD[aid])loadActor(aid).then(()=>{if(NAT.vis)Prisme.nativeEvent("actor",JSON.stringify(natActor(aid)))});
+ return JSON.stringify(natActor(aid))};

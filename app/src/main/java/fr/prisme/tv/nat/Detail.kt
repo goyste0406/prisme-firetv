@@ -306,7 +306,7 @@ class DetailScreen(ui: NativeUi, val itemId: String, val fromWeb: Boolean) : Scr
             v is SourceCard -> { preloaded = false; ui.play(itemId, v.srcId, 0, 0) }
             v is EpCard -> { val e = v.ep ?: return; preloaded = false; ui.play(itemId, "", season + 1, e.optInt("num")) }
             v is Chip -> go(li + 1)
-            v is CastCard -> ui.webScreen("actor", v.actorId)
+            v is CastCard -> ui.push(ActorScreen(ui, v.actorId))
             v is PosterCard -> v.item?.let { ui.openDetail(it.optString("id")) }
         }
     }
