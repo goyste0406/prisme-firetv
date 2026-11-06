@@ -538,6 +538,18 @@ function foreignCat(n){const t=norm(String(n||""));return !FRM.test(t)&&(FMARK.t
 function frOnly(pl){const D=DATA[pl.id];if(!D)return 0;const h=new Set(pl.hidden||[]);let n=0;
  for(const [t,m] of [["l",D.lc],["f",D.vc],["s",D.sc]])for(const name of Object.values(m||{}))if(foreignCat(name)){const k=t+":"+catKey(name);if(!h.has(k)){h.add(k);n++}}
  pl.hidden=[...h];return n}
+/* Langue d'une source : VO ou marque d'un autre pays dans le nom du flux → pas francophone */
+function frSrc(name,tag){if(tag==="VO")return false;const t=norm(String(name||""));if(FRM.test(t))return true;return !(FMARK.test(t)||FWORD.test(t))}
+/* Le résumé est-il en français ? (mots les plus courants de chaque langue) */
+const FRW=new Set("le les des une et est dans pour qui sur avec son sa ses du au aux il elle ne pas plus ce cette leur leurs par mais lui sont ont été être après tout entre deux".split(" "));
+const ENW=new Set("the and of to in is his her with for on that who when after their an as by from but he she they this was are be has have into".split(" "));
+const OTW=new Set("el los las del una y con para su por como sus al der die das und ist nicht mit von zu ein eine di che della nel sono gli lo dos uma não".split(" "));
+function isFr(t){t=String(t||"");if(!t.trim())return true;
+ if(/[\u0600-\u06FF\u0400-\u04FF\u0590-\u05FF\u0E00-\u0E7F\u3040-\u30FF\u4E00-\u9FFF\uAC00-\uD7AF]/.test(t))return false;
+ const w=t.toLowerCase().match(/[a-zàâäéèêëïîôöùûüçãõñß']+/g)||[];if(w.length<6)return true;
+ let f=(t.match(/[èêàâçùûîôœ]/gi)||[]).length,e=0,o=(t.match(/[ñáíóú¿¡ãõß]/gi)||[]).length;
+ for(const x of w){if(FRW.has(x))f++;else if(ENW.has(x))e++;else if(OTW.has(x))o++}
+ return f>=Math.max(e,o)}
 const mapCats=a=>{const m={};(a||[]).forEach(c=>m[c.category_id]=c.category_name||"Autres");return m};
 
 async function loadPlaylist(pl,step=()=>{}){
@@ -580,14 +592,14 @@ function buildCatalog(){
   for(const v of D.vod){const p=parseName(v.n),key=v.tmdb&&v.tmdb!=="0"?"t"+v.tmdb:norm(p.title)+"|"+p.year;let it=byKey["f"+key];
    if(!it){it=byKey["f"+key]=mk("f",key,p,v);FILMS.push(it);ALL[it.id]=it}
    const cn=D.vc[v.cat]||"Autres",ck=catKey(cn);for(const c of (v.cs||[v.cat])){const n2=D.vc[c]||cn,k2=catKey(n2);if(!it.cat.includes(k2))it.cat.push(k2);if(!fc.has(k2))fc.set(k2,n2)}
-   it.src.push({pl:pl.id,sid:v.id,ext:v.ext,q:p.q,tag:p.tag,name:v.n,cat:ck,added:v.added});
+   it.src.push({pl:pl.id,sid:v.id,ext:v.ext,q:p.q,tag:p.tag,name:v.n,cat:ck,added:v.added,fr:frSrc(v.n,p.tag)});
    if(!it.img&&v.img)it.img=v.img;if(v.r&&!it.info){it.tmdb=Math.round(v.r*10)}}
   for(const v of D.ser){const p=parseName(v.n),key=v.tmdb&&v.tmdb!=="0"?"t"+v.tmdb:norm(p.title)+"|"+(p.year||v.year);let it=byKey["s"+key];
    if(!it){it=byKey["s"+key]=mk("s",key,p,v);if(!it.y)it.y=+v.year||0;SERIES.push(it);ALL[it.id]=it}
    const cn=D.sc[v.cat]||"Autres",ck=catKey(cn);for(const c of (v.cs||[v.cat])){const n2=D.sc[c]||cn,k2=catKey(n2);if(!it.cat.includes(k2))it.cat.push(k2);if(!sc.has(k2))sc.set(k2,n2)}
-   it.src.push({pl:pl.id,sid:v.id,ext:"mkv",q:p.q,tag:p.tag,name:v.n,cat:ck,added:v.added});
+   it.src.push({pl:pl.id,sid:v.id,ext:"mkv",q:p.q,tag:p.tag,name:v.n,cat:ck,added:v.added,fr:frSrc(v.n,p.tag)});
    if(!it.img&&v.img)it.img=v.img;if(!it.bd&&v.bd)it.bd=v.bd;
-   if(!it.info){if(!it.s&&v.plot)it.s=v.plot;if(!it.dir&&v.dir)it.dir=v.dir;if(!it.g.length&&v.genre)it.g=v.genre.split(/[,/]/).map(x=>x.trim()).filter(Boolean).slice(0,3);if(v.r)it.tmdb=Math.round(v.r*10);
+   if(!it.info){if(!it.s&&v.plot&&isFr(v.plot))it.s=v.plot;if(!it.dir&&v.dir)it.dir=v.dir;if(!it.g.length&&v.genre)it.g=v.genre.split(/[,/]/).map(x=>x.trim()).filter(Boolean).slice(0,3);if(v.r)it.tmdb=Math.round(v.r*10);
     if(!it.cast.length&&v.cast)it.cast=castList(v.cast)}}
   for(const v of D.live){const p=parseName(v.n),cn=D.lc[v.cat]||"Autres",ck=catKey(cn),ctry=countryOf(v.n,cn),key=norm(p.title).replace(/[^a-z0-9+]+/g," ").trim()+"|"+ctry;let c=byKey["c"+key];
    if(!c){const h=hash(key);c=byKey["c"+key]={id:"c"+h.toString(36),n:p.title,cat:ck,genre:genreOf(p.title,cn),country:ctry,rank:tntRank(p.title),col:CHCOL[h%CHCOL.length],num:v.num||CHS.length+1,logo:v.logo,src:[]};CHS.push(c);CH[c.id]=c}
@@ -613,7 +625,7 @@ async function loadInfo(it){
  const s=it.src.find(x=>S.playlists.find(p=>p.id===x.pl&&p.on))||it.src[0],pl=S.playlists.find(p=>p.id===s.pl);
  try{
   if(it.type==="f"){const r=await getJSON(api(pl,"get_vod_info","&vod_id="+s.sid),30000)||{};const f=r.info||{};
-   it.s=f.plot||f.description||it.s;it.dir=f.director||it.dir;
+   {const t=f.plot||f.description||"";if(t&&isFr(t))it.s=t;else if(it.s&&!isFr(it.s))it.s=""}it.dir=f.director||it.dir;
    if(f.genre)it.g=String(f.genre).split(/[,/]/).map(x=>x.trim()).filter(Boolean).slice(0,3);
    it.d=Math.round((+f.duration_secs||0)/60)||it.d;if(!it.d&&f.duration){const m=String(f.duration).match(/(\d+):(\d+)/);if(m)it.d=+m[1]*60+ +m[2]}
    if(f.releasedate&&!it.y)it.y=+String(f.releasedate).slice(0,4)||0;
@@ -623,7 +635,7 @@ async function loadInfo(it){
    if(f.cast||f.actors)it.cast=castList(f.cast||f.actors);
    {const q=qualFromInfo(f);if(q)setQual(qkey(pl.id,"v",s.sid),q)}}
   else{const r=await getJSON(api(pl,"get_series_info","&series_id="+s.sid),30000)||{};const f=r.info||{};
-   it.s=f.plot||it.s;it.dir=f.director||it.dir;if(f.genre)it.g=String(f.genre).split(/[,/]/).map(x=>x.trim()).filter(Boolean).slice(0,3);
+   {const t=f.plot||"";if(t&&isFr(t))it.s=t;else if(it.s&&!isFr(it.s))it.s=""}it.dir=f.director||it.dir;if(f.genre)it.g=String(f.genre).split(/[,/]/).map(x=>x.trim()).filter(Boolean).slice(0,3);
    const bd=Array.isArray(f.backdrop_path)?f.backdrop_path[0]:f.backdrop_path;if(bd)it.bd=bd;if(f.rating)it.tmdb=Math.round(+f.rating*10);
    if(f.cast)it.cast=castList(f.cast);
    const eps=r.episodes||{};it.eps={};it.seasons=Object.keys(eps).map(Number).filter(n=>!isNaN(n)).sort((a,b)=>a-b);
@@ -783,7 +795,7 @@ function save(){try{localStorage.setItem("prisme",JSON.stringify({appVer:S.appVe
 const inApp=()=>S.playlists.length>0&&!S.adding;
 let AUTOCHK=false;
 /* Chaque playlist expose une partie du catalogue (simulation). L'union des playlists actives forme le catalogue affiché ; un titre présent sur plusieurs playlists est fusionné et garde la liste de ses sources. */
-function base(pl,key){const it=key.startsWith("ch:")?CH[key.slice(3)]:ALL[key];return !!it&&it.src.some(s=>s.pl===pl.id)}
+function base(pl,key){const it=key.startsWith("ch:")?CH[key.slice(3)]:ALL[key];return !!it&&it.src.some(s=>s.pl===pl.id&&(S.set.allLang||s.fr!==false))}
 function provCat(pl,it){const s=it&&it.src.find(s=>s.pl===pl.id);return s?s.cat:""}
 function provKey(pl,key){if(key.startsWith("ch:"))return "l:"+provCat(pl,CH[key.slice(3)]);const it=ALL[key];return it.type+":"+provCat(pl,it)}
 const HS={};function hidSet(pl){const a=pl.hidden||[];let h=HS[pl.id];if(!h||h.a!==a||h.n!==a.length)h=HS[pl.id]={a,n:a.length,s:new Set(a)};return h.s}
@@ -794,7 +806,7 @@ function plCats(pl,t){const D=DATA[pl.id];if(!D)return[];const m=t==="l"?D.lc:t=
 function rowHidden(type,k){const on=S.playlists.filter(p=>p.on);return on.length>0&&on.every(p=>(p.hidden||[]).includes(type+":"+k))}
 const qr=q=>({"4K":4,"1080p":3,"Auto":2.5,"720p":2,"SD":1})[q]||0;
 function variants(pl,key){const ch=key.startsWith("ch:"),it=ch?CH[key.slice(3)]:ALL[key];if(!it)return[];const kind=ch?"l":it.type==="f"?"v":"s";
- return it.src.filter(s=>s.pl===pl.id).map((s,i)=>{const k=qkey(pl.id,kind,s.sid),qi=QUAL[k]&&QUAL[k].ok?QUAL[k]:null,pend=!!QPEND[k],fail=!!(QUAL[k]&&!QUAL[k].ok);
+ return it.src.filter(s=>s.pl===pl.id&&(S.set.allLang||s.fr!==false)).map((s,i)=>{const k=qkey(pl.id,kind,s.sid),qi=QUAL[k]&&QUAL[k].ok?QUAL[k]:null,pend=!!QPEND[k],fail=!!(QUAL[k]&&!QUAL[k].ok);
   const q=qi?qi.q:(s.q!=="Auto"?s.q:(pend?"Analyse…":fail?"Inconnue":"Auto"));
   const tagAudio=ch?"Selon la chaîne":s.tag==="MULTI"?"Multi-langues (VF + VO)":s.tag==="VOSTFR"||s.tag==="VO"?"Version originale":"Français (VF)";
   return {id:pl.id+"|"+s.sid,i,p:pl,q,qi,hdr:!!(qi&&qi.hdr),tag:s.tag||"",sid:s.sid,ext:s.ext||"ts",name:s.name,
@@ -1005,6 +1017,7 @@ function settingsFull(){
   <div class="it"><span>Playlists actives</span><span>${on.length} / ${S.playlists.length}</span></div>
   <div class="it"><span>Contenu total</span><span>${chans().length} chaînes · ${films().length} films · ${series().length} séries</span></div>
   <div class="it"><span>Titres et chaînes avec plusieurs sources</span><span>${dup} titres regroupés</span></div>
+  <div class="it tall" data-f data-fid="set-alllang" data-act="langall"><span>Sources dans toutes les langues<small>Désactivé : seules les sources francophones (VF, VOSTFR, MULTI) apparaissent sur les fiches</small></span>${sw(st.allLang)}</div>
   <div class="it tall" data-f data-fid="set-adult" data-act="set:adult"><span>Charger le contenu adulte<small>Désactivé : les catégories adultes ne sont jamais chargées · pris en compte à la prochaine actualisation des playlists</small></span>${sw(st.adult)}</div>
  </div></section>
  <section data-anchor><h3>Guide TV (EPG)</h3><div class="grp">
@@ -1460,6 +1473,7 @@ function act(a){
   case "tab": move("down");break;
   case "open": if(natOn()&&ALL[v]){NAT.vis=true;Prisme.nativeOpen(v);break}push({t:"detail",id:v});break;
   case "fronly":{const pl=S.playlists.find(p=>p.id===v);if(!pl)break;const n=frOnly(pl);PLDIRTY=false;bump();dirty();save();render(F.dataset.fid);toast(n?`${n} catégories non francophones masquées`:"Aucune autre catégorie étrangère repérée");break}
+  case "langall": S.set.allLang=!S.set.allLang;bump();dirty();save();render(F.dataset.fid);break;
   case "sset": push({t:"sset",i:+v});break;
   case "ocat": push({t:"cat",ty:v,k:w,sort:"new"});break;
   case "csort":{const t=topS();if(t.t==="cat"&&t.sort!==v){t.sort=v;render("cs-"+v)}break}
@@ -1832,7 +1846,7 @@ async function tgRun(){
    try{
     if(it.tmdbId&&it.tmdbId!=="0"){const r=await tmdb((it.type==="f"?"movie/":"tv/")+it.tmdbId);
      TG[it.id]=r&&r.genres?it.tmdbId+":"+r.genres.map(g=>g.id).join(","):"-";
-     if(r){if(!it.s&&r.overview)it.s=r.overview;if(!it.bd&&r.backdrop_path)it.bd="https://image.tmdb.org/t/p/w1280"+r.backdrop_path;if(!it.tmdb&&r.vote_average)it.tmdb=Math.round(r.vote_average*10)}}
+     if(r){if(!it.s&&r.overview&&isFr(r.overview))it.s=r.overview;if(!it.bd&&r.backdrop_path)it.bd="https://image.tmdb.org/t/p/w1280"+r.backdrop_path;if(!it.tmdb&&r.vote_average)it.tmdb=Math.round(r.vote_average*10)}}
     else{const y=it.y?(it.type==="f"?"&year=":"&first_air_date_year=")+it.y:"";
      const r=await tmdb(`search/${it.type==="f"?"movie":"tv"}?query=${encodeURIComponent(String(it.t).slice(0,80))}${y}`);
      const m=r&&r.results&&r.results[0];TG[it.id]=m?m.id+":"+(m.genre_ids||[]).join(","):"-";
@@ -1853,7 +1867,7 @@ async function tmdbFill(it){
  try{let id=it.tmdbId;
   if(!id||id==="0"){const y=it.y?(it.type==="f"?"&year=":"&first_air_date_year=")+it.y:"";const r=await tmdb(`search/${it.type==="f"?"movie":"tv"}?query=${encodeURIComponent(String(it.t).slice(0,80))}${y}`);const m=r&&r.results&&r.results[0];if(!m)return;id=it.tmdbId=String(m.id)}
   const r=await tmdb((it.type==="f"?"movie/":"tv/")+id);if(!r)return;
-  if(!it.s&&r.overview)it.s=r.overview;if(!it.bd&&r.backdrop_path)it.bd="https://image.tmdb.org/t/p/w1280"+r.backdrop_path;
+  if(!it.s&&r.overview&&isFr(r.overview))it.s=r.overview;if(!it.bd&&r.backdrop_path)it.bd="https://image.tmdb.org/t/p/w1280"+r.backdrop_path;
   if(!it.tmdb&&r.vote_average)it.tmdb=Math.round(r.vote_average*10);if(!(it.g||[]).length&&r.genres)it.g=r.genres.map(g=>g.name).slice(0,3);
   if(!it.d&&r.runtime)it.d=r.runtime;
   natPush(it.id)}catch(e){}}

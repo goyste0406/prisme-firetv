@@ -200,7 +200,7 @@ async function tgRun(){
    try{
     if(it.tmdbId&&it.tmdbId!=="0"){const r=await tmdb((it.type==="f"?"movie/":"tv/")+it.tmdbId);
      TG[it.id]=r&&r.genres?it.tmdbId+":"+r.genres.map(g=>g.id).join(","):"-";
-     if(r){if(!it.s&&r.overview)it.s=r.overview;if(!it.bd&&r.backdrop_path)it.bd="https://image.tmdb.org/t/p/w1280"+r.backdrop_path;if(!it.tmdb&&r.vote_average)it.tmdb=Math.round(r.vote_average*10)}}
+     if(r){if(!it.s&&r.overview&&isFr(r.overview))it.s=r.overview;if(!it.bd&&r.backdrop_path)it.bd="https://image.tmdb.org/t/p/w1280"+r.backdrop_path;if(!it.tmdb&&r.vote_average)it.tmdb=Math.round(r.vote_average*10)}}
     else{const y=it.y?(it.type==="f"?"&year=":"&first_air_date_year=")+it.y:"";
      const r=await tmdb(`search/${it.type==="f"?"movie":"tv"}?query=${encodeURIComponent(String(it.t).slice(0,80))}${y}`);
      const m=r&&r.results&&r.results[0];TG[it.id]=m?m.id+":"+(m.genre_ids||[]).join(","):"-";
@@ -221,7 +221,7 @@ async function tmdbFill(it){
  try{let id=it.tmdbId;
   if(!id||id==="0"){const y=it.y?(it.type==="f"?"&year=":"&first_air_date_year=")+it.y:"";const r=await tmdb(`search/${it.type==="f"?"movie":"tv"}?query=${encodeURIComponent(String(it.t).slice(0,80))}${y}`);const m=r&&r.results&&r.results[0];if(!m)return;id=it.tmdbId=String(m.id)}
   const r=await tmdb((it.type==="f"?"movie/":"tv/")+id);if(!r)return;
-  if(!it.s&&r.overview)it.s=r.overview;if(!it.bd&&r.backdrop_path)it.bd="https://image.tmdb.org/t/p/w1280"+r.backdrop_path;
+  if(!it.s&&r.overview&&isFr(r.overview))it.s=r.overview;if(!it.bd&&r.backdrop_path)it.bd="https://image.tmdb.org/t/p/w1280"+r.backdrop_path;
   if(!it.tmdb&&r.vote_average)it.tmdb=Math.round(r.vote_average*10);if(!(it.g||[]).length&&r.genres)it.g=r.genres.map(g=>g.name).slice(0,3);
   if(!it.d&&r.runtime)it.d=r.runtime;
   natPush(it.id)}catch(e){}}

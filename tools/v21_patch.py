@@ -84,3 +84,32 @@ R('  case "sset":', '''  case "fronly":{const pl=S.playlists.find(p=>p.id===v);i
 R('''  <div class="it"><span>Titres et chaînes avec plusieurs sources</span><span>${dup} titres regroupés</span></div>''',
   '''  <div class="it"><span>Titres et chaînes avec plusieurs sources</span><span>${dup} titres regroupés</span></div>
   <div class="it tall" data-f data-fid="set-adult" data-act="set:adult"><span>Charger le contenu adulte<small>Désactivé : les catégories adultes ne sont jamais chargées · pris en compte à la prochaine actualisation des playlists</small></span>${sw(st.adult)}</div>''')
+
+# ---------------------------------------------------------------- 2.1.5 : sources et résumés en français uniquement
+R('const mapCats=a=>', '''/* Langue d'une source : VO ou marque d'un autre pays dans le nom du flux → pas francophone */
+function frSrc(name,tag){if(tag==="VO")return false;const t=norm(String(name||""));if(FRM.test(t))return true;return !(FMARK.test(t)||FWORD.test(t))}
+/* Le résumé est-il en français ? (mots les plus courants de chaque langue) */
+const FRW=new Set("le les des une et est dans pour qui sur avec son sa ses du au aux il elle ne pas plus ce cette leur leurs par mais lui sont ont été être après tout entre deux".split(" "));
+const ENW=new Set("the and of to in is his her with for on that who when after their an as by from but he she they this was are be has have into".split(" "));
+const OTW=new Set("el los las del una y con para su por como sus al der die das und ist nicht mit von zu ein eine di che della nel sono gli lo dos uma não".split(" "));
+function isFr(t){t=String(t||"");if(!t.trim())return true;
+ if(/[\\u0600-\\u06FF\\u0400-\\u04FF\\u0590-\\u05FF\\u0E00-\\u0E7F\\u3040-\\u30FF\\u4E00-\\u9FFF\\uAC00-\\uD7AF]/.test(t))return false;
+ const w=t.toLowerCase().match(/[a-zàâäéèêëïîôöùûüçãõñß']+/g)||[];if(w.length<6)return true;
+ let f=(t.match(/[èêàâçùûîôœ]/gi)||[]).length,e=0,o=(t.match(/[ñáíóú¿¡ãõß]/gi)||[]).length;
+ for(const x of w){if(FRW.has(x))f++;else if(ENW.has(x))e++;else if(OTW.has(x))o++}
+ return f>=Math.max(e,o)}
+const mapCats=a=>''')
+R('   it.src.push({pl:pl.id,sid:v.id,ext:v.ext,q:p.q,tag:p.tag,name:v.n,cat:ck,added:v.added});',
+  '   it.src.push({pl:pl.id,sid:v.id,ext:v.ext,q:p.q,tag:p.tag,name:v.n,cat:ck,added:v.added,fr:frSrc(v.n,p.tag)});')
+R('   it.src.push({pl:pl.id,sid:v.id,ext:"mkv",q:p.q,tag:p.tag,name:v.n,cat:ck,added:v.added});',
+  '   it.src.push({pl:pl.id,sid:v.id,ext:"mkv",q:p.q,tag:p.tag,name:v.n,cat:ck,added:v.added,fr:frSrc(v.n,p.tag)});')
+R('if(!it.s&&v.plot)it.s=v.plot;', 'if(!it.s&&v.plot&&isFr(v.plot))it.s=v.plot;')
+R('   it.s=f.plot||f.description||it.s;', '   {const t=f.plot||f.description||"";if(t&&isFr(t))it.s=t;else if(it.s&&!isFr(it.s))it.s=""}')
+R('   it.s=f.plot||it.s;', '   {const t=f.plot||"";if(t&&isFr(t))it.s=t;else if(it.s&&!isFr(it.s))it.s=""}')
+# seules les sources francophones comptent (sauf réglage contraire)
+R('function base(pl,key){const it=key.startsWith("ch:")?CH[key.slice(3)]:ALL[key];return !!it&&it.src.some(s=>s.pl===pl.id)}',
+  'function base(pl,key){const it=key.startsWith("ch:")?CH[key.slice(3)]:ALL[key];return !!it&&it.src.some(s=>s.pl===pl.id&&(S.set.allLang||s.fr!==false))}')
+R(' return it.src.filter(s=>s.pl===pl.id).map((s,i)=>{', ' return it.src.filter(s=>s.pl===pl.id&&(S.set.allLang||s.fr!==false)).map((s,i)=>{')
+R('''  <div class="it tall" data-f data-fid="set-adult" data-act="set:adult">''', '''  <div class="it tall" data-f data-fid="set-alllang" data-act="langall"><span>Sources dans toutes les langues<small>Désactivé : seules les sources francophones (VF, VOSTFR, MULTI) apparaissent sur les fiches</small></span>${sw(st.allLang)}</div>
+  <div class="it tall" data-f data-fid="set-adult" data-act="set:adult">''')
+R('  case "sset":', '  case "langall": S.set.allLang=!S.set.allLang;bump();dirty();save();render(F.dataset.fid);break;\n  case "sset":')
