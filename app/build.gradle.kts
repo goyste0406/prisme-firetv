@@ -12,8 +12,8 @@ android {
         minSdk = 26
         targetSdk = 34
         // Incrémenter versionCode et versionName à chaque nouvelle version publiée
-        versionCode = 14
-        versionName = "2.1.3"
+        versionCode = 15
+        versionName = "2.1.4"
     }
 
     signingConfigs {

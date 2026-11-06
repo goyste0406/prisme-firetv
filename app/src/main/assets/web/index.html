@@ -521,6 +521,23 @@ async function fillCats(pl,action,cats,list,map,D){
  await worker();
  if(added)LOG(`${pl.name} · ${action} : +${added} éléments récupérés dans ${miss.length} catégories`);
  return list}
+/* Catégories adultes : jamais chargées (sauf si activées dans Réglages › Catalogue) */
+const ADULT=/(^|[^a-z0-9])(adult|adulte|adultes|adults|xxx|porn|porno|sexe|sex|erotic|erotique|erotica|charme|hentai|for adults)([^a-z0-9]|$)|18 ?\+|\+ ?18/;
+const isAdultCat=n=>ADULT.test(norm(String(n||"")));
+function dropAdult(D){if(S.set.adult)return 0;let n=0;
+ for(const [lk,lst] of [["lc","live"],["vc","vod"],["sc","ser"]]){const m=D[lk]||{},bad=new Set();
+  for(const k of Object.keys(m))if(isAdultCat(m[k])){bad.add(String(k));delete m[k];n++}
+  if(bad.size)D[lst]=(D[lst]||[]).filter(x=>!bad.has(String(x.cat))&&!(x.cs||[]).some(c=>bad.has(String(c))))}
+ return n}
+/* Catégories non francophones : repérées par un code pays ou une langue étrangère, sans mention française */
+const FRM=/(^|[^a-z])(fr|fra|france|francais|francaise|french|vf|vff|vfq|vfi|vostfr|truefrench|belgique|belgium|suisse|quebec|qc|afrique|francophone|dom ?tom|antilles|reunion)([^a-z]|$)/;
+const FCODE="en|eng|uk|gb|us|usa|de|ger|at|it|ita|es|esp|sp|lat|mx|pt|br|ar|tr|nl|pl|ro|ru|ua|gr|al|yu|exyu|ex-yu|hr|rs|ba|mk|si|bg|cz|sk|hu|se|swe|no|dk|fi|is|in|pk|bd|lk|np|cn|tw|hk|jp|kr|kh|vn|th|ph|my|sg|id|ir|iq|af|ku|il|am|az|ge|kz|uz|so|et|ng|gh|ke|za|car|latam|latino|arab|asia";
+const FMARK=new RegExp("^[^a-z0-9]*("+FCODE+")\\s*[|:\\-–»\\]\\)/]|[|\\[\\(]\\s*("+FCODE+")\\s*[|\\]\\)]");
+const FWORD=/(ex-?yu|yugo|bollywood|english|anglais|german|allemand|deutsch|deutschland|italia|italian|italien|espana|spanish|espagnol|latino|portugal|portugues|brasil|brazil|arabic|arabe|turkish|turc|turkiye|turk|dutch|nederland|polska|polish|romania|russia|russe|ukrain|greek|grec|albania|albanais|serbia|croatia|bulgaria|czech|hungar|swedish|svenska|norway|danish|finnish|india|hindi|tamil|telugu|malayalam|punjabi|bengali|pakistan|urdu|chinese|chinois|japan|korean|coreen|kurd|persian|iran|afghan|somali|ethiopia|amharic|israel|hebrew|philippin|vietnam|thai|indonesia|malay|caribbean|jamaica|nigeria|ghana|kenya|swahili|armenia|georgia|azer|kazakh)/;
+function foreignCat(n){const t=norm(String(n||""));return !FRM.test(t)&&(FMARK.test(t)||FWORD.test(t))}
+function frOnly(pl){const D=DATA[pl.id];if(!D)return 0;const h=new Set(pl.hidden||[]);let n=0;
+ for(const [t,m] of [["l",D.lc],["f",D.vc],["s",D.sc]])for(const name of Object.values(m||{}))if(foreignCat(name)){const k=t+":"+catKey(name);if(!h.has(k)){h.add(k);n++}}
+ pl.hidden=[...h];return n}
 const mapCats=a=>{const m={};(a||[]).forEach(c=>m[c.category_id]=c.category_name||"Autres");return m};
 
 async function loadPlaylist(pl,step=()=>{}){
@@ -544,6 +561,7 @@ async function loadPlaylist(pl,step=()=>{}){
  step(2);D.live=await fillCats(pl,"get_live_streams",D.lc,await all("get_live_streams",mL,90000),mL,D);
  step(3);D.vod=await fillCats(pl,"get_vod_streams",D.vc,await all("get_vod_streams",mV,150000),mV,D);
  step(4);D.ser=await fillCats(pl,"get_series",D.sc,await all("get_series",mS,150000),mS,D);
+{const r=dropAdult(D);if(r)LOG(`${pl.name} : ${r} catégories adultes ignorées (jamais chargées)`)}
  LOG(`${pl.name} chargée en ${((Date.now()-t0)/1000).toFixed(1)} s · ${D.live.length} TV · ${D.vod.length} films · ${D.ser.length} séries${D.fill?` · ${D.fill} catégories complétées une par une`:""}`);
  DATA[pl.id]=D;pl.exp=D.info.exp_date?+D.info.exp_date*1000:null;pl.maxc=+D.info.max_connections||0;pl.actc=+D.info.active_cons||0;
  pl.fmt=(D.info.allowed_output_formats||[]).includes("ts")?"ts":((D.info.allowed_output_formats||[])[0]||"ts");
@@ -987,6 +1005,7 @@ function settingsFull(){
   <div class="it"><span>Playlists actives</span><span>${on.length} / ${S.playlists.length}</span></div>
   <div class="it"><span>Contenu total</span><span>${chans().length} chaînes · ${films().length} films · ${series().length} séries</span></div>
   <div class="it"><span>Titres et chaînes avec plusieurs sources</span><span>${dup} titres regroupés</span></div>
+  <div class="it tall" data-f data-fid="set-adult" data-act="set:adult"><span>Charger le contenu adulte<small>Désactivé : les catégories adultes ne sont jamais chargées · pris en compte à la prochaine actualisation des playlists</small></span>${sw(st.adult)}</div>
  </div></section>
  <section data-anchor><h3>Guide TV (EPG)</h3><div class="grp">
     <div class="it" data-f data-fid="set-epg" data-act="epg"><span>Actualiser le guide TV maintenant</span><span>Chargé automatiquement chaîne par chaîne</span></div>
@@ -1070,6 +1089,7 @@ function plmHtml(id){
   <div class="it" data-f data-fid="plm-on" data-act="pl:on:${p.id}" data-default><span>Playlist active</span>${sw(p.on)}</div>
   <div class="it tall"><span>Contenu affiché<small>Les versions d'un même titre (4K, 1080p, VF, VOSTFR…) sont regroupées dans une seule fiche</small></span><span>${c.c} chaînes · ${c.f} films · ${c.s} séries</span></div>
   ${(D=>D?`<div class="it tall"><span>Reçu du serveur<small>${Object.keys(D.lc||{}).length+Object.keys(D.vc||{}).length+Object.keys(D.sc||{}).length} catégories${D.fill?` · ${D.fill} complétée${D.fill>1?"s":""} catégorie par catégorie`:""}</small></span><span>${D.live.length} flux TV · ${D.vod.length} films · ${D.ser.length} séries</span></div>`:"")(DATA[p.id])}
+  <div class="it tall" data-f data-fid="plm-fr" data-act="fronly:${p.id}"><span>Garder uniquement le contenu francophone<small>Masque les catégories marquées d\'un autre pays ou d\'une autre langue · réversible ci-dessous</small></span><span>›</span></div>
   <div class="it" data-f data-fid="plm-showall" data-act="hideall:${p.id}:0"><span>Afficher toutes les catégories</span><span>${hid.length?hid.length+" masquée"+(hid.length>1?"s":""):"aucune masquée"}</span></div>
   <div class="it" data-f data-fid="plm-ref" data-act="plref:${p.id}"><span>Actualiser la playlist</span><span>player_api.php</span></div>
   <div class="it" data-f data-fid="plm-del" data-act="pl:del:${p.id}"><span style="color:#ff6961">Supprimer la playlist</span><span></span></div>
@@ -1439,6 +1459,7 @@ function act(a){
  switch(k){
   case "tab": move("down");break;
   case "open": if(natOn()&&ALL[v]){NAT.vis=true;Prisme.nativeOpen(v);break}push({t:"detail",id:v});break;
+  case "fronly":{const pl=S.playlists.find(p=>p.id===v);if(!pl)break;const n=frOnly(pl);PLDIRTY=false;bump();dirty();save();render(F.dataset.fid);toast(n?`${n} catégories non francophones masquées`:"Aucune autre catégorie étrangère repérée");break}
   case "sset": push({t:"sset",i:+v});break;
   case "ocat": push({t:"cat",ty:v,k:w,sort:"new"});break;
   case "csort":{const t=topS();if(t.t==="cat"&&t.sort!==v){t.sort=v;render("cs-"+v)}break}
@@ -1532,7 +1553,7 @@ async function doLogin(){
  const pl={id:"pl"+Date.now().toString(36),name:(f.name||"").trim()||"Playlist "+(S.playlists.length+1),url:u,user:f.user.trim(),pass:f.pass,epg:f.epg,on:true,hidden:[]};
  S.loading=true;render();
  const lis=[...document.querySelectorAll("#steps li")],mark=i=>{lis.forEach((li,j)=>{li.className=j<i?"done":j===i?"run":"";const d=li.querySelector(".dot");if(d)d.textContent=j<i?"✓":""})};
- try{await loadPlaylist(pl,mark);mark(5);S.playlists.push(pl);buildCatalog();mark(6);
+ try{await loadPlaylist(pl,mark);mark(5);const nfr=frOnly(pl);if(nfr)LOG(`${pl.name} : ${nfr} catégories non francophones masquées`);S.playlists.push(pl);buildCatalog();mark(6);if(nfr)setTimeout(()=>toast(`${nfr} catégories non francophones masquées · modifiable dans la playlist`),2600);
   S.loading=false;S.adding=false;S.stack=[{t:"home"}];save();loadTrends();
   if(first){S.tab="films";render();toast(`Connecté · ${chans().length} chaînes · ${films().length} films · ${series().length} séries`)}
   else{S.tab="settings";render("set-add");toast(`${pl.name} ajoutée : +${films().length-b.f} films, +${series().length-b.s} séries, +${chans().length-b.c} chaînes`)}
