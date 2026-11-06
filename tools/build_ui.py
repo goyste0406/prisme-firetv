@@ -21,7 +21,7 @@ def RX(pat, b, flags=re.S):
 def FN(name, code):
     """Remplace une fonction de premier niveau entière."""
     global js
-    m = re.search(r"^function " + re.escape(name) + r"\(", js, re.M)
+    m = re.search(r"^(?:async )?function " + re.escape(name) + r"\(", js, re.M)
     assert m, ("FN missing", name)
     nxt = re.search(r"^(function |const |let |/\*|class |document\.|view\.|setInterval|render\(\);)", js[m.end():], re.M)
     end = m.end() + nxt.start() if nxt else len(js)
@@ -309,9 +309,28 @@ R('setInterval(()=>{document.querySelectorAll(".clock")', 'if(NATIVE)document.do
 assert js.rstrip().endswith("render();"), js[-60:]
 js = js.rstrip()[:-len("render();")] + "boot();\n"
 
+exec(open(os.path.join(D, "perf_patch.py"), encoding="utf-8").read())
+
 # ---------------------------------------------------------------- CSS + page
 css += '''
 /* ---- app Fire TV ---- */
+html.lite .tabs,html.lite .btn,html.lite .pc,html.lite .mbox,html.lite .lpanel2,html.lite #toast,html.lite .modal,html.lite .ppause,html.lite .pinfo{backdrop-filter:none!important;-webkit-backdrop-filter:none!important}
+html.lite .tabs{background:rgba(26,26,32,.94)}
+html.lite .btn{background:rgba(62,62,72,.92)}
+html.lite .pc{background:rgba(48,48,58,.9)}
+html.lite .mbox{background:rgba(30,30,38,.98)}
+html.lite .modal{background:rgba(0,0,0,.72)}
+html.lite #toast{background:rgba(36,36,44,.97)}
+html.lite .lpanel2{background:rgba(24,24,30,.96)}
+html.lite .pst{box-shadow:none;transition:transform .16s ease-out}
+html.lite .card.foc .pst{box-shadow:0 10px 22px rgba(0,0,0,.55)}
+html.lite .pst::after{display:none}
+html.lite .eth,html.lite .av{box-shadow:none}
+html.lite .bgl{transition:opacity .25s linear}
+html.lite .vid{animation:none}
+html.lite .scan,html.lite .pth-img::after{display:none}
+html.lite .btn.foc,html.lite .pc.foc,html.lite .lch.foc,html.lite .tab.foc{box-shadow:none}
+.sx>*,.lchs>*{contain:layout style}
 [hidden]{display:none!important}
 html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#000}
 #scr{position:fixed!important;left:0;top:0}

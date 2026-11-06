@@ -396,6 +396,23 @@ kbd{font-family:var(--ui);font-size:12px;background:#1c1f27;border:1px solid #2a
 @media (max-width:760px){.remote{width:auto;flex-direction:row;flex-wrap:wrap;justify-content:center;border-radius:30px;padding:16px 20px}.brand-r{display:none}}
 
 /* ---- app Fire TV ---- */
+html.lite .tabs,html.lite .btn,html.lite .pc,html.lite .mbox,html.lite .lpanel2,html.lite #toast,html.lite .modal,html.lite .ppause,html.lite .pinfo{backdrop-filter:none!important;-webkit-backdrop-filter:none!important}
+html.lite .tabs{background:rgba(26,26,32,.94)}
+html.lite .btn{background:rgba(62,62,72,.92)}
+html.lite .pc{background:rgba(48,48,58,.9)}
+html.lite .mbox{background:rgba(30,30,38,.98)}
+html.lite .modal{background:rgba(0,0,0,.72)}
+html.lite #toast{background:rgba(36,36,44,.97)}
+html.lite .lpanel2{background:rgba(24,24,30,.96)}
+html.lite .pst{box-shadow:none;transition:transform .16s ease-out}
+html.lite .card.foc .pst{box-shadow:0 10px 22px rgba(0,0,0,.55)}
+html.lite .pst::after{display:none}
+html.lite .eth,html.lite .av{box-shadow:none}
+html.lite .bgl{transition:opacity .25s linear}
+html.lite .vid{animation:none}
+html.lite .scan,html.lite .pth-img::after{display:none}
+html.lite .btn.foc,html.lite .pc.foc,html.lite .lch.foc,html.lite .tab.foc{box-shadow:none}
+.sx>*,.lchs>*{contain:layout style}
 [hidden]{display:none!important}
 html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#000}
 #scr{position:fixed!important;left:0;top:0}
@@ -455,6 +472,11 @@ function parseName(raw){
  if(ym&&!/\(/.test(ym[0]))title=title.replace(/[\s\-–](19|20)\d{2}$/,"").trim();
  return {title:title||String(raw),year:ym?+ym[0].replace(/\D/g,""):0,q,tag};
 }
+/* Cache du catalogue sur l'appareil (IndexedDB) : démarrage instantané */
+const IDB={db:null,open(){return new Promise(r=>{try{const q=indexedDB.open("prisme",1);q.onupgradeneeded=()=>q.result.createObjectStore("data");q.onsuccess=()=>r(this.db=q.result);q.onerror=()=>r(null)}catch(e){r(null)}})},
+ async get(k){const db=this.db||await this.open();if(!db)return null;return new Promise(r=>{try{const t=db.transaction("data").objectStore("data").get(k);t.onsuccess=()=>r(t.result||null);t.onerror=()=>r(null)}catch(e){r(null)}})},
+ async put(k,v){const db=this.db||await this.open();if(!db)return;try{db.transaction("data","readwrite").objectStore("data").put(v,k)}catch(e){}},
+ async del(k){const db=this.db||await this.open();if(!db)return;try{db.transaction("data","readwrite").objectStore("data").delete(k)}catch(e){}}};
 const mapCats=a=>{const m={};(a||[]).forEach(c=>m[c.category_id]=c.category_name||"Autres");return m};
 
 async function loadPlaylist(pl,step=()=>{}){
@@ -469,7 +491,7 @@ async function loadPlaylist(pl,step=()=>{}){
  step(4);D.ser=(await getJSON(api(pl,"get_series"),120000)||[]).map(x=>({id:x.series_id,n:x.name||"",img:x.cover||"",cat:x.category_id,r:+x.rating||0,added:+(x.last_modified||0),plot:x.plot||"",cast:x.cast||"",dir:x.director||"",genre:x.genre||"",year:String(x.releaseDate||x.release_date||"").slice(0,4),bd:(Array.isArray(x.backdrop_path)?x.backdrop_path[0]:x.backdrop_path)||"",tmdb:String(x.tmdb||"")}));
  DATA[pl.id]=D;pl.exp=D.info.exp_date?+D.info.exp_date*1000:null;pl.maxc=+D.info.max_connections||0;pl.actc=+D.info.active_cons||0;
  pl.fmt=(D.info.allowed_output_formats||[]).includes("ts")?"ts":((D.info.allowed_output_formats||[])[0]||"ts");
- pl.loadedAt=Date.now();
+ pl.loadedAt=Date.now();IDB.put("pl:"+pl.id,D);
  return D;
 }
 
@@ -693,7 +715,7 @@ const films=()=>memo("f",()=>FILMS.filter(i=>srcs(i.id).length)),series=()=>memo
 const acred=a=>(CRED[a]||[]).filter(([id])=>srcs(id).length);
 function counts(pl){return {c:CHS.filter(c=>has(pl,"ch:"+c.id)).length,f:FILMS.filter(i=>has(pl,i.id)).length,s:SERIES.filter(i=>has(pl,i.id)).length}}
 const isFav=k=>S.favs.includes(k);
-function toggleFav(k,label){if(isFav(k)){S.favs=S.favs.filter(x=>x!==k);toast(`Retiré des favoris : ${label}`)}else{S.favs.push(k);toast(`Ajouté aux favoris : ${label}`)}save()}
+function toggleFav(k,label){dirty();if(isFav(k)){S.favs=S.favs.filter(x=>x!==k);toast(`Retiré des favoris : ${label}`)}else{S.favs.push(k);toast(`Ajouté aux favoris : ${label}`)}save()}
 
 /* ========================= RENDU : FRAGMENTS ========================= */
 const IC={
@@ -721,17 +743,30 @@ ff:'<svg viewBox="0 0 24 24"><path d="M12 5V1l5 5-5 5V7a6 6 0 1 0 6 6h2a8 8 0 1 
 prev:'<svg viewBox="0 0 24 24"><path d="M7 14l5-5 5 5z"/></svg>',
 next:'<svg viewBox="0 0 24 24"><path d="M7 10l5 5 5-5z"/></svg>',
 };
-function poster(it,nw){const img=it.img?`<img src="${esc(it.img)}" alt="" loading="lazy" decoding="async" onerror="this.parentNode.classList.remove('has-img');this.remove()">`:"";
- return `<div class="pst f-${it.f} sh${hash(it.id)%4} ${img?"has-img":""}" style="--a:${it.c[0]};--b:${it.c[1]}">${img}<div class="pst-in">${nw?'<span class="newb">Ajouté récemment</span>':`<span class="pst-k">${it.type==="s"?"SÉRIE":(it.y||"")}</span>`}<span class="pst-t">${esc(it.t)}</span></div></div>`}
+const PK={bebas:[34,.42],serif:[22,.56],black:[17,.78],thin:[19,.74]};
+function pfs(it){const [b,k]=PK[it.f]||[20,.6],t=String(it.t||""),lw=Math.max(4,...t.split(/\s+/).map(w=>w.length)),L=t.length;return Math.max(10,Math.min(b,114/(lw*k),Math.sqrt(114*112/(Math.max(L,1)*k*1.15))))|0}
+const imgS=(u,sz)=>u?String(u).replace(/(image\.tmdb\.org\/t\/p\/)(original|w\d+)\//,"$1"+sz+"/"):"";
+function poster(it,nw){const src=imgS(it.img,"w185"),img=src?`<img src="${esc(src)}" alt="" loading="lazy" decoding="async" onerror="this.parentNode.classList.remove('has-img');this.remove()">`:"";
+ return `<div class="pst f-${it.f} sh${hash(it.id)%4} ${img?"has-img":""}" style="--a:${it.c[0]};--b:${it.c[1]}">${img}<div class="pst-in">${nw?'<span class="newb">Ajouté récemment</span>':`<span class="pst-k">${it.type==="s"?"SÉRIE":(it.y||"")}</span>`}<span class="pst-t" style="font-size:${pfs(it)}px">${esc(it.t)}</span></div></div>`}
 function logoHtml(c,st=""){return `<span class="logo ${c.logo?"has-img":""}" style="--c:${c.col};${st}">${c.logo?`<img src="${esc(c.logo)}" alt="" loading="lazy" onerror="this.parentNode.classList.remove('has-img');this.remove()">`:""}<b>${esc(c.n)}</b></span>`}
 function card(it,row,extra="",sub=""){return `<div class="card${extra.includes("prog")?" hp":""}" data-f data-fid="${row}-${it.id}" data-row="${row}" data-act="open:${it.id}" data-hov="${it.id}">${poster(it,isRecent(it.id))}${extra}${isFav(it.id)?'<span class="favdot">♥</span>':""}<div class="cap">${esc(it.t)}</div>${sub}</div>`}
-function rowHtml(id,title,items,fn,count=true){if(!items.length)return"";const total=items.length;items=items.slice(0,40);return `<section class="row" data-anchor><h3>${esc(title)}${count?`<small>${total}</small>`:""}</h3><div class="sx">${items.map(i=>fn(i,id)).join("")}</div></section>`}
+const ROWS={};let RSEQ=0;
+let ROWI=0;
+function rowHtml(id,title,items,fn,count=true){if(!items.length)return"";const total=items.length,rk="r"+(++RSEQ),first=(ROWI++)<4?16:8;ROWS[rk]={items,fn,id,n:Math.min(first,total)};
+ if(RSEQ%400===0)Object.keys(ROWS).slice(0,200).forEach(x=>delete ROWS[x]);
+ return `<section class="row" data-anchor><h3>${esc(title)}${count?`<small>${total}</small>`:""}</h3><div class="sx" data-rk="${rk}">${items.slice(0,first).map(i=>fn(i,id)).join("")}</div></section>`}
+let LIVEL=null,LIVEN=0;
+function more(el){const p=el.parentElement;if(!p)return;
+ if(p.dataset.rk){const Rw=ROWS[p.dataset.rk];if(Rw&&Rw.n<Rw.items.length){const idx=Array.prototype.indexOf.call(p.children,el);if(idx>=p.children.length-5){const nx=Rw.items.slice(Rw.n,Rw.n+16);Rw.n+=nx.length;p.insertAdjacentHTML("beforeend",nx.map(i=>Rw.fn(i,Rw.id)).join(""))}}}
+ else if(el.classList.contains("lch")&&LIVEL&&LIVEN<LIVEL.length){const idx=Array.prototype.indexOf.call(p.children,el);if(idx>=p.children.length-6){const nx=LIVEL.slice(LIVEN,LIVEN+60);LIVEN+=nx.length;p.insertAdjacentHTML("beforeend",nx.map(lchHtml).join(""));nx.slice(0,20).forEach(c=>epg(c))}}}
 function rval(it,k){if(k==="imdb")return it.imdb?it.imdb.toFixed(1):null;if(k==="tmdb")return it.tmdb?(it.tmdb/10).toFixed(1).replace(".",",")+"/10":null;const v=(RX[it.id]||{})[k];if(v==null)return null;
  return k==="rt"?v+" %":k==="mc"?String(v):k==="lb"?v.toFixed(1)+"/5":k==="ac"?v.toFixed(1).replace(".",",")+"/5":v.toFixed(1).replace(".",",")+"/10"}
 function ratings(it,max=3,full=false){const on=(S.set&&S.set.meta)||{};return META.filter(([k])=>on[k]!==false).map(([k,n,sh])=>[k,full?n:sh,rval(it,k)]).filter(x=>x[2]!=null).slice(0,max).map(([k,n,v])=>`<span class="rt"><b class="r-${k}">${esc(n)}</b>${v}</span>`).join("")}
 /* Ajouts récents : date d'ajout fournie par Xtream (champ "added"), simulée ici par playlist */
 
-function added(id){const it=ALL[id];if(!it)return null;let best=null;const now=Date.now();
+const ADDC={v:-1,m:{}};
+function added(id){if(ADDC.v!==CATV){ADDC.v=CATV;ADDC.m={}}if(id in ADDC.m)return ADDC.m[id];return ADDC.m[id]=added0(id)}
+function added0(id){const it=ALL[id];if(!it)return null;let best=null;const now=Date.now();
  it.src.forEach(s=>{const p=S.playlists.find(x=>x.id===s.pl&&x.on);if(!p||!s.added||(p.hidden||[]).includes(it.type+":"+s.cat))return;const d=Math.max(0,Math.floor((now-s.added*1000)/86400000));if(!best||d<best.d)best={d,p}});return best}
 const isRecent=id=>{const a=added(id);return !!a&&a.d<=10};
 const agoTxt=d=>d===0?"aujourd'hui":d===1?"hier":`il y a ${d} jours`;
@@ -747,10 +782,14 @@ function tabbar(){const T=[["films","Films"],["series","Séries"],["live","TV en
  return `<div class="brand"><i></i>prisme</div><div class="clock">${fmt(nowMin())}</div><div class="tabbar"><div class="tabs">${T.map(([k,l])=>`<div class="tab ${l.startsWith("<")?"ic":""} ${S.tab===k?"sel":""}" data-f data-fid="tab-${k}" data-row="tabs" data-act="tab:${k}" data-hov="tab:${k}" ${S.tab===k?"data-default":""} aria-label="${k}">${l}</div>`).join("")}</div></div>`}
 function setBg(c,img){const L=document.querySelectorAll(".bgl");const on=L[0].classList.contains("on")?0:1;const nx=L[1-on];
  const g=`radial-gradient(55% 75% at 78% 28%, ${c[0]}d0, transparent 70%), radial-gradient(45% 60% at 30% 85%, ${c[1]}, transparent 70%), radial-gradient(30% 40% at 60% 60%, ${c[0]}55, transparent 70%), linear-gradient(160deg, ${c[1]}, #050507 80%)`;
+ img=imgS(img,"w780");
  nx.style.background=img?`linear-gradient(90deg, rgba(0,0,0,.35), rgba(0,0,0,0) 60%), url("${img}") center/cover no-repeat, ${g}`:g;
  nx.classList.add("on");L[on].classList.remove("on")}
 /* ========================= ÉCRANS ========================= */
-function homeHtml(){
+const HOMEC={k:"",h:""};
+function homeHtml(){const t=S.tab;if(t!=="films"&&t!=="series")return homeHtml0();const k=t+"|"+CATV+"|"+DIRTY+"|"+S.favs.length+"|"+Object.keys(S.prog).length+"|"+TREND.f.length+"|"+TREND.s.length;
+ if(HOMEC.k!==k){HOMEC.k=k;HOMEC.h=homeHtml0()}return HOMEC.h}
+function homeHtml0(){ROWI=0;
  const t=S.tab;
  if(t==="films"||t==="series"){
   const list=t==="films"?films():series(),cats=t==="films"?FCATS:SCATS,ty=t==="films"?"f":"s";
@@ -775,13 +814,14 @@ function homeHtml(){
 function chansC(){return memo("cc"+S.ctry,()=>chans().filter(c=>S.ctry==="*"||c.country===S.ctry))}
 function liveList(){const C=chansC();return S.lcat==="all"?C:S.lcat==="fav"?chans().filter(c=>isFav("ch:"+c.id)):C.filter(c=>c.genre===S.lcat)}
 function ctryHtml(){const L=[["*",CHS.length],...COUNTRIES];return `<div class="modal"><div class="mbox" style="width:600px"><div class="kick">TV en direct</div><h2>Pays des chaînes</h2><div class="tcol sy" style="max-height:440px">${L.map(([k,n])=>`<div class="trk ${k===S.ctry?"on":""}" data-f data-fid="cy-${k}" data-act="setctry:${k}" ${k===S.ctry?"data-default":""}><span>${esc(k==="*"?"Tous les pays":PAYS[k]||k)}<small>${n} chaîne${n>1?"s":""}</small></span>${k===S.ctry?'<span class="ck">✓</span>':""}</div>`).join("")}</div><div class="mfoot">Les genres se mettent à jour selon le pays choisi</div></div></div>`}
+function lchHtml(c){const e=epgAt(c);return `<div class="lch" data-f data-fid="ch-${c.id}" data-row="chs" data-act="live:${c.id}" data-hov="ch:${c.id}"><span class="num">${c.rank<999?c.rank:c.num}</span>${logoHtml(c)}<div style="min-width:0"><div class="nm">${esc(c.n)} ${isFav("ch:"+c.id)?"<span style='font-size:12px'>♥</span>":""}${(n=>n>1?`<span class="nsrc">${n} sources</span>`:"")(srcs("ch:"+c.id).length)}</div><div class="pg">${fmt(e.cur.s)} · ${esc(e.cur.t)}</div><div class="bar"><i style="width:${e.pct}%"></i></div></div></div>`}
 function liveHtml(){
  const L=liveList();
  const C=chansC(),cnt=k=>k==="all"?C.length:k==="fav"?chans().filter(c=>isFav("ch:"+c.id)).length:C.filter(c=>c.genre===k).length;
  const cats=(COUNTRIES.length>1?`<div class="lcat" data-f data-fid="lcat-ctry" data-row="lcats" data-act="ctry"><span>${esc(S.ctry==="*"?"Tous les pays":PAYS[S.ctry]||S.ctry)}</span><small>changer ›</small></div>`:"")+LCATS.filter(([k])=>k==="all"||k==="fav"||cnt(k)>0).map(([k,l])=>{const n=cnt(k);
   return `<div class="lcat ${S.lcat===k?"sel":""}" data-f data-fid="lcat-${k}" data-row="lcats" data-act="lcat:${k}" data-hov="lcat:${k}"><span>${esc(l)}</span><small>${n}</small></div>`}).join("");
  L.slice(0,30).forEach(c=>epg(c));
- const chs=L.slice(0,400).map(c=>{const e=epgAt(c);return `<div class="lch" data-f data-fid="ch-${c.id}" data-row="chs" data-act="live:${c.id}" data-hov="ch:${c.id}"><span class="num">${c.rank<999?c.rank:c.num}</span>${logoHtml(c)}<div style="min-width:0"><div class="nm">${esc(c.n)} ${isFav("ch:"+c.id)?"<span style='font-size:12px'>♥</span>":""}${(n=>n>1?`<span class="nsrc">${n} sources</span>`:"")(srcs("ch:"+c.id).length)}</div><div class="pg">${fmt(e.cur.s)} · ${esc(e.cur.t)}</div><div class="bar"><i style="width:${e.pct}%"></i></div></div></div>`}).join("")||`<div class="empty" style="padding:0 12px">Aucune chaîne en favori.<br>Appuyez sur ☰ Menu sur une chaîne pour l'ajouter.</div>`;
+ LIVEL=L;LIVEN=Math.min(60,L.length);const chs=L.slice(0,60).map(lchHtml).join("")||`<div class="empty" style="padding:0 12px">Aucune chaîne en favori.<br>Appuyez sur ☰ Menu sur une chaîne pour l'ajouter.</div>`;
  const c=CH[S.lch]&&L.includes(CH[S.lch])?CH[S.lch]:(L[0]||CHS[0]);if(c)S.lch=c.id;
  return `<div class="live"><div class="lcats sy" data-col="1">${cats}</div><div class="lchs sy" data-col="2">${chs}</div><div class="lpanel" id="lpanel">${c?panelHtml(c):'<div class="empty">Aucune chaîne dans tes playlists.</div>'}</div></div>`;
 }
@@ -857,6 +897,7 @@ function settingsHtml(){
   ${META.map(([k,n])=>`<div class="it" data-f data-fid="meta-${k}" data-act="meta:${k}"><span>Afficher la note ${esc(n)}</span>${sw(st.meta[k]!==false)}</div>`).join("")}
  </div></section>
  <section data-anchor><h3>Général</h3><div class="grp">
+  <div class="it tall" data-f data-fid="set-lite" data-act="set:lite"><span>Mode fluide<small>Effets de verre et ombres allégés · recommandé sur ce Fire TV</small></span>${sw(st.lite)}</div>
   <div class="it" data-f data-fid="set-par" data-act="set:parental"><span>Contrôle parental (code 0000)</span>${sw(st.parental)}</div>
  </div></section><div style="height:30px"></div></div>`;
 }
@@ -1090,7 +1131,7 @@ function endScrub(){clearTimeout(SC.t);SC={on:false};const th=$("#pthumb"),tr=$(
  const b=$("#pbar");if(b&&P){b.style.width=(P.pos/P.dur*100)+"%";$("#ptime").textContent=hms(P.pos);$("#prem").textContent="−"+hms(P.dur-P.pos)}}
 function commitScrub(){if(!SC.on||!P)return;P.pos=SC.pos;if(NATIVE)Prisme.seekTo(Math.round(P.pos*1000));endScrub();toast("Lecture à "+hms(P.pos))}
 function uiPing(){if(!P)return;P.last=Date.now();if(!P.ui){P.ui=true;const o=$("#pov");if(o)o.classList.remove("hid");return true}return false}
-function stopPlayer(){clearInterval(PT);if(NATIVE)Prisme.stop();if(P&&P.kind==="vod"){const pct=P.pos/P.dur;if(pct>0.02&&pct<0.97)S.prog[P.id]=pct;else if(pct>=0.97)delete S.prog[P.id];save()}P=null}
+function stopPlayer(){clearInterval(PT);if(P&&P.kind==="vod")dirty();if(NATIVE)Prisme.stop();if(P&&P.kind==="vod"){const pct=P.pos/P.dur;if(pct>0.02&&pct<0.97)S.prog[P.id]=pct;else if(pct>=0.97)delete S.prog[P.id];save()}P=null}
 function zap(d){const L=liveList().length?liveList():chans();let i=L.findIndex(c=>c.id===P.id);i=(i+d+L.length)%L.length;P.id=L[i].id;P.src=srcId("ch:"+P.id);P.err=0;P.audio=null;P.sub=null;S.lch=P.id;if(NATIVE)Prisme.play(streamUrl(),0,true);render("p-src");uiPing()}
 
 /* ========================= MOTEUR DE RENDU / FOCUS ========================= */
@@ -1113,8 +1154,12 @@ function render(fid){
  if(S.modal&&inApp()&&S.modal.type==="upd")html+=updHtml();
  else if(S.modal&&inApp()){const mt=S.modal.type;html+=mt==="tracks"?(P?tracksHtml():""):mt==="fmt"?(P?fmtHtml():""):mt==="guide"?(P?guideHtml():""):mt==="chs"?(P?chsHtml():""):mt==="ctry"?ctryHtml():modalHtml()}
  view.innerHTML=html;F=null;fitAll(view);if(!S.booting)autoCheck();
+ document.documentElement.classList.toggle("lite",!!S.set.lite);
  document.documentElement.classList.toggle("vplay",t.t==="player");
- // fond
+ bgFor(t);
+ afterRender(t,fid);
+}
+function bgFor(t){
  if(!inApp()) setBg(["#2a3a6e","#120c22"]);
  else if(t.t==="detail") setBg(ALL[t.id].c,ALL[t.id].bd);
  else if(t.t==="actor"){const h=hash(t.id)%360;setBg([`#${hsl(h,45,40)}`,`#${hsl(h,40,10)}`])}
@@ -1122,16 +1167,15 @@ function render(fid){
  else if(t.t==="plm"||(t.t==="home"&&(S.tab==="search"||S.tab==="settings"))) setBg(["#2b3245","#0a0b10"]);
  else if(t.t==="home"){const l=S.tab==="films"?films():series();setBg(l[0]?l[0].c:["#2b3245","#0a0b10"],l[0]&&l[0].bd)}
  {const tk=$("#f-tmdb");if(tk)tk.addEventListener("change",()=>{S.set.tmdbKey=tk.value.trim();save();toast(S.set.tmdbKey?"Clé TMDB enregistrée":"Clé TMDB supprimée");loadTrends()})}
+}
+function afterRender(t,fid){
  if(!inApp()&&!S.loading){const r=$("#req");if(r)r.innerHTML=reqText();
   view.querySelectorAll(".inp").forEach(inp=>inp.addEventListener("input",()=>{S.form={...S.form,[{"f-name":"name","f-url":"url","f-user":"user","f-pass":"pass"}[inp.id]]:inp.value};$("#req").innerHTML=reqText()}))}
  const root=view.querySelector(".modal")||view;
  const el=(fid&&root.querySelector(`[data-fid="${CSS.escape(fid)}"]`))||root.querySelector("[data-default]")||root.querySelector("[data-f]");
  setFocus(el,true);
 }
-function fitAll(root){
- root.querySelectorAll(".pst-t").forEach(t=>fitEl(t,120));
- root.querySelectorAll(".ttl").forEach(t=>{const fs=parseFloat(getComputedStyle(t).fontSize);fitEl(t,fs*(t.closest(".hero")?1.15:2.15))});
-}
+function fitAll(root){root.querySelectorAll(".ttl").forEach(t=>{const fs=parseFloat(getComputedStyle(t).fontSize);fitEl(t,fs*(t.closest(".hero")?1.15:2.15))})}
 function fitEl(t,maxH){let fs=parseFloat(getComputedStyle(t).fontSize),n=0;while((t.scrollWidth>t.clientWidth+1||t.scrollHeight>maxH+1)&&n<14){fs*=.9;t.style.fontSize=fs+"px";n++}}
 function hsl(h,s,l){s/=100;l/=100;const k=n=>(n+h/30)%12,a=s*Math.min(l,1-l),f=n=>l-a*Math.max(-1,Math.min(k(n)-3,Math.min(9-k(n),1)));return [f(0),f(8),f(4)].map(x=>Math.round(x*255).toString(16).padStart(2,"0")).join("")}
 function setFocus(el,instant){
@@ -1142,6 +1186,7 @@ function setFocus(el,instant){
  if(NATIVE)Prisme.setTyping(el.tagName==="INPUT");
  if(el.dataset.row)rowMem[el.dataset.row]=el.dataset.fid;
  {const c=colOf(el);if(c!=null)colMem[c]=el.dataset.fid}
+ more(el);
  ensureVisible(el,instant);
  if(el.dataset.hov)onHover(el.dataset.hov);
 }
@@ -1158,13 +1203,14 @@ function ensureVisible(el,instant){
   p=p.parentElement;
  }
 }
+let HOVT=null;
 function onHover(h){
  const [k,v,w]=h.split(":");
  if(k==="tab"){if(S.tab!==v){S.tab=v;save();render("tab-"+v)}return}
  if(k==="lcat"){if(S.lcat!==v){S.lcat=v;save();render("lcat-"+v)}return}
  if(k==="ch"){S.lch=v;epg(CH[v]);const p=$("#lpanel");if(p)p.innerHTML=panelHtml(CH[v]);setBg([CH[v].col,"#08080c"]);return}
  if(k==="season"){const n=+w;if((S.seasons[v]||1)!==n){S.seasons[v]=n;save();view.querySelectorAll(".chip").forEach((c,i)=>c.classList.toggle("sel",i+1===n));const e=$("#eps");e.innerHTML=epsHtml(ALL[v],n);e.scrollLeft=0;e._tx=0}return}
- if(ALL[h]&&topS().t==="home"){const hr=$("#hero");if(hr){hr.innerHTML=heroInner(ALL[h]);fitAll(hr)}setBg(ALL[h].c,ALL[h].bd)}
+ if(ALL[h]&&topS().t==="home"){clearTimeout(HOVT);HOVT=setTimeout(()=>{const hr=$("#hero");if(!hr||topS().t!=="home")return;hr.innerHTML=heroInner(ALL[h]);fitAll(hr);setBg(ALL[h].c,ALL[h].bd)},S.set.lite?220:120)}
 }
 function focusables(){return [...(view.querySelector(".modal")||view).querySelectorAll("[data-f]")]}
 const colMem={};const colOf=e=>{const c=e.closest("[data-col]");return c?+c.dataset.col:null};
@@ -1199,12 +1245,19 @@ function move(dir){
  if(r&&r!==F.dataset.row&&rowMem[r]){const m=view.querySelector(`[data-fid="${CSS.escape(rowMem[r])}"]`);if(m){const mb=m.getBoundingClientRect();if(mb.right>sr.left&&mb.left<sr.right)best=m}}
  setFocus(best);
 }
-function push(e){topS().last=F&&F.dataset.fid;S.stack.push(e);render(null)}
+let DIRTY=0;const dirty=()=>{DIRTY++;HOMEC.k=""};
+function snapshot(t){const sc=[];view.querySelectorAll(".sx,.sy").forEach((e,i)=>{if(e.scrollLeft||e.scrollTop)sc.push([i,e.scrollLeft,e.scrollTop])});
+ const fr=document.createDocumentFragment();while(view.firstChild)fr.appendChild(view.firstChild);t.dom=fr;t.sc=sc;t.ver=DIRTY+"|"+CATV}
+function restore(t){view.replaceChildren(t.dom);t.dom=null;const els=view.querySelectorAll(".sx,.sy");
+ t.sc.forEach(([i,l,tp])=>{const e=els[i];if(!e)return;e.style.scrollBehavior="auto";e.scrollLeft=l;e.scrollTop=tp;e._tx=l;e._ty=tp;e._tt=0;e._tt2=0;e.style.scrollBehavior=""});
+ document.documentElement.classList.toggle("vplay",false);view.querySelectorAll(".foc").forEach(x=>x.classList.remove("foc"));F=null;bgFor(t);
+ const el=(t.last&&view.querySelector(`[data-fid="${CSS.escape(t.last)}"]`))||view.querySelector("[data-default]")||view.querySelector("[data-f]");setFocus(el,true)}
+function push(e){const t=topS();t.last=F&&F.dataset.fid;if(!S.modal&&t.t!=="player"&&inApp())snapshot(t);else t.dom=null;S.stack.push(e);render(null)}
 function back(){
  if(S.adding&&!S.loading){S.adding=false;render("set-add");return}
  const t=topS();
  if(t.t==="player"){stopPlayer()}
- if(S.stack.length>1){S.stack.pop();render(topS().last);return}
+ if(S.stack.length>1){S.stack.pop();const tp=topS();if(tp.dom&&tp.ver===DIRTY+"|"+CATV){restore(tp);return}tp.dom=null;render(tp.last);return}
  if(inApp()&&F&&F.dataset.row!=="tabs"){const tb=view.querySelector(`[data-fid="tab-${S.tab}"]`);if(tb){setFocus(tb);const r=$("#rows");if(r)r.scrollTo({top:0,behavior:"smooth"});return}}
  EXIT=true;
 }
@@ -1236,7 +1289,7 @@ function act(a){
   case "key":
    if(v==="sp")S.q+=" ";else if(v==="del")S.q=S.q.slice(0,-1);else if(v==="clr")S.q="";else S.q+=v;
    render(F.dataset.fid);break;
-  case "set":
+  case "set":dirty();
    if(v==="engine")S.set.engine=S.set.engine==="vlc"?"exo":"vlc";
    else if(v==="epgShift")S.set.epgShift=S.set.epgShift>=3?-3:S.set.epgShift+1;
    else S.set[v]=!S.set[v];
@@ -1251,7 +1304,7 @@ function act(a){
   case "trk":{if(v==="a")P.audio=+w;else P.sub=+w;if(NATIVE){v==="a"?Prisme.setAudio(+w):Prisme.setSub(+w)}const t=tracks();
    toast(v==="a"?`Audio : ${t.au[+w].n}${t.au[+w].c?" · "+t.au[+w].c:""}`:(+w<0?"Sous-titres désactivés":`Sous-titres : ${t.su[+w]}`));render(F.dataset.fid);break}
   case "p:seekok":break;
-  case "meta":S.set.meta={...S.set.meta,[v]:S.set.meta[v]===false};save();render(F.dataset.fid);toast(`Note ${META.find(m=>m[0]===v)[1]} ${S.set.meta[v]?"affichée":"masquée"}`);break;
+  case "meta":dirty();S.set.meta={...S.set.meta,[v]:S.set.meta[v]===false};save();render(F.dataset.fid);toast(`Note ${META.find(m=>m[0]===v)[1]} ${S.set.meta[v]?"affichée":"masquée"}`);break;
   case "upd":updAct(v);break;
   case "ctry":S.modal={type:"ctry",ret:"lcat-ctry"};render("cy-"+S.ctry);break;
   case "setctry":S.ctry=v;S.modal=null;S.lcat="all";save();render("lcat-ctry");break;
@@ -1261,7 +1314,7 @@ function act(a){
    else if(m.k.startsWith("ch:")){const id=m.k.slice(3);push({t:"player"});S.stack[S.stack.length-2].last=ret;startPlayer({kind:"live",id,src:v,playing:true});render(null)}
    else act("play:"+m.k);break}
   case "plm":push({t:"plm",id:v});break;
-  case "hide":{const pl=S.playlists.find(p=>p.id===v);if(!pl)break;pl.hidden=pl.hidden||[];const hk=w+":"+x,lbl=[...LCATS,...FCATS,...SCATS].find(c=>c[0]===x);
+  case "hide":{dirty();const pl=S.playlists.find(p=>p.id===v);if(!pl)break;pl.hidden=pl.hidden||[];const hk=w+":"+x,lbl=[...LCATS,...FCATS,...SCATS].find(c=>c[0]===x);
    if(pl.hidden.includes(hk))pl.hidden=pl.hidden.filter(k=>k!==hk);else pl.hidden.push(hk);bump();save();render(F.dataset.fid);
    toast(`${pl.hidden.includes(hk)?"Masquée":"Affichée"} : ${lbl?lbl[1]:x} (${pl.name})`);break}
   case "hideall":{const pl=S.playlists.find(p=>p.id===v);pl.hidden=[];bump();save();render(F.dataset.fid);toast("Toutes les catégories sont affichées");break}
@@ -1272,7 +1325,7 @@ function act(a){
   case "pl":{const pl=S.playlists.find(p=>p.id===w);if(!pl)break;
    if(v==="on"){pl.on=!pl.on;bump();save();render(F.dataset.fid);toast(`${pl.name} ${pl.on?"activée":"désactivée"} · ${films().length} films, ${series().length} séries, ${chans().length} chaînes`)}
    else if(v==="del"){if(DEL!==w){DEL=w;clearTimeout(DELT);DELT=setTimeout(()=>DEL=null,3000);toast(`Appuyez à nouveau sur OK pour supprimer « ${pl.name} »`)}
-    else{DEL=null;S.playlists=S.playlists.filter(p=>p.id!==w);delete DATA[w];buildCatalog();save();toast(`« ${pl.name} » supprimée`);if(!S.playlists.length){S.form={name:DEFPL.name,url:DEFPL.url,user:DEFPL.user,pass:DEFPL.pass,epg:true};S.stack=[{t:"home"}];render()}else {if(topS().t==="plm")S.stack.pop();render("set-add")}}}
+    else{DEL=null;S.playlists=S.playlists.filter(p=>p.id!==w);delete DATA[w];IDB.del("pl:"+w);buildCatalog();save();toast(`« ${pl.name} » supprimée`);if(!S.playlists.length){S.form={name:DEFPL.name,url:DEFPL.url,user:DEFPL.user,pass:DEFPL.pass,epg:true};S.stack=[{t:"home"}];render()}else {if(topS().t==="plm")S.stack.pop();render("set-add")}}}
    break}
   case "pw":S.showPw=!S.showPw;render("f-pw");break;
   case "login":doLogin();break;
@@ -1308,12 +1361,20 @@ async function doLogin(){
   else{S.tab="settings";render("set-add");toast(`${pl.name} ajoutée : +${films().length-b.f} films, +${series().length-b.s} séries, +${chans().length-b.c} chaînes`)}
  }catch(e){S.loading=false;render("f-url");toast("Connexion impossible : "+e.message)}
 }
-async function boot(){if(!S.playlists.length){render();return}S.booting=true;render();
+let LASTKEY=0;
+async function boot(){if(S.set.lite==null){S.set.lite=!UHD;save()}document.documentElement.classList.toggle("lite",!!S.set.lite);
+ if(!S.playlists.length){render();return}
+ let cached=0;for(const p of S.playlists){const D=await IDB.get("pl:"+p.id);if(D){DATA[p.id]=D;cached++}}
+ if(cached===S.playlists.length){buildCatalog();render();loadTrends();
+  Promise.all(S.playlists.map(p=>loadPlaylist(p).catch(e=>{p.bootMsg=e.message}))).then(()=>{buildCatalog();save();
+   const t=topS();if(t.t==="home"&&!S.modal&&Date.now()-LASTKEY>4000)render(F&&F.dataset.fid)});return}
+ S.booting=true;render();
  await Promise.all(S.playlists.map(async p=>{try{await loadPlaylist(p);p.bootSt="done";p.bootMsg="ok"}catch(e){p.bootSt="";p.bootMsg=e.message}if(S.booting)render()}));
  buildCatalog();S.booting=false;S.playlists.filter(p=>p.bootMsg&&p.bootMsg!=="ok").forEach(p=>setTimeout(()=>toast(`${p.name} : ${p.bootMsg}`),1200));
  render();loadTrends().then(()=>{if(topS().t==="home"&&(S.tab==="films"||S.tab==="series"))render(F&&F.dataset.fid)})}
 /* ========================= ENTRÉES ========================= */
 function key(k){
+ LASTKEY=Date.now();
  if(S.loading)return;
  if(S.modal){if(k==="back"){const r=S.modal.ret;S.modal=null;render(r);return}
   if(k==="up"||k==="down"||k==="left"||k==="right"){move(k);return}

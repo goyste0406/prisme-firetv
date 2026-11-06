@@ -21,6 +21,12 @@ SERIES = [{"series_id": 500 + i, "name": "FR| " + n, "cover": "", "plot": p, "ca
 CHANNELS = ["TF1 ᶠᴴᴰ", "Gulli HD", "Disney Channel FHD", "Canal J", "RMC Découverte HD", "National Geographic FHD", "RMC Sport 1 FHD", "Ciné+ Frisson HD", "M6 Music HD", "France 3 Bretagne HD", "UK| Sky Sports Main Event FHD", "UK| BBC One HD", "TF1 FHD", "France 2 FHD", "France 3 HD", "Canal+ FHD", "France 5 HD", "M6 FHD", "Arte HD", "W9 HD", "TMC HD", "BFM TV FHD", "CNEWS HD", "LCI HD", "franceinfo FHD", "L'Equipe HD", "beIN Sports 1 FHD", "TF1 4K", "TF1 HD"]
 LIVE = [{"num": i + 1, "name": "FR| " + n, "stream_id": 1000 + i, "stream_icon": "", "epg_channel_id": "", "category_id": "22" if any(x in n for x in ("BFM", "CNEWS", "LCI", "franceinfo")) else "23" if any(x in n for x in ("Equipe", "beIN")) else "21", "tv_archive": 0} for i, n in enumerate(CHANNELS)]
 
+import os
+if os.environ.get("MOCK_BIG"):
+    VCATS += [{"category_id": str(100 + c), "category_name": f"FR | Catégorie {c}"} for c in range(36)]
+    VOD += [{"num": 1000 + i, "name": f"FR| Film démo {i} ({1980 + i % 45}) {'FHD' if i % 2 else 'HD'}", "stream_id": 5000 + i, "stream_icon": "", "rating": 5 + (i % 40) / 10, "added": str(NOW - (i % 300) * 86400), "category_id": str(100 + i % 36), "container_extension": "mkv", "tmdb": ""} for i in range(4000)]
+    LIVE += [{"num": 100 + i, "name": f"FR| Chaîne {i} {'FHD' if i % 3 else 'HD'}", "stream_id": 9000 + i, "stream_icon": "", "epg_channel_id": "", "category_id": "21", "tv_archive": 0} for i in range(1500)]
+
 def short_epg(sid):
     start = NOW - (NOW % 1800) - 1800
     out = []

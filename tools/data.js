@@ -36,6 +36,11 @@ function parseName(raw){
  if(ym&&!/\(/.test(ym[0]))title=title.replace(/[\s\-–](19|20)\d{2}$/,"").trim();
  return {title:title||String(raw),year:ym?+ym[0].replace(/\D/g,""):0,q,tag};
 }
+/* Cache du catalogue sur l'appareil (IndexedDB) : démarrage instantané */
+const IDB={db:null,open(){return new Promise(r=>{try{const q=indexedDB.open("prisme",1);q.onupgradeneeded=()=>q.result.createObjectStore("data");q.onsuccess=()=>r(this.db=q.result);q.onerror=()=>r(null)}catch(e){r(null)}})},
+ async get(k){const db=this.db||await this.open();if(!db)return null;return new Promise(r=>{try{const t=db.transaction("data").objectStore("data").get(k);t.onsuccess=()=>r(t.result||null);t.onerror=()=>r(null)}catch(e){r(null)}})},
+ async put(k,v){const db=this.db||await this.open();if(!db)return;try{db.transaction("data","readwrite").objectStore("data").put(v,k)}catch(e){}},
+ async del(k){const db=this.db||await this.open();if(!db)return;try{db.transaction("data","readwrite").objectStore("data").delete(k)}catch(e){}}};
 const mapCats=a=>{const m={};(a||[]).forEach(c=>m[c.category_id]=c.category_name||"Autres");return m};
 
 async function loadPlaylist(pl,step=()=>{}){
@@ -50,7 +55,7 @@ async function loadPlaylist(pl,step=()=>{}){
  step(4);D.ser=(await getJSON(api(pl,"get_series"),120000)||[]).map(x=>({id:x.series_id,n:x.name||"",img:x.cover||"",cat:x.category_id,r:+x.rating||0,added:+(x.last_modified||0),plot:x.plot||"",cast:x.cast||"",dir:x.director||"",genre:x.genre||"",year:String(x.releaseDate||x.release_date||"").slice(0,4),bd:(Array.isArray(x.backdrop_path)?x.backdrop_path[0]:x.backdrop_path)||"",tmdb:String(x.tmdb||"")}));
  DATA[pl.id]=D;pl.exp=D.info.exp_date?+D.info.exp_date*1000:null;pl.maxc=+D.info.max_connections||0;pl.actc=+D.info.active_cons||0;
  pl.fmt=(D.info.allowed_output_formats||[]).includes("ts")?"ts":((D.info.allowed_output_formats||[])[0]||"ts");
- pl.loadedAt=Date.now();
+ pl.loadedAt=Date.now();IDB.put("pl:"+pl.id,D);
  return D;
 }
 

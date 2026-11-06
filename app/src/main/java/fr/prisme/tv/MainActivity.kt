@@ -71,6 +71,7 @@ class MainActivity : Activity() {
             loadWithOverviewMode = false
             useWideViewPort = false
             textZoom = 100
+            offscreenPreRaster = true
         }
         val assets = WebViewAssetLoader.Builder()
             .setDomain(host)
