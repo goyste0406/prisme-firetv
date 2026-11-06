@@ -19,18 +19,20 @@ function LOG(m){LOGS.unshift([Date.now(),String(m).slice(0,240)]);if(LOGS.length
 const proxied=u=>NATIVE?"https://appassets.androidplatform.net/proxy?u="+encodeURIComponent(u):u;
 /* Le fournisseur peut bloquer un compte qui envoie trop de demandes : au plus 2 à la fois, espacées,
    et pause de 15 minutes de toutes les demandes automatiques dès qu'il refuse (403, 429, 503). */
-const PROV={busy:0,q:[],last:0,ban:0};
+const PROV={busy:0,q:[],last:0,ban:{}};
+const hostOf=u=>{try{return new URL(u).host}catch(e){return ""}};
 const isProv=u=>/player_api\.php/.test(u);
 function provSlot(){return new Promise(res=>{PROV.q.push(res);provPump()})}
 function provPump(){if(PROV.busy>=2||!PROV.q.length)return;const w=Math.max(0,PROV.last+250-Date.now());
  setTimeout(()=>{if(PROV.busy>=2||!PROV.q.length)return;PROV.busy++;PROV.last=Date.now();PROV.q.shift()();provPump()},w)}
 async function getJSON(u,timeout=60000){
  const prov=isProv(u);
- if(prov&&Date.now()<PROV.ban)throw new Error(`le fournisseur a refusé l'accès, nouvel essai possible dans ${Math.ceil((PROV.ban-Date.now())/60000)} min`);
+ const ho=prov?hostOf(u):"",bn=PROV.ban[ho]||0;
+ if(prov&&Date.now()<bn)throw new Error(`le fournisseur ${ho} a refusé l'accès, nouvel essai possible dans ${Math.ceil((bn-Date.now())/60000)} min`);
  if(prov)await provSlot();
  const ctl=new AbortController(),t=setTimeout(()=>ctl.abort(),timeout);
  try{const r=await fetch(proxied(u),{signal:ctl.signal});
-  if(prov&&[403,429,503].includes(r.status)){PROV.ban=Date.now()+15*60000;LOG(`Le fournisseur refuse les demandes (code ${r.status}) : pause automatique de 15 minutes pour ne pas aggraver le blocage`)}
+  if(prov&&[403,429,503].includes(r.status)){PROV.ban[ho]=Date.now()+15*60000;LOG(`Le fournisseur ${ho} refuse les demandes (code ${r.status}) : pause automatique de 15 minutes pour ne pas aggraver le blocage`)}
   if(!r.ok)throw new Error("le serveur répond "+r.status);const txt=await r.text();return txt?JSON.parse(txt):null}
  catch(e){const m=e.name==="AbortError"?"délai dépassé":e.message;if(!/wikipedia/.test(u))LOG("Erreur réseau · "+hidePw(u).replace(/^https?:\/\//,"").slice(0,110)+" · "+m);throw new Error(m)}finally{clearTimeout(t);if(prov){PROV.busy--;provPump()}}}
 const clean=u=>(u||"").trim().replace(/\/+$/,"");
