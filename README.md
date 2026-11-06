@@ -6,6 +6,7 @@ Application IPTV pour Fire TV (Fire OS 7 et plus), inspirée de l'interface tvOS
 - **Films**, **Séries**, **TV en direct** avec guide TV (EPG court Xtream)
 - Fiches détaillées, casting, sources multiples (qualité, langue), choix automatique d'une source compatible avec l'appareil
 - Lecteur natif **ExoPlayer (Media3)** : pistes audio et sous-titres, format d'image, défilement rapide, guide et liste des chaînes
+- **Interface native** pour les films et séries (accueil, genres, fiches, choix de la source) : retours en arrière instantanés
 - **Mises à jour en un clic** depuis Réglages › À propos
 
 ## Installer sur le Fire TV
@@ -27,5 +28,6 @@ Toujours garder la même clé : sinon une mise à jour ne peut pas remplacer l'a
 ## Structure
 
 - `app/src/main/java/fr/prisme/tv/` : activité Android, pont JavaScript, proxy HTTP, lecteur ExoPlayer, mises à jour
+- `app/src/main/java/fr/prisme/tv/nat/` : interface native des films et séries (données fournies par `tools/native_api.js`)
 - `app/src/main/assets/web/index.html` : interface (générée depuis le simulateur par `tools/build_ui.py`)
 - `tools/` : simulateur, couche de données Xtream (`data.js`), faux serveur Xtream pour les tests
