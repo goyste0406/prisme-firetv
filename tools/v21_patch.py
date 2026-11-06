@@ -113,3 +113,43 @@ R(' return it.src.filter(s=>s.pl===pl.id).map((s,i)=>{', ' return it.src.filter(
 R('''  <div class="it tall" data-f data-fid="set-adult" data-act="set:adult">''', '''  <div class="it tall" data-f data-fid="set-alllang" data-act="langall"><span>Sources dans toutes les langues<small>Désactivé : seules les sources francophones (VF, VOSTFR, MULTI) apparaissent sur les fiches</small></span>${sw(st.allLang)}</div>
   <div class="it tall" data-f data-fid="set-adult" data-act="set:adult">''')
 R('  case "sset":', '  case "langall": S.set.allLang=!S.set.allLang;bump();dirty();save();render(F.dataset.fid);break;\n  case "sset":')
+
+# ---------------------------------------------------------------- 2.1.6 : les catégories masquées ne sont plus chargées
+R('{const r=dropAdult(D);if(r)LOG(`${pl.name} : ${r} catégories adultes ignorées (jamais chargées)`)}',
+  '{const r=dropAdult(D);if(r)LOG(`${pl.name} : ${r} catégories adultes ignorées (jamais chargées)`)}\n {const r=pruneHidden(pl,D);if(r)LOG(`${pl.name} : ${r} titres et chaînes de catégories masquées non chargés`)}')
+R('const mapCats=a=>', '''/* Catégories masquées : leurs titres ne sont pas gardés en mémoire (ils sont rechargés si on les réaffiche) */
+function pruneHidden(pl,D){const h=hidSetOf(pl);if(!h.size||!D)return 0;D.hc=D.hc||{};let n=0;
+ for(const [t,cm,lst] of [["l","lc","live"],["f","vc","vod"],["s","sc","ser"]]){const m=D[cm]||{},bad=new Set();
+  for(const k of Object.keys(m)){const hk=t+":"+catKey(m[k]);if(h.has(hk))bad.add(String(k))}
+  if(!bad.size)continue;
+  D[lst]=(D[lst]||[]).filter(x=>{if(!bad.has(String(x.cat)))return true;const hk=t+":"+catKey(m[x.cat]);D.hc[hk]=(D.hc[hk]||0)+1;n++;return false})}
+ return n}
+function hidSetOf(pl){return new Set(pl.hidden||[])}
+const mapCats=a=>''')
+# nouvelle playlist : on retire tout de suite ce qui vient d'être masqué
+R('const nfr=frOnly(pl);if(nfr)LOG(`${pl.name} : ${nfr} catégories non francophones masquées`);',
+  'const nfr=frOnly(pl);if(nfr){LOG(`${pl.name} : ${nfr} catégories non francophones masquées`);const D=DATA[pl.id];if(pruneHidden(pl,D))IDB.put("pl:"+pl.id,D)}')
+# bouton « francophone » sur une playlist existante : retire aussi de la mémoire
+R('  case "fronly":{const pl=S.playlists.find(p=>p.id===v);if(!pl)break;const n=frOnly(pl);PLDIRTY=false;bump();dirty();save();render(F.dataset.fid);',
+  '  case "fronly":{const pl=S.playlists.find(p=>p.id===v);if(!pl)break;const n=frOnly(pl);PLDIRTY=false;if(n){const D=DATA[pl.id];pruneHidden(pl,D);IDB.put("pl:"+pl.id,D);buildCatalog()}bump();dirty();save();render(F.dataset.fid);')
+# comptes des catégories masquées (titres non chargés)
+R('function catCount(pl,type,k){return plStats(pl)[type][k]||0}', 'function catCount(pl,type,k){const D=DATA[pl.id];return plStats(pl)[type][k]||(D&&D.hc&&D.hc[type+":"+k])||0}')
+# réafficher une catégorie retirée de la mémoire : rechargement de la playlist en quittant la page
+R('   PLDIRTY=true;clearTimeout(PLSAVE);PLSAVE=setTimeout(save,1200);',
+  '   PLDIRTY=true;clearTimeout(PLSAVE);PLSAVE=setTimeout(save,1200);{const D=DATA[pl.id];if(!h&&D&&D.hc&&D.hc[hk])PLRELOAD.add(pl.id)}')
+R('let PLDIRTY=false,PLSAVE=null;', 'let PLDIRTY=false,PLSAVE=null;const PLRELOAD=new Set();')
+R('  case "hideall":{const pl=S.playlists.find(p=>p.id===v);pl.hidden=[];PLDIRTY=false;bump();dirty();save();render(F.dataset.fid);',
+  '  case "hideall":{const pl=S.playlists.find(p=>p.id===v);pl.hidden=[];PLDIRTY=false;{const D=DATA[pl.id];if(D&&D.hc&&Object.keys(D.hc).length)PLRELOAD.add(pl.id)}bump();dirty();save();render(F.dataset.fid);setTimeout(plApply,50);')
+R(' if(t.t==="plm"&&PLDIRTY){PLDIRTY=false;clearTimeout(PLSAVE);save();bump();dirty()}',
+  ' if(t.t==="plm"&&(PLDIRTY||PLRELOAD.size)){PLDIRTY=false;clearTimeout(PLSAVE);save();setTimeout(plApply,30)}')
+R('function plmHtml(id){', '''/* En quittant la page d'une playlist : on retire de la mémoire ce qui vient d'être masqué,
+   et on recharge la playlist si des catégories retirées ont été réaffichées */
+async function plApply(){
+ for(const p of S.playlists){const D=DATA[p.id];if(D&&!PLRELOAD.has(p.id)&&pruneHidden(p,D))IDB.put("pl:"+p.id,D)}
+ buildCatalog();bump();dirty();
+ const ids=[...PLRELOAD];PLRELOAD.clear();
+ for(const id of ids){const p=S.playlists.find(x=>x.id===id);if(!p)continue;toast(`${p.name} : chargement des catégories réaffichées…`);
+  try{await loadPlaylist(p);p.synced=Date.now();buildCatalog();bump();dirty();save();toast(`${p.name} : catégories réaffichées chargées`)}catch(e){toast(`${p.name} : rechargement impossible (${e.message})`)}}
+ if(NAT.vis)Prisme.nativeEvent("catalog","");
+ const t=topS();if(t.t!=="player")render(F&&F.dataset.fid)}
+function plmHtml(id){''')
