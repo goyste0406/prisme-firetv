@@ -75,7 +75,7 @@ class Player(private val ctx: Context) {
     fun preload(url: String, startMs: Long) {
         if (exo?.playWhenReady == true && exo?.playbackState != androidx.media3.common.Player.STATE_IDLE) return
         val p = exo ?: build().also { exo = it; view.player = it }
-        error = null; preUrl = url; preStart = startMs
+        error = null; preUrl = url; preStart = startMs; stateJson = "{}"
         p.setMediaItem(MediaItem.fromUri(url), if (startMs > 0) startMs else C.TIME_UNSET)
         p.prepare(); p.playWhenReady = false
     }
@@ -88,6 +88,7 @@ class Player(private val ctx: Context) {
 
     fun play(url: String, startMs: Long, isLive: Boolean) {
         val p = exo ?: build().also { exo = it; view.player = it }
+        stateJson = "{}"
         if (url == preUrl && p.playbackState != androidx.media3.common.Player.STATE_IDLE && error == null) {
             preUrl = null; live = isLive
             if (startMs > 0 && Math.abs(startMs - preStart) > 3000) p.seekTo(startMs)

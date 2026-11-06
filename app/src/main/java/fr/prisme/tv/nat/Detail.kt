@@ -257,8 +257,7 @@ class DetailScreen(ui: NativeUi, val itemId: String, val fromWeb: Boolean) : Scr
 
     override fun onFocus(line: Line, i: Int, v: View) {
         removeCallbacks(preloadRun)
-        if (v === playBtn) postDelayed(preloadRun, 500)
-        else if (preloaded) { preloaded = false; ui.unpreload() }
+        if (v === playBtn && !preloaded) postDelayed(preloadRun, 600)
         if (v is Chip && line === lines.getOrNull(epLineIndex - 1) && i != season) {
             (line as StaticLine).views.forEachIndexed { k, c -> (c as Chip).selected2 = k == i }
             season = i

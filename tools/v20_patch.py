@@ -31,3 +31,9 @@ R(' if(!CH[S.lch]&&CHS[0])S.lch=CHS[0].id;\n}', ' if(!CH[S.lch]&&CHS[0])S.lch=CH
 # réglage : revenir à l'ancienne interface
 R('<div class="it tall" data-f data-fid="set-lite" data-act="set:lite">',
   '${NAT.ok?`<div class="it tall" data-f data-fid="set-legacy" data-act="set:legacy"><span>Ancienne interface pour les films et séries<small>À activer seulement en cas de problème avec la nouvelle interface</small></span>${sw(st.legacy)}</div>`:""}\n  <div class="it tall" data-f data-fid="set-lite" data-act="set:lite">')
+
+# une seule connexion chez le fournisseur : la lecture attend la fin d'une analyse de flux en cours
+R('if(NATIVE){const u=streamUrl();if(!u){toast("Flux introuvable");return}Prisme.play(u,Math.round((p.pos||0)*1000),p.kind==="live");Prisme.setFormat(curFmt()[0])}}',
+  'if(NATIVE){const u=streamUrl();if(!u){toast("Flux introuvable");return}PQ.splice(0).forEach(([k])=>{if(QPEND[k]==="probe")delete QPEND[k]});'
+  'const go=()=>{if(P!==p||p.go)return;p.go=1;p.t0=Date.now();Prisme.play(u,Math.round((p.pos||0)*1000),p.kind==="live");Prisme.setFormat(curFmt()[0])};'
+  'if(Prisme.probeBusy()){LOG("Lecture en attente de la fin d\'une analyse de flux");const w0=Date.now(),wt=setInterval(()=>{if(P!==p||!Prisme.probeBusy()||Date.now()-w0>26000){clearInterval(wt);go()}},300)}else go()}}')

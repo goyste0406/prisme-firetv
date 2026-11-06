@@ -90,10 +90,14 @@ window.nativeApi={
   else{const sn=(it.seasons||[])[ss-1];const L=(it.eps||{})[sn]||[];const e=L.find(x=>x.num===ep)||L[0];if(!e)return JSON.stringify({ok:false,msg:"Épisode introuvable"});
    const vv=srcs(id).find(z=>z.p.id===it.srcPl);p={kind:"vod",id,src:vv?vv.id:v.id,ss,ep:e.num,dur:(e.dur||0)*60,pos:0,playing:true};res=`S${sn} · E${e.num}`;S.seasons[id]=ss}
   p.nat=true;p.t0=Date.now();
-  NAT.vis=false;NAT.pre=null;
+  NAT.vis=false;
+  PQ.splice(0).forEach(([k])=>{if(QPEND[k]==="probe")delete QPEND[k]});
   S.stack.push({t:"player"});
+  const busy=NATIVE&&!NAT.pre&&(PQRUN||Prisme.probeBusy());
+  NAT.pre=null;
   startPlayer(p);render(null);
   const cv=curVar();
+  if(busy)setTimeout(()=>{if(P===p&&!p.go)Prisme.nativeEvent("loading",JSON.stringify({msg:"Analyse du flux en cours, démarrage dans un instant…"}))},300);
   return JSON.stringify({ok:true,t:it.t,f:it.f,c1:it.c[0],c2:it.c[1],bd:tmS(it.bd,"w1280"),img:tmS(it.img,"w342"),q:cv&&qr(cv.q)>0&&cv.q!=="Auto"?cv.q:"",src:[cv?cv.p.name:"",cv?cv.tag:"",res].filter(Boolean).join(" · ")});
  },
  cancel(){if(P&&P.nat){stopPlayer();if(topS().t==="player")S.stack.pop();NAT.vis=true}return ""},
@@ -157,13 +161,13 @@ function natTick(st){
  if(P.retryAt){if(Date.now()<P.retryAt)return true;P.retryAt=0;P.err=0;Prisme.play(streamUrl(),Math.round((P.pos||0)*1000),P.kind==="live");return true}
  if(st.error&&!P.err){
   const code=+((String(st.error).match(/(?:Response code|code)[: ]+(\d{3})/i)||[])[1]||0);
-  if([401,403,429,456,458,503,509,551].includes(code)&&(P.retry||0)<6){
-   P.retry=(P.retry||0)+1;P.retryAt=Date.now()+2500;P.err=1;
-   const m=`Connexion précédente en cours de fermeture… nouvel essai ${P.retry} sur 6`;
+  if([401,403,429,456,458,503,509,551].includes(code)&&(P.retry||0)<10){
+   P.retry=(P.retry||0)+1;P.retryAt=Date.now()+3000;P.err=1;
+   const m=`Connexion précédente en cours de fermeture… nouvel essai ${P.retry} sur 10`;
    if(P.nat)Prisme.nativeEvent("loading",JSON.stringify({msg:m,warn:true}));else toast(m);
    return true}
-  if(!P.started){P.err=1;if(natSwitch("erreur"))return true;if(natFail(String(st.error).slice(0,120)))return true;P.err=0}
+  if(!P.started){P.err=1;LOG("Erreur de lecture · "+String(st.error).slice(0,160));if(natSwitch("erreur"))return true;if(natFail(String(st.error).slice(0,120)))return true;P.err=0}
  }
- if(P&&!P.started&&!st.error&&P.nat&&Date.now()-(P.t0||0)>(P.kind==="vod"&&ALL[P.id]&&ALL[P.id].type==="f"?8000:20000)){
-  P.t0=Date.now();if(natSwitch("délai dépassé"))return true;if(natFail("la vidéo ne démarre pas"))return true}
+ if(P&&!P.started&&!st.error&&P.nat&&!P.slowMsg&&Date.now()-(P.t0||0)>10000){P.slowMsg=1;Prisme.nativeEvent("loading",JSON.stringify({msg:"Le serveur met du temps à répondre…"}))}
+ if(P&&!P.started&&!st.error&&P.nat&&Date.now()-(P.t0||0)>25000){P.t0=Date.now();P.slowMsg=0;if(natSwitch("délai dépassé"))return true;if(!P.slowFail){P.slowFail=1;return false}if(natFail("la vidéo ne démarre pas (pas de réponse du serveur)"))return true}
  return false}
