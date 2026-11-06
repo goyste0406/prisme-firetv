@@ -22,7 +22,7 @@ class GenreScreen(ui: NativeUi, private val ty: String, private val key: String)
     private var sort = "new"
     private val chips: List<Chip>
     private val sortKeys = listOf("new", "az", "note")
-    private val grid: GridLine
+    private lateinit var grid: GridLine
     private val chipLine: StaticLine
     private var c1 = "#2b3245"
     private var c2 = "#0a0b10"
