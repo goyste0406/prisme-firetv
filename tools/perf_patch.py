@@ -59,7 +59,8 @@ async function boot(){if(S.set.lite==null){S.set.lite=!UHD;save()}document.docum
  if(!S.playlists.length){render();return}
  let cached=0;for(const p of S.playlists){const D=await IDB.get("pl:"+p.id);if(D){DATA[p.id]=D;cached++}}
  if(cached===S.playlists.length){buildCatalog();render();loadTrends();
-  Promise.all(S.playlists.map(p=>loadPlaylist(p).catch(e=>{p.bootMsg=e.message}))).then(()=>{buildCatalog();save();
+  const stale=S.playlists.filter(p=>Date.now()-(p.synced||0)>6*3600e3);
+  if(stale.length)Promise.all(stale.map(p=>loadPlaylist(p).then(()=>{p.synced=Date.now()}).catch(e=>{p.bootMsg=e.message}))).then(()=>{buildCatalog();save();
    const t=topS();if(t.t==="home"&&!S.modal&&Date.now()-LASTKEY>4000)render(F&&F.dataset.fid)});return}
  S.booting=true;render();
  await Promise.all(S.playlists.map(async p=>{try{await loadPlaylist(p);p.bootSt="done";p.bootMsg="ok"}catch(e){p.bootSt="";p.bootMsg=e.message}if(S.booting)render()}));

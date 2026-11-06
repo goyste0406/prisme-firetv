@@ -17,10 +17,22 @@ const LOGS=[];
 const hidePw=u=>String(u||"").replace(/password=[^&]*/,"password=•••").replace(/\/(live|movie|series)\/([^/]+)\/([^/]+)\//,"/$1/$2/•••/").replace(/api_key=[^&]*/,"api_key=•••");
 function LOG(m){LOGS.unshift([Date.now(),String(m).slice(0,240)]);if(LOGS.length>120)LOGS.pop()}
 const proxied=u=>NATIVE?"https://appassets.androidplatform.net/proxy?u="+encodeURIComponent(u):u;
+/* Le fournisseur peut bloquer un compte qui envoie trop de demandes : au plus 2 à la fois, espacées,
+   et pause de 15 minutes de toutes les demandes automatiques dès qu'il refuse (403, 429, 503). */
+const PROV={busy:0,q:[],last:0,ban:0};
+const isProv=u=>/player_api\.php/.test(u);
+function provSlot(){return new Promise(res=>{PROV.q.push(res);provPump()})}
+function provPump(){if(PROV.busy>=2||!PROV.q.length)return;const w=Math.max(0,PROV.last+250-Date.now());
+ setTimeout(()=>{if(PROV.busy>=2||!PROV.q.length)return;PROV.busy++;PROV.last=Date.now();PROV.q.shift()();provPump()},w)}
 async function getJSON(u,timeout=60000){
+ const prov=isProv(u);
+ if(prov&&Date.now()<PROV.ban)throw new Error(`le fournisseur a refusé l'accès, nouvel essai possible dans ${Math.ceil((PROV.ban-Date.now())/60000)} min`);
+ if(prov)await provSlot();
  const ctl=new AbortController(),t=setTimeout(()=>ctl.abort(),timeout);
- try{const r=await fetch(proxied(u),{signal:ctl.signal});if(!r.ok)throw new Error("le serveur répond "+r.status);const txt=await r.text();return txt?JSON.parse(txt):null}
- catch(e){const m=e.name==="AbortError"?"délai dépassé":e.message;if(!/wikipedia/.test(u))LOG("Erreur réseau · "+hidePw(u).replace(/^https?:\/\//,"").slice(0,110)+" · "+m);throw new Error(m)}finally{clearTimeout(t)}}
+ try{const r=await fetch(proxied(u),{signal:ctl.signal});
+  if(prov&&[403,429,503].includes(r.status)){PROV.ban=Date.now()+15*60000;LOG(`Le fournisseur refuse les demandes (code ${r.status}) : pause automatique de 15 minutes pour ne pas aggraver le blocage`)}
+  if(!r.ok)throw new Error("le serveur répond "+r.status);const txt=await r.text();return txt?JSON.parse(txt):null}
+ catch(e){const m=e.name==="AbortError"?"délai dépassé":e.message;if(!/wikipedia/.test(u))LOG("Erreur réseau · "+hidePw(u).replace(/^https?:\/\//,"").slice(0,110)+" · "+m);throw new Error(m)}finally{clearTimeout(t);if(prov){PROV.busy--;provPump()}}}
 const clean=u=>(u||"").trim().replace(/\/+$/,"");
 const api=(pl,action,extra="")=>`${clean(pl.url)}/player_api.php?username=${encodeURIComponent(pl.user)}&password=${encodeURIComponent(pl.pass)}${action?"&action="+action:""}${extra}`;
 const b64=s=>{try{return decodeURIComponent(escape(atob(s||"")))}catch(e){return s||""}};
@@ -47,13 +59,14 @@ const IDB={db:null,open(){return new Promise(r=>{try{const q=indexedDB.open("pri
  async del(k){const db=this.db||await this.open();if(!db)return;try{db.transaction("data","readwrite").objectStore("data").delete(k)}catch(e){}}};
 /* Certains serveurs ne renvoient pas tout d'un coup : les catégories restées vides sont demandées une par une */
 async function fillCats(pl,action,cats,list,map,D){
+ if(list.length)return list;
  const have=new Set();list.forEach(x=>{have.add(x.cat);(x.cs||[]).forEach(c=>have.add(c))});
- const miss=Object.keys(cats||{}).filter(k=>!have.has(String(k)));if(!miss.length)return list;
+ const miss=Object.keys(cats||{}).filter(k=>!have.has(String(k))).slice(0,25);if(!miss.length)return list;
  const seen=new Set(list.map(x=>x.id));let i=0,added=0;
  const worker=async()=>{while(i<miss.length){const c=miss[i++];try{const r=await getJSON(api(pl,action,"&category_id="+encodeURIComponent(c)),60000);
   const arr=Array.isArray(r)?r:Object.values(r||{}).filter(x=>x&&typeof x==="object");if(arr.length)D.fill++;
   arr.forEach(x=>{const m=map(x);if(!m.cat)m.cat=String(c);if(seen.has(m.id)){const o=list.find(y=>y.id===m.id);if(o){o.cs=o.cs||[o.cat];if(!o.cs.includes(String(c)))o.cs.push(String(c))}}else{seen.add(m.id);list.push(m);added++}})}catch(e){}}};
- await Promise.all([worker(),worker(),worker(),worker()]);
+ await worker();
  if(added)LOG(`${pl.name} · ${action} : +${added} éléments récupérés dans ${miss.length} catégories`);
  return list}
 const mapCats=a=>{const m={};(a||[]).forEach(c=>m[c.category_id]=c.category_name||"Autres");return m};
