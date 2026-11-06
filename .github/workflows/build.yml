@@ -1,0 +1,81 @@
+name: Compiler et publier l'APK
+
+on:
+  push:
+    branches: [main]
+    paths-ignore: ["README.md", "tools/**"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  issues: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.9"
+
+      - name: Compilation (signée avec keystore/prisme-release.jks)
+        env:
+          KEYSTORE_PATH: ${{ github.workspace }}/keystore/prisme-release.jks
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: prisme
+          KEY_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+        run: |
+          if [ -z "$KEYSTORE_PASSWORD" ]; then
+            echo "Le secret KEYSTORE_PASSWORD est absent : ajoute-le dans Settings > Secrets and variables > Actions" | tee build.log
+            exit 1
+          fi
+          set -o pipefail
+          gradle :app:assembleRelease --no-daemon --stacktrace 2>&1 | tee build.log
+
+      - name: Préparer la version
+        id: v
+        run: |
+          NAME=$(grep -oP 'versionName = "\K[^"]+' app/build.gradle.kts)
+          CODE=$(grep -oP 'versionCode = \K[0-9]+' app/build.gradle.kts)
+          mkdir -p out
+          cp app/build/outputs/apk/release/app-release.apk out/prisme.apk
+          SIZE=$(stat -c%s out/prisme.apk)
+          DATE=$(LC_ALL=fr_FR.UTF-8 date -u '+%-d %B %Y' 2>/dev/null || date -u '+%Y-%m-%d')
+          NOTES=$(git log -1 --pretty=%B | sed '/^$/d' | sed '/^Co-Authored-By/d;/^Claude-Session/d' | jq -R . | jq -s .)
+          jq -n --arg n "$NAME" --argjson c "$CODE" --argjson s "$SIZE" --arg d "$DATE" --argjson notes "$NOTES" \
+            --arg apk "https://github.com/${{ github.repository }}/releases/download/v$NAME/prisme.apk" \
+            '{versionName:$n, versionCode:$c, size:$s, date:$d, notes:$notes, apk:$apk}' > out/version.json
+          cat out/version.json
+          echo "name=$NAME" >> "$GITHUB_OUTPUT"
+
+      - name: Publier la release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="v${{ steps.v.outputs.name }}"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" out/prisme.apk out/version.json --clobber
+          else
+            gh release create "$TAG" out/prisme.apk out/version.json --title "prisme ${{ steps.v.outputs.name }}" --notes-file <(jq -r '.notes[]' out/version.json) --latest
+          fi
+
+      - name: Signaler l'échec dans une issue
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          touch build.log
+          { echo "Commit : ${{ github.sha }}"; echo; echo '```'; grep -E "e: |error:|FAILURE|What went wrong|Exception|BUILD" build.log | head -80; echo; tail -c 30000 build.log; echo '```'; } > issue.md
+          gh issue create --title "Échec de compilation (${GITHUB_SHA::7})" --body-file issue.md
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: prisme-apk
+          path: out/
