@@ -592,7 +592,7 @@ async function loadInfo(it){
    {const f0=it.seasons.map(n=>(eps[n]||[])[0]).find(Boolean),q=f0&&qualFromInfo(f0.info);if(q)setQual(qkey(pl.id,"s",s.sid),q)}
    it.se=it.seasons.map(n=>it.eps[n].length);it.ep=(it.eps[it.seasons[0]]||[])[0]?.dur||0;it.srcPl=s.pl}
   it.info=true;it.cast.forEach(([a])=>{const L=CRED[a]=CRED[a]||[];if(!L.some(x=>x[0]===it.id))L.push([it.id,""])});
- }catch(e){toast("Fiche indisponible : "+e.message)}
+ }catch(e){it.infoErr=e.message;LOG("Fiche indisponible · "+it.t+" · "+e.message);toast("Fiche indisponible : "+e.message)}
  it.loading=false;natPush(it.id);if((it.g||[]).length)natGenreBump();
  const t=topS();if(t.t==="detail"&&t.id===it.id)render(F&&F.dataset.fid);
 }
@@ -653,7 +653,7 @@ function refreshQual(){natPush(NAT.detail);if(inApp()&&topS().t==="home"&&S.tab=
 function srcUrl(pl,kind,sid,ext){const u=clean(pl.url),us=encodeURIComponent(pl.user),pw=encodeURIComponent(pl.pass);
  return kind==="l"?`${u}/live/${us}/${pw}/${sid}.${pl.fmt==="m3u8"?"m3u8":"ts"}`:kind==="v"?`${u}/movie/${us}/${pw}/${sid}.${ext||"mkv"}`:`${u}/series/${us}/${pw}/${sid}.${ext||"mkv"}`}
 const PQ=[];let PQRUN=false,PQOWN="";
-function probeQueue(k,url){if(QPEND[k]||QUAL[k]||!NATIVE)return;QPEND[k]="probe";PQ.push([k,url]);pumpProbe()}
+function probeQueue(k,url){if(QPEND[k]||QUAL[k]||!NATIVE||!S.set.probe)return;QPEND[k]="probe";PQ.push([k,url]);pumpProbe()}
 function pumpProbe(){if(PQRUN||!PQ.length)return;
  if(P||NAT.pre){setTimeout(pumpProbe,3000);return}   // jamais pendant une lecture : une seule connexion chez beaucoup de fournisseurs
  PQRUN=true;const [k,url]=PQ.shift();Prisme.probe(k,url);const t0=Date.now();
@@ -674,7 +674,7 @@ async function analyze(key){
  const kind=ch?"l":it.type==="f"?"v":"s";
  for(const s of it.src){const pl=S.playlists.find(p=>p.id===s.pl&&p.on);if(!pl)continue;const k=qkey(pl.id,kind,s.sid);
   if(QUAL[k]&&(QUAL[k].ok||Date.now()-QUAL[k].at<20*60e3)||QPEND[k])continue;
-  if(kind==="l"){const u=srcUrl(pl,"l",s.sid);if(pl.fmt==="m3u8"){QPEND[k]="info";const q=await hlsQual(u);if(q){setQual(k,q);continue}delete QPEND[k]}probeQueue(k,u);continue}
+  if(kind==="l"){if(!S.set.probe)continue;const u=srcUrl(pl,"l",s.sid);if(pl.fmt==="m3u8"){QPEND[k]="info";const q=await hlsQual(u);if(q){setQual(k,q);continue}delete QPEND[k]}probeQueue(k,u);continue}
   QPEND[k]="info";
   try{
    if(kind==="v"){const r=await getJSON(api(pl,"get_vod_info","&vod_id="+s.sid),20000)||{};const q=qualFromInfo(r.info);
@@ -983,6 +983,8 @@ function settingsHtml(){
   ${META.map(([k,n])=>`<div class="it" data-f data-fid="meta-${k}" data-act="meta:${k}"><span>Afficher la note ${esc(n)}</span>${sw(st.meta[k]!==false)}</div>`).join("")}
  </div></section>
  <section data-anchor><h3>Général</h3><div class="grp">
+  <div class="it tall" data-f data-fid="set-probe" data-act="set:probe"><span>Analyser les flux avant la lecture<small>Mesure la qualité réelle (4K, 1080p…) · ouvre une connexion chez le fournisseur : à éviter avec un abonnement 1 écran</small></span>${sw(st.probe)}</div>
+  <div class="it tall" data-f data-fid="set-preload" data-act="set:preload"><span>Préchargement depuis la fiche<small>Démarrage plus rapide · ouvre une connexion à l'avance</small></span>${sw(st.preload)}</div>
   ${NAT.ok?`<div class="it tall" data-f data-fid="set-legacy" data-act="set:legacy"><span>Ancienne interface pour les films et séries<small>À activer seulement en cas de problème avec la nouvelle interface</small></span>${sw(st.legacy)}</div>`:""}
   <div class="it tall" data-f data-fid="set-lite" data-act="set:lite"><span>Mode fluide<small>Effets de verre et ombres allégés · recommandé sur ce Fire TV</small></span>${sw(st.lite)}</div>
   <div class="it" data-f data-fid="set-par" data-act="set:parental"><span>Contrôle parental (code 0000)</span>${sw(st.parental)}</div>
@@ -1650,7 +1652,7 @@ window.nativeApi={
  },
  cancel(){if(P&&P.nat){stopPlayer();if(topS().t==="player")S.stack.pop();NAT.vis=true}return ""},
  preload(id,ss,ep){
-  if(P||PQRUN||NAT.pre||(NATIVE&&Prisme.probeBusy()))return "";
+  if(!S.set.preload||P||PQRUN||NAT.pre||(NATIVE&&Prisme.probeBusy()))return "";
   const it=ALL[id];if(!it)return "";const v=pickSrc(id);if(!v||!compat(v))return "";
   let url="",pos=0;
   const mk=s=>[clean(s.url),encodeURIComponent(s.user),encodeURIComponent(s.pass)];
@@ -1672,7 +1674,7 @@ function natData(id){
   const L=srcs(id),cur=pickSrc(id),isS=it.type==="s";
   const o={id,ty:it.type,t:it.t,f:it.f,c1:it.c[0],c2:it.c[1],img:tmS(it.img,"w342"),bd:tmS(it.bd,"w1280"),
    kick:(isS?"Série":"Film")+((it.g||[])[0]?" · "+it.g[0]:""),meta:metaArr(it),age:it.age||"",tmdb:tmdbTxt(it),imdb:it.imdb?it.imdb.toFixed(1):"",
-   s:it.s||"",dir:it.dir||"",loading:!it.info&&!!it.loading,fav:isFav(id)};
+   s:it.s||(!it.info&&!it.loading&&it.infoErr?`Résumé indisponible : le serveur n'a pas répondu (${it.infoErr})`:""),dir:it.dir||"",loading:!it.info&&!!it.loading,fav:isFav(id)};
   const nm=c=>A[c[0]]||c[2]||"";
   o.castLine=it.cast.slice(0,3).map(nm).filter(Boolean).join(", ");
   o.cast=it.cast.slice(0,14).map(c=>({id:c[0],n:nm(c),r:c[1]||"",ph:photoOf(nm(c))}));
@@ -1709,9 +1711,9 @@ function natTick(st){
  if(P.retryAt){if(Date.now()<P.retryAt)return true;P.retryAt=0;P.err=0;Prisme.play(streamUrl(),Math.round((P.pos||0)*1000),P.kind==="live");return true}
  if(st.error&&!P.err){
   const code=+((String(st.error).match(/(?:Response code|code)[: ]+(\d{3})/i)||[])[1]||0);
-  if([401,403,429,456,458,503,509,551].includes(code)&&(P.retry||0)<10){
-   P.retry=(P.retry||0)+1;P.retryAt=Date.now()+3000;P.err=1;
-   const m=`Connexion précédente en cours de fermeture… nouvel essai ${P.retry} sur 10`;
+  if([401,403,429,456,458,503,509,551].includes(code)&&(P.retry||0)<5){
+   P.retry=(P.retry||0)+1;P.retryAt=Date.now()+4000;P.err=1;LOG(`Serveur occupé (code ${code}) · nouvel essai ${P.retry} sur 5`);
+   const m=`Connexion précédente en cours de fermeture… nouvel essai ${P.retry} sur 5`;
    if(P.nat)Prisme.nativeEvent("loading",JSON.stringify({msg:m,warn:true}));else toast(m);
    return true}
   if(!P.started){P.err=1;LOG("Erreur de lecture · "+String(st.error).slice(0,160));if(natSwitch("erreur"))return true;if(natFail(String(st.error).slice(0,120)))return true;P.err=0}

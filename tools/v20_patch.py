@@ -30,7 +30,7 @@ R('if(P){setTimeout(pumpProbe,3000);return}', 'if(P||NAT.pre){setTimeout(pumpPro
 R(' if(!CH[S.lch]&&CHS[0])S.lch=CHS[0].id;\n}', ' if(!CH[S.lch]&&CHS[0])S.lch=CHS[0].id;\n if(NAT.vis)setTimeout(()=>Prisme.nativeEvent("catalog",""),50);\n}')
 # réglage : revenir à l'ancienne interface
 R('<div class="it tall" data-f data-fid="set-lite" data-act="set:lite">',
-  '${NAT.ok?`<div class="it tall" data-f data-fid="set-legacy" data-act="set:legacy"><span>Ancienne interface pour les films et séries<small>À activer seulement en cas de problème avec la nouvelle interface</small></span>${sw(st.legacy)}</div>`:""}\n  <div class="it tall" data-f data-fid="set-lite" data-act="set:lite">')
+  '<div class="it tall" data-f data-fid="set-probe" data-act="set:probe"><span>Analyser les flux avant la lecture<small>Mesure la qualité réelle (4K, 1080p…) · ouvre une connexion chez le fournisseur : à éviter avec un abonnement 1 écran</small></span>${sw(st.probe)}</div>\n  <div class="it tall" data-f data-fid="set-preload" data-act="set:preload"><span>Préchargement depuis la fiche<small>Démarrage plus rapide · ouvre une connexion à l\'avance</small></span>${sw(st.preload)}</div>\n  ${NAT.ok?`<div class="it tall" data-f data-fid="set-legacy" data-act="set:legacy"><span>Ancienne interface pour les films et séries<small>À activer seulement en cas de problème avec la nouvelle interface</small></span>${sw(st.legacy)}</div>`:""}\n  <div class="it tall" data-f data-fid="set-lite" data-act="set:lite">')
 
 # une seule connexion chez le fournisseur : la lecture attend la fin d'une analyse de flux en cours
 R('if(NATIVE){const u=streamUrl();if(!u){toast("Flux introuvable");return}Prisme.play(u,Math.round((p.pos||0)*1000),p.kind==="live");Prisme.setFormat(curFmt()[0])}}',

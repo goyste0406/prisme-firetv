@@ -141,7 +141,7 @@ async function loadInfo(it){
    {const f0=it.seasons.map(n=>(eps[n]||[])[0]).find(Boolean),q=f0&&qualFromInfo(f0.info);if(q)setQual(qkey(pl.id,"s",s.sid),q)}
    it.se=it.seasons.map(n=>it.eps[n].length);it.ep=(it.eps[it.seasons[0]]||[])[0]?.dur||0;it.srcPl=s.pl}
   it.info=true;it.cast.forEach(([a])=>{const L=CRED[a]=CRED[a]||[];if(!L.some(x=>x[0]===it.id))L.push([it.id,""])});
- }catch(e){toast("Fiche indisponible : "+e.message)}
+ }catch(e){it.infoErr=e.message;LOG("Fiche indisponible · "+it.t+" · "+e.message);toast("Fiche indisponible : "+e.message)}
  it.loading=false;
  const t=topS();if(t.t==="detail"&&t.id===it.id)render(F&&F.dataset.fid);
 }
@@ -202,7 +202,7 @@ function refreshQual(){const t=topS();if(!inApp()||S.booting)return;
 function srcUrl(pl,kind,sid,ext){const u=clean(pl.url),us=encodeURIComponent(pl.user),pw=encodeURIComponent(pl.pass);
  return kind==="l"?`${u}/live/${us}/${pw}/${sid}.${pl.fmt==="m3u8"?"m3u8":"ts"}`:kind==="v"?`${u}/movie/${us}/${pw}/${sid}.${ext||"mkv"}`:`${u}/series/${us}/${pw}/${sid}.${ext||"mkv"}`}
 const PQ=[];let PQRUN=false,PQOWN="";
-function probeQueue(k,url){if(QPEND[k]||QUAL[k]||!NATIVE)return;QPEND[k]="probe";PQ.push([k,url]);pumpProbe()}
+function probeQueue(k,url){if(QPEND[k]||QUAL[k]||!NATIVE||!S.set.probe)return;QPEND[k]="probe";PQ.push([k,url]);pumpProbe()}
 function pumpProbe(){if(PQRUN||!PQ.length)return;
  if(P){setTimeout(pumpProbe,3000);return}   // jamais pendant une lecture : une seule connexion chez beaucoup de fournisseurs
  PQRUN=true;const [k,url]=PQ.shift();Prisme.probe(k,url);const t0=Date.now();
@@ -223,7 +223,7 @@ async function analyze(key){
  const kind=ch?"l":it.type==="f"?"v":"s";
  for(const s of it.src){const pl=S.playlists.find(p=>p.id===s.pl&&p.on);if(!pl)continue;const k=qkey(pl.id,kind,s.sid);
   if(QUAL[k]&&(QUAL[k].ok||Date.now()-QUAL[k].at<20*60e3)||QPEND[k])continue;
-  if(kind==="l"){const u=srcUrl(pl,"l",s.sid);if(pl.fmt==="m3u8"){QPEND[k]="info";const q=await hlsQual(u);if(q){setQual(k,q);continue}delete QPEND[k]}probeQueue(k,u);continue}
+  if(kind==="l"){if(!S.set.probe)continue;const u=srcUrl(pl,"l",s.sid);if(pl.fmt==="m3u8"){QPEND[k]="info";const q=await hlsQual(u);if(q){setQual(k,q);continue}delete QPEND[k]}probeQueue(k,u);continue}
   QPEND[k]="info";
   try{
    if(kind==="v"){const r=await getJSON(api(pl,"get_vod_info","&vod_id="+s.sid),20000)||{};const q=qualFromInfo(r.info);

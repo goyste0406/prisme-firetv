@@ -64,7 +64,12 @@ class Player(private val ctx: Context) {
             .setLoadControl(load)
             .build().also { p ->
                 p.addListener(object : androidx.media3.common.Player.Listener {
-                    override fun onPlayerError(e: PlaybackException) { error = "${e.errorCodeName}: ${e.message}" }
+                    override fun onPlayerError(e: PlaybackException) {
+                        // le code HTTP du fournisseur (403, 458…) est dans la cause, pas dans le message
+                        var c: Throwable? = e.cause; var code = 0
+                        while (c != null && code == 0) { if (c is androidx.media3.datasource.HttpDataSource.InvalidResponseCodeException) code = c.responseCode; c = c.cause }
+                        error = "${e.errorCodeName}: " + if (code > 0) "Response code: $code" else (e.cause?.message ?: e.message ?: "")
+                    }
                     override fun onVideoSizeChanged(v: VideoSize) { applyFormat() }
                     override fun onRenderedFirstFrame() { if (p.playWhenReady) main.post { onFirstFrame?.invoke() } }
                 })

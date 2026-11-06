@@ -102,7 +102,7 @@ window.nativeApi={
  },
  cancel(){if(P&&P.nat){stopPlayer();if(topS().t==="player")S.stack.pop();NAT.vis=true}return ""},
  preload(id,ss,ep){
-  if(P||PQRUN||NAT.pre||(NATIVE&&Prisme.probeBusy()))return "";
+  if(!S.set.preload||P||PQRUN||NAT.pre||(NATIVE&&Prisme.probeBusy()))return "";
   const it=ALL[id];if(!it)return "";const v=pickSrc(id);if(!v||!compat(v))return "";
   let url="",pos=0;
   const mk=s=>[clean(s.url),encodeURIComponent(s.user),encodeURIComponent(s.pass)];
@@ -124,7 +124,7 @@ function natData(id){
   const L=srcs(id),cur=pickSrc(id),isS=it.type==="s";
   const o={id,ty:it.type,t:it.t,f:it.f,c1:it.c[0],c2:it.c[1],img:tmS(it.img,"w342"),bd:tmS(it.bd,"w1280"),
    kick:(isS?"Série":"Film")+((it.g||[])[0]?" · "+it.g[0]:""),meta:metaArr(it),age:it.age||"",tmdb:tmdbTxt(it),imdb:it.imdb?it.imdb.toFixed(1):"",
-   s:it.s||"",dir:it.dir||"",loading:!it.info&&!!it.loading,fav:isFav(id)};
+   s:it.s||(!it.info&&!it.loading&&it.infoErr?`Résumé indisponible : le serveur n'a pas répondu (${it.infoErr})`:""),dir:it.dir||"",loading:!it.info&&!!it.loading,fav:isFav(id)};
   const nm=c=>A[c[0]]||c[2]||"";
   o.castLine=it.cast.slice(0,3).map(nm).filter(Boolean).join(", ");
   o.cast=it.cast.slice(0,14).map(c=>({id:c[0],n:nm(c),r:c[1]||"",ph:photoOf(nm(c))}));
@@ -161,9 +161,9 @@ function natTick(st){
  if(P.retryAt){if(Date.now()<P.retryAt)return true;P.retryAt=0;P.err=0;Prisme.play(streamUrl(),Math.round((P.pos||0)*1000),P.kind==="live");return true}
  if(st.error&&!P.err){
   const code=+((String(st.error).match(/(?:Response code|code)[: ]+(\d{3})/i)||[])[1]||0);
-  if([401,403,429,456,458,503,509,551].includes(code)&&(P.retry||0)<10){
-   P.retry=(P.retry||0)+1;P.retryAt=Date.now()+3000;P.err=1;
-   const m=`Connexion précédente en cours de fermeture… nouvel essai ${P.retry} sur 10`;
+  if([401,403,429,456,458,503,509,551].includes(code)&&(P.retry||0)<5){
+   P.retry=(P.retry||0)+1;P.retryAt=Date.now()+4000;P.err=1;LOG(`Serveur occupé (code ${code}) · nouvel essai ${P.retry} sur 5`);
+   const m=`Connexion précédente en cours de fermeture… nouvel essai ${P.retry} sur 5`;
    if(P.nat)Prisme.nativeEvent("loading",JSON.stringify({msg:m,warn:true}));else toast(m);
    return true}
   if(!P.started){P.err=1;LOG("Erreur de lecture · "+String(st.error).slice(0,160));if(natSwitch("erreur"))return true;if(natFail(String(st.error).slice(0,120)))return true;P.err=0}
