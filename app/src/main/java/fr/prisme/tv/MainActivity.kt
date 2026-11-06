@@ -84,8 +84,16 @@ class MainActivity : Activity(), fr.prisme.tv.nat.NativeUi.Host {
             override fun shouldInterceptRequest(view: WebView, req: WebResourceRequest): WebResourceResponse? {
                 val u = req.url
                 if (u.host == host && u.path == "/proxy") return proxy(u.getQueryParameter("u") ?: "")
+                if (u.host == host && u.path == "/slim") return slim(u.getQueryParameter("k") ?: "vod", u.getQueryParameter("u") ?: "")
                 if (u.host == host && u.path == "/img") return images.get(u.getQueryParameter("u") ?: "", (u.getQueryParameter("w") ?: "200").toIntOrNull() ?: 200)
                 return assets.shouldInterceptRequest(u)
+            }
+
+            /** Le moteur de l'interface a été arrêté (manque de mémoire) : on relance l'écran au lieu de fermer l'appli */
+            override fun onRenderProcessGone(view: WebView, detail: android.webkit.RenderProcessGoneDetail): Boolean {
+                getSharedPreferences("prisme", MODE_PRIVATE).edit().putLong("crash", System.currentTimeMillis()).apply()
+                main.post { recreate() }
+                return true
             }
         }
         web.addJavascriptInterface(Bridge(), "Prisme")
@@ -116,6 +124,24 @@ class MainActivity : Activity(), fr.prisme.tv.nat.NativeUi.Host {
             WebResourceResponse("application/json", "utf-8", 502, "Bad Gateway",
                 mapOf("Access-Control-Allow-Origin" to "*"),
                 JSONObject().put("error", e.toString()).toString().byteInputStream())
+        }
+    }
+
+    /** Liste Xtream allégée (voir Slim) */
+    private fun slim(kind: String, target: String): WebResourceResponse {
+        val headers = mapOf("Access-Control-Allow-Origin" to "*", "Cache-Control" to "no-store")
+        return try {
+            val conn = openFollow(target, 15000, 120000)
+            val code = conn.responseCode
+            if (code >= 300) {
+                WebResourceResponse("application/json", "utf-8", if (code in 300..399) 502 else code, conn.responseMessage?.takeIf { it.isNotBlank() } ?: "Error", headers, (conn.errorStream ?: "".byteInputStream()))
+            } else {
+                val buf = java.io.ByteArrayOutputStream(1 shl 20)
+                conn.inputStream.use { Slim.convert(kind, it, buf) }
+                WebResourceResponse("application/json", "utf-8", 200, "OK", headers, java.io.ByteArrayInputStream(buf.toByteArray()))
+            }
+        } catch (e: Throwable) {
+            WebResourceResponse("application/json", "utf-8", 502, "Bad Gateway", headers, JSONObject().put("error", e.toString()).toString().byteInputStream())
         }
     }
 
@@ -235,6 +261,8 @@ class MainActivity : Activity(), fr.prisme.tv.nat.NativeUi.Host {
         @JavascriptInterface fun preload(url: String, startMs: Long) = main.post { player.preload(url, startMs) }
         @JavascriptInterface fun unpreload() = main.post { player.unpreload() }
         @JavascriptInterface fun probeBusy(): Boolean = prober.busy
+        /** Heure du dernier arrêt de l'interface par manque de mémoire (0 si jamais) */
+        @JavascriptInterface fun lastCrash(): Long = getSharedPreferences("prisme", MODE_PRIVATE).getLong("crash", 0)
         /** Clé TMDB intégrée à la compilation (secret GitHub TMDB_API_KEY), vide sinon */
         @JavascriptInterface fun tmdbKey(): String = try { assets.open("tmdb.txt").bufferedReader().use { it.readText().trim() } } catch (e: Exception) { "" }
         @JavascriptInterface fun exit() = main.post { moveTaskToBack(true) }

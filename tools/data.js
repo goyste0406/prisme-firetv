@@ -25,13 +25,13 @@ const isProv=u=>/player_api\.php/.test(u);
 function provSlot(){return new Promise(res=>{PROV.q.push(res);provPump()})}
 function provPump(){if(PROV.busy>=2||!PROV.q.length)return;const w=Math.max(0,PROV.last+250-Date.now());
  setTimeout(()=>{if(PROV.busy>=2||!PROV.q.length)return;PROV.busy++;PROV.last=Date.now();PROV.q.shift()();provPump()},w)}
-async function getJSON(u,timeout=60000){
+async function getJSON(u,timeout=60000,slim=""){
  const prov=isProv(u);
  const ho=prov?hostOf(u):"",bn=PROV.ban[ho]||0;
  if(prov&&Date.now()<bn)throw new Error(`le fournisseur ${ho} a refusé l'accès, nouvel essai possible dans ${Math.ceil((bn-Date.now())/60000)} min`);
  if(prov)await provSlot();
  const ctl=new AbortController(),t=setTimeout(()=>ctl.abort(),timeout);
- try{const r=await fetch(proxied(u),{signal:ctl.signal});
+ try{const r=await fetch(slim&&NATIVE?`https://appassets.androidplatform.net/slim?k=${slim}&u=${encodeURIComponent(u)}`:proxied(u),{signal:ctl.signal});
   if(prov&&[403,429,503].includes(r.status)){PROV.ban[ho]=Date.now()+15*60000;LOG(`Le fournisseur ${ho} refuse les demandes (code ${r.status}) : pause automatique de 15 minutes pour ne pas aggraver le blocage`)}
   if(!r.ok)throw new Error("le serveur répond "+r.status);const txt=await r.text();return txt?JSON.parse(txt):null}
  catch(e){const m=e.name==="AbortError"?"délai dépassé":e.message;if(!/wikipedia/.test(u))LOG("Erreur réseau · "+hidePw(u).replace(/^https?:\/\//,"").slice(0,110)+" · "+m);throw new Error(m)}finally{clearTimeout(t);if(prov){PROV.busy--;provPump()}}}
@@ -82,10 +82,15 @@ async function loadPlaylist(pl,step=()=>{}){
  D.lc=mapCats(lc);D.vc=mapCats(vc);D.sc=mapCats(sc);
  const t0=Date.now();D.fill=0;
  const cs=x=>{const a=Array.isArray(x.category_ids)?x.category_ids.map(String):[];const c=String(x.category_id??"");if(c&&!a.includes(c))a.unshift(c);return a.length>1?a:undefined};
- const mL=x=>({id:x.stream_id,n:x.name||"",logo:x.stream_icon||"",cat:String(x.category_id??""),cs:cs(x),num:+x.num||0,arch:+x.tv_archive||0});
- const mV=x=>({id:x.stream_id,n:x.name||"",img:x.stream_icon||"",cat:String(x.category_id??""),cs:cs(x),r:+x.rating||0,added:+x.added||0,ext:x.container_extension||"mp4",tmdb:String(x.tmdb||x.tmdb_id||"")});
- const mS=x=>({id:x.series_id,n:x.name||"",img:x.cover||"",cat:String(x.category_id??""),cs:cs(x),r:+x.rating||0,added:+(x.last_modified||0),plot:x.plot||"",cast:x.cast||"",dir:x.director||"",genre:x.genre||"",year:String(x.releaseDate||x.release_date||"").slice(0,4),bd:(Array.isArray(x.backdrop_path)?x.backdrop_path[0]:x.backdrop_path)||"",tmdb:String(x.tmdb||"")});
- const all=async(action,map,to)=>{try{const r=await getJSON(api(pl,action),to);return Array.isArray(r)?r.map(map):Object.values(r||{}).filter(x=>x&&typeof x==="object").map(map)}catch(e){LOG(`${pl.name} · ${action} a échoué (${e.message}) : chargement catégorie par catégorie`);return []}};
+ const nid=v=>/^\d+$/.test(String(v))?+v:v,csA=(c,a)=>{const s=(a||[]).map(String);c=String(c??"");if(c&&!s.includes(c))s.unshift(c);return s.length>1?s:undefined};
+ const aL=x=>({id:nid(x[0]),n:x[1]||"",logo:x[2]||"",cat:String(x[3]??""),cs:csA(x[3],x[4]),num:+x[5]||0,arch:+x[6]||0});
+ const aV=x=>({id:nid(x[0]),n:x[1]||"",img:x[2]||"",cat:String(x[3]??""),cs:csA(x[3],x[4]),r:+x[5]||0,added:+x[6]||0,ext:x[7]||"mp4",tmdb:String(x[8]||"")});
+ const aS=x=>({id:nid(x[0]),n:x[1]||"",img:x[2]||"",cat:String(x[3]??""),cs:csA(x[3],x[4]),r:+x[5]||0,added:+x[6]||0,plot:x[7]||"",cast:x[8]||"",dir:x[9]||"",genre:x[10]||"",year:String(x[11]||"").slice(0,4),bd:x[12]||"",tmdb:String(x[13]||"")});
+ const mL=x=>Array.isArray(x)?aL(x):({id:x.stream_id,n:x.name||"",logo:x.stream_icon||"",cat:String(x.category_id??""),cs:cs(x),num:+x.num||0,arch:+x.tv_archive||0});
+ const mV=x=>Array.isArray(x)?aV(x):({id:x.stream_id,n:x.name||"",img:x.stream_icon||"",cat:String(x.category_id??""),cs:cs(x),r:+x.rating||0,added:+x.added||0,ext:x.container_extension||"mp4",tmdb:String(x.tmdb||x.tmdb_id||"")});
+ const mS=x=>Array.isArray(x)?aS(x):({id:x.series_id,n:x.name||"",img:x.cover||"",cat:String(x.category_id??""),cs:cs(x),r:+x.rating||0,added:+(x.last_modified||0),plot:x.plot||"",cast:x.cast||"",dir:x.director||"",genre:x.genre||"",year:String(x.releaseDate||x.release_date||"").slice(0,4),bd:(Array.isArray(x.backdrop_path)?x.backdrop_path[0]:x.backdrop_path)||"",tmdb:String(x.tmdb||"")});
+ const SK={get_live_streams:"live",get_vod_streams:"vod",get_series:"series"};
+ const all=async(action,map,to)=>{try{const r=await getJSON(api(pl,action),to,SK[action]||"");return Array.isArray(r)?r.map(map):Object.values(r||{}).filter(x=>x&&typeof x==="object").map(map)}catch(e){LOG(`${pl.name} · ${action} a échoué (${e.message}) : chargement catégorie par catégorie`);return []}};
  step(2);D.live=await fillCats(pl,"get_live_streams",D.lc,await all("get_live_streams",mL,90000),mL,D);
  step(3);D.vod=await fillCats(pl,"get_vod_streams",D.vc,await all("get_vod_streams",mV,150000),mV,D);
  step(4);D.ser=await fillCats(pl,"get_series",D.sc,await all("get_series",mS,150000),mS,D);

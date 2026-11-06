@@ -234,3 +234,5 @@ function natActor(aid){const n=A[aid]||"",cr=acred(aid);return {id:aid,n,ph:phot
 nativeApi.actor=function(aid){const n=A[aid]||"";if(n)wantPhotos([n]);
  if(S.set.tmdbKey&&!ACTD[aid])loadActor(aid).then(()=>{if(NAT.vis)Prisme.nativeEvent("actor",JSON.stringify(natActor(aid)))});
  return JSON.stringify(natActor(aid))};
+/* Après un arrêt de l'interface par manque de mémoire, on l'explique */
+try{if(NATIVE&&typeof Prisme.lastCrash==="function"&&Date.now()-Prisme.lastCrash()<120000){LOG("L'interface a été relancée après un manque de mémoire");setTimeout(()=>toast("L'appli a manqué de mémoire et a été relancée"),4000)}}catch(e){}
