@@ -12,11 +12,15 @@ const PAL=[["#8a6b3d","#0d1422"],["#d9823b","#2b1206"],["#5b7c99","#0b1118"],["#
 const FONTS=["bebas","serif","black","thin"];
 const CHCOL=["#1e4fd8","#d1162c","#159a48","#6d2fd6","#e08a00","#0a8fd0","#c21875","#0f766e","#4b4b4b","#8b2bd6"];
 
+/* Journal de diagnostic (Réglages › Diagnostic) : jamais de mot de passe */
+const LOGS=[];
+const hidePw=u=>String(u||"").replace(/password=[^&]*/,"password=•••").replace(/\/(live|movie|series)\/([^/]+)\/([^/]+)\//,"/$1/$2/•••/").replace(/api_key=[^&]*/,"api_key=•••");
+function LOG(m){LOGS.unshift([Date.now(),String(m).slice(0,240)]);if(LOGS.length>120)LOGS.pop()}
 const proxied=u=>NATIVE?"https://appassets.androidplatform.net/proxy?u="+encodeURIComponent(u):u;
 async function getJSON(u,timeout=60000){
  const ctl=new AbortController(),t=setTimeout(()=>ctl.abort(),timeout);
  try{const r=await fetch(proxied(u),{signal:ctl.signal});if(!r.ok)throw new Error("le serveur répond "+r.status);const txt=await r.text();return txt?JSON.parse(txt):null}
- catch(e){throw new Error(e.name==="AbortError"?"délai dépassé":e.message)}finally{clearTimeout(t)}}
+ catch(e){const m=e.name==="AbortError"?"délai dépassé":e.message;if(!/wikipedia/.test(u))LOG("Erreur réseau · "+hidePw(u).replace(/^https?:\/\//,"").slice(0,110)+" · "+m);throw new Error(m)}finally{clearTimeout(t)}}
 const clean=u=>(u||"").trim().replace(/\/+$/,"");
 const api=(pl,action,extra="")=>`${clean(pl.url)}/player_api.php?username=${encodeURIComponent(pl.user)}&password=${encodeURIComponent(pl.pass)}${action?"&action="+action:""}${extra}`;
 const b64=s=>{try{return decodeURIComponent(escape(atob(s||"")))}catch(e){return s||""}};
@@ -41,6 +45,17 @@ const IDB={db:null,open(){return new Promise(r=>{try{const q=indexedDB.open("pri
  async get(k){const db=this.db||await this.open();if(!db)return null;return new Promise(r=>{try{const t=db.transaction("data").objectStore("data").get(k);t.onsuccess=()=>r(t.result||null);t.onerror=()=>r(null)}catch(e){r(null)}})},
  async put(k,v){const db=this.db||await this.open();if(!db)return;try{db.transaction("data","readwrite").objectStore("data").put(v,k)}catch(e){}},
  async del(k){const db=this.db||await this.open();if(!db)return;try{db.transaction("data","readwrite").objectStore("data").delete(k)}catch(e){}}};
+/* Certains serveurs ne renvoient pas tout d'un coup : les catégories restées vides sont demandées une par une */
+async function fillCats(pl,action,cats,list,map,D){
+ const have=new Set();list.forEach(x=>{have.add(x.cat);(x.cs||[]).forEach(c=>have.add(c))});
+ const miss=Object.keys(cats||{}).filter(k=>!have.has(String(k)));if(!miss.length)return list;
+ const seen=new Set(list.map(x=>x.id));let i=0,added=0;
+ const worker=async()=>{while(i<miss.length){const c=miss[i++];try{const r=await getJSON(api(pl,action,"&category_id="+encodeURIComponent(c)),60000);
+  const arr=Array.isArray(r)?r:Object.values(r||{}).filter(x=>x&&typeof x==="object");if(arr.length)D.fill++;
+  arr.forEach(x=>{const m=map(x);if(!m.cat)m.cat=String(c);if(seen.has(m.id)){const o=list.find(y=>y.id===m.id);if(o){o.cs=o.cs||[o.cat];if(!o.cs.includes(String(c)))o.cs.push(String(c))}}else{seen.add(m.id);list.push(m);added++}})}catch(e){}}};
+ await Promise.all([worker(),worker(),worker(),worker()]);
+ if(added)LOG(`${pl.name} · ${action} : +${added} éléments récupérés dans ${miss.length} catégories`);
+ return list}
 const mapCats=a=>{const m={};(a||[]).forEach(c=>m[c.category_id]=c.category_name||"Autres");return m};
 
 async function loadPlaylist(pl,step=()=>{}){
@@ -50,9 +65,16 @@ async function loadPlaylist(pl,step=()=>{}){
  const D={info:auth.user_info,server:auth.server_info||{}};
  step(1);const [lc,vc,sc]=await Promise.all([getJSON(api(pl,"get_live_categories")),getJSON(api(pl,"get_vod_categories")),getJSON(api(pl,"get_series_categories"))]);
  D.lc=mapCats(lc);D.vc=mapCats(vc);D.sc=mapCats(sc);
- step(2);D.live=(await getJSON(api(pl,"get_live_streams"))||[]).map(x=>({id:x.stream_id,n:x.name||"",logo:x.stream_icon||"",cat:x.category_id,num:+x.num||0,arch:+x.tv_archive||0}));
- step(3);D.vod=(await getJSON(api(pl,"get_vod_streams"),120000)||[]).map(x=>({id:x.stream_id,n:x.name||"",img:x.stream_icon||"",cat:x.category_id,r:+x.rating||0,added:+x.added||0,ext:x.container_extension||"mp4",tmdb:String(x.tmdb||x.tmdb_id||"")}));
- step(4);D.ser=(await getJSON(api(pl,"get_series"),120000)||[]).map(x=>({id:x.series_id,n:x.name||"",img:x.cover||"",cat:x.category_id,r:+x.rating||0,added:+(x.last_modified||0),plot:x.plot||"",cast:x.cast||"",dir:x.director||"",genre:x.genre||"",year:String(x.releaseDate||x.release_date||"").slice(0,4),bd:(Array.isArray(x.backdrop_path)?x.backdrop_path[0]:x.backdrop_path)||"",tmdb:String(x.tmdb||"")}));
+ const t0=Date.now();D.fill=0;
+ const cs=x=>{const a=Array.isArray(x.category_ids)?x.category_ids.map(String):[];const c=String(x.category_id??"");if(c&&!a.includes(c))a.unshift(c);return a.length>1?a:undefined};
+ const mL=x=>({id:x.stream_id,n:x.name||"",logo:x.stream_icon||"",cat:String(x.category_id??""),cs:cs(x),num:+x.num||0,arch:+x.tv_archive||0});
+ const mV=x=>({id:x.stream_id,n:x.name||"",img:x.stream_icon||"",cat:String(x.category_id??""),cs:cs(x),r:+x.rating||0,added:+x.added||0,ext:x.container_extension||"mp4",tmdb:String(x.tmdb||x.tmdb_id||"")});
+ const mS=x=>({id:x.series_id,n:x.name||"",img:x.cover||"",cat:String(x.category_id??""),cs:cs(x),r:+x.rating||0,added:+(x.last_modified||0),plot:x.plot||"",cast:x.cast||"",dir:x.director||"",genre:x.genre||"",year:String(x.releaseDate||x.release_date||"").slice(0,4),bd:(Array.isArray(x.backdrop_path)?x.backdrop_path[0]:x.backdrop_path)||"",tmdb:String(x.tmdb||"")});
+ const all=async(action,map,to)=>{try{const r=await getJSON(api(pl,action),to);return Array.isArray(r)?r.map(map):Object.values(r||{}).filter(x=>x&&typeof x==="object").map(map)}catch(e){LOG(`${pl.name} · ${action} a échoué (${e.message}) : chargement catégorie par catégorie`);return []}};
+ step(2);D.live=await fillCats(pl,"get_live_streams",D.lc,await all("get_live_streams",mL,90000),mL,D);
+ step(3);D.vod=await fillCats(pl,"get_vod_streams",D.vc,await all("get_vod_streams",mV,150000),mV,D);
+ step(4);D.ser=await fillCats(pl,"get_series",D.sc,await all("get_series",mS,150000),mS,D);
+ LOG(`${pl.name} chargée en ${((Date.now()-t0)/1000).toFixed(1)} s · ${D.live.length} TV · ${D.vod.length} films · ${D.ser.length} séries${D.fill?` · ${D.fill} catégories complétées une par une`:""}`);
  DATA[pl.id]=D;pl.exp=D.info.exp_date?+D.info.exp_date*1000:null;pl.maxc=+D.info.max_connections||0;pl.actc=+D.info.active_cons||0;
  pl.fmt=(D.info.allowed_output_formats||[]).includes("ts")?"ts":((D.info.allowed_output_formats||[])[0]||"ts");
  pl.loadedAt=Date.now();IDB.put("pl:"+pl.id,D);
@@ -69,12 +91,12 @@ function buildCatalog(){
  for(const pl of S.playlists){const D=DATA[pl.id];if(!D)continue;
   for(const v of D.vod){const p=parseName(v.n),key=v.tmdb&&v.tmdb!=="0"?"t"+v.tmdb:norm(p.title)+"|"+p.year;let it=byKey["f"+key];
    if(!it){it=byKey["f"+key]=mk("f",key,p,v);FILMS.push(it);ALL[it.id]=it}
-   const cn=D.vc[v.cat]||"Autres",ck=catKey(cn);if(!it.cat.includes(ck))it.cat.push(ck);if(!fc.has(ck))fc.set(ck,cn);
+   const cn=D.vc[v.cat]||"Autres",ck=catKey(cn);for(const c of (v.cs||[v.cat])){const n2=D.vc[c]||cn,k2=catKey(n2);if(!it.cat.includes(k2))it.cat.push(k2);if(!fc.has(k2))fc.set(k2,n2)}
    it.src.push({pl:pl.id,sid:v.id,ext:v.ext,q:p.q,tag:p.tag,name:v.n,cat:ck,added:v.added});
    if(!it.img&&v.img)it.img=v.img;if(v.r&&!it.info){it.tmdb=Math.round(v.r*10)}}
   for(const v of D.ser){const p=parseName(v.n),key=v.tmdb&&v.tmdb!=="0"?"t"+v.tmdb:norm(p.title)+"|"+(p.year||v.year);let it=byKey["s"+key];
    if(!it){it=byKey["s"+key]=mk("s",key,p,v);if(!it.y)it.y=+v.year||0;SERIES.push(it);ALL[it.id]=it}
-   const cn=D.sc[v.cat]||"Autres",ck=catKey(cn);if(!it.cat.includes(ck))it.cat.push(ck);if(!sc.has(ck))sc.set(ck,cn);
+   const cn=D.sc[v.cat]||"Autres",ck=catKey(cn);for(const c of (v.cs||[v.cat])){const n2=D.sc[c]||cn,k2=catKey(n2);if(!it.cat.includes(k2))it.cat.push(k2);if(!sc.has(k2))sc.set(k2,n2)}
    it.src.push({pl:pl.id,sid:v.id,ext:"mkv",q:p.q,tag:p.tag,name:v.n,cat:ck,added:v.added});
    if(!it.img&&v.img)it.img=v.img;if(!it.bd&&v.bd)it.bd=v.bd;
    if(!it.info){if(!it.s&&v.plot)it.s=v.plot;if(!it.dir&&v.dir)it.dir=v.dir;if(!it.g.length&&v.genre)it.g=v.genre.split(/[,/]/).map(x=>x.trim()).filter(Boolean).slice(0,3);if(v.r)it.tmdb=Math.round(v.r*10);
@@ -156,7 +178,7 @@ async function loadTrends(){if(!S.set.tmdbKey)return;try{const [m,t]=await Promi
 /* ========================= QUALITÉ RÉELLE DES SOURCES =========================
    1) Films et séries : get_vod_info / get_series_info donnent souvent la résolution (analyse ffprobe du serveur)
    2) Sinon, et pour la TV en direct : analyse native du flux (une à la fois) avant de choisir */
-const QUAL=(()=>{try{return JSON.parse(localStorage.getItem("prisme-q")||"{}")}catch(e){return {}}})();
+const QUAL=(()=>{try{const q=JSON.parse(localStorage.getItem("prisme-q")||"{}");Object.keys(q).forEach(k=>{if(!q[k]||!q[k].ok)delete q[k]});return q}catch(e){return {}}})();
 const QPEND={};let QSAVE=null,QREF=null;
 const qkey=(plId,kind,sid)=>`${plId}|${kind}|${sid}`;
 function qLabel(w,h){if(!w&&!h)return "";if(w>=3200||h>=1800)return "4K";if(w>=1800||h>=1000)return "1080p";if(w>=1200||h>=700)return "720p";return "SD"}
@@ -179,22 +201,29 @@ function refreshQual(){const t=topS();if(!inApp()||S.booting)return;
 /* URL de flux pour une source donnée (sans lecture) */
 function srcUrl(pl,kind,sid,ext){const u=clean(pl.url),us=encodeURIComponent(pl.user),pw=encodeURIComponent(pl.pass);
  return kind==="l"?`${u}/live/${us}/${pw}/${sid}.${pl.fmt==="m3u8"?"m3u8":"ts"}`:kind==="v"?`${u}/movie/${us}/${pw}/${sid}.${ext||"mkv"}`:`${u}/series/${us}/${pw}/${sid}.${ext||"mkv"}`}
-const PQ=[];let PQRUN=false;
+const PQ=[];let PQRUN=false,PQOWN="";
 function probeQueue(k,url){if(QPEND[k]||QUAL[k]||!NATIVE)return;QPEND[k]="probe";PQ.push([k,url]);pumpProbe()}
 function pumpProbe(){if(PQRUN||!PQ.length)return;
  if(P){setTimeout(pumpProbe,3000);return}   // jamais pendant une lecture : une seule connexion chez beaucoup de fournisseurs
  PQRUN=true;const [k,url]=PQ.shift();Prisme.probe(k,url);const t0=Date.now();
- const poll=setInterval(()=>{const r=Prisme.probeResult(k);if(r&&r!=="pending"||Date.now()-t0>20000){clearInterval(poll);PQRUN=false;
-  let o={ok:false};try{o=r&&r!=="pending"?JSON.parse(r):{ok:false}}catch(e){}
-  if(o.ok&&(o.w||o.h))setQual(k,{...o,q:qLabel(o.w,o.h),from:"analyse"});else{setQual(k,{ok:false,q:"",from:"analyse"});Prisme.probeForget(k)}
+ const poll=setInterval(()=>{const r=Prisme.probeResult(k);if(r&&r!=="pending"||Date.now()-t0>32000){clearInterval(poll);PQRUN=false;
+  let o={ok:false,error:"pas de réponse après 32 s"};try{if(r&&r!=="pending")o=JSON.parse(r)}catch(e){o={ok:false,error:"réponse illisible"}}
+  const nm=qName(k);
+  if(o.ok&&(o.w||o.h)){setQual(k,{...o,q:qLabel(o.w,o.h),from:"analyse"});LOG(`Analyse OK · ${nm} · ${o.w}×${o.h} ${o.vc||""} · ${o.via||""} ${o.ms?(o.ms/1000).toFixed(1)+" s":""}`)}
+  else{setQual(k,{ok:false,q:"",from:"analyse",err:o.error||"aucune piste vidéo trouvée"});Prisme.probeForget(k);LOG(`Analyse échouée · ${nm} · ${hidePw(o.error||"aucune piste vidéo")}`)}
   pumpProbe()}},700)}
-/* Lance l'analyse de toutes les sources d'un titre ou d'une chaîne */
+function qName(k){const [pl,kind,sid]=k.split("|");const L=kind==="l"?CHS:kind==="v"?FILMS:SERIES;for(const i of L){const s=i.src.find(s=>s.pl===pl&&String(s.sid)===sid);if(s)return s.name||i.n||i.t}return k}
+/* HLS : la résolution est écrite dans la liste maîtresse, pas besoin d'ouvrir le flux */
+async function hlsQual(url){try{const ctl=new AbortController(),t=setTimeout(()=>ctl.abort(),8000);const r=await fetch(proxied(url),{signal:ctl.signal});clearTimeout(t);const txt=(await r.text()).slice(0,20000);
+ let w=0,h=0;txt.replace(/RESOLUTION=(\d+)x(\d+)/g,(_,a,b)=>{if(+a*+b>w*h){w=+a;h=+b}});return w?{ok:true,w,h,q:qLabel(w,h),vc:/hvc1|hev1/.test(txt)?"HEVC":/avc1/.test(txt)?"H.264":"",fps:0,hdr:false,audio:[],subs:null,from:"liste HLS"}:null}catch(e){return null}}
+/* Lance l'analyse de toutes les sources d'un titre ou d'une chaîne (la demande la plus récente passe en premier) */
 async function analyze(key){
  const ch=key.startsWith("ch:"),it=ch?CH[key.slice(3)]:ALL[key];if(!it)return;
+ if(PQOWN!==key){PQ.splice(0).forEach(([k])=>{if(QPEND[k]==="probe")delete QPEND[k]});PQOWN=key}
  const kind=ch?"l":it.type==="f"?"v":"s";
  for(const s of it.src){const pl=S.playlists.find(p=>p.id===s.pl&&p.on);if(!pl)continue;const k=qkey(pl.id,kind,s.sid);
-  if(QUAL[k]&&(QUAL[k].ok||Date.now()-QUAL[k].at<6*3600e3)||QPEND[k])continue;
-  if(kind==="l"){probeQueue(k,srcUrl(pl,"l",s.sid));continue}
+  if(QUAL[k]&&(QUAL[k].ok||Date.now()-QUAL[k].at<20*60e3)||QPEND[k])continue;
+  if(kind==="l"){const u=srcUrl(pl,"l",s.sid);if(pl.fmt==="m3u8"){QPEND[k]="info";const q=await hlsQual(u);if(q){setQual(k,q);continue}delete QPEND[k]}probeQueue(k,u);continue}
   QPEND[k]="info";
   try{
    if(kind==="v"){const r=await getJSON(api(pl,"get_vod_info","&vod_id="+s.sid),20000)||{};const q=qualFromInfo(r.info);
@@ -202,8 +231,28 @@ async function analyze(key){
    else{const r=await getJSON(api(pl,"get_series_info","&series_id="+s.sid),20000)||{};const eps=r.episodes||{},first=Object.keys(eps).map(Number).sort((a,b)=>a-b).map(n=>eps[n]&&eps[n][0]).find(Boolean);
     const q=first&&qualFromInfo(first.info);
     if(q)setQual(k,q);else if(first){delete QPEND[k];probeQueue(k,srcUrl(pl,"s",first.id,first.container_extension))}else setQual(k,{ok:false,q:""})}
-  }catch(e){setQual(k,{ok:false,q:""})}}
+  }catch(e){delete QPEND[k];probeQueue(k,srcUrl(pl,kind,s.sid,s.ext))}}
 }
+
+/* ========================= PHOTOS DES ACTEURS =========================
+   TMDB (si une clé est enregistrée) puis Wikipédia, gardées sur l'appareil */
+const PHOTO=(()=>{try{return JSON.parse(localStorage.getItem("prisme-ph")||"{}")}catch(e){return {}}})();
+let PHS=null,PHRUN=0;const PHQ=[],DAY=()=>Math.floor(Date.now()/86400000);
+function phSave(){clearTimeout(PHS);PHS=setTimeout(()=>{try{const ks=Object.keys(PHOTO);if(ks.length>5000)ks.slice(0,ks.length-5000).forEach(k=>delete PHOTO[k]);localStorage.setItem("prisme-ph",JSON.stringify(PHOTO))}catch(e){}},1500)}
+function photoOf(n){const v=PHOTO[norm(String(n||""))];return v&&v[0]!=="-"?v:""}
+function setPhoto(n,url){const k=norm(n);if(!url&&PHOTO[k]&&PHOTO[k][0]!=="-")return;PHOTO[k]=url||("-"+DAY());phSave();if(url)paintPhoto(n,url)}
+function paintPhoto(n,url){view.querySelectorAll(".av[data-nm]:not(.has-img)").forEach(av=>{if(av.dataset.nm===n){av.insertAdjacentHTML("afterbegin",`<img src="${esc(imgS(url,"p"))}" alt="" decoding="async" onerror="this.parentNode.classList.remove('has-img');this.remove()">`);av.classList.add("has-img")}})}
+const PHRE=/(acteur|actrice|actor|actress|comedien|humoriste|comedian|realisat|director|cineaste|filmmaker|scenariste|screenwriter|chanteu|singer|rappeur|rapper|musicien|musician|animat|presentat|host|mannequin|model|doubleu|voice|personnalite|television|sportif|footballeur|boxeur|youtubeu|danseu|dancer|producteur|producer|ecrivain|writer|artiste|artist|showrunner)/;
+async function wikiPhoto(n){let net=false;for(const lg of ["fr","en"]){try{const r=await getJSON(`https://${lg}.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(n.trim().replace(/ /g,"_"))}?redirect=true`,10000);
+  if(!r||r.type==="disambiguation"||!r.thumbnail||!r.thumbnail.source)continue;const d=norm((r.description||"")+" "+String(r.extract||"").slice(0,240));if(PHRE.test(d))return r.thumbnail.source}
+ catch(e){if(!/ 404/.test(e.message))net=true}}return net?null:""}
+function wantPhotos(names){const d=DAY();[...new Set(names)].forEach(n=>{if(!n)return;const v=PHOTO[norm(n)];if(v&&(v[0]!=="-"||d-+v.slice(1)<10))return;if(!PHQ.includes(n))PHQ.push(n)});pumpPh()}
+function pumpPh(){while(PHRUN<3&&PHQ.length){const n=PHQ.shift();PHRUN++;wikiPhoto(n).then(u=>{if(u!==null)setPhoto(n,u)}).catch(()=>{}).finally(()=>{PHRUN--;pumpPh()})}}
+async function castTmdb(it){if(!S.set.tmdbKey||!it.tmdbId||it.tmdbId==="0"||it._ct)return;it._ct=1;
+ try{const r=await tmdb((it.type==="f"?"movie/":"tv/")+it.tmdbId+(it.type==="f"?"/credits":"/aggregate_credits"));const L=(r&&r.cast)||[];let ch=false;
+  if(!it.cast.length&&L.length){it.cast=castList(L.slice(0,12).map(c=>c.name).join(","));it.cast.forEach(([a])=>{const C=CRED[a]=CRED[a]||[];if(!C.some(x=>x[0]===it.id))C.push([it.id,""])});ch=true}
+  L.forEach(c=>{if(c.profile_path)setPhoto(c.name,"https://image.tmdb.org/t/p/w185"+c.profile_path);const role=c.character||(c.roles&&c.roles[0]&&c.roles[0].character)||"";const e=it.cast.find(x=>norm(x[2]||A[x[0]]||"")===norm(c.name||""));if(e&&!e[1]&&role){e[1]=role;ch=true}});
+  const t=topS();if(ch&&t.t==="detail"&&t.id===it.id&&!S.modal)render(F&&F.dataset.fid)}catch(e){}}
 
 /* ========================= TV EN DIRECT : GENRES ET PAYS ========================= */
 const GENRES=[["gen","Généralistes"],["info","Info"],["sport","Sport"],["cine","Cinéma"],["series","Séries"],["kids","Jeunesse"],["docs","Découverte"],["music","Musique"],["divert","Divertissement"],["region","Régionales"],["other","Autres"]];

@@ -43,6 +43,7 @@ class MainActivity : Activity() {
     private lateinit var web: WebView
     private lateinit var player: Player
     private val prober = Prober()
+    private lateinit var images: ImageCache
     private val main = Handler(Looper.getMainLooper())
     private val host = "appassets.androidplatform.net"
     @Volatile private var typing = false
@@ -54,13 +55,13 @@ class MainActivity : Activity() {
 
         val root = FrameLayout(this)
         root.setBackgroundColor(Color.BLACK)
+        images = ImageCache(java.io.File(cacheDir, "img"))
         player = Player(this)
         root.addView(player.view, FrameLayout.LayoutParams(-1, -1))
 
         WebView.setWebContentsDebuggingEnabled(true)
         web = WebView(this)
         web.setBackgroundColor(Color.TRANSPARENT)
-        web.setLayerType(View.LAYER_TYPE_HARDWARE, null)
         with(web.settings) {
             javaScriptEnabled = true
             domStorageEnabled = true
@@ -68,8 +69,8 @@ class MainActivity : Activity() {
             mediaPlaybackRequiresUserGesture = false
             mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
             cacheMode = WebSettings.LOAD_DEFAULT
-            loadWithOverviewMode = false
-            useWideViewPort = false
+            loadWithOverviewMode = true
+            useWideViewPort = true
             textZoom = 100
             offscreenPreRaster = true
         }
@@ -82,6 +83,7 @@ class MainActivity : Activity() {
             override fun shouldInterceptRequest(view: WebView, req: WebResourceRequest): WebResourceResponse? {
                 val u = req.url
                 if (u.host == host && u.path == "/proxy") return proxy(u.getQueryParameter("u") ?: "")
+                if (u.host == host && u.path == "/img") return images.get(u.getQueryParameter("u") ?: "", (u.getQueryParameter("w") ?: "200").toIntOrNull() ?: 200)
                 return assets.shouldInterceptRequest(u)
             }
         }

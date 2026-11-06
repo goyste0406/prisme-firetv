@@ -310,6 +310,7 @@ assert js.rstrip().endswith("render();"), js[-60:]
 js = js.rstrip()[:-len("render();")] + "boot();\n"
 
 exec(open(os.path.join(D, "perf_patch.py"), encoding="utf-8").read())
+exec(open(os.path.join(D, "v13_patch.py"), encoding="utf-8").read())
 
 # ---------------------------------------------------------------- CSS + page
 css += '''
@@ -326,7 +327,7 @@ html.lite .pst{box-shadow:none;transition:transform .16s ease-out}
 html.lite .card.foc .pst{box-shadow:0 10px 22px rgba(0,0,0,.55)}
 html.lite .pst::after{display:none}
 html.lite .eth,html.lite .av{box-shadow:none}
-html.lite .bgl{transition:opacity .25s linear}
+html.lite .bgl{transition:none}
 html.lite .vid{animation:none}
 html.lite .scan,html.lite .pth-img::after{display:none}
 html.lite .btn.foc,html.lite .pc.foc,html.lite .lch.foc,html.lite .tab.foc{box-shadow:none}
@@ -347,12 +348,26 @@ html.native .player .pframe,html.native .player .wm2{display:none}
 .logo.has-img b{display:none}
 .logo b{font-weight:800}
 .ep .eth span{z-index:1}
+.av{position:relative;overflow:hidden}
+.av b{font-weight:inherit}
+.av img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:center 22%}
+.av.has-img b{opacity:0}
+.cchip small{font-size:13px;font-weight:500;opacity:.6;margin-left:8px}
+.cath{padding:96px 64px 8px}
+.cath h1{margin:6px 0 18px;font-size:48px;font-weight:700;letter-spacing:-.02em}
+.csorts{display:flex;gap:12px}
+.cgrid{display:flex;flex-wrap:wrap;gap:30px 26px;padding:22px 64px 0}
+.qs{height:20px!important;font-size:11px!important;padding:0 6px!important;margin-left:6px;vertical-align:2px}
+.qa{background:rgba(255,255,255,.25)!important;color:#fff!important}
+.it.lg{font-size:15px}
+.it.lg span:first-child{white-space:normal;line-height:1.35}
+.it.lg span:last-child{flex:0 0 auto}
 '''
 html = f'''<!doctype html>
 <html lang="fr">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=1280, user-scalable=no">
 <title>prisme</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo+Black&family=Bebas+Neue&family=Outfit:wght@200;300;400;500;600;700&family=Playfair+Display:ital,wght@1,700&display=swap">
 <style>{css}</style>

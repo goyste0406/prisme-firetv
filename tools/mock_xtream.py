@@ -22,6 +22,7 @@ CHANNELS = ["TF1 ᶠᴴᴰ", "Gulli HD", "Disney Channel FHD", "Canal J", "RMC D
 LIVE = [{"num": i + 1, "name": "FR| " + n, "stream_id": 1000 + i, "stream_icon": "", "epg_channel_id": "", "category_id": "22" if any(x in n for x in ("BFM", "CNEWS", "LCI", "franceinfo")) else "23" if any(x in n for x in ("Equipe", "beIN")) else "21", "tv_archive": 0} for i, n in enumerate(CHANNELS)]
 
 import os
+VOD[0]["category_ids"] = ["3", "1"]  # film rangé dans deux catégories
 if os.environ.get("MOCK_BIG"):
     VCATS += [{"category_id": str(100 + c), "category_name": f"FR | Catégorie {c}"} for c in range(36)]
     VOD += [{"num": 1000 + i, "name": f"FR| Film démo {i} ({1980 + i % 45}) {'FHD' if i % 2 else 'HD'}", "stream_id": 5000 + i, "stream_icon": "", "rating": 5 + (i % 40) / 10, "added": str(NOW - (i % 300) * 86400), "category_id": str(100 + i % 36), "container_extension": "mkv", "tmdb": ""} for i in range(4000)]
@@ -52,6 +53,10 @@ class H(BaseHTTPRequestHandler):
         a = q.get("action")
         if not a: return self.send({"user_info": {"auth": 1, "status": "Active", "exp_date": str(NOW + 200 * 86400), "max_connections": "2", "active_cons": "0", "allowed_output_formats": ["m3u8", "ts"]}, "server_info": {"url": "localhost"}})
         r = {"get_vod_categories": VCATS, "get_series_categories": SCATS, "get_live_categories": LCATS, "get_vod_streams": VOD, "get_series": SERIES, "get_live_streams": LIVE}.get(a)
+        cid = q.get("category_id")
+        if a in ("get_vod_streams", "get_series", "get_live_streams") and r is not None:
+            if cid: r = [x for x in r if str(x["category_id"]) == cid or cid in x.get("category_ids", [])]
+            elif os.environ.get("MOCK_PARTIAL"): r = [x for x in r if str(x["category_id"]) not in ("9", "12")]  # serveur qui « oublie » des catégories
         if a == "get_short_epg": r = short_epg(q.get("stream_id"))
         if a == "get_series_info": r = series_info(int(q.get("series_id")))
         if a == "get_vod_info":
