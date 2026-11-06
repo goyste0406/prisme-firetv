@@ -37,3 +37,24 @@ R('if(NATIVE){const u=streamUrl();if(!u){toast("Flux introuvable");return}Prisme
   'if(NATIVE){const u=streamUrl();if(!u){toast("Flux introuvable");return}PQ.splice(0).forEach(([k])=>{if(QPEND[k]==="probe")delete QPEND[k]});'
   'const go=()=>{if(P!==p||p.go)return;p.go=1;p.t0=Date.now();Prisme.play(u,Math.round((p.pos||0)*1000),p.kind==="live");Prisme.setFormat(curFmt()[0])};'
   'if(Prisme.probeBusy()){LOG("Lecture en attente de la fin d\'une analyse de flux");const w0=Date.now(),wt=setInterval(()=>{if(P!==p||!Prisme.probeBusy()||Date.now()-w0>26000){clearInterval(wt);go()}},300)}else go()}}')
+
+# Diagnostic : état du compte chez le fournisseur (expiration, connexions en cours) et test d'un flux
+R('function diagHtml(){', '''const DIAGA={};let DIAGT="";
+async function diagAcct(){for(const p of S.playlists){try{const r=await getJSON(api(p,""),15000)||{};DIAGA[p.id]=r.user_info||{err:"réponse sans infos de compte"}}catch(e){DIAGA[p.id]={err:e.message}}}
+ if(topS().t==="diag")render(F&&F.dataset.fid)}
+async function diagTest(){const id=Object.keys(S.prog).reverse().find(k=>ALL[k]&&ALL[k].type==="f")||(films()[0]||{}).id;const it=ALL[id];if(!it){DIAGT="Aucun film à tester";render(F&&F.dataset.fid);return}
+ const v=pickSrc(id);if(!v){DIAGT="Aucune source";render(F&&F.dataset.fid);return}
+ const s=v.p,u=`${clean(s.url)}/movie/${encodeURIComponent(s.user)}/${encodeURIComponent(s.pass)}/${v.sid}.${v.ext}`;
+ DIAGT="Test en cours…";render(F&&F.dataset.fid);
+ const ctl=new AbortController(),t=setTimeout(()=>ctl.abort(),12000),t0=Date.now();
+ try{const r=await fetch(proxied(u),{signal:ctl.signal});DIAGT=`${it.t} : réponse ${r.status} ${r.status===200||r.status===206?"(flux accessible)":r.status===502?"(redirection ou serveur injoignable)":"(refusé par le fournisseur)"} en ${((Date.now()-t0)/1000).toFixed(1)} s`;ctl.abort()}
+ catch(e){DIAGT=`${it.t} : ${e.name==="AbortError"?"pas de réponse en 12 s":e.message}`}
+ clearTimeout(t);LOG("Test de flux · "+DIAGT);if(topS().t==="diag")render(F&&F.dataset.fid)}
+function diagHtml(){if(!Object.keys(DIAGA).length&&S.playlists.length){DIAGA._=1;setTimeout(diagAcct,50)}''')
+R('''  ${it("dg-q",`Analyse de la qualité vidéo''', '''  ${S.playlists.map(p=>{const u=DIAGA[p.id];if(!u)return it("dg-a"+p.id,`Compte ${esc(p.name)}<small>vérification…</small>`,"");if(u.err)return it("dg-a"+p.id,`Compte ${esc(p.name)}<small>${esc(u.err)}</small>`,"injoignable");
+   const exp=+u.exp_date?new Date(+u.exp_date*1000).toLocaleDateString("fr-FR"):"illimité";
+   return it("dg-a"+p.id,`Compte ${esc(p.name)}<small>Statut : ${esc(u.status||"?")} · expire le ${exp} · connexions en cours ${esc(String(u.active_cons??"?"))} sur ${esc(String(u.max_connections??"?"))}</small>`,u.status==="Active"?"actif":esc(u.status||"?"))}).join("")}
+  <div class="it tall" data-f data-fid="dg-test" data-act="diag:test"><span>Tester un flux de film<small>${esc(DIAGT||"Vérifie si le fournisseur accepte la connexion (ouvre une connexion quelques secondes)")}</small></span><span>›</span></div>
+  ${it("dg-q",`Analyse de la qualité vidéo''')
+R('''   else if(v==="ref")render(F&&F.dataset.fid);''','''   else if(v==="ref"){Object.keys(DIAGA).forEach(k=>delete DIAGA[k]);render(F&&F.dataset.fid)}
+   else if(v==="test")diagTest();''')

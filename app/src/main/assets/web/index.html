@@ -991,11 +991,26 @@ function settingsHtml(){
   <div class="it" data-f data-fid="set-diag" data-act="diag"><span>Diagnostic</span><span>analyse des flux, chargements, erreurs ›</span></div>
  </div></section><div style="height:30px"></div></div>`;
 }
-function diagHtml(){const q=Object.values(QUAL),ok=q.filter(x=>x.ok).length,ph=Object.values(PHOTO),nph=ph.filter(x=>x&&x[0]!=="-").length;
+const DIAGA={};let DIAGT="";
+async function diagAcct(){for(const p of S.playlists){try{const r=await getJSON(api(p,""),15000)||{};DIAGA[p.id]=r.user_info||{err:"réponse sans infos de compte"}}catch(e){DIAGA[p.id]={err:e.message}}}
+ if(topS().t==="diag")render(F&&F.dataset.fid)}
+async function diagTest(){const id=Object.keys(S.prog).reverse().find(k=>ALL[k]&&ALL[k].type==="f")||(films()[0]||{}).id;const it=ALL[id];if(!it){DIAGT="Aucun film à tester";render(F&&F.dataset.fid);return}
+ const v=pickSrc(id);if(!v){DIAGT="Aucune source";render(F&&F.dataset.fid);return}
+ const s=v.p,u=`${clean(s.url)}/movie/${encodeURIComponent(s.user)}/${encodeURIComponent(s.pass)}/${v.sid}.${v.ext}`;
+ DIAGT="Test en cours…";render(F&&F.dataset.fid);
+ const ctl=new AbortController(),t=setTimeout(()=>ctl.abort(),12000),t0=Date.now();
+ try{const r=await fetch(proxied(u),{signal:ctl.signal});DIAGT=`${it.t} : réponse ${r.status} ${r.status===200||r.status===206?"(flux accessible)":r.status===502?"(redirection ou serveur injoignable)":"(refusé par le fournisseur)"} en ${((Date.now()-t0)/1000).toFixed(1)} s`;ctl.abort()}
+ catch(e){DIAGT=`${it.t} : ${e.name==="AbortError"?"pas de réponse en 12 s":e.message}`}
+ clearTimeout(t);LOG("Test de flux · "+DIAGT);if(topS().t==="diag")render(F&&F.dataset.fid)}
+function diagHtml(){if(!Object.keys(DIAGA).length&&S.playlists.length){DIAGA._=1;setTimeout(diagAcct,50)}const q=Object.values(QUAL),ok=q.filter(x=>x.ok).length,ph=Object.values(PHOTO),nph=ph.filter(x=>x&&x[0]!=="-").length;
  const it=(f,a,b)=>`<div class="it tall" data-f data-fid="${f}"><span>${a}</span><span>${b}</span></div>`;
  return `<div class="set sy" id="set" style="top:60px"><section data-anchor><div class="kick" style="margin-left:18px">Réglages</div><h2 style="margin:6px 0 14px 18px;font-size:40px;font-weight:700;letter-spacing:-.02em">Diagnostic</h2><div class="grp">
   ${it("dg-dev",`Appareil<small>${esc(DEV.model||"navigateur")} · Android ${esc(ANDROID[DEV.sdk]||DEV.sdk||"")} · prisme ${esc(APPV.name)}</small>`,`${innerWidth}×${innerHeight} · ×${SCALE.toFixed(2)}`)}
   ${S.playlists.map(p=>{const D=DATA[p.id];return it("dg-"+p.id,`${esc(p.name)}<small>${D?`${Object.keys(D.vc||{}).length} catégories films · ${Object.keys(D.sc||{}).length} séries · ${Object.keys(D.lc||{}).length} TV${D.fill?` · ${D.fill} complétées`:""}`:"non chargée"}</small>`,D?`${D.live.length} TV · ${D.vod.length} films · ${D.ser.length} séries`:"—")}).join("")}
+  ${S.playlists.map(p=>{const u=DIAGA[p.id];if(!u)return it("dg-a"+p.id,`Compte ${esc(p.name)}<small>vérification…</small>`,"");if(u.err)return it("dg-a"+p.id,`Compte ${esc(p.name)}<small>${esc(u.err)}</small>`,"injoignable");
+   const exp=+u.exp_date?new Date(+u.exp_date*1000).toLocaleDateString("fr-FR"):"illimité";
+   return it("dg-a"+p.id,`Compte ${esc(p.name)}<small>Statut : ${esc(u.status||"?")} · expire le ${exp} · connexions en cours ${esc(String(u.active_cons??"?"))} sur ${esc(String(u.max_connections??"?"))}</small>`,u.status==="Active"?"actif":esc(u.status||"?"))}).join("")}
+  <div class="it tall" data-f data-fid="dg-test" data-act="diag:test"><span>Tester un flux de film<small>${esc(DIAGT||"Vérifie si le fournisseur accepte la connexion (ouvre une connexion quelques secondes)")}</small></span><span>›</span></div>
   ${it("dg-q",`Analyse de la qualité vidéo<small>${ok} réussie${ok>1?"s":""} · ${q.length-ok} échec${q.length-ok>1?"s":""} · ${PQ.length} en attente${PQRUN?" · analyse en cours":""}</small>`,NATIVE?"lecteur natif":"navigateur")}
   ${it("dg-ph",`Photos des acteurs<small>${nph} trouvée${nph>1?"s":""} sur ${ph.length} recherchée${ph.length>1?"s":""} · ${S.set.tmdbKey?"TMDB puis Wikipédia":"Wikipédia (ajoute une clé TMDB pour plus de photos)"}</small>`,"")}
   <div class="it" data-f data-fid="dg-clrq" data-act="diag:clrq"><span>Refaire toutes les analyses de qualité</span><span>›</span></div>
@@ -1387,7 +1402,8 @@ function act(a){
   case "csort":{const t=topS();if(t.t==="cat"&&t.sort!==v){t.sort=v;render("cs-"+v)}break}
   case "diag": if(v==="clrq"){Object.keys(QUAL).forEach(k=>delete QUAL[k]);try{localStorage.removeItem("prisme-q")}catch(e){}toast("Analyses effacées : elles seront refaites");render("dg-clrq")}
    else if(v==="clrph"){Object.keys(PHOTO).forEach(k=>delete PHOTO[k]);try{localStorage.removeItem("prisme-ph")}catch(e){}toast("Photos des acteurs effacées");render("dg-clrph")}
-   else if(v==="ref")render(F&&F.dataset.fid);else push({t:"diag"});break;
+   else if(v==="ref"){Object.keys(DIAGA).forEach(k=>delete DIAGA[k]);render(F&&F.dataset.fid)}
+   else if(v==="test")diagTest();else push({t:"diag"});break;
   case "actor": push({t:"actor",id:v});break;
   case "trailer": toast(ALL[v]&&ALL[v].trailer?"Bande-annonce YouTube : lecture prévue dans une prochaine version":"Pas de bande-annonce fournie par le serveur");break;
   case "fav": toggleFav(v,ALL[v].t);render(F.dataset.fid);break;
