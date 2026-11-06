@@ -17,6 +17,8 @@ import android.widget.TextView
  */
 object K {
     var u = 1.5f
+    /** Vrai pendant un rétablissement du focus : pas d'animation (évite le « clignotement ») */
+    var instant = false
     private val faces = HashMap<String, Typeface>()
     private var fontFiles: Set<String> = emptySet()
     private lateinit var app: Context

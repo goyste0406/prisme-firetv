@@ -1615,31 +1615,14 @@ window.nativeApi={
    else{const d=i=>{const a2=added(i.id);return a2?a2.d:1e9};a.sort((x,y)=>d(x)-d(y))}return a});
   return JSON.stringify({title:g[1],kick:`${ty==="f"?"Films":"Séries"} · ${L.length} titre${L.length>1?"s":""}`,c1:g[2],c2:g[3],items:L.map(i=>nI(i,false))});
  },
+ /* Demande de la fiche par l'interface native : lance une seule fois le chargement des infos, l'analyse et les photos */
  detail(id){
   const it=ALL[id];if(!it)return JSON.stringify({error:"introuvable"});
   NAT.detail=id;
-  if(!it.info&&!it.loading)loadInfo(it);
+  if(!it.info&&!it.loading&&Date.now()-(it._lt||0)>60000){it._lt=Date.now();loadInfo(it)}
   setTimeout(()=>{if(!P)analyze(id)},80);
-  const L=srcs(id),cur=pickSrc(id),isS=it.type==="s";
-  const o={id,ty:it.type,t:it.t,f:it.f,c1:it.c[0],c2:it.c[1],img:tmS(it.img,"w342"),bd:tmS(it.bd,"w1280"),
-   kick:(isS?"Série":"Film")+((it.g||[])[0]?" · "+it.g[0]:""),meta:metaArr(it),age:it.age||"",tmdb:tmdbTxt(it),imdb:it.imdb?it.imdb.toFixed(1):"",
-   s:it.s||"",dir:it.dir||"",loading:!it.info,fav:isFav(id)};
-  const nm=c=>A[c[0]]||c[2]||"";
-  o.castLine=it.cast.slice(0,3).map(nm).filter(Boolean).join(", ");
-  o.cast=it.cast.slice(0,14).map(c=>({id:c[0],n:nm(c),r:c[1]||"",ph:photoOf(nm(c))}));
-  wantPhotos(o.cast.map(c=>c.n).filter(Boolean));
-  const ad=added(id);o.added=ad?(ad.d===0?"aujourd'hui":ad.d===1?"hier":`il y a ${ad.d} jours`)+" sur "+ad.p.name:"";
-  o.sources=L.map(v=>({id:v.id,q:v.q,pl:v.p.name,name:v.name||"",codec:v.codec||"",audio:(v.audio||[]).join(" | "),subs:(v.subs||[]).join(", "),fmt:"."+(v.ext||""),ok:compat(v),def:!!cur&&cur.id===v.id}));
-  if(cur){o.srcLine=[cur.p.name,cur.q,cur.tag].filter(Boolean).join(" · ");o.srcQ=qr(cur.q)>0&&cur.q!=="Auto"?cur.q:""}
-  if(!isS){const pr=S.prog[id]||0;o.playLabel=pr>0.02&&it.d?`Reprendre à ${dur(Math.round(pr*it.d))}`:"Lecture"}
-  else{
-   const le=(S.lastEp||{})[id],sn=it.seasons||[];
-   o.seasons=sn.map((n,i)=>({n:String(n),label:"Saison "+n,eps:((it.eps||{})[n]||[]).map(e=>({num:e.num,t:e.t,d:e.dur?e.dur+" min":"",img:tmS(e.img,"w300"),q:e.q||"",pr:le&&le.ss===i+1&&le.ep===e.num?(le.pct||0):0}))}));
-   if(le&&sn[le.ss-1]!=null){o.resume={ss:le.ss,ep:le.ep};o.ssel=le.ss-1;o.playLabel=`Reprendre S${sn[le.ss-1]} E${le.ep}`}
-   else{o.ssel=0;const e0=((it.eps||{})[sn[0]]||[])[0];o.playLabel=it.info&&e0?`Lecture S${sn[0]} E${e0.num}`:"Lecture"}
-  }
-  o.similar=memo("nsim"+id,()=>[...films(),...series()].filter(x=>x.id!==id&&x.type===it.type&&((it.g||[]).length?(x.g||[]).some(g=>it.g.includes(g)):x.cat[0]===it.cat[0])).slice(0,12)).map(i=>nI(i,false));
-  return JSON.stringify(o);
+  const o=natData(id);
+  NAT.last=JSON.stringify(o);return NAT.last;
  },
  fav(id){const it=ALL[id];if(!it)return JSON.stringify({});toggleFav(id,it.t);return JSON.stringify({fav:isFav(id),msg:isFav(id)?`Ajouté à Ma liste : ${it.t}`:`Retiré de Ma liste : ${it.t}`})},
  play(id,src,ss,ep){
@@ -1679,7 +1662,31 @@ window.nativeApi={
 };
 
 /* Fiche native : mise à jour quand les infos, la qualité ou les photos arrivent */
-function natPush(id){if(!NAT.vis||!id||NAT.detail!==id)return;clearTimeout(NAT.pt);NAT.pt=setTimeout(()=>{try{Prisme.nativeEvent("detail",nativeApi.detail(id))}catch(e){}},350)}
+/* Contenu d'une fiche pour l'interface native (sans effet de bord : appelé à chaque mise à jour) */
+function natData(id){
+  const it=ALL[id];if(!it)return {error:"introuvable",cast:[]};
+  const L=srcs(id),cur=pickSrc(id),isS=it.type==="s";
+  const o={id,ty:it.type,t:it.t,f:it.f,c1:it.c[0],c2:it.c[1],img:tmS(it.img,"w342"),bd:tmS(it.bd,"w1280"),
+   kick:(isS?"Série":"Film")+((it.g||[])[0]?" · "+it.g[0]:""),meta:metaArr(it),age:it.age||"",tmdb:tmdbTxt(it),imdb:it.imdb?it.imdb.toFixed(1):"",
+   s:it.s||"",dir:it.dir||"",loading:!it.info&&!!it.loading,fav:isFav(id)};
+  const nm=c=>A[c[0]]||c[2]||"";
+  o.castLine=it.cast.slice(0,3).map(nm).filter(Boolean).join(", ");
+  o.cast=it.cast.slice(0,14).map(c=>({id:c[0],n:nm(c),r:c[1]||"",ph:photoOf(nm(c))}));
+  wantPhotos(o.cast.map(c=>c.n).filter(Boolean));
+  const ad=added(id);o.added=ad?(ad.d===0?"aujourd'hui":ad.d===1?"hier":`il y a ${ad.d} jours`)+" sur "+ad.p.name:"";
+  o.sources=L.map(v=>({id:v.id,q:v.q,pl:v.p.name,name:v.name||"",codec:v.codec||"",audio:(v.audio||[]).join(" | "),subs:(v.subs||[]).join(", "),fmt:"."+(v.ext||""),ok:compat(v),def:!!cur&&cur.id===v.id}));
+  if(cur){o.srcLine=[cur.p.name,cur.q,cur.tag].filter(Boolean).join(" · ");o.srcQ=qr(cur.q)>0&&cur.q!=="Auto"?cur.q:""}
+  if(!isS){const pr=S.prog[id]||0;o.playLabel=pr>0.02&&it.d?`Reprendre à ${dur(Math.round(pr*it.d))}`:"Lecture"}
+  else{
+   const le=(S.lastEp||{})[id],sn=it.seasons||[];
+   o.seasons=sn.map((n,i)=>({n:String(n),label:"Saison "+n,eps:((it.eps||{})[n]||[]).map(e=>({num:e.num,t:e.t,d:e.dur?e.dur+" min":"",img:tmS(e.img,"w300"),q:e.q||"",pr:le&&le.ss===i+1&&le.ep===e.num?(le.pct||0):0}))}));
+   if(le&&sn[le.ss-1]!=null){o.resume={ss:le.ss,ep:le.ep};o.ssel=le.ss-1;o.playLabel=`Reprendre S${sn[le.ss-1]} E${le.ep}`}
+   else{o.ssel=0;const e0=((it.eps||{})[sn[0]]||[])[0];o.playLabel=it.info&&e0?`Lecture S${sn[0]} E${e0.num}`:"Lecture"}
+  }
+  o.similar=memo("nsim"+id,()=>[...films(),...series()].filter(x=>x.id!==id&&x.type===it.type&&((it.g||[]).length?(x.g||[]).some(g=>it.g.includes(g)):x.cat[0]===it.cat[0])).slice(0,12)).map(i=>nI(i,false));
+  return o;
+}
+function natPush(id){if(!NAT.vis||!id||NAT.detail!==id)return;clearTimeout(NAT.pt);NAT.pt=setTimeout(()=>{try{const s=JSON.stringify(natData(id));if(s!==NAT.last){NAT.last=s;Prisme.nativeEvent("detail",s)}}catch(e){}},350)}
 
 /* Lecture lancée depuis le natif : changement de source automatique et nouvel essai si la connexion est encore occupée */
 function natSwitch(reason){

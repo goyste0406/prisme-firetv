@@ -28,6 +28,11 @@ class DetailScreen(ui: NativeUi, val itemId: String, val fromWeb: Boolean) : Scr
     private var epLineIndex = -1
     private var epSection: RowSection? = null
     private var preloaded = false
+    private var lastJson = ""
+    private var sig = ""
+    private val srcCards = ArrayList<SourceCard>()
+    private val castCards = ArrayList<Pair<CastCard, String>>()
+    private var srcLineRow: LinearLayout? = null
     private val preloadRun = Runnable { ui.safe("préchargement") { startPreload() } }
 
     init {
@@ -45,7 +50,24 @@ class DetailScreen(ui: NativeUi, val itemId: String, val fromWeb: Boolean) : Scr
         ui.api("detail(${ui.q(itemId)})") { o -> if (o != null && !o.has("error")) update(o) else ui.toast("Fiche indisponible") }
     }
 
+    /** Ce qui impose de reconstruire la fiche ; le reste (qualité, photos, reprise) est mis à jour sur place */
+    private fun signature(o: JSONObject): String {
+        val b = StringBuilder(o.optString("ty")).append('|').append(o.optString("s").length).append('|').append(o.optString("dir"))
+            .append('|').append(o.optJSONArray("meta")?.toString()).append('|').append(o.optString("tmdb")).append('|').append(o.optBoolean("loading"))
+        o.objs("sources").forEach { b.append(',').append(it.optString("id")) }
+        b.append('|'); o.objs("seasons").forEach { b.append(it.optString("n")).append(':').append(it.objs("eps").size).append(',') }
+        b.append('|'); o.objs("cast").forEach { b.append(it.optString("id")).append(it.optString("r")).append(',') }
+        b.append('|'); o.objs("similar").forEach { b.append(it.optString("id")).append(',') }
+        return b.toString()
+    }
+
     fun update(o: JSONObject) {
+        val js = o.toString()
+        if (js == lastJson) return
+        lastJson = js
+        val ns = signature(o)
+        if (d != null && ns == sig) { d = o; refreshInPlace(o); return }
+        sig = ns
         val first = d == null
         val oldLi = li
         val oldIdx = lines.map { it.idx }
@@ -66,8 +88,40 @@ class DetailScreen(ui: NativeUi, val itemId: String, val fromWeb: Boolean) : Scr
         }
     }
 
+    private fun refreshInPlace(o: JSONObject) {
+        playBtn?.setLabel(o.optString("playLabel", "Lecture"))
+        (favBtn?.getChildAt(0) as? android.widget.ImageView)?.setImageResource(if (o.optBoolean("fav")) R.drawable.ic_heart_on else R.drawable.ic_heart)
+        srcLineRow?.let { fillSrcLine(it, o) }
+        val srcs = o.objs("sources")
+        srcCards.forEachIndexed { i, c -> srcs.getOrNull(i)?.let { s -> c.bind(s); if (c === cur) c.foc(true) } }
+        val cast = o.objs("cast")
+        castCards.forEachIndexed { i, (c, ph) ->
+            val n = cast.getOrNull(i) ?: return@forEachIndexed
+            if (n.optString("ph") != ph) { c.bind(n); castCards[i] = Pair(c, n.optString("ph")) }
+        }
+        val eps = o.objs("seasons").getOrNull(season)?.objs("eps")
+        val epLine = lines.getOrNull(epLineIndex) as? StaticLine
+        if (eps != null && epLine != null) {
+            val c1 = K.color(o.optString("c1"), Color.DKGRAY); val c2 = K.color(o.optString("c2"), Color.BLACK)
+            val sn = o.objs("seasons")[season].optString("n")
+            epLine.views.forEachIndexed { i, v -> val e = eps.getOrNull(i); if (v is EpCard && e != null) v.bind(e, "S$sn · E${e.optInt("num")}", c1, c2) }
+        }
+    }
+
+    private fun fillSrcLine(sl: LinearLayout, o: JSONObject) {
+        sl.removeAllViews()
+        val a = K.text(ui.ctx, 16f, K.white(0.65f)); a.text = "Source : "
+        val b = K.text(ui.ctx, 16f, Color.WHITE, 600); b.text = o.optString("srcLine")
+        sl.addView(a); sl.addView(b)
+        val q = o.optString("srcQ")
+        if (q.isNotEmpty()) sl.addView(qBadge(ui.ctx, q, 22f, 12f).apply { (layoutParams as LinearLayout.LayoutParams).leftMargin = K.px(10) })
+        val n = o.objs("sources").size
+        if (n > 1) { val c = K.text(ui.ctx, 16f, K.white(0.5f)); c.text = "  ·  $n sources"; sl.addView(c) }
+    }
+
     private fun build(o: JSONObject) {
         content.removeAllViews(); lines.clear(); epLineIndex = -1
+        srcCards.clear(); castCards.clear(); srcLineRow = null
         val series = o.optString("ty") == "s"
         // ---- haut de fiche (un écran entier, contenu calé en bas)
         val top = FrameLayout(ui.ctx)
@@ -111,15 +165,10 @@ class DetailScreen(ui: NativeUi, val itemId: String, val fromWeb: Boolean) : Scr
         val fb = Btn(ui.ctx, null, if (o.optBoolean("fav")) R.drawable.ic_heart_on else R.drawable.ic_heart, round = true)
         favBtn = fb; btns.addView(fb, LinearLayout.LayoutParams(K.px(58), K.px(58)).apply { leftMargin = K.px(16) }); bl.add(fb)
         col.addView(btns, LinearLayout.LayoutParams(K.WRAP, K.WRAP).apply { topMargin = K.px(22) })
-        val srcLine = o.optString("srcLine")
-        if (srcLine.isNotBlank()) {
+        if (o.optString("srcLine").isNotBlank()) {
             val sl = LinearLayout(ui.ctx).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
-            val a = K.text(ui.ctx, 16f, K.white(0.65f)); a.text = "Source : "
-            val b = K.text(ui.ctx, 16f, Color.WHITE, 600); b.text = srcLine
-            sl.addView(a); sl.addView(b)
-            val q = o.optString("srcQ")
-            if (q.isNotEmpty()) sl.addView(qBadge(ui.ctx, q, 22f, 12f).apply { (layoutParams as LinearLayout.LayoutParams).leftMargin = K.px(10) })
-            if (nSrc > 1) { val c = K.text(ui.ctx, 16f, K.white(0.5f)); c.text = "  ·  $nSrc sources"; sl.addView(c) }
+            fillSrcLine(sl, o)
+            srcLineRow = sl
             col.addView(sl, LinearLayout.LayoutParams(K.WRAP, K.WRAP).apply { topMargin = K.px(16) })
         }
         top.addView(col, FrameLayout.LayoutParams(K.MATCH, K.WRAP, Gravity.BOTTOM).apply { leftMargin = K.px(64); rightMargin = K.px(120); bottomMargin = K.px(64) })
@@ -151,7 +200,7 @@ class DetailScreen(ui: NativeUi, val itemId: String, val fromWeb: Boolean) : Scr
         if (!series && nSrc > 0) {
             val sec = RowSection(ui.ctx, if (nSrc > 1) "Sources disponibles" else "Source", if (nSrc > 1) "$nSrc · OK pour lire depuis cette source" else null)
             val v = ArrayList<View>()
-            o.objs("sources").forEach { s -> val c = SourceCard(ui.ctx); c.bind(s); sec.add(c, 22f); v.add(c) }
+            o.objs("sources").forEach { s -> val c = SourceCard(ui.ctx); c.bind(s); sec.add(c, 22f); v.add(c); srcCards.add(c) }
             v.forEach { it.layoutParams = (it.layoutParams as LinearLayout.LayoutParams).apply { width = K.px(340) } }
             content.addView(sec, LinearLayout.LayoutParams(K.MATCH, K.WRAP))
             lines.add(StaticLine(v, sec, sec.scroller))
@@ -161,7 +210,7 @@ class DetailScreen(ui: NativeUi, val itemId: String, val fromWeb: Boolean) : Scr
         if (cast.isNotEmpty()) {
             val sec = RowSection(ui.ctx, "Distribution", null)
             val v = ArrayList<View>()
-            cast.forEach { c -> val cc = CastCard(ui.ctx); cc.bind(c); sec.add(cc, 26f); v.add(cc) }
+            cast.forEach { c -> val cc = CastCard(ui.ctx); cc.bind(c); sec.add(cc, 26f); v.add(cc); castCards.add(Pair(cc, c.optString("ph"))) }
             content.addView(sec, LinearLayout.LayoutParams(K.MATCH, K.WRAP))
             lines.add(StaticLine(v, sec, sec.scroller))
         }

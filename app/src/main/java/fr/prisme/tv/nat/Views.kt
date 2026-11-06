@@ -47,8 +47,17 @@ fun View.circleClip() {
 /** Agrandissement animé par la puce graphique (pas de recalcul de mise en page) */
 fun View.lift(on: Boolean, scale: Float, dy: Float = 0f) {
     animate().cancel()
+    val s = if (on) scale else 1f
+    val t = if (on) K.pxf(dy) else 0f
+    if (K.instant || (scaleX == s && translationY == t)) { scaleX = s; scaleY = s; translationY = t; return }
     animate().scaleX(if (on) scale else 1f).scaleY(if (on) scale else 1f)
         .translationY(if (on) K.pxf(dy) else 0f).setDuration(140).start()
+}
+
+fun View.slideY(y: Float) {
+    animate().cancel()
+    if (K.instant || translationY == y) { translationY = y; return }
+    animate().translationY(y).setDuration(140).start()
 }
 
 object Img {
@@ -169,7 +178,7 @@ class PosterCard(ctx: Context, val rank: Boolean = false, val pw: Float = 138f, 
         border.visibility = if (on) View.VISIBLE else View.INVISIBLE
         poster.elevation = if (on) K.pxf(12f) else 0f
         cap.setTextColor(if (on) Color.WHITE else K.white(0.6f))
-        cap.animate().translationY(if (on) K.pxf(10f) else 0f).setDuration(140).start()
+        cap.slideY(if (on) K.pxf(10f) else 0f)
     }
 }
 
@@ -340,7 +349,7 @@ class CastCard(ctx: Context) : LinearLayout(ctx), Foc {
     override fun foc(on: Boolean) {
         av.lift(on, 1.12f)
         ring.visibility = if (on) View.VISIBLE else View.INVISIBLE
-        name.animate().translationY(if (on) K.pxf(8f) else 0f).setDuration(140).start()
+        name.slideY(if (on) K.pxf(8f) else 0f)
     }
 }
 
@@ -462,8 +471,8 @@ class EpCard(ctx: Context) : LinearLayout(ctx), Foc {
         th.lift(on, 1.08f)
         border.visibility = if (on) View.VISIBLE else View.INVISIBLE
         th.elevation = if (on) K.pxf(10f) else 0f
-        t.animate().translationY(if (on) K.pxf(8f) else 0f).setDuration(140).start()
-        d.animate().translationY(if (on) K.pxf(8f) else 0f).setDuration(140).start()
+        t.slideY(if (on) K.pxf(8f) else 0f)
+        d.slideY(if (on) K.pxf(8f) else 0f)
     }
 }
 

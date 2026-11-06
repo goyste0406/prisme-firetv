@@ -161,7 +161,9 @@ abstract class Screen(val ui: NativeUi) : FrameLayout(ui.ctx) {
             if (L.idx != target || line() !== L) return@reveal
             (cur as? Foc)?.foc(false)
             cur = v
-            (v as? Foc)?.foc(true)
+            val was = K.instant
+            K.instant = instant
+            try { (v as? Foc)?.foc(true) } finally { K.instant = was }
             onFocus(L, target, v)
         }
     }
