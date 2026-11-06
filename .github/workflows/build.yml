@@ -2,7 +2,7 @@ name: Compiler et publier l'APK
 
 on:
   push:
-    branches: [main]
+    branches: [main, native]
     paths-ignore: ["README.md", "tools/**"]
   workflow_dispatch:
 
@@ -15,6 +15,17 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
+      - name: Polices de l'interface native (Google Fonts, licence OFL)
+        run: |
+          mkdir -p app/src/main/assets/fonts
+          base=https://github.com/google/fonts/raw/main/ofl
+          curl -fsSL -o app/src/main/assets/fonts/Outfit.ttf "$base/outfit/Outfit%5Bwght%5D.ttf" || echo "Outfit absente"
+          curl -fsSL -o app/src/main/assets/fonts/BebasNeue.ttf "$base/bebasneue/BebasNeue-Regular.ttf" || echo "Bebas absente"
+          curl -fsSL -o app/src/main/assets/fonts/PlayfairItalic.ttf "$base/playfairdisplay/PlayfairDisplay-Italic%5Bwght%5D.ttf" || echo "Playfair absente"
+          curl -fsSL -o app/src/main/assets/fonts/ArchivoBlack.ttf "$base/archivoblack/ArchivoBlack-Regular.ttf" || echo "Archivo absente"
+          find app/src/main/assets/fonts -size -1k -delete
+          ls -la app/src/main/assets/fonts
 
       - uses: actions/setup-java@v4
         with:
@@ -55,7 +66,16 @@ jobs:
           cat out/version.json
           echo "name=$NAME" >> "$GITHUB_OUTPUT"
 
+      - name: Version de test (branche native, jamais proposée en mise à jour)
+        if: github.ref == 'refs/heads/native'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="test-${GITHUB_SHA::7}"
+          gh release create "$TAG" out/prisme.apk --title "Test $TAG" --notes "Version de test de l'interface native" --prerelease --target "$GITHUB_SHA"
+
       - name: Publier la release
+        if: github.ref == 'refs/heads/main'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |

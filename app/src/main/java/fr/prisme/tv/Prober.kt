@@ -24,6 +24,8 @@ import android.media.MediaFormat
 class Prober {
     private val exec = Executors.newSingleThreadExecutor()
     private val results = ConcurrentHashMap<String, String>()
+    /** Une analyse occupe une connexion chez le fournisseur */
+    @Volatile var busy = false
     private val factory = DefaultMediaSourceFactory(
         DefaultHttpDataSource.Factory()
             .setUserAgent(MainActivity.UA)
@@ -36,6 +38,7 @@ class Prober {
         if (results.containsKey(id)) return
         results[id] = "pending"
         exec.execute {
+            busy = true
             val t0 = System.currentTimeMillis()
             var res = try { retriever(url) } catch (e: Throwable) {
                 JSONObject().put("ok", false).put("error", "ExoPlayer: " + (e.cause?.toString() ?: e.toString()))
@@ -47,6 +50,7 @@ class Prober {
                 }
             }
             results[id] = res.put("ms", System.currentTimeMillis() - t0).toString()
+            busy = false
         }
     }
 

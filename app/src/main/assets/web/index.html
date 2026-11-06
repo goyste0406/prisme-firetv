@@ -564,6 +564,7 @@ function buildCatalog(){
  CRED={};[...FILMS,...SERIES].forEach(i=>i.cast.forEach(([a,r,n])=>{if(n)A[a]=n;(CRED[a]=CRED[a]||[]).push([i.id,r])}));
  CATV++;
  if(!CH[S.lch]&&CHS[0])S.lch=CHS[0].id;
+ if(NAT.vis)setTimeout(()=>Prisme.nativeEvent("catalog",""),50);
 }
 function castList(str){return String(str||"").split(",").map(x=>x.trim()).filter(Boolean).slice(0,12).map(n=>{const a="a"+hash(norm(n)).toString(36);A[a]=n;return [a,"",n]})}
 
@@ -592,7 +593,7 @@ async function loadInfo(it){
    it.se=it.seasons.map(n=>it.eps[n].length);it.ep=(it.eps[it.seasons[0]]||[])[0]?.dur||0;it.srcPl=s.pl}
   it.info=true;it.cast.forEach(([a])=>{const L=CRED[a]=CRED[a]||[];if(!L.some(x=>x[0]===it.id))L.push([it.id,""])});
  }catch(e){toast("Fiche indisponible : "+e.message)}
- it.loading=false;
+ it.loading=false;natPush(it.id);if((it.g||[]).length)natGenreBump();
  const t=topS();if(t.t==="detail"&&t.id===it.id)render(F&&F.dataset.fid);
 }
 
@@ -644,7 +645,7 @@ function qualFromInfo(info){const v=info&&info.video,a=info&&info.audio;if(!v||!
  const lang=a&&a.tags&&(a.tags.language||a.tags.LANGUAGE);
  return {ok:true,w:+v.width||0,h:+v.height||0,q:qLabel(+v.width,+v.height),vc:vcName(v.codec_name),fps:fp>0&&fp<200?Math.round(fp):0,
   hdr:/2084|hlg|arib/i.test(v.color_transfer||""),audio:a&&a.codec_name?[{lang:ISO[String(lang||"").toLowerCase()]||lang||"",codec:acName(a.codec_name),ch:chName(a.channels)}]:[],subs:null,from:"serveur"}}
-function refreshQual(){if(inApp()&&topS().t==="home"&&S.tab==="live")view.querySelectorAll(".lch").forEach(el=>{const b=el.querySelector(".qbx");if(b){const h=qBadge(el.dataset.hov);if(b.innerHTML!==h)b.innerHTML=h}});const t=topS();if(!inApp()||S.booting)return;
+function refreshQual(){natPush(NAT.detail);if(inApp()&&topS().t==="home"&&S.tab==="live")view.querySelectorAll(".lch").forEach(el=>{const b=el.querySelector(".qbx");if(b){const h=qBadge(el.dataset.hov);if(b.innerHTML!==h)b.innerHTML=h}});const t=topS();if(!inApp()||S.booting)return;
  if(S.modal&&!S.modal.type)render(F&&F.dataset.fid);
  else if(t.t==="detail"&&!S.modal)render(F&&F.dataset.fid);
  else if(t.t==="home"&&S.tab==="live"&&CH[S.lch]){const p=$("#lpanel");if(p)p.innerHTML=panelHtml(CH[S.lch])}}
@@ -654,7 +655,7 @@ function srcUrl(pl,kind,sid,ext){const u=clean(pl.url),us=encodeURIComponent(pl.
 const PQ=[];let PQRUN=false,PQOWN="";
 function probeQueue(k,url){if(QPEND[k]||QUAL[k]||!NATIVE)return;QPEND[k]="probe";PQ.push([k,url]);pumpProbe()}
 function pumpProbe(){if(PQRUN||!PQ.length)return;
- if(P){setTimeout(pumpProbe,3000);return}   // jamais pendant une lecture : une seule connexion chez beaucoup de fournisseurs
+ if(P||NAT.pre){setTimeout(pumpProbe,3000);return}   // jamais pendant une lecture : une seule connexion chez beaucoup de fournisseurs
  PQRUN=true;const [k,url]=PQ.shift();Prisme.probe(k,url);const t0=Date.now();
  const poll=setInterval(()=>{const r=Prisme.probeResult(k);if(r&&r!=="pending"||Date.now()-t0>32000){clearInterval(poll);PQRUN=false;
   let o={ok:false,error:"pas de réponse après 32 s"};try{if(r&&r!=="pending")o=JSON.parse(r)}catch(e){o={ok:false,error:"réponse illisible"}}
@@ -690,7 +691,7 @@ const PHOTO=(()=>{try{return JSON.parse(localStorage.getItem("prisme-ph")||"{}")
 let PHS=null,PHRUN=0;const PHQ=[],DAY=()=>Math.floor(Date.now()/86400000);
 function phSave(){clearTimeout(PHS);PHS=setTimeout(()=>{try{const ks=Object.keys(PHOTO);if(ks.length>5000)ks.slice(0,ks.length-5000).forEach(k=>delete PHOTO[k]);localStorage.setItem("prisme-ph",JSON.stringify(PHOTO))}catch(e){}},1500)}
 function photoOf(n){const v=PHOTO[norm(String(n||""))];return v&&v[0]!=="-"?v:""}
-function setPhoto(n,url){const k=norm(n);if(!url&&PHOTO[k]&&PHOTO[k][0]!=="-")return;PHOTO[k]=url||("-"+DAY());phSave();if(url)paintPhoto(n,url)}
+function setPhoto(n,url){const k=norm(n);if(!url&&PHOTO[k]&&PHOTO[k][0]!=="-")return;PHOTO[k]=url||("-"+DAY());phSave();if(url){paintPhoto(n,url);natPush(NAT.detail)}}
 function paintPhoto(n,url){view.querySelectorAll(".av[data-nm]:not(.has-img)").forEach(av=>{if(av.dataset.nm===n){av.insertAdjacentHTML("afterbegin",`<img src="${esc(imgS(url,"p"))}" alt="" decoding="async" onerror="this.parentNode.classList.remove('has-img');this.remove()">`);av.classList.add("has-img")}})}
 const PHRE=/(acteur|actrice|actor|actress|comedien|humoriste|comedian|realisat|director|cineaste|filmmaker|scenariste|screenwriter|chanteu|singer|rappeur|rapper|musicien|musician|animat|presentat|host|mannequin|model|doubleu|voice|personnalite|television|sportif|footballeur|boxeur|youtubeu|danseu|dancer|producteur|producer|ecrivain|writer|artiste|artist|showrunner)/;
 async function wikiPhoto(n){let net=false;for(const lg of ["fr","en"]){try{const r=await getJSON(`https://${lg}.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(n.trim().replace(/ /g,"_"))}?redirect=true`,10000);
@@ -739,7 +740,7 @@ let S={booting:false,playlists:[],adding:false,loading:false,showPw:false,form:{
   tab:"films",lcat:"all",lch:"",q:"",favs:[],prog:{},srcSel:{},
   appVer:"1.0.0",appCode:1,instPerm:false,set:{autoUpd:true,hw:true,afr:true,epgShift:0,parental:false,subs:false,epgAuto:true,engine:"exo",tmdbKey:"",meta:{imdb:true,tmdb:true,rt:true,mc:true,lb:true,ac:true,sc:true}},epgAt:null,stack:[{t:"home"}],seasons:{}};
 try{const sv=JSON.parse(localStorage.getItem("prisme")||"null");if(sv){if(!sv.playlists)sv.playlists=sv.logged&&sv.server?[{...DEFPL,...sv.server}]:[];delete sv.server;delete sv.logged;delete sv.epgAuto;Object.assign(S,sv,{loading:false,adding:false,stack:[{t:"home"}],set:{...S.set,...(sv.set||{})}})}}catch(e){}
-function save(){try{localStorage.setItem("prisme",JSON.stringify({appVer:S.appVer,appCode:S.appCode,instPerm:S.instPerm,playlists:S.playlists,tab:S.tab,favs:S.favs,prog:S.prog,set:S.set,epgAt:S.epgAt,seasons:S.seasons,lcat:S.lcat,ctry:S.ctry,srcSel:S.srcSel}))}catch(e){}}
+function save(){try{localStorage.setItem("prisme",JSON.stringify({appVer:S.appVer,appCode:S.appCode,instPerm:S.instPerm,playlists:S.playlists,tab:S.tab,favs:S.favs,prog:S.prog,set:S.set,epgAt:S.epgAt,seasons:S.seasons,lastEp:S.lastEp,lcat:S.lcat,ctry:S.ctry,srcSel:S.srcSel}))}catch(e){}}
 const inApp=()=>S.playlists.length>0&&!S.adding;
 let AUTOCHK=false;
 /* Chaque playlist expose une partie du catalogue (simulation). L'union des playlists actives forme le catalogue affiché ; un titre présent sur plusieurs playlists est fusionné et garde la liste de ses sources. */
@@ -982,6 +983,7 @@ function settingsHtml(){
   ${META.map(([k,n])=>`<div class="it" data-f data-fid="meta-${k}" data-act="meta:${k}"><span>Afficher la note ${esc(n)}</span>${sw(st.meta[k]!==false)}</div>`).join("")}
  </div></section>
  <section data-anchor><h3>Général</h3><div class="grp">
+  ${NAT.ok?`<div class="it tall" data-f data-fid="set-legacy" data-act="set:legacy"><span>Ancienne interface pour les films et séries<small>À activer seulement en cas de problème avec la nouvelle interface</small></span>${sw(st.legacy)}</div>`:""}
   <div class="it tall" data-f data-fid="set-lite" data-act="set:lite"><span>Mode fluide<small>Effets de verre et ombres allégés · recommandé sur ce Fire TV</small></span>${sw(st.lite)}</div>
   <div class="it" data-f data-fid="set-par" data-act="set:parental"><span>Contrôle parental (code 0000)</span>${sw(st.parental)}</div>
   <div class="it" data-f data-fid="set-diag" data-act="diag"><span>Diagnostic</span><span>analyse des flux, chargements, erreurs ›</span></div>
@@ -1198,7 +1200,7 @@ function infoBox(){const v=curVar()||{name:"",audio:["—"],subs:["—"]},st=P.n
 function startPlayer(p){P=p;P.ui=true;P.audio=null;P.sub=null;clearInterval(PT);PT=setInterval(tick,500);uiPing();
  if(NATIVE){const u=streamUrl();if(!u){toast("Flux introuvable");return}Prisme.play(u,Math.round((p.pos||0)*1000),p.kind==="live");Prisme.setFormat(curFmt()[0])}}
 function tick(){if(!P)return;
- if(NATIVE){let st={};try{st=JSON.parse(Prisme.state()||"{}")}catch(e){}P.nst=st;
+ if(NATIVE){let st={};try{st=JSON.parse(Prisme.state()||"{}")}catch(e){}P.nst=st;if(natTick(st))return;
   if(st.pos!=null&&!SC.on){P.pos=st.pos/1000;if(st.dur>0)P.dur=st.dur/1000}
   if(st.error&&!P.err){P.err=1;toast("Lecture impossible : "+st.error);const s=srcs(curKey()).filter(compat);if(s.length>1)toast("Essaie une autre source avec le bouton Source")}
   if(st.ended&&!P.endH){P.endH=1;const it=ALL[P.id];if(P.kind==="vod"&&it&&it.type==="s"){const n=nextEp(it);if(n){act("p:nextep");return}}toast("Lecture terminée");back();return}
@@ -1230,7 +1232,7 @@ function endScrub(){clearTimeout(SC.t);SC={on:false};const th=$("#pthumb"),tr=$(
  const b=$("#pbar");if(b&&P){b.style.width=(P.pos/P.dur*100)+"%";$("#ptime").textContent=hms(P.pos);$("#prem").textContent="−"+hms(P.dur-P.pos)}}
 function commitScrub(){if(!SC.on||!P)return;P.pos=SC.pos;if(NATIVE)Prisme.seekTo(Math.round(P.pos*1000));endScrub();toast("Lecture à "+hms(P.pos))}
 function uiPing(){if(!P)return;P.last=Date.now();if(!P.ui){P.ui=true;const o=$("#pov");if(o)o.classList.remove("hid");return true}return false}
-function stopPlayer(){clearInterval(PT);if(P&&P.kind==="vod")dirty();if(NATIVE)Prisme.stop();if(P&&P.kind==="vod"){const pct=P.pos/P.dur;if(pct>0.02&&pct<0.97)S.prog[P.id]=pct;else if(pct>=0.97)delete S.prog[P.id];save()}P=null}
+function stopPlayer(){clearInterval(PT);NAT.pre=null;if(P&&P.kind==="vod"&&ALL[P.id]&&ALL[P.id].type==="s"&&P.dur>0&&P.ss){S.lastEp=S.lastEp||{};S.lastEp[P.id]={ss:P.ss,ep:P.ep,pct:P.pos/P.dur}}if(P&&P.kind==="vod")dirty();if(NATIVE)Prisme.stop();if(P&&P.kind==="vod"){const pct=P.pos/P.dur;if(pct>0.02&&pct<0.97)S.prog[P.id]=pct;else if(pct>=0.97)delete S.prog[P.id];save()}P=null}
 function zap(d){const L=liveList().length?liveList():chans();let i=L.findIndex(c=>c.id===P.id);i=(i+d+L.length)%L.length;P.id=L[i].id;P.src=srcId("ch:"+P.id);P.err=0;P.audio=null;P.sub=null;S.lch=P.id;if(NATIVE)Prisme.play(streamUrl(),0,true);render("p-src");uiPing()}
 
 /* ========================= MOTEUR DE RENDU / FOCUS ========================= */
@@ -1260,6 +1262,7 @@ function render(fid){
  document.documentElement.classList.toggle("vplay",t.t==="player");
  bgFor(t);
  afterRender(t,fid);
+ if(natOn()&&!NAT.vis&&!S.booting&&!S.modal&&t.t==="home"&&(S.tab==="films"||S.tab==="series"))natShow(S.tab);
 }
 function bgFor(t){
  if(!inApp()) setBg(["#2a3a6e","#120c22"]);
@@ -1311,7 +1314,7 @@ function ensureVisible(el,instant){
 let HOVT=null,LPT=null;
 function onHover(h){
  const [k,v,w]=h.split(":");
- if(k==="tab"){if(S.tab!==v){S.tab=v;save();render("tab-"+v)}return}
+ if(k==="tab"){if(natOn()&&(v==="films"||v==="series")){S.tab=v;save();natShow(v);return}if(S.tab!==v){S.tab=v;save();render("tab-"+v)}return}
  if(k==="lcat"){if(S.lcat!==v){S.lcat=v;save();render("lcat-"+v)}return}
  if(k==="ch"){S.lch=v;epg(CH[v]);clearTimeout(LPT);LPT=setTimeout(()=>{if(!P&&topS().t==="home"&&S.tab==="live"&&S.lch===v)analyze("ch:"+v)},900);const p=$("#lpanel");if(p)p.innerHTML=panelHtml(CH[v]);setBg([CH[v].col,"#08080c"]);return}
  if(k==="season"){const n=+w;if((S.seasons[v]||1)!==n){S.seasons[v]=n;save();view.querySelectorAll(".chip").forEach((c,i)=>c.classList.toggle("sel",i+1===n));const e=$("#eps");e.innerHTML=epsHtml(ALL[v],n);e.scrollLeft=0;e._tx=0}return}
@@ -1361,6 +1364,8 @@ function push(e){const t=topS();t.last=F&&F.dataset.fid;if(!S.modal&&t.t!=="play
 function back(){
  if(S.adding&&!S.loading){S.adding=false;render("set-add");return}
  const t=topS();
+ if(t.t==="player"&&P&&P.nat){stopPlayer();S.stack.pop();natShow("");return}
+ if(S.retNat&&t.t!=="player"&&S.stack.length<=2&&natOn()){S.retNat=false;S.stack=[{t:"home"}];natShow("");return}
  if(t.t==="player"){stopPlayer()}
  if(S.stack.length>1){S.stack.pop();const tp=topS();if(tp.dom&&tp.ver===DIRTY+"|"+CATV){restore(tp);return}tp.dom=null;render(tp.last);return}
  if(inApp()&&F&&F.dataset.row!=="tabs"){const tb=view.querySelector(`[data-fid="tab-${S.tab}"]`);if(tb){setFocus(tb);const r=$("#rows");if(r)r.scrollTo({top:0,behavior:"smooth"});return}}
@@ -1375,7 +1380,7 @@ function act(a){
  if(!a)return;const [k,v,w,x]=a.split(":");
  switch(k){
   case "tab": move("down");break;
-  case "open": push({t:"detail",id:v});break;
+  case "open": if(natOn()&&ALL[v]){NAT.vis=true;Prisme.nativeOpen(v);break}push({t:"detail",id:v});break;
   case "ocat": push({t:"cat",ty:v,k:w,sort:"new"});break;
   case "csort":{const t=topS();if(t.t==="cat"&&t.sort!==v){t.sort=v;render("cs-"+v)}break}
   case "diag": if(v==="clrq"){Object.keys(QUAL).forEach(k=>delete QUAL[k]);try{localStorage.removeItem("prisme-q")}catch(e){}toast("Analyses effacées : elles seront refaites");render("dg-clrq")}
@@ -1541,6 +1546,169 @@ view.addEventListener("click",e=>{const el=e.target.closest("[data-f]");if(!el)r
  setFocus(el);if(el.tagName!=="INPUT")act(el.dataset.act)});
 if(NATIVE)document.documentElement.classList.add("native");
 setInterval(()=>{document.querySelectorAll(".clock").forEach(c=>c.textContent=fmt(nowMin()))},15000);
+/* ========================= INTERFACE NATIVE (films et séries, version 2) =========================
+   L'interface native (Kotlin) affiche l'accueil, les genres et les fiches ; elle demande ses données ici.
+   Le catalogue, les sources, la qualité, les favoris et la lecture restent gérés par cette couche. */
+const NAT={ok:NATIVE&&typeof Prisme.nativeOk==="function",vis:false,detail:"",pre:null,gv:0,pt:null};
+const natOn=()=>NAT.ok&&!S.set.legacy&&inApp();
+const tmS=(u,sz)=>u?String(u).replace(/(image\.tmdb\.org\/t\/p\/)(original|w\d+)\//,"$1"+sz+"/"):"";
+function natShow(tab){if(!NAT.ok)return;NAT.vis=true;Prisme.nativeShow(tab||"")}
+
+/* Genres : liste fixe (TMDB en français), un titre peut en avoir plusieurs */
+const GDEF={
+ f:[["action","Action","#e3342f","#3a0a0a",/action/],["comedie","Comédie","#f5b942","#5b3a06",/comed|humour|comique|comedy/],["drame","Drame","#7aa2c2","#0c1520",/drame|drama/],
+  ["thriller","Thriller","#5b7c99","#05070d",/thriller|suspense/],["policier","Policier","#9c6b3f","#1a120b",/polic|crime|criminel|gangster|mafia|polar/],
+  ["sf","Science-fiction","#6ee7f9","#0b1730",/science|sci-?fi|\bs\.?f\b/],["horreur","Horreur","#c8323a","#0a0a0a",/horreur|horror|epouvante|gore|slasher/],
+  ["animation","Animation","#ff9f0a","#5b1036",/anim|dessin|cartoon|manga|pixar|disney/],["familial","Familial","#7fb347","#1c2b12",/famil|enfant|kids|jeunesse/],
+  ["aventure","Aventure","#c9a227","#0e1a2b",/aventure|adventure/],["romance","Romance","#ff5fa2","#5b1036",/romance|romanti|amour|love/],
+  ["fantastique","Fantastique","#bf5af2","#1d0b30",/fantas|merveilleux/],["mystere","Mystère","#8e7cc3","#120c22",/myst|enquete/],
+  ["documentaire","Documentaire","#90cea1","#0f2a1d",/docu/],["histoire","Histoire","#b08d57","#1f150a",/histo|peplum|biopic|biograph/],
+  ["guerre","Guerre","#b7a57a","#141414",/guerre|\bwar\b|militaire/],["musique","Musique","#ff375f","#2a0612",/musi|concert/],
+  ["western","Western","#d9823b","#2b1206",/western/],["telefilm","Téléfilm","#8e939e","#16181d",/telefilm|tv ?movie/],["autres","Autres","#5d6270","#16181d",null]],
+ s:[["drame","Drame","#7aa2c2","#0c1520",/drame|drama/],["policier","Policier","#9c6b3f","#1a120b",/polic|crime|criminel|gangster|mafia|polar/],
+  ["comedie","Comédie","#f5b942","#5b3a06",/comed|humour|sitcom|comique|comedy/],["action","Action & Aventure","#e3342f","#3a0a0a",/action|aventure|adventure/],
+  ["sf","Science-fiction & Fantastique","#6ee7f9","#0b1730",/science|sci-?fi|fantas|\bs\.?f\b/],["mystere","Mystère","#8e7cc3","#120c22",/myst|thriller|suspense|enquete/],
+  ["animation","Animation","#ff9f0a","#5b1036",/anim|cartoon|manga/],["jeunesse","Jeunesse","#30d158","#0b2a16",/jeunesse|enfant|kids|junior/],
+  ["familial","Familial","#7fb347","#1c2b12",/famil/],["documentaire","Documentaire","#90cea1","#0f2a1d",/docu/],
+  ["realite","Téléréalité","#ff5fa2","#5b1036",/realite|reality/],["feuilleton","Feuilleton","#c9a227","#2b1f06",/feuilleton|soap|novela/],
+  ["guerre","Guerre & Politique","#b7a57a","#141414",/guerre|\bwar\b|politi/],["western","Western","#d9823b","#2b1206",/western/],
+  ["talk","Talk-show","#bf5af2","#1d0b30",/talk|debat/],["actu","Actualités","#0a84ff","#06142b",/actu|news/],["autres","Autres","#5d6270","#16181d",null]]};
+function catLabels(ty){return memo("cl"+ty,()=>{const m={};(ty==="f"?FCATS:SCATS).forEach(([k,n])=>m[k]=n);return m})}
+function genreKeys(it){
+ if(it._gv===NAT.gv+"|"+CATV&&it._gk)return it._gk;
+ const D=GDEF[it.type],cl=catLabels(it.type),out=[];
+ const txt=[...(it.g||[]),...it.cat.map(k=>cl[k]||"")].map(x=>norm(String(x)));
+ for(const g of D){if(g[4]&&txt.some(t=>g[4].test(t)))out.push(g[0])}
+ if(!out.length)out.push("autres");
+ it._gk=out;it._gv=NAT.gv+"|"+CATV;return out}
+function genreIndex(ty){return memo("gi"+ty+"|"+NAT.gv,()=>{const m={};(ty==="f"?films():series()).forEach(i=>genreKeys(i).forEach(k=>(m[k]=m[k]||[]).push(i)));return m})}
+let NATGB=null;
+function natGenreBump(){clearTimeout(NATGB);NATGB=setTimeout(()=>{NAT.gv++;if(NAT.vis)Prisme.nativeEvent("home","")},4000)}
+
+function metaArr(i){return (i.type==="f"?[i.y||"",i.d?dur(i.d):"",(i.g||[]).slice(0,2).join(" · ")]:[i.y||"",i.se&&i.se.length?`${i.se.length} saison${i.se.length>1?"s":""}`:"",(i.g||[]).slice(0,2).join(" · "),i.net||""]).filter(Boolean).map(String)}
+const tmdbTxt=i=>i.tmdb?(i.tmdb/10).toFixed(1).replace(".",",")+"/10":"";
+function nI(i,full){const o={id:i.id,ty:i.type,t:i.t,y:i.y||0,img:tmS(i.img,"w342"),f:i.f,c1:i.c[0],c2:i.c[1],nw:isRecent(i.id),pr:S.prog[i.id]||0};
+ if(full){o.bd=tmS(i.bd,"w1280");o.kick=(i.type==="f"?"Film":"Série")+((i.g||[])[0]?" · "+i.g[0]:"");o.meta=metaArr(i);o.s=String(i.s||"").slice(0,280);o.tmdb=tmdbTxt(i);o.age=i.age||""}
+ return o}
+function natVer(ty){return [CATV,DIRTY,S.favs.length,Object.keys(S.prog).length,TREND.f.length,TREND.s.length,NAT.gv,ty].join("|")}
+
+window.nativeApi={
+ ver(ty){return natVer(ty)},
+ home(ty){
+  const list=ty==="f"?films():series();
+  const ok=i=>i&&i.type===ty&&srcs(i.id).length;
+  const cont=Object.keys(S.prog).reverse().map(k=>ALL[k]).filter(ok).slice(0,30);
+  const fav=S.favs.map(k=>ALL[k]).filter(ok).slice(0,40);
+  const recent=memo("nre"+ty,()=>list.map(i=>[i,added(i.id)]).filter(x=>x[1]).sort((a,b)=>a[1].d-b[1].d).slice(0,30).map(x=>x[0]));
+  const trend=memo("ntr"+ty+TREND[ty].length,()=>[...list].sort((a,b)=>trendScore(b)-trendScore(a)).slice(0,10));
+  const rows=[["cont","Continuer à regarder",cont,""],["fav","Ma liste",fav,""],["new","Derniers ajouts",recent,""],["top",ty==="f"?"Top 10 des films du moment":"Top 10 des séries du moment",trend,"rank"]]
+   .filter(r=>r[2].length).map(([k,title,items,kind])=>({k,title,small:k==="new"||k==="top"?"":String(items.length),kind,items:items.map(i=>nI(i,true))}));
+  const gi=genreIndex(ty);
+  const genres=GDEF[ty].filter(g=>(gi[g[0]]||[]).length).map(g=>({k:g[0],n:g[1],c:gi[g[0]].length,c1:g[2],c2:g[3]}));
+  return JSON.stringify({v:natVer(ty),rows,genres});
+ },
+ genre(ty,k,sort){
+  const g=GDEF[ty].find(x=>x[0]===k)||["","Genre","#2b3245","#0a0b10"];
+  const L=memo("ng"+ty+k+sort+"|"+NAT.gv,()=>{const a=[...(genreIndex(ty)[k]||[])];
+   if(sort==="az")a.sort((x,y)=>String(x.t).localeCompare(String(y.t),"fr"));
+   else if(sort==="note")a.sort((x,y)=>(y.tmdb||0)-(x.tmdb||0));
+   else{const d=i=>{const a2=added(i.id);return a2?a2.d:1e9};a.sort((x,y)=>d(x)-d(y))}return a});
+  return JSON.stringify({title:g[1],kick:`${ty==="f"?"Films":"Séries"} · ${L.length} titre${L.length>1?"s":""}`,c1:g[2],c2:g[3],items:L.map(i=>nI(i,false))});
+ },
+ detail(id){
+  const it=ALL[id];if(!it)return JSON.stringify({error:"introuvable"});
+  NAT.detail=id;
+  if(!it.info&&!it.loading)loadInfo(it);
+  setTimeout(()=>{if(!P)analyze(id)},80);
+  const L=srcs(id),cur=pickSrc(id),isS=it.type==="s";
+  const o={id,ty:it.type,t:it.t,f:it.f,c1:it.c[0],c2:it.c[1],img:tmS(it.img,"w342"),bd:tmS(it.bd,"w1280"),
+   kick:(isS?"Série":"Film")+((it.g||[])[0]?" · "+it.g[0]:""),meta:metaArr(it),age:it.age||"",tmdb:tmdbTxt(it),imdb:it.imdb?it.imdb.toFixed(1):"",
+   s:it.s||"",dir:it.dir||"",loading:!it.info,fav:isFav(id)};
+  const nm=c=>A[c[0]]||c[2]||"";
+  o.castLine=it.cast.slice(0,3).map(nm).filter(Boolean).join(", ");
+  o.cast=it.cast.slice(0,14).map(c=>({id:c[0],n:nm(c),r:c[1]||"",ph:photoOf(nm(c))}));
+  wantPhotos(o.cast.map(c=>c.n).filter(Boolean));
+  const ad=added(id);o.added=ad?(ad.d===0?"aujourd'hui":ad.d===1?"hier":`il y a ${ad.d} jours`)+" sur "+ad.p.name:"";
+  o.sources=L.map(v=>({id:v.id,q:v.q,pl:v.p.name,name:v.name||"",codec:v.codec||"",audio:(v.audio||[]).join(" | "),subs:(v.subs||[]).join(", "),fmt:"."+(v.ext||""),ok:compat(v),def:!!cur&&cur.id===v.id}));
+  if(cur){o.srcLine=[cur.p.name,cur.q,cur.tag].filter(Boolean).join(" · ");o.srcQ=qr(cur.q)>0&&cur.q!=="Auto"?cur.q:""}
+  if(!isS){const pr=S.prog[id]||0;o.playLabel=pr>0.02&&it.d?`Reprendre à ${dur(Math.round(pr*it.d))}`:"Lecture"}
+  else{
+   const le=(S.lastEp||{})[id],sn=it.seasons||[];
+   o.seasons=sn.map((n,i)=>({n:String(n),label:"Saison "+n,eps:((it.eps||{})[n]||[]).map(e=>({num:e.num,t:e.t,d:e.dur?e.dur+" min":"",img:tmS(e.img,"w300"),q:e.q||"",pr:le&&le.ss===i+1&&le.ep===e.num?(le.pct||0):0}))}));
+   if(le&&sn[le.ss-1]!=null){o.resume={ss:le.ss,ep:le.ep};o.ssel=le.ss-1;o.playLabel=`Reprendre S${sn[le.ss-1]} E${le.ep}`}
+   else{o.ssel=0;const e0=((it.eps||{})[sn[0]]||[])[0];o.playLabel=it.info&&e0?`Lecture S${sn[0]} E${e0.num}`:"Lecture"}
+  }
+  o.similar=memo("nsim"+id,()=>[...films(),...series()].filter(x=>x.id!==id&&x.type===it.type&&((it.g||[]).length?(x.g||[]).some(g=>it.g.includes(g)):x.cat[0]===it.cat[0])).slice(0,12)).map(i=>nI(i,false));
+  return JSON.stringify(o);
+ },
+ fav(id){const it=ALL[id];if(!it)return JSON.stringify({});toggleFav(id,it.t);return JSON.stringify({fav:isFav(id),msg:isFav(id)?`Ajouté à Ma liste : ${it.t}`:`Retiré de Ma liste : ${it.t}`})},
+ play(id,src,ss,ep){
+  const it=ALL[id];if(!it)return JSON.stringify({ok:false,msg:"Titre introuvable"});
+  if(src){const vv=srcs(id).find(x=>x.id===src);if(vv&&!compat(vv))return JSON.stringify({ok:false,msg:"Source 4K non lisible sur ton Fire TV Stick (1080p max)"});if(vv){S.srcSel[id]=src;save()}}
+  if(it.type==="s"&&!it.info)return JSON.stringify({ok:false,msg:"Épisodes en cours de chargement"});
+  const v=pickSrc(id);if(!v)return JSON.stringify({ok:false,msg:"Aucune source disponible"});
+  if(P)stopPlayer();
+  if(topS().t==="player")S.stack.pop();
+  S.modal=null;
+  let p,res="";
+  if(it.type==="f"){const pos=(S.prog[id]||0)*(it.d||0)*60;p={kind:"vod",id,src:v.id,dur:(it.d||0)*60,pos,playing:true};if(pos>60)res="reprise à "+dur(Math.round(pos/60))}
+  else{const sn=(it.seasons||[])[ss-1];const L=(it.eps||{})[sn]||[];const e=L.find(x=>x.num===ep)||L[0];if(!e)return JSON.stringify({ok:false,msg:"Épisode introuvable"});
+   const vv=srcs(id).find(z=>z.p.id===it.srcPl);p={kind:"vod",id,src:vv?vv.id:v.id,ss,ep:e.num,dur:(e.dur||0)*60,pos:0,playing:true};res=`S${sn} · E${e.num}`;S.seasons[id]=ss}
+  p.nat=true;p.t0=Date.now();
+  NAT.vis=false;NAT.pre=null;
+  S.stack.push({t:"player"});
+  startPlayer(p);render(null);
+  const cv=curVar();
+  return JSON.stringify({ok:true,t:it.t,f:it.f,c1:it.c[0],c2:it.c[1],bd:tmS(it.bd,"w1280"),img:tmS(it.img,"w342"),q:cv&&qr(cv.q)>0&&cv.q!=="Auto"?cv.q:"",src:[cv?cv.p.name:"",cv?cv.tag:"",res].filter(Boolean).join(" · ")});
+ },
+ cancel(){if(P&&P.nat){stopPlayer();if(topS().t==="player")S.stack.pop();NAT.vis=true}return ""},
+ preload(id,ss,ep){
+  if(P||PQRUN||NAT.pre||(NATIVE&&Prisme.probeBusy()))return "";
+  const it=ALL[id];if(!it)return "";const v=pickSrc(id);if(!v||!compat(v))return "";
+  let url="",pos=0;
+  const mk=s=>[clean(s.url),encodeURIComponent(s.user),encodeURIComponent(s.pass)];
+  if(it.type==="f"){const [u,us,pw]=mk(v.p);url=`${u}/movie/${us}/${pw}/${v.sid}.${v.ext}`;pos=(S.prog[id]||0)*(it.d||0)*60}
+  else{if(!it.info)return "";const sn=(it.seasons||[])[ss-1];const e=((it.eps||{})[sn]||[]).find(x=>x.num===ep);if(!e)return "";
+   const vv=srcs(id).find(z=>z.p.id===it.srcPl)||v;const [u,us,pw]=mk(vv.p);url=`${u}/series/${us}/${pw}/${e.id}.${e.ext}`}
+  NAT.pre=url;Prisme.preload(url,Math.round(pos*1000));return "";
+ },
+ unpreload(){if(NAT.pre&&!P)Prisme.unpreload();NAT.pre=null;setTimeout(pumpProbe,1500);return ""},
+ tab(v){NAT.vis=false;S.tab=v;S.modal=null;S.stack=[{t:"home"}];save();render("tab-"+v);return ""},
+ web(kind,id){NAT.vis=false;S.retNat=true;S.modal=null;S.stack=[{t:"home"},{t:kind,id}];render(null);return ""},
+ resume(){NAT.vis=false;S.stack=S.stack.filter(x=>x.t!=="player");S.modal=null;render(topS().last);return ""}
+};
+
+/* Fiche native : mise à jour quand les infos, la qualité ou les photos arrivent */
+function natPush(id){if(!NAT.vis||!id||NAT.detail!==id)return;clearTimeout(NAT.pt);NAT.pt=setTimeout(()=>{try{Prisme.nativeEvent("detail",nativeApi.detail(id))}catch(e){}},350)}
+
+/* Lecture lancée depuis le natif : changement de source automatique et nouvel essai si la connexion est encore occupée */
+function natSwitch(reason){
+ const it=ALL[P.id];if(!it||it.type!=="f"||P.kind!=="vod")return false;
+ const L=srcs(P.id).filter(compat),i=L.findIndex(v=>v.id===P.src),nx=L[i+1];if(!nx)return false;
+ const old=curVar();P.src=nx.id;P.t0=Date.now();P.err=0;P.retry=0;P.aSync=null;P.audio=null;P.sub=null;P.started=false;
+ Prisme.play(streamUrl(),Math.round((P.pos||0)*1000),false);LOG(`Source changée (${reason}) : ${old?old.p.name+" "+old.q:""} → ${nx.p.name} ${nx.q}`);
+ if(P.nat)Prisme.nativeEvent("loading",JSON.stringify({banner:`${old?old.p.name+" "+old.q:"La source"} ne répond pas · passage à ${nx.p.name} ${nx.q}`,q:qr(nx.q)>0&&nx.q!=="Auto"?nx.q:"",src:nx.p.name+(nx.tag?" · "+nx.tag:""),msg:"Démarrage de la vidéo…",warn:false}));
+ else toast(`Source suivante : ${nx.p.name} ${nx.q}`);
+ return true}
+function natFail(msg){LOG("Lecture impossible · "+msg);if(P&&P.nat){Prisme.nativeEvent("playfail",JSON.stringify({msg:"Lecture impossible : "+msg}));stopPlayer();if(topS().t==="player")S.stack.pop();NAT.vis=true;return true}return false}
+/* Appelé à chaque tour du lecteur : true = la suite de tick() est ignorée */
+function natTick(st){
+ if(!P)return true;
+ if(!P.started&&(st.playing||(st.pos>0&&!st.buffering))){P.started=true;P.retry=0}
+ if(P.retryAt){if(Date.now()<P.retryAt)return true;P.retryAt=0;P.err=0;Prisme.play(streamUrl(),Math.round((P.pos||0)*1000),P.kind==="live");return true}
+ if(st.error&&!P.err){
+  const code=+((String(st.error).match(/(?:Response code|code)[: ]+(\d{3})/i)||[])[1]||0);
+  if([401,403,429,456,458,503,509,551].includes(code)&&(P.retry||0)<6){
+   P.retry=(P.retry||0)+1;P.retryAt=Date.now()+2500;P.err=1;
+   const m=`Connexion précédente en cours de fermeture… nouvel essai ${P.retry} sur 6`;
+   if(P.nat)Prisme.nativeEvent("loading",JSON.stringify({msg:m,warn:true}));else toast(m);
+   return true}
+  if(!P.started){P.err=1;if(natSwitch("erreur"))return true;if(natFail(String(st.error).slice(0,120)))return true;P.err=0}
+ }
+ if(P&&!P.started&&!st.error&&P.nat&&Date.now()-(P.t0||0)>(P.kind==="vod"&&ALL[P.id]&&ALL[P.id].type==="f"?8000:20000)){
+  P.t0=Date.now();if(natSwitch("délai dépassé"))return true;if(natFail("la vidéo ne démarre pas"))return true}
+ return false}
+
 boot();
 </script>
 </body>

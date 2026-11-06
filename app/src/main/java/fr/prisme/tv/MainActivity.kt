@@ -38,12 +38,13 @@ import kotlin.concurrent.thread
  *  - le contrôle du lecteur (lecture, pistes, format, position)
  *  - le téléchargement et l'installation des mises à jour (APK)
  */
-class MainActivity : Activity() {
+class MainActivity : Activity(), fr.prisme.tv.nat.NativeUi.Host {
 
     private lateinit var web: WebView
     private lateinit var player: Player
     private val prober = Prober()
     private lateinit var images: ImageCache
+    private lateinit var nat: fr.prisme.tv.nat.NativeUi
     private val main = Handler(Looper.getMainLooper())
     private val host = "appassets.androidplatform.net"
     @Volatile private var typing = false
@@ -92,6 +93,11 @@ class MainActivity : Activity() {
         setContentView(root)
         web.isFocusable = true
         web.requestFocus()
+        // Interface native des films et séries, posée au-dessus de l'interface web
+        fr.prisme.tv.nat.K.init(this)
+        nat = fr.prisme.tv.nat.NativeUi(this, web)
+        root.addView(nat.root, FrameLayout.LayoutParams(-1, -1))
+        player.onFirstFrame = { nat.onFirstFrame() }
         web.loadUrl("https://$host/assets/web/index.html")
     }
 
@@ -115,6 +121,7 @@ class MainActivity : Activity() {
 
     /** Touches de la télécommande transmises à l'interface (les flèches restent gérées par la page). */
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        if (nat.visible && nat.onKey(event)) return true
         val name = when (event.keyCode) {
             KeyEvent.KEYCODE_BACK -> "back"
             KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER, KeyEvent.KEYCODE_NUMPAD_ENTER ->
@@ -134,6 +141,13 @@ class MainActivity : Activity() {
         }
         return true
     }
+
+    override fun nativeVisible(on: Boolean) {
+        web.visibility = if (on) View.INVISIBLE else View.VISIBLE
+        if (!on) web.requestFocus()
+    }
+
+    override fun exitApp() { moveTaskToBack(true) }
 
     override fun onPause() { super.onPause(); player.onPause() }
     override fun onDestroy() { player.release(); web.destroy(); super.onDestroy() }
@@ -211,6 +225,16 @@ class MainActivity : Activity() {
             startActivity(i)
         }
         @JavascriptInterface fun setTyping(on: Boolean) { typing = on }
+
+        // Interface native (films et séries)
+        @JavascriptInterface fun nativeOk(): Boolean = true
+        @JavascriptInterface fun nativeShow(tab: String) = main.post { nat.show(tab) }
+        @JavascriptInterface fun nativeOpen(id: String) = main.post { nat.openDetail(id, true) }
+        @JavascriptInterface fun nativeHide() = main.post { nat.toWeb() }
+        @JavascriptInterface fun nativeEvent(kind: String, data: String) = main.post { nat.event(kind, data) }
+        @JavascriptInterface fun preload(url: String, startMs: Long) = main.post { player.preload(url, startMs) }
+        @JavascriptInterface fun unpreload() = main.post { player.unpreload() }
+        @JavascriptInterface fun probeBusy(): Boolean = prober.busy
         @JavascriptInterface fun exit() = main.post { moveTaskToBack(true) }
     }
 

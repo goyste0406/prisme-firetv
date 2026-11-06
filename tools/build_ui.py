@@ -311,6 +311,7 @@ js = js.rstrip()[:-len("render();")] + "boot();\n"
 
 exec(open(os.path.join(D, "perf_patch.py"), encoding="utf-8").read())
 exec(open(os.path.join(D, "v13_patch.py"), encoding="utf-8").read())
+exec(open(os.path.join(D, "v20_patch.py"), encoding="utf-8").read())
 
 # ---------------------------------------------------------------- CSS + page
 css += '''

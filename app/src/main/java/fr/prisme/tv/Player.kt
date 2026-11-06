@@ -39,6 +39,10 @@ class Player(private val ctx: Context) {
     private var format = "auto"
     private val main = Handler(Looper.getMainLooper())
     @Volatile var stateJson: String = "{}"
+    /** Appelé quand la première image de la vidéo est affichée (fin de l'écran de chargement natif) */
+    var onFirstFrame: (() -> Unit)? = null
+    private var preUrl: String? = null
+    private var preStart = 0L
 
     private val tick = object : Runnable {
         override fun run() { update(); main.postDelayed(this, 250) }
@@ -52,7 +56,7 @@ class Player(private val ctx: Context) {
             .setReadTimeoutMs(30000)
         // Tampon modéré : le Fire TV Stick 3e génération n'a que 1 Go de RAM
         val load = DefaultLoadControl.Builder()
-            .setBufferDurationsMs(15000, 40000, 1500, 3000)
+            .setBufferDurationsMs(15000, 40000, 1000, 3000)
             .build()
         val renderers = DefaultRenderersFactory(ctx).setEnableDecoderFallback(true)
         return ExoPlayer.Builder(ctx, renderers)
@@ -62,12 +66,37 @@ class Player(private val ctx: Context) {
                 p.addListener(object : androidx.media3.common.Player.Listener {
                     override fun onPlayerError(e: PlaybackException) { error = "${e.errorCodeName}: ${e.message}" }
                     override fun onVideoSizeChanged(v: VideoSize) { applyFormat() }
+                    override fun onRenderedFirstFrame() { if (p.playWhenReady) main.post { onFirstFrame?.invoke() } }
                 })
             }
     }
 
+    /** Préchargement depuis la fiche : connexion ouverte et mise en mémoire tampon, sans afficher */
+    fun preload(url: String, startMs: Long) {
+        if (exo?.playWhenReady == true && exo?.playbackState != androidx.media3.common.Player.STATE_IDLE) return
+        val p = exo ?: build().also { exo = it; view.player = it }
+        error = null; preUrl = url; preStart = startMs
+        p.setMediaItem(MediaItem.fromUri(url), if (startMs > 0) startMs else C.TIME_UNSET)
+        p.prepare(); p.playWhenReady = false
+    }
+
+    fun unpreload() {
+        if (preUrl == null) return
+        preUrl = null
+        if (exo?.playWhenReady != true) { exo?.stop(); exo?.clearMediaItems() }
+    }
+
     fun play(url: String, startMs: Long, isLive: Boolean) {
         val p = exo ?: build().also { exo = it; view.player = it }
+        if (url == preUrl && p.playbackState != androidx.media3.common.Player.STATE_IDLE && error == null) {
+            preUrl = null; live = isLive
+            if (startMs > 0 && Math.abs(startMs - preStart) > 3000) p.seekTo(startMs)
+            p.playWhenReady = true
+            view.visibility = View.VISIBLE
+            main.removeCallbacks(tick); main.post(tick)
+            return
+        }
+        preUrl = null
         error = null; live = isLive
         p.setMediaItem(MediaItem.fromUri(url), if (startMs > 0) startMs else C.TIME_UNSET)
         p.prepare(); p.playWhenReady = true
@@ -78,6 +107,7 @@ class Player(private val ctx: Context) {
     fun resume() { exo?.play() }
     fun seekTo(ms: Long) { exo?.seekTo(ms.coerceAtLeast(0)) }
     fun stop() {
+        preUrl = null
         exo?.stop(); exo?.clearMediaItems()
         view.visibility = View.INVISIBLE
         main.removeCallbacks(tick); stateJson = "{}"
