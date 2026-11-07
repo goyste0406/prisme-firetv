@@ -141,7 +141,7 @@ function natData(id){
   if(!isS){const pr=S.prog[id]||0;o.playLabel=pr>0.02&&it.d?`Reprendre à ${dur(Math.round(pr*it.d))}`:"Lecture"}
   else{
    const le=(S.lastEp||{})[id],sn=it.seasons||[];
-   o.seasons=sn.map((n,i)=>({n:String(n),label:"Saison "+n,eps:((it.eps||{})[n]||[]).map(e=>({num:e.num,t:e.t,d:e.dur?e.dur+" min":"",img:tmS(e.img,"w300"),q:e.q||"",pr:le&&le.ss===i+1&&le.ep===e.num?(le.pct||0):0}))}));
+   o.seasons=sn.map((n,i)=>({n:String(n),label:"Saison "+n,eps:((it.eps||{})[n]||[]).map(e=>({num:e.num,t:epTitle(e,it)||("Épisode "+e.num),d:e.dur?e.dur+" min":"",img:tmS(e.img,"w300"),q:e.q||"",pr:le&&le.ss===i+1&&le.ep===e.num?(le.pct||0):0}))}));
    if(le&&sn[le.ss-1]!=null){o.resume={ss:le.ss,ep:le.ep};o.ssel=le.ss-1;o.playLabel=`Reprendre S${sn[le.ss-1]} E${le.ep}`}
    else{o.ssel=0;const e0=((it.eps||{})[sn[0]]||[])[0];o.playLabel=it.info&&e0?`Lecture S${sn[0]} E${e0.num}`:"Lecture"}
   }
@@ -244,6 +244,9 @@ try{if(NATIVE&&typeof Prisme.lastCrash==="function"&&Date.now()-Prisme.lastCrash
 /* ========================= ÉTAPES 3 et 4 : TV en direct et lecteur natifs =========================
    La liste des chaînes, le guide et l'aperçu en direct, puis le lecteur (films, épisodes, chaînes) sont dessinés en natif.
    Le choix des sources, les reprises, les nouveaux essais et l'épisode suivant restent gérés ici. */
+/* Titre d'épisode lisible : sans le nom brut du fournisseur ni « S01E02 » */
+function epTitle(e,it){let t=String(e&&e.t||"");const m=t.match(/S\d{1,2}\s*E\d{1,3}\s*[-–:·|]*\s*(.*)$/i);if(m)t=m[1];t=t.replace(/^[\s\-–:·|]+/,"").trim();
+ if(!t||/^(É|E)pisode \d+$/i.test(t)||(it&&norm(t).includes(norm(it.t))))return "";return t}
 function chQ(c){let b="";srcs("ch:"+c.id).forEach(v=>{if(qr(v.q)>0&&v.q!=="Auto"&&(!b||qr(v.q)>qr(b)))b=v.q});return b}
 function chO(c,full){const e=epgAt(c);
  const o={id:c.id,n:c.n,num:c.rank<999?c.rank:c.num,logo:c.logo||"",col:c.col,q:chQ(c),pg:e.cur.t,s:fmt(e.cur.s),pct:Math.round(e.pct),fav:isFav("ch:"+c.id)};
@@ -273,7 +276,7 @@ nativeApi.pinfo=function(wl){if(!P)return JSON.stringify({none:true});const v=cu
  const o={kind:P.kind,q:v&&qr(v.q)>0&&v.q!=="Auto"?v.q:"",src:v?v.p.name+(qr(v.q)>0&&v.q!=="Auto"?" · "+v.q:""):"",ns:srcs(curKey()).length,fmt:fm[1],fmtk:fm[0]};
  if(P.kind==="live"){const c=CH[P.id];if(c)Object.assign(o,chO(c,true));o.cat=natCatName();if(wl){const L=liveList();o.list=(L.length?L:chans()).slice(0,1500).map(x=>chO(x))}}
  else{const it=ALL[P.id];if(it){o.t=it.t;o.kick=(it.type==="f"?"Film":"Série")+(it.y?" · "+it.y:"");o.ser=it.type==="s";o.c1=it.c[0];o.c2=it.c[1];o.d=(it.d||0)*60;
-  if(o.ser){const e=curEp(),sn=(it.seasons||[])[P.ss-1];o.sub=`Saison ${sn} · Épisode ${P.ep}`+(e&&e.t&&!/^Épisode \d+$/.test(e.t)?" · "+e.t:"");const n=nextEp(it);o.next=n?`S${(it.seasons||[])[n.ss-1]} · E${n.ep}`:"";if(e&&e.dur)o.d=e.dur*60}}}
+  if(o.ser){const e=curEp(),sn=(it.seasons||[])[P.ss-1];{const et=epTitle(e,it);o.sub=`Saison ${sn} · Épisode ${P.ep}`+(et?" · "+et:"")}const n=nextEp(it);o.next=n?`S${(it.seasons||[])[n.ss-1]} · E${n.ep}`:"";if(e&&e.dur)o.d=e.dur*60}}}
  return JSON.stringify(o)};
 nativeApi.psrcs=function(){if(!P)return JSON.stringify({sources:[]});return JSON.stringify({t:P.kind==="live"?(CH[P.id]||{}).n:(ALL[P.id]||{}).t,sources:srcs(curKey()).map(v=>({id:v.id,q:v.q,pl:v.p.name,name:v.name||"",codec:v.codec||"",audio:(v.audio||[]).join(" | "),ok:compat(v),def:v.id===P.src}))})};
 nativeApi.pact=function(a,v){if(!P)return JSON.stringify({none:true});

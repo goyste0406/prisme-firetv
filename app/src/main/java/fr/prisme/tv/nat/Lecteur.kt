@@ -51,7 +51,7 @@ class PBtn(ctx: Context, val key: String, label: String, sub: String, icon: Int 
         setPadding(K.px(18), 0, K.px(20), 0)
         if (icon != 0) { ic.setImageResource(icon); addView(ic, LayoutParams(K.px(20), K.px(20)).apply { rightMargin = K.px(10) }) }
         val col = LinearLayout(ctx).apply { orientation = VERTICAL }
-        t.text = label; col.addView(t)
+        t.text = label; col.addView(t, LayoutParams(K.WRAP, K.WRAP))
         s.text = sub; s.visibility = if (sub.isEmpty()) View.GONE else View.VISIBLE
         col.addView(s, LayoutParams(K.WRAP, K.WRAP).apply { topMargin = K.px(2) })
         addView(col)
@@ -371,7 +371,7 @@ class PlayerScreen(ui: NativeUi, init: JSONObject? = null) : Screen(ui) {
         val a = st.optJSONArray("audio") ?: return ""
         val i = st.optInt("aSel", -1)
         val x = a.optJSONObject(if (i >= 0) i else 0) ?: return ""
-        return if (short) x.optString("codec") else listOf(x.optString("lang").ifEmpty { x.optString("name") }, x.optString("codec")).filter { it.isNotBlank() }.joinToString(" ")
+        return if (short) x.optString("codec") else listOf(langOf(x), x.optString("codec")).filter { it.isNotBlank() }.joinToString(" ")
     }
 
     private fun subLabel(): String {
@@ -379,6 +379,16 @@ class PlayerScreen(ui: NativeUi, init: JSONObject? = null) : Screen(ui) {
         val i = st.optInt("sSel", -1)
         if (s == null || i < 0) return "aucun"
         val x = s.optJSONObject(i) ?: return "aucun"
+        return langOf(x).ifEmpty { "piste ${i + 1}" }
+    }
+
+    /** Nom de langue lisible (les pistes sans langue déclarée n'affichent rien) */
+    private fun langOf(x: JSONObject): String {
+        val c = x.optString("code").lowercase(Locale.ROOT)
+        if (c in setOf("und", "zxx", "mis", "mul", "")) {
+            val n = x.optString("name")
+            return if (n.isBlank() || n.equals(c, true) || n == "Piste" || n.length <= 3) "" else n
+        }
         return x.optString("lang").ifEmpty { x.optString("name") }
     }
 
@@ -616,10 +626,10 @@ class PlayerScreen(ui: NativeUi, init: JSONObject? = null) : Screen(ui) {
         val a = st.optJSONArray("audio"); val s = st.optJSONArray("subs")
         val aSel = st.optInt("aSel", -1); val sSel = st.optInt("sSel", -1)
         val au = ArrayList<SidePanel.Item>()
-        for (i in 0 until (a?.length() ?: 0)) { val x = a!!.optJSONObject(i) ?: continue; au.add(SidePanel.Item(x.optString("lang").ifEmpty { x.optString("name") }, x.optString("codec"), i == aSel)) }
+        for (i in 0 until (a?.length() ?: 0)) { val x = a!!.optJSONObject(i) ?: continue; au.add(SidePanel.Item(langOf(x).ifEmpty { "Piste ${i + 1}" }, x.optString("codec"), i == aSel)) }
         val su = ArrayList<SidePanel.Item>()
         su.add(SidePanel.Item("Désactivés", "", sSel < 0))
-        for (i in 0 until (s?.length() ?: 0)) { val x = s!!.optJSONObject(i) ?: continue; su.add(SidePanel.Item(x.optString("lang").ifEmpty { x.optString("name") }, x.optString("codec"), i == sSel)) }
+        for (i in 0 until (s?.length() ?: 0)) { val x = s!!.optJSONObject(i) ?: continue; su.add(SidePanel.Item(langOf(x).ifEmpty { "Sous-titres ${i + 1}" }, x.optString("codec"), i == sSel)) }
         if (au.isEmpty() && su.size == 1) { ui.toast("Pistes en cours de lecture…"); return }
         val name = if (isLive) info.optString("n") else info.optString("t")
         ui.push(SidePanel(ui, name, "Audio et sous-titres", listOf("Audio · ${au.size}" to au, "Sous-titres · ${su.size - 1}" to su)) { sec, i ->

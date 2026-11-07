@@ -181,7 +181,7 @@ class Player(private val ctx: Context) {
     }
 
     private fun label(f: androidx.media3.common.Format): JSONObject {
-        val lang = f.language?.let { Locale(it).getDisplayLanguage(Locale.FRENCH).replaceFirstChar { c -> c.uppercase() } }
+        val lang = f.language?.takeIf { it.lowercase(Locale.ROOT) !in setOf("und", "zxx", "mis", "mul") }?.let { Locale(it).getDisplayLanguage(Locale.FRENCH).replaceFirstChar { c -> c.uppercase() } }
         val codec = when {
             f.sampleMimeType?.contains("eac3") == true -> "E-AC3"
             f.sampleMimeType?.contains("ac3") == true -> "AC3"

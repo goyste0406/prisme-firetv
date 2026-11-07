@@ -345,7 +345,7 @@ R('function upnHide(){UPN.on=false;if(UPN.el)UPN.el.style.display="none"}',
   'function upnHide(){UPN.on=false;if(UPN.el)UPN.el.style.display="none";if(UPN.nat){UPN.nat=false;try{Prisme.nativeEvent("upnext",\'{"on":false}\')}catch(e){}}}')
 R(' const e=curEpOf(it,n.ss,n.ep)||{},sn=(it.seasons||[])[n.ss-1]||n.ss,s=Math.max(0,Math.ceil(left));',
   ''' const e=curEpOf(it,n.ss,n.ep)||{},sn=(it.seasons||[])[n.ss-1]||n.ss,s=Math.max(0,Math.ceil(left));
- if(P&&P.natUi){UPN.on=true;UPN.nat=true;Prisme.nativeEvent("upnext",JSON.stringify({on:true,left:s,t:it.t,f:it.f,c1:it.c[0],c2:it.c[1],ep:`Saison ${sn} · Épisode ${n.ep}`+(e.t&&!/^Épisode \\d+$/.test(e.t)?" · "+e.t:""),plot:String(e.plot||"").slice(0,240)}));return}''')
+ if(P&&P.natUi){UPN.on=true;UPN.nat=true;Prisme.nativeEvent("upnext",JSON.stringify({on:true,left:s,t:it.t,f:it.f,c1:it.c[0],c2:it.c[1],ep:`Saison ${sn} · Épisode ${n.ep}`+(epTitle(e,it)?" · "+epTitle(e,it):""),plot:String(e.plot||"").slice(0,240)}));return}''')
 # fin de lecture avec le lecteur natif : on referme le lecteur natif
 R('toast("Lecture terminée");back();return}', 'if(P.natUi){stopPlayer();S.stack=S.stack.filter(x=>x.t!=="player");Prisme.nativeEvent("pend","");return}toast("Lecture terminée");back();return}')
 R('render("p-nextep");toast(`Saison', 'if(P.natUi){Prisme.nativeEvent("pinfo","")}else render("p-nextep");if(!P.natUi)toast(`Saison')
