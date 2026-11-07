@@ -63,7 +63,7 @@ const IDB={db:null,open(){return new Promise(r=>{try{const q=indexedDB.open("pri
 async function fillCats(pl,action,cats,list,map,D){
  if(list.length)return list;
  const have=new Set();list.forEach(x=>{have.add(x.cat);(x.cs||[]).forEach(c=>have.add(c))});
- const miss=Object.keys(cats||{}).filter(k=>!have.has(String(k))).slice(0,25);if(!miss.length)return list;
+ const miss=Object.keys(cats||{}).filter(k=>!have.has(String(k))&&!(pl.hidden||[]).includes((action==="get_live_streams"?"l":action==="get_vod_streams"?"f":"s")+":"+catKey(cats[k]))&&(S.set.adult||!isAdultCat(cats[k])));if(!miss.length)return list;LOG(`${pl.name} · ${action} : liste complète indisponible, chargement de ${miss.length} catégories une par une`);
  const seen=new Set(list.map(x=>x.id));let i=0,added=0;
  const worker=async()=>{while(i<miss.length){const c=miss[i++];try{const r=await getJSON(api(pl,action,"&category_id="+encodeURIComponent(c)),60000);
   const arr=Array.isArray(r)?r:Object.values(r||{}).filter(x=>x&&typeof x==="object");if(arr.length)D.fill++;
@@ -92,8 +92,8 @@ async function loadPlaylist(pl,step=()=>{}){
  const SK={get_live_streams:"live",get_vod_streams:"vod",get_series:"series"};
  const all=async(action,map,to)=>{try{const r=await getJSON(api(pl,action),to,SK[action]||"");return Array.isArray(r)?r.map(map):Object.values(r||{}).filter(x=>x&&typeof x==="object").map(map)}catch(e){LOG(`${pl.name} · ${action} a échoué (${e.message}) : chargement catégorie par catégorie`);return []}};
  step(2);D.live=await fillCats(pl,"get_live_streams",D.lc,await all("get_live_streams",mL,90000),mL,D);
- step(3);D.vod=await fillCats(pl,"get_vod_streams",D.vc,await all("get_vod_streams",mV,150000),mV,D);
- step(4);D.ser=await fillCats(pl,"get_series",D.sc,await all("get_series",mS,150000),mS,D);
+ step(3);D.vod=await fillCats(pl,"get_vod_streams",D.vc,await all("get_vod_streams",mV,300000),mV,D);
+ step(4);D.ser=await fillCats(pl,"get_series",D.sc,await all("get_series",mS,300000),mS,D);
  LOG(`${pl.name} chargée en ${((Date.now()-t0)/1000).toFixed(1)} s · ${D.live.length} TV · ${D.vod.length} films · ${D.ser.length} séries${D.fill?` · ${D.fill} catégories complétées une par une`:""}`);
  DATA[pl.id]=D;pl.exp=D.info.exp_date?+D.info.exp_date*1000:null;pl.maxc=+D.info.max_connections||0;pl.actc=+D.info.active_cons||0;
  pl.fmt=(D.info.allowed_output_formats||[]).includes("ts")?"ts":((D.info.allowed_output_formats||[])[0]||"ts");

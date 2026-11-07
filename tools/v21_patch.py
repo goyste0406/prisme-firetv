@@ -169,8 +169,8 @@ R(' step(2);D.live=await fillCats(pl,"get_live_streams",D.lc,await all("get_live
    catch(e){LOG(`${pl.name} · ${action} catégorie ${c} : ${e.message}`)}}
   LOG(`${pl.name} · ${SK[action]} : ${vis.length} catégories gardées sur ${ids.length}, chargées une par une`);return out};
  step(2);D.live=await fillCats(pl,"get_live_streams",D.lc,await sel("get_live_streams",mL,90000,"l",D.lc),mL,D);''')
-R('D.vod=await fillCats(pl,"get_vod_streams",D.vc,await all("get_vod_streams",mV,150000),mV,D);', 'D.vod=await fillCats(pl,"get_vod_streams",D.vc,await sel("get_vod_streams",mV,150000,"f",D.vc),mV,D);')
-R('D.ser=await fillCats(pl,"get_series",D.sc,await all("get_series",mS,150000),mS,D);', 'D.ser=await fillCats(pl,"get_series",D.sc,await sel("get_series",mS,150000,"s",D.sc),mS,D);')
+R('D.vod=await fillCats(pl,"get_vod_streams",D.vc,await all("get_vod_streams",mV,300000),mV,D);', 'D.vod=await fillCats(pl,"get_vod_streams",D.vc,await sel("get_vod_streams",mV,300000,"f",D.vc),mV,D);')
+R('D.ser=await fillCats(pl,"get_series",D.sc,await all("get_series",mS,300000),mS,D);', 'D.ser=await fillCats(pl,"get_series",D.sc,await sel("get_series",mS,300000,"s",D.sc),mS,D);')
 R('async function fillCats(pl,action,cats,list,map,D){\n if(list.length)return list;', 'async function fillCats(pl,action,cats,list,map,D){\n if(list.length||D.sel)return list;')
 R('async function loadPlaylist(pl,step=()=>{}){', 'async function loadPlaylist(pl,step=()=>{},pick=null){')
 # ajout : écran de choix des catégories entre l'authentification et le téléchargement
