@@ -527,7 +527,7 @@ const isAdultCat=n=>ADULT.test(norm(String(n||"")));
 function dropAdult(D){if(S.set.adult)return 0;let n=0;
  for(const [lk,lst] of [["lc","live"],["vc","vod"],["sc","ser"]]){const m=D[lk]||{},bad=new Set();
   for(const k of Object.keys(m))if(isAdultCat(m[k])){bad.add(String(k));delete m[k];n++}
-  if(bad.size)D[lst]=(D[lst]||[]).filter(x=>!bad.has(String(x.cat))&&!(x.cs||[]).some(c=>bad.has(String(c))))}
+  if(bad.size)D[lst]=(D[lst]||[]).filter(x=>{if(!bad.has(String(x.cat)))return true;const alt=(x.cs||[]).map(String).find(c=>m[c]!=null&&!bad.has(c));if(alt){x.cat=alt;return true}return false})}
  return n}
 /* Catégories non francophones : repérées par un code pays ou une langue étrangère, sans mention française */
 const FRM=/(^|[^a-z])(fr|fra|france|francais|francaise|french|vf|vff|vfq|vfi|vostfr|truefrench|belgique|belgium|suisse|quebec|qc|afrique|francophone|dom ?tom|antilles|reunion)([^a-z]|$)/;
@@ -555,7 +555,9 @@ function pruneHidden(pl,D){const h=hidSetOf(pl);if(!h.size||!D)return 0;D.hc=D.h
  for(const [t,cm,lst] of [["l","lc","live"],["f","vc","vod"],["s","sc","ser"]]){const m=D[cm]||{},bad=new Set();
   for(const k of Object.keys(m)){const hk=t+":"+catKey(m[k]);if(h.has(hk))bad.add(String(k))}
   if(!bad.size)continue;
-  D[lst]=(D[lst]||[]).filter(x=>{if(!bad.has(String(x.cat)))return true;const hk=t+":"+catKey(m[x.cat]);D.hc[hk]=(D.hc[hk]||0)+1;n++;return false})}
+  D[lst]=(D[lst]||[]).filter(x=>{if(!bad.has(String(x.cat)))return true;
+   const alt=(x.cs||[]).map(String).find(c=>m[c]!=null&&!bad.has(c));if(alt){x.cat=alt;return true}
+   const hk=t+":"+catKey(m[x.cat]);D.hc[hk]=(D.hc[hk]||0)+1;n++;return false})}
  return n}
 function hidSetOf(pl){return new Set(pl.hidden||[])}
 const mapCats=a=>{const m={};(a||[]).forEach(c=>m[c.category_id]=c.category_name||"Autres");return m};
@@ -585,7 +587,7 @@ async function loadPlaylist(pl,step=()=>{},pick=null){
   if(!hset.size||vis.length>80||vis.length>=ids.length*0.6)return all(action,map,to);
   D.sel=true;const out=[],seen=new Set();
   for(const c of vis){try{const r=await getJSON(api(pl,action,"&category_id="+encodeURIComponent(c)),60000,SK[action]||"");
-   (Array.isArray(r)?r:Object.values(r||{}).filter(x=>x&&typeof x==="object")).forEach(x=>{const m=map(x);if(!m.cat)m.cat=String(c);if(!seen.has(m.id)){seen.add(m.id);out.push(m)}})}
+   (Array.isArray(r)?r:Object.values(r||{}).filter(x=>x&&typeof x==="object")).forEach(x=>{const m=map(x);const p0=m.cat;m.cat=String(c);if(p0&&p0!==m.cat){m.cs=[m.cat,...(m.cs||[p0]).filter(z=>z!==m.cat)]}if(!seen.has(m.id)){seen.add(m.id);out.push(m)}})}
    catch(e){LOG(`${pl.name} · ${action} catégorie ${c} : ${e.message}`)}}
   LOG(`${pl.name} · ${SK[action]} : ${vis.length} catégories gardées sur ${ids.length}, chargées une par une`);return out};
  step(2);D.live=await fillCats(pl,"get_live_streams",D.lc,await sel("get_live_streams",mL,90000,"l",D.lc),mL,D);
