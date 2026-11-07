@@ -323,3 +323,37 @@ async function loadNowPlaying(){
   LOG(`TMDB : ${NOWP.f.length} sorties cinéma récentes et ${NOWP.s.length} séries en diffusion trouvées dans tes playlists`);
   if(NAT.vis)Prisme.nativeEvent("home","")}catch(e){}}
 setTimeout(loadNowPlaying,12000);setInterval(()=>loadNowPlaying(),6*3600000);
+
+/* ========================= ÉTAPE 5 : Réglages natifs =========================
+   Les pages de réglages existantes (mêmes réglages, mêmes actions) sont lues ici et décrites à l'interface native. */
+function nsRows(sec){return [...sec.querySelectorAll(".it")].map(el=>{const sp=el.querySelectorAll(":scope>span"),a=sp[0],sm=a&&a.querySelector("small"),sub=sm?sm.textContent:"";
+ let label=a?a.textContent:"";if(sm)label=label.slice(0,label.length-sub.length);
+ const swe=el.querySelector(".sw"),inp=el.querySelector("input");let val=sp[1]?sp[1].textContent:"";if(inp)val=inp.value?(S.set.tmdbBuiltin?"clé intégrée":"enregistrée"):"non renseignée";
+ return {fid:el.dataset.fid||"",act:el.dataset.act||"",l:label.trim(),s:sub.trim(),v:String(val).trim(),sw:swe?swe.classList.contains("on"):null,red:/ff6961/.test(a&&a.getAttribute("style")||""),log:el.classList.contains("lg")}})}
+function nsParse(html){const tp=document.createElement("template");tp.innerHTML=html;const root=tp.content.firstElementChild;if(!root)return [];
+ return [...root.querySelectorAll(":scope>section")].map(s=>{const h=s.querySelector("h3"),k=s.querySelector(".kick"),h2=s.querySelector("h2");return {t:h?h.textContent.trim():"",kick:k?k.textContent:"",h2:h2?h2.textContent:"",rows:nsRows(s)}})}
+nativeApi.setPage=function(kind,id){
+ if(kind==="plm"){const p=S.playlists.find(x=>x.id===id);if(!p)return JSON.stringify({back:true});const secs=nsParse(plmHtml(id)),first=secs.shift()||{rows:[]};
+  return JSON.stringify({kind,kick:"RÉGLAGES · MES PLAYLISTS",title:p.name,left:first.rows,secs:secs.map(s=>({t:s.t,rows:s.rows}))})}
+ if(kind==="diag"){if(Object.keys(DIAGA).length<=1)setTimeout(()=>{try{Prisme.nativeEvent("setpage","")}catch(e){}},4000);const secs=nsParse(diagHtml()),first=secs.shift()||{rows:[]};
+  return JSON.stringify({kind,kick:"RÉGLAGES",title:"Diagnostic",sub:`${DEV.model||"navigateur"} · Android ${ANDROID[DEV.sdk]||DEV.sdk||""} · prisme ${APPV.name}`,
+   left:first.rows.filter(r=>r.act),secs:[{t:"Comptes et catalogue",rows:first.rows.filter(r=>!r.act)},...secs.map(s=>({t:s.t,rows:s.rows}))]})}
+ const secs=nsParse(settingsFull()).map(s=>{const m=s.t.match(/^(.*?)\s*(?:Xtream\s*)?\((\d+)\)$/);return {n:m?m[1].replace(/\s*Xtream$/,""):s.t,c:m?m[2]:"",t:s.t,rows:s.rows.filter(r=>r.act!=="diag")}});
+ secs.push({n:"Diagnostic",c:"",t:"Diagnostic",rows:[{fid:"set-diag",act:"diag",l:"Ouvrir le Diagnostic",s:"Comptes, chargements des playlists, analyses et journal",v:"›",sw:null}]});
+ return JSON.stringify({kind:"root",kick:"PRISME "+APPV.name,title:"Réglages",secs})};
+nativeApi.setAct=function(kind,id,a){
+ if(a.startsWith("plm:"))return JSON.stringify({nav:"plm",id:a.slice(4)});
+ if(a==="diag")return JSON.stringify({nav:"diag"});
+ /* saisie d'une playlist et mise à jour : ancienne interface, retour aux réglages natifs ensuite */
+ if(a==="addpl"||a.startsWith("upd:")){NAT.vis=false;S.retNat=true;S.tab=a==="addpl"?"films":"settings";S.modal=null;S.stack=[{t:"home"},{t:"settings"}];render(null);act(a);return JSON.stringify({web:true})}
+ const want=kind==="plm"?{t:"plm",id}:kind==="diag"?{t:"diag"}:{t:"settings"},t=topS();
+ if(!(t.t===want.t&&t.id===want.id&&view.querySelector(`[data-act="${CSS.escape(a)}"]`))){S.tab="settings";S.modal=null;S.stack=want.t==="settings"?[{t:"home"},want]:[{t:"home"},{t:"settings"},want];render(null)}
+ const el=view.querySelector(`[data-act="${CSS.escape(a)}"]`);if(el)setFocus(el,true);
+ try{act(a)}catch(e){LOG("Réglage · "+e.message)}
+ if(kind==="plm"&&!S.playlists.find(p=>p.id===id))return JSON.stringify({back:true});
+ if(a.startsWith("hide:")){const [,pid,ty,k]=a.split(":"),pl=S.playlists.find(p=>p.id===pid),h=(pl.hidden||[]).includes(ty+":"+k),n=catCount(pl,ty,k);
+  return JSON.stringify({patch:{act:a,sw:!h,s:`${n} ${({l:"chaînes",f:"films",s:"séries"})[ty]}${h?" · masquée":""}`}})}
+ if(a==="diag:test")setTimeout(()=>{try{Prisme.nativeEvent("setpage","")}catch(e){}},2500);
+ return nativeApi.setPage(kind,id)};
+nativeApi.setLeave=function(kind){if(kind==="plm"&&(PLDIRTY||PLRELOAD.size)){PLDIRTY=false;clearTimeout(PLSAVE);save();setTimeout(plApply,30)}
+ if(kind==="root"){S.stack=[{t:"home"}];S.modal=null}return ""};

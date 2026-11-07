@@ -359,7 +359,7 @@ class NativeUi(val host: Host, val web: WebView) {
             "catalog" -> home?.reload()
             "loading" -> if (loading.visibility == View.VISIBLE) loading.update(o)
             "playfail" -> { loading.hide(); toast(o.optString("msg")); stack.lastOrNull { !it.modal }?.onPlayFail(o.optString("msg")) }
-            "epg", "upnext", "pinfo" -> stack.forEach { it.onEvent(kind, o) }
+            "epg", "upnext", "pinfo", "setpage" -> stack.forEach { it.onEvent(kind, o) }
             "pend" -> closePlayer()
             "toast" -> toast(o.optString("msg"))
             "home" -> home?.reload()

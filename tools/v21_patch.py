@@ -375,3 +375,5 @@ R('const compat=v=>qr(v.q)<=qr(DEVICE.maxQ);', 'const maxQ=()=>S.set.allow4k?"4K
 R('  <div class="it"><span>Qualité maximale</span><span>${DEVICE.maxQ} · sources 4K ignorées automatiquement</span></div>',
   '  <div class="it tall" data-f data-fid="set-allow4k" data-act="set:allow4k"><span>Autoriser la 4K<small>${UHD?"Ton appareil lit la 4K : elle est déjà autorisée":S.set.allow4k?"Sources 4K proposées · à activer seulement si ton appareil et ton téléviseur lisent la 4K":"Sources 4K ignorées : cet appareil lit jusqu\'en "+DEVICE.maxQ}</small></span>${sw(UHD||!!S.set.allow4k)}</div>')
 R('   else S.set[v]=!S.set[v];', '   else S.set[v]=!S.set[v];\n   if(v==="allow4k"){bump();toast(S.set.allow4k?"4K autorisée : les sources 4K seront proposées et choisies en priorité":"4K désactivée : retour au 1080p maximum")}')
+# 2.5.0 : réglages natifs · les messages de la couche de données s'affichent dans l'interface native
+R('function toast(m){', 'function toast(m){if(NATIVE&&typeof NAT!=="undefined"&&NAT.vis){try{Prisme.nativeEvent("toast",JSON.stringify({msg:String(m)}))}catch(e){}return}')

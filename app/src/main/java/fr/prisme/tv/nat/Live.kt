@@ -539,7 +539,7 @@ class LiveScreen(ui: NativeUi, private val fromTabs: Boolean = false) : Screen(u
         ti = i; paintFocus()
         when (top.tabs.items[i].key) {
             "films", "series" -> { ui.closeLive(top.tabs.items[i].key) }
-            "settings" -> { stopPreview(); ui.webTab("settings") }
+            else -> {}
         }
     }
 
@@ -581,7 +581,7 @@ class LiveScreen(ui: NativeUi, private val fromTabs: Boolean = false) : Screen(u
 
     override fun ok() {
         when (zone) {
-            0 -> when (top.tabs.items[ti].key) { "search" -> { stopPreview(); ui.push(SearchScreen(ui)) } }
+            0 -> when (top.tabs.items[ti].key) { "search" -> { stopPreview(); ui.push(SearchScreen(ui)) }; "settings" -> { stopPreview(); ui.push(SettingsScreen(ui)) } }
             1 -> { removeCallbacks(catRun); load(cats.getOrNull(cti)?.key ?: cat, false); if (chans.isNotEmpty()) { zone = 2; paintFocus() } }
             2 -> openFull(chans.getOrNull(ci)?.optString("id") ?: return)
         }

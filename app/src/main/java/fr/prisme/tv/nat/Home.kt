@@ -235,7 +235,7 @@ class HomeScreen(ui: NativeUi) : Screen(ui) {
                 "films", "series" -> if (t.key != ty) openTab(t.key, focusTabs = true)
                 "search" -> {}
                 "live" -> later { ui.openLive(true) }
-                else -> ui.webTab(t.key)
+                else -> {}
             }
             return
         }
@@ -255,7 +255,7 @@ class HomeScreen(ui: NativeUi) : Screen(ui) {
         when (v) {
             is PosterCard -> v.item?.let { ui.openDetail(it.optString("id")) }
             is Tile -> ui.push(GenreScreen(ui, if (ty == "series") "s" else "f", v.key))
-            is TabItem -> if (v.key == "search") ui.push(SearchScreen(ui)) else go(1)
+            is TabItem -> when (v.key) { "search" -> ui.push(SearchScreen(ui)); "settings" -> ui.push(SettingsScreen(ui)); else -> go(1) }
         }
     }
 
