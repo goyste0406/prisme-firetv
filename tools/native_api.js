@@ -195,6 +195,8 @@ async function tgRun(){
  if(TGS.run||!S.set.tmdbKey)return;TGS.run=true;
  try{
   if(!TGS.loaded){try{TG=(await IDB.get("tg"))||{}}catch(e){TG={}}TGS.loaded=true;NAT.gv++;if(NAT.vis)Prisme.nativeEvent("home","")}
+  /* titres déjà vus avec un identifiant TMDB faux : une nouvelle chance, par le titre cette fois */
+  for(const k of Object.keys(TG))if(TG[k]==="-"&&ALL[k]&&ALL[k].tmdbId&&ALL[k].tmdbId!=="0"&&!TG["~"+k]){delete TG[k];TG["~"+k]=1}
   const d=i=>{const a=added(i.id);return a?a.d:1e9};
   const todo=[...films(),...series()].filter(i=>!(i.id in TG)).sort((a,b)=>d(a)-d(b));
   TGS.todo=todo.length;let fails=0;
@@ -202,7 +204,9 @@ async function tgRun(){
    if(!S.set.tmdbKey||!ALL[it.id])continue;
    while(P)await nap(5000);
    try{
-    if(it.tmdbId&&it.tmdbId!=="0"){const r=await tmdb((it.type==="f"?"movie/":"tv/")+it.tmdbId);
+    /* identifiant TMDB faux chez le fournisseur (404) : on l'oublie et on cherche par le titre */
+    let r0=null;if(it.tmdbId&&it.tmdbId!=="0"){try{r0=await tmdb((it.type==="f"?"movie/":"tv/")+it.tmdbId)}catch(e){if(/404/.test(e.message))it.tmdbId="";else throw e}}
+    if(it.tmdbId&&it.tmdbId!=="0"){const r=r0;
      TG[it.id]=r&&r.genres?it.tmdbId+":"+r.genres.map(g=>g.id).join(","):"-";
      if(r){if(!it.s&&r.overview&&isFr(r.overview))it.s=r.overview;if(!it.bd&&r.backdrop_path)it.bd="https://image.tmdb.org/t/p/w1280"+r.backdrop_path;if(!it.tmdb&&r.vote_average)it.tmdb=Math.round(r.vote_average*10)}}
     else{const y=it.y?(it.type==="f"?"&year=":"&first_air_date_year=")+it.y:"";
@@ -224,7 +228,10 @@ async function tmdbFill(it){
  if(!S.set.tmdbKey||it._tf||(it.s&&it.bd))return;it._tf=1;
  try{let id=it.tmdbId;
   if(!id||id==="0"){const y=it.y?(it.type==="f"?"&year=":"&first_air_date_year=")+it.y:"";const r=await tmdb(`search/${it.type==="f"?"movie":"tv"}?query=${encodeURIComponent(String(it.t).slice(0,80))}${y}`);const m=r&&r.results&&r.results[0];if(!m)return;id=it.tmdbId=String(m.id)}
-  const r=await tmdb((it.type==="f"?"movie/":"tv/")+id);if(!r)return;
+  let r=null;try{r=await tmdb((it.type==="f"?"movie/":"tv/")+id)}catch(e){if(!/404/.test(e.message))throw e;
+   const y=it.y?(it.type==="f"?"&year=":"&first_air_date_year=")+it.y:"";const q=await tmdb(`search/${it.type==="f"?"movie":"tv"}?query=${encodeURIComponent(String(it.t).slice(0,80))}${y}`);const m=q&&q.results&&q.results[0];if(!m)return;
+   it.tmdbId=String(m.id);r=await tmdb((it.type==="f"?"movie/":"tv/")+it.tmdbId)}
+  if(!r)return;
   if(!it.s&&r.overview&&isFr(r.overview))it.s=r.overview;if(!it.bd&&r.backdrop_path)it.bd="https://image.tmdb.org/t/p/w1280"+r.backdrop_path;
   if(!it.tmdb&&r.vote_average)it.tmdb=Math.round(r.vote_average*10);if(!(it.g||[]).length&&r.genres)it.g=r.genres.map(g=>g.name).slice(0,3);
   if(!it.d&&r.runtime)it.d=r.runtime;

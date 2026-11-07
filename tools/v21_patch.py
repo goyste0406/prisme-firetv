@@ -354,3 +354,6 @@ R('if(k==="tab"){if(natOn()&&(v==="films"||v==="series")){', 'if(k==="tab"){if(n
 R('t.t==="home"&&(S.tab==="films"||S.tab==="series"))natShow(S.tab);', 't.t==="home"&&(S.tab==="films"||S.tab==="series"||S.tab==="live"))natShow(S.tab);')
 # guide reçu : l'interface native se met à jour
 R('function refreshEpgViews(){const t=topS();if(!inApp())return;', 'function refreshEpgViews(){if(NAT.vis){try{Prisme.nativeEvent("epg","")}catch(e){}return}const t=topS();if(!inApp())return;')
+
+# 2.3.2 : un identifiant TMDB inconnu (404) n'est pas une erreur réseau, il n'encombre plus le journal
+R('if(!/wikipedia/.test(u))LOG("Erreur réseau · "', 'if(!/wikipedia/.test(u)&&!(/themoviedb/.test(u)&&/ 404$/.test(m)))LOG("Erreur réseau · "')
