@@ -398,3 +398,14 @@ R('''  <div class="it tall"><span>Tendances, sorties et genres<small>''', '''  <
   <div class="it tall"><span>Tendances, sorties et genres<small>''')
 R('  case "langall":', '  case "tmdbfull":{if(!S.set.tmdbKey){toast("Clé TMDB absente");break}if(TGS.run&&TGS.full){toast("Téléchargement déjà en cours");break}TGS.full=true;tgRun();toast("Téléchargement des infos TMDB lancé en arrière-plan : en pause pendant les vidéos");break}\n  case "langall":')
 R(' if(typeof NOWP!=="undefined"&&NOWP.at){NOWP.at=0;setTimeout(loadNowPlaying,15000)}\n}', ' if(typeof NOWP!=="undefined"&&NOWP.at){NOWP.at=0;setTimeout(loadNowPlaying,15000)}\n if(typeof tcApply==="function")tcApply();\n}')
+# 2.7.0 : marques « déjà vu » (films, épisodes, séries terminées)
+R('seasons:S.seasons,lastEp:S.lastEp,seen:S.seen,', 'seasons:S.seasons,lastEp:S.lastEp,seen:S.seen,done:S.done,epp:S.epp,')
+R('function stopPlayer(){clearInterval(PT);upnHide();', '''function seenKey(id,ss,ep){return ss?id+"|"+ss+"|"+ep:id}
+/* vu à 90 % (le générique de fin ne compte pas) ; épisode commencé : son avancement est gardé */
+function markSeen(){if(!P||P.kind!=="vod"||!(P.dur>0))return;const it=ALL[P.id];if(!it)return;S.done=S.done||{};S.epp=S.epp||{};
+ const ser=it.type==="s",k=ser?seenKey(P.id,P.ss,P.ep):P.id,pc=P.pos/P.dur;
+ if(pc>=0.9){if(!S.done[k])S.done[k]=Date.now();delete S.epp[k]}else if(ser&&pc>0.02)S.epp[k]=Math.round(pc*100)/100;
+ const ks=Object.keys(S.epp);if(ks.length>3000)ks.slice(0,ks.length-3000).forEach(x=>delete S.epp[x])}
+function stopPlayer(){clearInterval(PT);upnHide();markSeen();''')
+R('const pct=P.pos/P.dur;if(pct>0.02&&pct<0.97)S.prog[P.id]=pct;else if(pct>=0.97)delete S.prog[P.id];', 'const pct=P.pos/P.dur;if(pct>0.02&&pct<0.9)S.prog[P.id]=pct;else if(pct>=0.9)delete S.prog[P.id];')
+R('upnHide();Object.assign(P,{ss:n.ss,ep:n.ep,', 'upnHide();markSeen();Object.assign(P,{ss:n.ss,ep:n.ep,')

@@ -40,14 +40,16 @@ function natGenreBump(){clearTimeout(NATGB);NATGB=setTimeout(()=>{NAT.gv++;if(NA
 
 function metaArr(i){return (i.type==="f"?[i.y||"",i.d?dur(i.d):"",(i.g||[]).slice(0,2).join(" · ")]:[i.y||"",i.se&&i.se.length?`${i.se.length} saison${i.se.length>1?"s":""}`:"",(i.g||[]).slice(0,2).join(" · "),i.net||""]).filter(Boolean).map(String)}
 const tmdbTxt=i=>i.tmdb&&S.set.meta.tmdb!==false?(i.tmdb/10).toFixed(1).replace(".",",")+"/10":"";
-function nI(i,full){const o={id:i.id,ty:i.type,t:i.t,y:i.y||0,img:tmS(i.img,"w342"),f:i.f,c1:i.c[0],c2:i.c[1],nw:isRecent(i.id),pr:S.prog[i.id]||0};
+function serSeen(it){if(!it.eps||!it.seasons||!S.done)return false;let n=0;for(let i=0;i<it.seasons.length;i++)for(const e of (it.eps[it.seasons[i]]||[])){n++;if(!S.done[seenKey(it.id,i+1,e.num)])return false}return n>0}
+const isSeen=i=>i.type==="f"?!!(S.done&&S.done[i.id]):serSeen(i);
+function nI(i,full){const vu=isSeen(i);const o={id:i.id,ty:i.type,t:i.t,y:i.y||0,img:tmS(i.img,"w342"),f:i.f,c1:i.c[0],c2:i.c[1],nw:isRecent(i.id)&&!vu,pr:vu&&i.type==="f"?0:S.prog[i.id]||0,vu};
  if(full){o.bd=tmS(i.bd,"w1280");o.kick=(i.type==="f"?"Film":"Série")+((i.g||[])[0]?" · "+i.g[0]:"");o.meta=metaArr(i);o.s=String(i.s||"").slice(0,280);o.tmdb=tmdbTxt(i);o.age=i.age||""}
  return o}
 /* Séries suivies (regardées ou dans Ma liste) mises à jour chez le fournisseur depuis la dernière visite */
 function newEps(){if(!S.seen){S.seen={};const now=Date.now();[...S.favs,...Object.keys(S.lastEp||{}),...Object.keys(S.prog)].forEach(k=>{if(ALL[k]&&ALL[k].type==="s")S.seen[k]=now});save()}
  return Object.keys(S.seen).map(k=>ALL[k]).filter(i=>{if(!i||i.type!=="s"||!anySrc(i.id))return false;let m=0;for(const s of i.src)if(s.added>m)m=s.added;return m*1000>S.seen[i.id]})
   .sort((a,b)=>Math.max(...b.src.map(s=>s.added||0))-Math.max(...a.src.map(s=>s.added||0))).slice(0,30)}
-function natVer(ty){return [(typeof NOWP!=="undefined"?NOWP.f.length+"/"+NOWP.s.length:""),CATV,DIRTY,S.favs.length,Object.values(S.seen||{}).reduce((a,b)=>a+b,0)%1e9,Object.keys(S.prog).length,TREND.f.length,TREND.s.length,NAT.gv,ty].join("|")}
+function natVer(ty){return [Object.keys(S.done||{}).length,(typeof NOWP!=="undefined"?NOWP.f.length+"/"+NOWP.s.length:""),CATV,DIRTY,S.favs.length,Object.values(S.seen||{}).reduce((a,b)=>a+b,0)%1e9,Object.keys(S.prog).length,TREND.f.length,TREND.s.length,NAT.gv,ty].join("|")}
 
 window.nativeApi={
  ver(ty){return natVer(ty)},
@@ -131,7 +133,7 @@ function natData(id){
   const L=srcs(id),cur=pickSrc(id),isS=it.type==="s";
   const o={id,ty:it.type,t:it.t,f:it.f,c1:it.c[0],c2:it.c[1],img:tmS(it.img,"w342"),bd:tmS(it.bd,"w1280"),
    kick:(isS?"Série":"Film")+((it.g||[])[0]?" · "+it.g[0]:""),meta:metaArr(it),age:it.age||"",tmdb:tmdbTxt(it),imdb:it.imdb&&S.set.meta.imdb!==false?it.imdb.toFixed(1):"",
-   s:it.s||(!it.info&&!it.loading&&it.infoErr?`Résumé indisponible : le serveur n'a pas répondu (${it.infoErr})`:""),dir:it.dir||"",loading:!it.info&&!!it.loading,fav:isFav(id)};
+   s:it.s||(!it.info&&!it.loading&&it.infoErr?`Résumé indisponible : le serveur n'a pas répondu (${it.infoErr})`:""),dir:it.dir||"",loading:!it.info&&!!it.loading,fav:isFav(id),vu:isSeen(it)};
   tcApply1(it);tcPhotos(it);
   const nm=c=>A[c[0]]||c[2]||"";
   o.castLine=it.cast.slice(0,3).map(nm).filter(Boolean).join(", ");
@@ -143,7 +145,7 @@ function natData(id){
   if(!isS){const pr=S.prog[id]||0;o.playLabel=pr>0.02&&it.d?`Reprendre à ${dur(Math.round(pr*it.d))}`:"Lecture"}
   else{
    const le=(S.lastEp||{})[id],sn=it.seasons||[];
-   o.seasons=sn.map((n,i)=>({n:String(n),label:"Saison "+n,eps:((it.eps||{})[n]||[]).map(e=>({num:e.num,t:epTitle(e,it)||("Épisode "+e.num),d:e.dur?e.dur+" min":"",img:tmS(e.img,"w300"),q:e.q||"",pr:le&&le.ss===i+1&&le.ep===e.num?(le.pct||0):0}))}));
+   o.seasons=sn.map((n,i)=>({n:String(n),label:"Saison "+n,eps:((it.eps||{})[n]||[]).map(e=>({num:e.num,t:epTitle(e,it)||("Épisode "+e.num),d:e.dur?e.dur+" min":"",img:tmS(e.img,"w300"),q:e.q||"",vu:!!(S.done&&S.done[seenKey(it.id,i+1,e.num)]),pr:(S.done&&S.done[seenKey(it.id,i+1,e.num)])?0:(S.epp&&S.epp[seenKey(it.id,i+1,e.num)])||(le&&le.ss===i+1&&le.ep===e.num?(le.pct||0):0)}))}));
    if(le&&sn[le.ss-1]!=null){o.resume={ss:le.ss,ep:le.ep};o.ssel=le.ss-1;o.playLabel=`Reprendre S${sn[le.ss-1]} E${le.ep}`}
    else{o.ssel=0;const e0=((it.eps||{})[sn[0]]||[])[0];o.playLabel=it.info&&e0?`Lecture S${sn[0]} E${e0.num}`:"Lecture"}
   }
@@ -379,3 +381,11 @@ nativeApi.setAct=function(kind,id,a){
  return nativeApi.setPage(kind,id)};
 nativeApi.setLeave=function(kind){if(kind==="plm"&&(PLDIRTY||PLRELOAD.size)){PLDIRTY=false;clearTimeout(PLSAVE);save();setTimeout(plApply,30)}
  if(kind==="root"){S.stack=[{t:"home"}];S.modal=null}return ""};
+
+/* Marquer comme vu ou non vu (film, épisode, ou toute la série) */
+nativeApi.seen=function(id,ss,ep){const it=ALL[id];if(!it)return "{}";S.done=S.done||{};let on;
+ if(it.type==="f"){on=!S.done[id];if(on){S.done[id]=Date.now();delete S.prog[id]}else delete S.done[id]}
+ else if(+ss>0){const k=seenKey(id,+ss,+ep);on=!S.done[k];if(on){S.done[k]=Date.now();if(S.epp)delete S.epp[k]}else delete S.done[k]}
+ else{on=!serSeen(it);let n=0;for(let i=0;i<(it.seasons||[]).length;i++)for(const e of ((it.eps||{})[it.seasons[i]]||[])){n++;const k=seenKey(id,i+1,e.num);if(on)S.done[k]=Date.now();else delete S.done[k]}
+  if(!n)return JSON.stringify({vu:false,msg:"Épisodes en cours de chargement"})}
+ save();return JSON.stringify({vu:on,msg:+ss>0?(on?"Épisode marqué comme vu":"Épisode marqué comme non vu"):(on?(it.type==="s"?"Série marquée comme vue":"Film marqué comme vu"):(it.type==="s"?"Série marquée comme non vue":"Film marqué comme non vu"))})};

@@ -113,6 +113,7 @@ class PosterCard(ctx: Context, val rank: Boolean = false, val pw: Float = 138f, 
     private val border = View(ctx)
     private val cap = K.text(ctx, 14f, K.white(0.6f), 400)
     private val num = OutlineNum(ctx)
+    private var vu: View? = null
     private var root = this
     var item: JSONObject? = null
 
@@ -137,6 +138,7 @@ class PosterCard(ctx: Context, val rank: Boolean = false, val pw: Float = 138f, 
         border.background = K.round(Color.TRANSPARENT, 12f, 3, Color.WHITE)
         border.visibility = View.INVISIBLE
         poster.addView(border, K.lp(K.MATCH, K.MATCH))
+        poster.addView(seenDot(ctx).also { vu = it }, FrameLayout.LayoutParams(K.px(30), K.px(30), Gravity.END).apply { rightMargin = K.px(8); topMargin = K.px(8) })
         if (wrap != null) {
             num.layoutParams = FrameLayout.LayoutParams(K.px(120), K.px(150), Gravity.BOTTOM or Gravity.START).apply { leftMargin = -K.px(4) }
             wrap.addView(num)
@@ -161,7 +163,9 @@ class PosterCard(ctx: Context, val rank: Boolean = false, val pw: Float = 138f, 
         val nw = it.optBoolean("nw")
         badge.visibility = if (nw) View.VISIBLE else View.GONE
         kick.visibility = if (nw) View.INVISIBLE else View.VISIBLE
-        val pr = it.optDouble("pr", 0.0)
+        val seen = it.optBoolean("vu")
+        vu?.visibility = if (seen) View.VISIBLE else View.GONE
+        val pr = if (seen) 0.0 else it.optDouble("pr", 0.0)
         prog.visibility = if (pr > 0.01) View.VISIBLE else View.GONE
         if (pr > 0.01) {
             val w = (K.px(pw - 24) * pr).toInt()
@@ -429,6 +433,7 @@ class EpCard(ctx: Context) : LinearLayout(ctx), Foc {
     private val border = View(ctx)
     private val t = K.text(ctx, 16f, Color.WHITE, 600)
     private val d = K.text(ctx, 13f, K.white(0.55f))
+    private var vu: View? = null
     var ep: JSONObject? = null
 
     init {
@@ -447,6 +452,7 @@ class EpCard(ctx: Context) : LinearLayout(ctx), Foc {
         th.addView(prog, FrameLayout.LayoutParams(K.MATCH, K.px(4), Gravity.BOTTOM).apply { leftMargin = K.px(12); rightMargin = K.px(12); bottomMargin = K.px(5) })
         border.background = K.round(Color.TRANSPARENT, 12f, 3, Color.WHITE); border.visibility = View.INVISIBLE
         th.addView(border, K.lp(K.MATCH, K.MATCH))
+        th.addView(seenDot(ctx).also { vu = it }, FrameLayout.LayoutParams(K.px(28), K.px(28)).apply { leftMargin = K.px(10); topMargin = K.px(10) })
         addView(th, LayoutParams(K.px(260), K.px(146)))
         addView(t, LayoutParams(K.px(260), K.WRAP).apply { topMargin = K.px(12) })
         addView(d, LayoutParams(K.px(260), K.WRAP).apply { topMargin = K.px(3) })
@@ -457,11 +463,13 @@ class EpCard(ctx: Context) : LinearLayout(ctx), Foc {
         th.background = K.grad(c1, c2)
         lb.text = label
         t.text = e.optString("t")
-        d.text = e.optString("d")
+        val seen = e.optBoolean("vu")
+        d.text = listOf(e.optString("d"), if (seen) "Vu" else "").filter { it.isNotEmpty() }.joinToString(" · ")
+        vu?.visibility = if (seen) View.VISIBLE else View.GONE
         q.removeAllViews()
         val qq = e.optString("q")
         if (qq.isNotEmpty()) q.addView(qBadge(context, qq, 22f, 11f))
-        val pr = e.optDouble("pr", 0.0)
+        val pr = if (seen) 0.0 else e.optDouble("pr", 0.0)
         prog.visibility = if (pr > 0.01) View.VISIBLE else View.GONE
         progBar.layoutParams = FrameLayout.LayoutParams((K.px(236) * pr).toInt(), K.MATCH)
         Img.load(img, e.optString("img"), K.px(286), K.px(160))
@@ -515,4 +523,15 @@ class TabBar(ctx: Context) : LinearLayout(ctx) {
     }
 
     fun select(key: String) { items.forEach { it.sel = it.key == key } }
+}
+
+/** Pastille « déjà vu » : coche blanche sur rond vert */
+fun seenDot(ctx: Context): View {
+    val f = FrameLayout(ctx)
+    f.background = GradientDrawable().apply { shape = GradientDrawable.OVAL; setColor(Color.parseColor("#30d158")); setStroke(K.px(2), K.black(0.35f)) }
+    val i = ImageView(ctx); i.setImageResource(fr.prisme.tv.R.drawable.ic_check)
+    f.addView(i, FrameLayout.LayoutParams(K.px(16), K.px(16), Gravity.CENTER))
+    f.visibility = View.GONE
+    f.elevation = K.pxf(2f)
+    return f
 }

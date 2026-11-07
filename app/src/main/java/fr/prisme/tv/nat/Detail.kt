@@ -23,6 +23,7 @@ class DetailScreen(ui: NativeUi, val itemId: String, val fromWeb: Boolean) : Scr
     private var d: JSONObject? = null
     private var playBtn: Btn? = null
     private var favBtn: Btn? = null
+    private var seenBtn: Btn? = null
     private var srcBtn: Btn? = null
     private var season = 0
     private var epLineIndex = -1
@@ -91,6 +92,7 @@ class DetailScreen(ui: NativeUi, val itemId: String, val fromWeb: Boolean) : Scr
     private fun refreshInPlace(o: JSONObject) {
         playBtn?.setLabel(o.optString("playLabel", "Lecture"))
         (favBtn?.getChildAt(0) as? android.widget.ImageView)?.setImageResource(if (o.optBoolean("fav")) R.drawable.ic_heart_on else R.drawable.ic_heart)
+        (seenBtn?.getChildAt(0) as? android.widget.ImageView)?.setImageResource(if (o.optBoolean("vu")) R.drawable.ic_seen else R.drawable.ic_seen_off)
         srcLineRow?.let { fillSrcLine(it, o) }
         val srcs = o.objs("sources")
         srcCards.forEachIndexed { i, c -> srcs.getOrNull(i)?.let { s -> c.bind(s); if (c === cur) c.foc(true) } }
@@ -164,6 +166,8 @@ class DetailScreen(ui: NativeUi, val itemId: String, val fromWeb: Boolean) : Scr
         } else srcBtn = null
         val fb = Btn(ui.ctx, null, if (o.optBoolean("fav")) R.drawable.ic_heart_on else R.drawable.ic_heart, round = true)
         favBtn = fb; btns.addView(fb, LinearLayout.LayoutParams(K.px(58), K.px(58)).apply { leftMargin = K.px(16) }); bl.add(fb)
+        val vb = Btn(ui.ctx, null, if (o.optBoolean("vu")) R.drawable.ic_seen else R.drawable.ic_seen_off, round = true)
+        seenBtn = vb; btns.addView(vb, LinearLayout.LayoutParams(K.px(58), K.px(58)).apply { leftMargin = K.px(16) }); bl.add(vb)
         col.addView(btns, LinearLayout.LayoutParams(K.WRAP, K.WRAP).apply { topMargin = K.px(22) })
         if (o.optString("srcLine").isNotBlank()) {
             val sl = LinearLayout(ui.ctx).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
@@ -188,7 +192,7 @@ class DetailScreen(ui: NativeUi, val itemId: String, val fromWeb: Boolean) : Scr
                 }
                 content.addView(sec, LinearLayout.LayoutParams(K.MATCH, K.WRAP))
                 lines.add(StaticLine(chips, sec, sec.scroller).also { it.idx = season })
-                val es = RowSection(ui.ctx, "Épisodes", null, 4f)
+                val es = RowSection(ui.ctx, "Épisodes", "☰ Menu : marquer comme vu ou non vu", 4f)
                 epSection = es
                 content.addView(es, LinearLayout.LayoutParams(K.MATCH, K.WRAP))
                 epLineIndex = lines.size
@@ -302,6 +306,7 @@ class DetailScreen(ui: NativeUi, val itemId: String, val fromWeb: Boolean) : Scr
                 else ui.play(itemId, "", 0, 0)
             }
             v === favBtn -> toggleFav()
+            v === seenBtn -> toggleSeen(0, 0)
             v === srcBtn -> ui.push(SourceDialog(ui, this, o))
             v is SourceCard -> { preloaded = false; ui.play(itemId, v.srcId, 0, 0) }
             v is EpCard -> { val e = v.ep ?: return; preloaded = false; ui.play(itemId, "", season + 1, e.optInt("num")) }
@@ -313,7 +318,22 @@ class DetailScreen(ui: NativeUi, val itemId: String, val fromWeb: Boolean) : Scr
 
     fun playSource(src: String) { preloaded = false; ui.play(itemId, src, 0, 0) }
 
-    override fun onMenu(line: Line, i: Int, v: View) { if (v !is PosterCard) toggleFav() }
+    override fun onMenu(line: Line, i: Int, v: View) {
+        when (v) {
+            is EpCard -> { val e = v.ep ?: return; toggleSeen(season + 1, e.optInt("num")) }
+            is PosterCard -> {}
+            else -> toggleFav()
+        }
+    }
+
+    /** Vu / non vu : film, série entière (0, 0) ou un épisode */
+    private fun toggleSeen(ss: Int, ep: Int) {
+        ui.api("seen(${ui.q(itemId)},$ss,$ep)") { r ->
+            if (r == null) return@api
+            ui.toast(r.optString("msg"))
+            ui.api("detail(${ui.q(itemId)})") { o -> if (o != null && !o.has("error")) update(o) }
+        }
+    }
 
     private fun toggleFav() {
         ui.api("fav(${ui.q(itemId)})") { r ->
