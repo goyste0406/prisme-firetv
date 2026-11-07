@@ -14,6 +14,8 @@ import java.io.OutputStreamWriter
  * Sans ça, la mémoire de l'interface déborde sur le Fire TV Stick et l'appli se ferme.
  */
 object Slim {
+    /** Nombre d'éléments déjà lus dans la liste en cours (affiché pendant les actualisations) */
+    val count = java.util.concurrent.atomic.AtomicInteger(0)
     private val FIELDS = mapOf(
         "live" to listOf("stream_id", "name", "stream_icon", "category_id", "*cats", "num", "tv_archive"),
         "vod" to listOf("stream_id", "name", "stream_icon", "category_id", "*cats", "rating", "added", "container_extension", "tmdb|tmdb_id"),
@@ -25,6 +27,7 @@ object Slim {
         val spec = FIELDS[kind] ?: FIELDS.getValue("vod")
         val wanted = HashSet<String>()
         spec.forEach { f -> if (!f.startsWith("*")) f.substringBefore(":").split("|").forEach { wanted.add(it) } }
+        count.set(0)
         val r = JsonReader(InputStreamReader(input, "UTF-8"))
         r.isLenient = true
         val w = JsonWriter(OutputStreamWriter(out, "UTF-8"))
@@ -46,6 +49,7 @@ object Slim {
 
     private fun item(r: JsonReader, w: JsonWriter, spec: List<String>, wanted: Set<String>) {
         if (r.peek() != JsonToken.BEGIN_OBJECT) { r.skipValue(); return }
+        count.incrementAndGet()
         val m = HashMap<String, String>()
         var cats: ArrayList<String>? = null
         var backdrop = ""

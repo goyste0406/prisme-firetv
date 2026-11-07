@@ -61,6 +61,9 @@ class NativeUi(val host: Host, val web: WebView) {
     private val scrim = View(ctx)
     private val layer = FrameLayout(ctx)
     private val toastV = K.text(ctx, 19f, Color.WHITE, 500, 2)
+    private val taskV = LinearLayout(ctx)
+    private val taskSpin = Spinner(ctx)
+    private val taskT = K.text(ctx, 15f, Color.WHITE, 500, 1)
     val loading = LoadingOverlay(ctx)
     val stack = ArrayList<Screen>()
     var visible = false
@@ -94,6 +97,13 @@ class NativeUi(val host: Host, val web: WebView) {
         toastV.background = K.round(Color.argb(247, 36, 36, 44), 18f, 1, K.white(0.12f))
         toastV.alpha = 0f
         root.addView(toastV, FrameLayout.LayoutParams(K.WRAP, K.WRAP, Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL).apply { bottomMargin = K.px(40) })
+        taskV.orientation = LinearLayout.HORIZONTAL; taskV.gravity = Gravity.CENTER_VERTICAL
+        taskV.setPadding(K.px(14), K.px(8), K.px(18), K.px(8))
+        taskV.background = K.round(Color.argb(240, 26, 26, 32), 20f, 1, K.white(0.12f))
+        taskV.addView(taskSpin, LinearLayout.LayoutParams(K.px(18), K.px(18)))
+        taskV.addView(taskT, LinearLayout.LayoutParams(K.WRAP, K.WRAP).apply { leftMargin = K.px(10) })
+        taskV.visibility = View.GONE
+        root.addView(taskV, FrameLayout.LayoutParams(K.WRAP, K.WRAP, Gravity.BOTTOM or Gravity.END).apply { rightMargin = K.px(40); bottomMargin = K.px(28) })
         setBg("#2b3245", "#0a0b10", null)
     }
 
@@ -290,6 +300,8 @@ class NativeUi(val host: Host, val web: WebView) {
             "playfail" -> { loading.hide(); toast(o.optString("msg")) }
             "toast" -> toast(o.optString("msg"))
             "home" -> home?.reload()
+            "task" -> if (o.optBoolean("on")) { taskT.text = o.optString("text"); if (taskV.visibility != View.VISIBLE) { taskV.visibility = View.VISIBLE; taskSpin.start() } }
+                      else { taskV.visibility = View.GONE; taskSpin.stop() }
             "actor" -> stack.filterIsInstance<ActorScreen>().filter { it.aid == o.optString("id") }.forEach { it.fill(o) }
             "started" -> if (loading.visibility == View.VISIBLE) main.postDelayed({ safe("lecture") { if (loading.visibility == View.VISIBLE) { loading.hide(); toWeb() } } }, 700)
         }

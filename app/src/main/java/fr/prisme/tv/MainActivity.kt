@@ -262,6 +262,7 @@ class MainActivity : Activity(), fr.prisme.tv.nat.NativeUi.Host {
         @JavascriptInterface fun preload(url: String, startMs: Long) = main.post { player.preload(url, startMs) }
         @JavascriptInterface fun unpreload() = main.post { player.unpreload() }
         @JavascriptInterface fun probeBusy(): Boolean = prober.busy
+        @JavascriptInterface fun slimCount(): Int = Slim.count.get()
         /** Heure du dernier arrêt de l'interface par manque de mémoire (0 si jamais) */
         @JavascriptInterface fun lastCrash(): Long = getSharedPreferences("prisme", MODE_PRIVATE).getLong("crash", 0)
         /** Clé TMDB intégrée à la compilation (secret GitHub TMDB_API_KEY), vide sinon */

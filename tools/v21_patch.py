@@ -238,3 +238,38 @@ function langFix(st){const a=S.set.aLang??"fr";if(!a||!st.audio||st.audio.length
  if(ok(st.audio[st.aSel]))return;const i=st.audio.findIndex(ok);if(i>=0&&i!==st.aSel){Prisme.setAudio(i);P.audio=i;LOG(`Piste audio ${LANGN[a]} choisie automatiquement`)}}
 function plmHtml(id){''')
 R('  if(P.kind==="vod"&&P.aSync==null&&st.audio&&st.audio.length){P.aSync=1;', '  if(P.kind==="vod"&&P.aSync==null&&st.audio&&st.audio.length){P.aSync=1;langFix(st);st.aSel=P.audio??st.aSel;')
+
+# ---------------------------------------------------------------- 2.1.12 : actualisation en tâche de fond avec avancement
+R('function plmHtml(id){', '''/* Actualisation en arrière-plan : une à la fois par playlist, avancement affiché partout (pastille en bas à droite) */
+const TASK={on:false,label:"",step:"",n:0,poll:null,q:[]};const REFRESHING=new Set();
+const STEPN=["connexion","catégories","chaînes","films","séries"];
+function taskText(){return `Actualisation · ${TASK.label} · ${TASK.step}${TASK.n>0?` · ${TASK.n.toLocaleString("fr-FR")} reçus`:""}${TASK.q.length?` · ${TASK.q.length} en attente`:""}`}
+function taskDraw(){let el=document.getElementById("bgtask");
+ if(!el){el=document.createElement("div");el.id="bgtask";el.style.cssText="position:fixed;right:28px;bottom:22px;z-index:99;display:none;align-items:center;gap:10px;padding:8px 16px 8px 12px;border-radius:20px;background:rgba(26,26,32,.94);border:1px solid rgba(255,255,255,.12);color:#fff;font:500 15px Outfit,sans-serif";
+  el.innerHTML='<span style="width:14px;height:14px;border-radius:50%;border:2.5px solid rgba(255,255,255,.25);border-top-color:#fff;animation:bgspin .9s linear infinite"></span><span id="bgtaskt"></span>';
+  const st=document.createElement("style");st.textContent="@keyframes bgspin{to{transform:rotate(360deg)}}";document.head.appendChild(st);document.body.appendChild(el)}
+ el.style.display=TASK.on?"flex":"none";const t=document.getElementById("bgtaskt");if(t)t.textContent=taskText();
+ try{if(NAT.ok)Prisme.nativeEvent("task",JSON.stringify({on:TASK.on,text:taskText()}))}catch(e){}}
+async function refreshPl(p,quiet){
+ if(REFRESHING.has(p.id)){if(!quiet)toast(`${p.name} : actualisation déjà en cours`);return}
+ REFRESHING.add(p.id);
+ while(TASK.on){if(!TASK.q.includes(p.name))TASK.q.push(p.name);taskDraw();await nap(1000)}
+ TASK.q=TASK.q.filter(x=>x!==p.name);
+ const before=counts(p);TASK.on=true;TASK.label=p.name;TASK.step="connexion";TASK.n=0;taskDraw();
+ TASK.poll=setInterval(()=>{try{if(NATIVE&&typeof Prisme.slimCount==="function"){const n=Prisme.slimCount();if(n!==TASK.n){TASK.n=n;taskDraw()}}}catch(e){}},1000);
+ try{await loadPlaylist(p,i=>{TASK.step=STEPN[i]||"";TASK.n=0;taskDraw()});p.synced=Date.now();TASK.step="mise à jour du catalogue";TASK.n=0;taskDraw();await nap(30);
+  buildCatalog();bump();dirty();save();const a=counts(p);
+  const d=(x,y,l)=>x!==y?`${x>y?"+":""}${(x-y).toLocaleString("fr-FR")} ${l}`:"";
+  const diff=[d(a.f,before.f,"films"),d(a.s,before.s,"séries"),d(a.c,before.c,"chaînes")].filter(Boolean).join(" · ");
+  LOG(`${p.name} actualisée · ${a.f} films · ${a.s} séries · ${a.c} chaînes${diff?" ("+diff+")":""}`);
+  if(!quiet||diff)toast(`${p.name} à jour${diff?" : "+diff:" : aucun changement"}`);
+  const t=topS();if(t.t!=="player"&&!S.modal&&Date.now()-LASTKEY>1500)render(F&&F.dataset.fid)}
+ catch(e){toast(`${p.name} : actualisation impossible (${e.message})`);LOG(`${p.name} : actualisation impossible · ${e.message}`)}
+ finally{clearInterval(TASK.poll);TASK.on=false;REFRESHING.delete(p.id);taskDraw()}}
+function plmHtml(id){''')
+R('  case "plref":{const pl=S.playlists.find(p=>p.id===v);toast(`Actualisation de ${pl.name}…`);loadPlaylist(pl).then(()=>{buildCatalog();save();render(F&&F.dataset.fid);toast(`${pl.name} à jour`)}).catch(e=>toast("Échec : "+e.message));break}',
+  '  case "plref":{const pl=S.playlists.find(p=>p.id===v);if(pl){toast(`Actualisation de ${pl.name} en arrière-plan : tu peux continuer à regarder`);refreshPl(pl)}break}')
+R('  try{await loadPlaylist(p);p.synced=Date.now();buildCatalog();bump();dirty();save();toast(`${p.name} : catégories réaffichées chargées`)}catch(e){toast(`${p.name} : rechargement impossible (${e.message})`)}}',
+  '  await refreshPl(p,false)}')
+R('  if(stale.length)Promise.all(stale.map(p=>loadPlaylist(p).then(()=>{p.synced=Date.now()}).catch(e=>{p.bootMsg=e.message}))).then(()=>{buildCatalog();save();',
+  '  if(stale.length)(async()=>{for(const p of stale)await refreshPl(p,true)})().then(()=>{')
