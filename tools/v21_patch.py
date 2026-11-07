@@ -409,3 +409,6 @@ function markSeen(){if(!P||P.kind!=="vod"||!(P.dur>0))return;const it=ALL[P.id];
 function stopPlayer(){clearInterval(PT);upnHide();markSeen();''')
 R('const pct=P.pos/P.dur;if(pct>0.02&&pct<0.97)S.prog[P.id]=pct;else if(pct>=0.97)delete S.prog[P.id];', 'const pct=P.pos/P.dur;if(pct>0.02&&pct<0.9)S.prog[P.id]=pct;else if(pct>=0.9)delete S.prog[P.id];')
 R('upnHide();Object.assign(P,{ss:n.ss,ep:n.ep,', 'upnHide();markSeen();Object.assign(P,{ss:n.ss,ep:n.ep,')
+
+# 2.7.1 : tri des genres par date de sortie (date exacte du fournisseur ou de TMDB, sinon l'année)
+R('   if(f.releasedate&&!it.y)it.y=+String(f.releasedate).slice(0,4)||0;', '   if(f.releasedate&&/^\\d{4}-\\d\\d-\\d\\d/.test(String(f.releasedate)))it.rd=String(f.releasedate).slice(0,10);\n   if(f.releasedate&&!it.y)it.y=+String(f.releasedate).slice(0,4)||0;')

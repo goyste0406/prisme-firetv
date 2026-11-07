@@ -21,7 +21,7 @@ class GenreScreen(ui: NativeUi, private val ty: String, private val key: String)
     private var items: List<JSONObject> = emptyList()
     private var sort = "new"
     private val chips: List<Chip>
-    private val sortKeys = listOf("new", "az", "note")
+    private val sortKeys = listOf("new", "date", "az", "note")
     private lateinit var grid: GridLine
     private val chipLine: StaticLine
     private var c1 = "#2b3245"
@@ -53,7 +53,7 @@ class GenreScreen(ui: NativeUi, private val ty: String, private val key: String)
         header.addView(title, LinearLayout.LayoutParams(K.WRAP, K.WRAP).apply { topMargin = K.px(6) })
         chipsRow.orientation = LinearLayout.HORIZONTAL
         chipsRow.clipChildren = false
-        chips = listOf(Chip(ui.ctx, "Derniers ajouts"), Chip(ui.ctx, "A → Z"), Chip(ui.ctx, "Les mieux notés"))
+        chips = listOf(Chip(ui.ctx, "Derniers ajouts"), Chip(ui.ctx, if (ty == "f") "Sortie au cinéma" else "Première diffusion"), Chip(ui.ctx, "A → Z"), Chip(ui.ctx, "Les mieux notés"))
         chips.forEachIndexed { i, c -> chipsRow.addView(c, LinearLayout.LayoutParams(K.WRAP, K.px(42)).apply { if (i > 0) leftMargin = K.px(12) }) }
         chips[0].selected2 = true
         header.addView(chipsRow, LinearLayout.LayoutParams(K.WRAP, K.WRAP).apply { topMargin = K.px(18) })

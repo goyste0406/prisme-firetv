@@ -73,6 +73,7 @@ window.nativeApi={
   const L=memo("ng"+ty+k+sort+"|"+NAT.gv,()=>{const a=[...(genreIndex(ty)[k]||[])];
    if(sort==="az")a.sort((x,y)=>String(x.t).localeCompare(String(y.t),"fr"));
    else if(sort==="note")a.sort((x,y)=>(y.tmdb||0)-(x.tmdb||0));
+   else if(sort==="date"){const r=i=>(TC[i.id]&&TC[i.id].d)||i.rd||(i.y?i.y+"-07-01":"");a.sort((x,y)=>r(y).localeCompare(r(x))||String(x.t).localeCompare(String(y.t),"fr"))}
    else{const d=i=>{const a2=added(i.id);return a2?a2.d:1e9};a.sort((x,y)=>d(x)-d(y))}return a});
   return JSON.stringify({title:g[1],kick:`${ty==="f"?"Films":"Séries"} · ${L.length} titre${L.length>1?"s":""}`,c1:g[2],c2:g[3],items:L.map(i=>nI(i,false))});
  },
@@ -204,9 +205,9 @@ function tgBump(force){if(!TGS.dirty)return;if(!force&&Date.now()-TGS.lastBump<1
 let TC={};let TCSAVE=null;function tcSave(){clearTimeout(TCSAVE);TCSAVE=setTimeout(()=>{IDB.put("tc",TC).catch(()=>{})},60000)}
 const TMI="https://image.tmdb.org/t/p/";
 function tcStore(it,r){if(!r)return;const L=((it.type==="f"?r.credits:r.aggregate_credits)||{}).cast||[];
- TC[it.id]={c:L.slice(0,12).map(c=>[String(c.name||"").replace(/,/g," "),c.character||(c.roles&&c.roles[0]&&c.roles[0].character)||"",c.profile_path||""]),s:r.overview&&isFr(r.overview)?String(r.overview).slice(0,700):"",b:r.backdrop_path||"",v:r.vote_average||0,g:(r.genres||[]).map(g=>g.name).slice(0,3)};
+ TC[it.id]={c:L.slice(0,12).map(c=>[String(c.name||"").replace(/,/g," "),c.character||(c.roles&&c.roles[0]&&c.roles[0].character)||"",c.profile_path||""]),s:r.overview&&isFr(r.overview)?String(r.overview).slice(0,700):"",b:r.backdrop_path||"",v:r.vote_average||0,g:(r.genres||[]).map(g=>g.name).slice(0,3),d:String(r.release_date||r.first_air_date||"").slice(0,10)};
  tcApply1(it);tcSave()}
-function tcApply1(it){const t=TC[it.id];if(!t)return;if(!it.s&&t.s)it.s=t.s;if(!it.bd&&t.b)it.bd=TMI+"w1280"+t.b;if(!it.tmdb&&t.v)it.tmdb=Math.round(t.v*10);if(!(it.g||[]).length&&t.g&&t.g.length)it.g=t.g.slice();
+function tcApply1(it){const t=TC[it.id];if(!t)return;if(!it.y&&t.d)it.y=+t.d.slice(0,4)||0;if(!it.s&&t.s)it.s=t.s;if(!it.bd&&t.b)it.bd=TMI+"w1280"+t.b;if(!it.tmdb&&t.v)it.tmdb=Math.round(t.v*10);if(!(it.g||[]).length&&t.g&&t.g.length)it.g=t.g.slice();
  if(!it.cast.length&&t.c.length){it.cast=castList(t.c.map(x=>x[0]).join(","));it.cast.forEach((c,k)=>{c[1]=t.c[k]?t.c[k][1]:"";const C=CRED[c[0]]=CRED[c[0]]||[];if(!C.some(x=>x[0]===it.id))C.push([it.id,c[1]])})}
  else if(t.c.length)it.cast.forEach(c=>{if(!c[1]){const m=t.c.find(x=>norm(x[0])===norm(c[2]||A[c[0]]||""));if(m)c[1]=m[1]}})}
 function tcPhotos(it){const t=TC[it.id];if(!t)return;t.c.forEach(x=>{if(x[2]&&!photoOf(x[0]))setPhoto(x[0],TMI+"w185"+x[2])})}
