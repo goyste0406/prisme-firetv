@@ -273,3 +273,38 @@ R('  try{await loadPlaylist(p);p.synced=Date.now();buildCatalog();bump();dirty()
   '  await refreshPl(p,false)}')
 R('  if(stale.length)Promise.all(stale.map(p=>loadPlaylist(p).then(()=>{p.synced=Date.now()}).catch(e=>{p.bootMsg=e.message}))).then(()=>{buildCatalog();save();',
   '  if(stale.length)(async()=>{for(const p of stale)await refreshPl(p,true)})().then(()=>{')
+
+# ---------------------------------------------------------------- 2.1.13 : films absents · garde-fous et comptage détaillé
+# liste complète : plus de temps pour les très gros catalogues
+R('await sel("get_vod_streams",mV,300000,"f",D.vc)', 'await sel("get_vod_streams",mV,600000,"f",D.vc)')
+R('await sel("get_series",mS,300000,"s",D.sc)', 'await sel("get_series",mS,600000,"s",D.sc)')
+# comment chaque liste a été obtenue (affiché dans Diagnostic)
+R(' const all=async(action,map,to)=>{try{const r=await getJSON(api(pl,action),to,SK[action]||"");return Array.isArray(r)?r.map(map):Object.values(r||{}).filter(x=>x&&typeof x==="object").map(map)}catch(e){LOG(`${pl.name} · ${action} a échoué (${e.message}) : chargement catégorie par catégorie`);return []}};',
+  ' D.how={};const all=async(action,map,to)=>{try{const r=await getJSON(api(pl,action),to,SK[action]||"");const o=Array.isArray(r)?r.map(map):Object.values(r||{}).filter(x=>x&&typeof x==="object").map(map);D.how[SK[action]]=`liste complète : ${o.length}`;return o}catch(e){D.how[SK[action]]=`liste complète en échec (${e.message})`;LOG(`${pl.name} · ${action} a échoué (${e.message}) : chargement catégorie par catégorie`);return []}};')
+# fournisseur qui bloque en cours de route : on arrête au lieu d'enchaîner des centaines d'échecs
+R('   catch(e){LOG(`${pl.name} · ${action} catégorie ${c} : ${e.message}`)}}\n  LOG(`${pl.name} · ${SK[action]} : ${vis.length} catégories gardées sur ${ids.length}, chargées une par une`);return out};',
+  '   catch(e){LOG(`${pl.name} · ${action} catégorie ${c} : ${e.message}`);if(/refusé l\'accès/.test(e.message))break}}\n  D.how[SK[action]]=(D.how[SK[action]]||"")+` · ${vis.length} catégories une par une : ${out.length}`;\n  LOG(`${pl.name} · ${SK[action]} : ${vis.length} catégories gardées sur ${ids.length}, chargées une par une (${out.length} éléments)`);return out};')
+R('arr.forEach(x=>{const m=map(x);if(!m.cat)m.cat=String(c);if(seen.has(m.id)){const o=list.find(y=>y.id===m.id);if(o){o.cs=o.cs||[o.cat];if(!o.cs.includes(String(c)))o.cs.push(String(c))}}else{seen.add(m.id);list.push(m);added++}})}catch(e){}}};',
+  'arr.forEach(x=>{const m=map(x);if(!m.cat)m.cat=String(c);if(seen.has(m.id)){const o=list.find(y=>y.id===m.id);if(o){o.cs=o.cs||[o.cat];if(!o.cs.includes(String(c)))o.cs.push(String(c))}}else{seen.add(m.id);list.push(m);added++}})}catch(e){if(/refusé l\'accès/.test(e.message))break}}};')
+R(' if(added)LOG(`${pl.name} · ${action} : +${added} éléments récupérés dans ${miss.length} catégories`);',
+  ' if(added)LOG(`${pl.name} · ${action} : +${added} éléments récupérés dans ${miss.length} catégories`);\n {const k={get_live_streams:"live",get_vod_streams:"vod",get_series:"series"}[action];D.how=D.how||{};D.how[k]=(D.how[k]||"")+` · ${miss.length} catégories une par une : ${added}`}')
+# une liste revenue vide alors qu'elle ne l'était pas : on garde la précédente au lieu de tout effacer
+R('{const r=dropAdult(D);',
+  '{const O=DATA[pl.id];if(O)for(const [k,cm,n] of [["live","lc","chaînes"],["vod","vc","films"],["ser","sc","séries"]])if(!(D[k]||[]).length&&Object.keys(D[cm]||{}).length&&(O[k]||[]).length){D[k]=O[k];LOG(`${pl.name} : aucun élément reçu pour les ${n} cette fois, la liste précédente est conservée`)}}\n{const r=dropAdult(D);')
+# filtre de langue : s'il ne reconnaît AUCUNE source francophone sur une playlist, c'est lui qui se trompe → on garde tout
+R(' CHS.sort((a,b)=>(a.rank-b.rank)||(a.num-b.num));CHS.forEach((c,i)=>c.pos=i+1);',
+  ''' for(const pl of S.playlists)for(const [L,n] of [[FILMS,"films"],[SERIES,"séries"]]){let a=0,b=0;
+  for(const i of L)for(const s of i.src)if(s.pl===pl.id){if(s.fr===false)b++;else a++}
+  if(!a&&b){for(const i of L)for(const s of i.src)if(s.pl===pl.id)s.fr=true;LOG(`${pl.name} : aucun des ${b} ${n} n'a été reconnu comme francophone, le filtre de langue est ignoré pour cette playlist`)}}
+ CHS.sort((a,b)=>(a.rank-b.rank)||(a.num-b.num));CHS.forEach((c,i)=>c.pos=i+1);''')
+# Diagnostic : où passent les films et séries de chaque playlist
+R('function diagHtml(){', '''function diagCat(pl,t){return memo("dg"+t+pl.id,()=>{const D=DATA[pl.id];if(!D)return "playlist pas encore chargée";
+ const cm=t==="f"?D.vc:D.sc,L=t==="f"?FILMS:SERIES,h=hidSet(pl),ks=new Set(Object.values(cm||{}).map(n=>t+":"+catKey(n)));let hc=0;ks.forEach(k=>{if(h.has(k))hc++});
+ let pr=0;for(const k in (D.hc||{}))if(k.startsWith(t+":"))pr+=D.hc[k];
+ let tot=0,lang=0,hid=0,vis=0;for(const i of L){if(!i.src.some(x=>x.pl===pl.id))continue;tot++;if(has(pl,i.id))vis++;else if(!base(pl,i.id))lang++;else hid++}
+ const how=(D.how||{})[t==="f"?"vod":"series"];
+ return `${vis.toLocaleString("fr-FR")} affichés · ${ks.size} catégories dont ${hc} masquées · ${((t==="f"?D.vod:D.ser)||[]).length+pr} reçus du fournisseur${pr?` dont ${pr} non chargés (catégories masquées)`:""}${lang?` · ${lang} écartés (autre langue)`:""}${hid?` · ${hid} masqués`:""}${how?" · "+how:""}`})}
+function diagHtml(){''')
+R('  <div class="it tall" data-f data-fid="dg-test" data-act="diag:test">',
+  '''  ${S.playlists.map(p=>`<div class="it tall"><span>Films · ${esc(p.name)}<small>${esc(diagCat(p,"f"))}</small></span><span></span></div><div class="it tall"><span>Séries · ${esc(p.name)}<small>${esc(diagCat(p,"s"))}</small></span><span></span></div>`).join("")}
+  <div class="it tall" data-f data-fid="dg-test" data-act="diag:test">''')

@@ -517,9 +517,10 @@ async function fillCats(pl,action,cats,list,map,D){
  const seen=new Set(list.map(x=>x.id));let i=0,added=0;
  const worker=async()=>{while(i<miss.length){const c=miss[i++];try{const r=await getJSON(api(pl,action,"&category_id="+encodeURIComponent(c)),60000);
   const arr=Array.isArray(r)?r:Object.values(r||{}).filter(x=>x&&typeof x==="object");if(arr.length)D.fill++;
-  arr.forEach(x=>{const m=map(x);if(!m.cat)m.cat=String(c);if(seen.has(m.id)){const o=list.find(y=>y.id===m.id);if(o){o.cs=o.cs||[o.cat];if(!o.cs.includes(String(c)))o.cs.push(String(c))}}else{seen.add(m.id);list.push(m);added++}})}catch(e){}}};
+  arr.forEach(x=>{const m=map(x);if(!m.cat)m.cat=String(c);if(seen.has(m.id)){const o=list.find(y=>y.id===m.id);if(o){o.cs=o.cs||[o.cat];if(!o.cs.includes(String(c)))o.cs.push(String(c))}}else{seen.add(m.id);list.push(m);added++}})}catch(e){if(/refusé l'accès/.test(e.message))break}}};
  await worker();
  if(added)LOG(`${pl.name} · ${action} : +${added} éléments récupérés dans ${miss.length} catégories`);
+ {const k={get_live_streams:"live",get_vod_streams:"vod",get_series:"series"}[action];D.how=D.how||{};D.how[k]=(D.how[k]||"")+` · ${miss.length} catégories une par une : ${added}`}
  return list}
 /* Catégories adultes : jamais chargées (sauf si activées dans Réglages › Catalogue) */
 const ADULT=/(^|[^a-z0-9])(adult|adulte|adultes|adults|xxx|porn|porno|sexe|sex|erotic|erotique|erotica|charme|hentai|for adults)([^a-z0-9]|$)|18 ?\+|\+ ?18/;
@@ -584,7 +585,7 @@ async function loadPlaylist(pl,step=()=>{},pick=null){
  const SK={get_live_streams:"live",get_vod_streams:"vod",get_series:"series"};
  if(pick){const ok=await pick(D);if(!ok)throw new Error("ajout annulé")}
  const hset=new Set(pl.hidden||[]);
- const all=async(action,map,to)=>{try{const r=await getJSON(api(pl,action),to,SK[action]||"");return Array.isArray(r)?r.map(map):Object.values(r||{}).filter(x=>x&&typeof x==="object").map(map)}catch(e){LOG(`${pl.name} · ${action} a échoué (${e.message}) : chargement catégorie par catégorie`);return []}};
+ D.how={};const all=async(action,map,to)=>{try{const r=await getJSON(api(pl,action),to,SK[action]||"");const o=Array.isArray(r)?r.map(map):Object.values(r||{}).filter(x=>x&&typeof x==="object").map(map);D.how[SK[action]]=`liste complète : ${o.length}`;return o}catch(e){D.how[SK[action]]=`liste complète en échec (${e.message})`;LOG(`${pl.name} · ${action} a échoué (${e.message}) : chargement catégorie par catégorie`);return []}};
  const sel=async(action,map,to,t,cm)=>{const ids=Object.keys(cm||{});
   const vis=ids.filter(k=>!hset.has(t+":"+catKey(cm[k]))&&(S.set.adult||!isAdultCat(cm[k])));
   if(!hset.size||vis.length>=ids.length*0.6)return all(action,map,to);
@@ -593,11 +594,13 @@ async function loadPlaylist(pl,step=()=>{},pick=null){
   D.sel=true;const out=[],seen=new Set();
   for(const c of vis){try{const r=await getJSON(api(pl,action,"&category_id="+encodeURIComponent(c)),60000,SK[action]||"");
    (Array.isArray(r)?r:Object.values(r||{}).filter(x=>x&&typeof x==="object")).forEach(x=>{const m=map(x);const p0=m.cat;m.cat=String(c);if(p0&&p0!==m.cat){m.cs=[m.cat,...(m.cs||[p0]).filter(z=>z!==m.cat)]}if(!seen.has(m.id)){seen.add(m.id);out.push(m)}})}
-   catch(e){LOG(`${pl.name} · ${action} catégorie ${c} : ${e.message}`)}}
-  LOG(`${pl.name} · ${SK[action]} : ${vis.length} catégories gardées sur ${ids.length}, chargées une par une`);return out};
+   catch(e){LOG(`${pl.name} · ${action} catégorie ${c} : ${e.message}`);if(/refusé l'accès/.test(e.message))break}}
+  D.how[SK[action]]=(D.how[SK[action]]||"")+` · ${vis.length} catégories une par une : ${out.length}`;
+  LOG(`${pl.name} · ${SK[action]} : ${vis.length} catégories gardées sur ${ids.length}, chargées une par une (${out.length} éléments)`);return out};
  step(2);D.live=await fillCats(pl,"get_live_streams",D.lc,await sel("get_live_streams",mL,90000,"l",D.lc),mL,D);
- step(3);D.vod=await fillCats(pl,"get_vod_streams",D.vc,await sel("get_vod_streams",mV,300000,"f",D.vc),mV,D);
- step(4);D.ser=await fillCats(pl,"get_series",D.sc,await sel("get_series",mS,300000,"s",D.sc),mS,D);
+ step(3);D.vod=await fillCats(pl,"get_vod_streams",D.vc,await sel("get_vod_streams",mV,600000,"f",D.vc),mV,D);
+ step(4);D.ser=await fillCats(pl,"get_series",D.sc,await sel("get_series",mS,600000,"s",D.sc),mS,D);
+{const O=DATA[pl.id];if(O)for(const [k,cm,n] of [["live","lc","chaînes"],["vod","vc","films"],["ser","sc","séries"]])if(!(D[k]||[]).length&&Object.keys(D[cm]||{}).length&&(O[k]||[]).length){D[k]=O[k];LOG(`${pl.name} : aucun élément reçu pour les ${n} cette fois, la liste précédente est conservée`)}}
 {const r=dropAdult(D);if(r)LOG(`${pl.name} : ${r} catégories adultes ignorées (jamais chargées)`)}
  {const r=pruneHidden(pl,D);if(r)LOG(`${pl.name} : ${r} titres et chaînes de catégories masquées non chargés`)}
  LOG(`${pl.name} chargée en ${((Date.now()-t0)/1000).toFixed(1)} s · ${D.live.length} TV · ${D.vod.length} films · ${D.ser.length} séries${D.fill?` · ${D.fill} catégories complétées une par une`:""}`);
@@ -631,6 +634,9 @@ function buildCatalog(){
    if(!c){const h=hash(key);c=byKey["c"+key]={id:"c"+h.toString(36),n:p.title,cat:ck,genre:genreOf(p.title,cn),country:ctry,rank:tntRank(p.title),col:CHCOL[h%CHCOL.length],num:v.num||CHS.length+1,logo:v.logo,src:[]};CHS.push(c);CH[c.id]=c}
    if(!lc.has(ck))lc.set(ck,cn);if(!c.logo&&v.logo)c.logo=v.logo;
    c.src.push({pl:pl.id,sid:v.id,q:p.q,name:v.n,cat:ck,arch:v.arch})}}
+ for(const pl of S.playlists)for(const [L,n] of [[FILMS,"films"],[SERIES,"séries"]]){let a=0,b=0;
+  for(const i of L)for(const s of i.src)if(s.pl===pl.id){if(s.fr===false)b++;else a++}
+  if(!a&&b){for(const i of L)for(const s of i.src)if(s.pl===pl.id)s.fr=true;LOG(`${pl.name} : aucun des ${b} ${n} n'a été reconnu comme francophone, le filtre de langue est ignoré pour cette playlist`)}}
  CHS.sort((a,b)=>(a.rank-b.rank)||(a.num-b.num));CHS.forEach((c,i)=>c.pos=i+1);
  FCATS=[...fc.entries()];SCATS=[...sc.entries()];
  LCATS=[["all","Toutes les chaînes"],["fav","Favoris"],...GENRES];
@@ -1098,6 +1104,12 @@ async function diagTest(){const id=Object.keys(S.prog).reverse().find(k=>ALL[k]&
  try{const r=await fetch(proxied(u),{signal:ctl.signal});DIAGT=`${it.t} : réponse ${r.status} ${r.status===200||r.status===206?"(flux accessible)":r.status===502?"(redirection ou serveur injoignable)":"(refusé par le fournisseur)"} en ${((Date.now()-t0)/1000).toFixed(1)} s`;ctl.abort()}
  catch(e){DIAGT=`${it.t} : ${e.name==="AbortError"?"pas de réponse en 12 s":e.message}`}
  clearTimeout(t);LOG("Test de flux · "+DIAGT);if(topS().t==="diag")render(F&&F.dataset.fid)}
+function diagCat(pl,t){return memo("dg"+t+pl.id,()=>{const D=DATA[pl.id];if(!D)return "playlist pas encore chargée";
+ const cm=t==="f"?D.vc:D.sc,L=t==="f"?FILMS:SERIES,h=hidSet(pl),ks=new Set(Object.values(cm||{}).map(n=>t+":"+catKey(n)));let hc=0;ks.forEach(k=>{if(h.has(k))hc++});
+ let pr=0;for(const k in (D.hc||{}))if(k.startsWith(t+":"))pr+=D.hc[k];
+ let tot=0,lang=0,hid=0,vis=0;for(const i of L){if(!i.src.some(x=>x.pl===pl.id))continue;tot++;if(has(pl,i.id))vis++;else if(!base(pl,i.id))lang++;else hid++}
+ const how=(D.how||{})[t==="f"?"vod":"series"];
+ return `${vis.toLocaleString("fr-FR")} affichés · ${ks.size} catégories dont ${hc} masquées · ${((t==="f"?D.vod:D.ser)||[]).length+pr} reçus du fournisseur${pr?` dont ${pr} non chargés (catégories masquées)`:""}${lang?` · ${lang} écartés (autre langue)`:""}${hid?` · ${hid} masqués`:""}${how?" · "+how:""}`})}
 function diagHtml(){if(!Object.keys(DIAGA).length&&S.playlists.length){DIAGA._=1;setTimeout(diagAcct,50)}const q=Object.values(QUAL),ok=q.filter(x=>x.ok).length,ph=Object.values(PHOTO),nph=ph.filter(x=>x&&x[0]!=="-").length;
  const it=(f,a,b)=>`<div class="it tall" data-f data-fid="${f}"><span>${a}</span><span>${b}</span></div>`;
  return `<div class="set sy" id="set" style="top:60px"><section data-anchor><div class="kick" style="margin-left:18px">Réglages</div><h2 style="margin:6px 0 14px 18px;font-size:40px;font-weight:700;letter-spacing:-.02em">Diagnostic</h2><div class="grp">
@@ -1106,6 +1118,7 @@ function diagHtml(){if(!Object.keys(DIAGA).length&&S.playlists.length){DIAGA._=1
   ${S.playlists.map(p=>{const u=DIAGA[p.id];if(!u)return it("dg-a"+p.id,`Compte ${esc(p.name)}<small>vérification…</small>`,"");if(u.err)return it("dg-a"+p.id,`Compte ${esc(p.name)}<small>${esc(u.err)}</small>`,"injoignable");
    const exp=+u.exp_date?new Date(+u.exp_date*1000).toLocaleDateString("fr-FR"):"illimité";
    return it("dg-a"+p.id,`Compte ${esc(p.name)}<small>Statut : ${esc(u.status||"?")} · expire le ${exp} · connexions en cours ${esc(String(u.active_cons??"?"))} sur ${esc(String(u.max_connections??"?"))}</small>`,u.status==="Active"?"actif":esc(u.status||"?"))}).join("")}
+  ${S.playlists.map(p=>`<div class="it tall"><span>Films · ${esc(p.name)}<small>${esc(diagCat(p,"f"))}</small></span><span></span></div><div class="it tall"><span>Séries · ${esc(p.name)}<small>${esc(diagCat(p,"s"))}</small></span><span></span></div>`).join("")}
   <div class="it tall" data-f data-fid="dg-test" data-act="diag:test"><span>Tester un flux de film<small>${esc(DIAGT||"Vérifie si le fournisseur accepte la connexion (ouvre une connexion quelques secondes)")}</small></span><span>›</span></div>
   ${it("dg-tg",`Genres TMDB<small>${S.set.tmdbKey?`${Object.keys(TG).length} titres vérifiés · ${Object.values(TG).filter(v=>v[0]!=="-").length} classés${TGS.run?` · en cours (${TGS.done} sur ${TGS.todo})`:""}`:"clé TMDB absente"}</small>`,S.set.tmdbBuiltin?"clé intégrée":S.set.tmdbKey?"clé saisie":"")}
   ${it("dg-q",`Analyse de la qualité vidéo<small>${ok} réussie${ok>1?"s":""} · ${q.length-ok} échec${q.length-ok>1?"s":""} · ${PQ.length} en attente${PQRUN?" · analyse en cours":""}</small>`,NATIVE?"lecteur natif":"navigateur")}
