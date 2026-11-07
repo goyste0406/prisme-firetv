@@ -66,7 +66,7 @@ function dropAdult(D){if(S.set.adult)return 0;let n=0;
 const FRM=/(^|[^a-z])(fr|fra|france|francais|francaise|french|vf|vff|vfq|vfi|vostfr|truefrench|belgique|belgium|suisse|quebec|qc|afrique|francophone|dom ?tom|antilles|reunion)([^a-z]|$)/;
 const FCODE="en|eng|uk|gb|us|usa|de|ger|at|it|ita|es|esp|sp|lat|mx|pt|br|ar|tr|nl|pl|ro|ru|ua|gr|al|yu|exyu|ex-yu|hr|rs|ba|mk|si|bg|cz|sk|hu|se|swe|no|dk|fi|is|in|pk|bd|lk|np|cn|tw|hk|jp|kr|kh|vn|th|ph|my|sg|id|ir|iq|af|ku|il|am|az|ge|kz|uz|so|et|ng|gh|ke|za|car|latam|latino|arab|asia";
 const FMARK=new RegExp("^[^a-z0-9]*("+FCODE+")\\\\s*[|:\\\\-–»\\\\]\\\\)/]|[|\\\\[\\\\(]\\\\s*("+FCODE+")\\\\s*[|\\\\]\\\\)]");
-const FWORD=/(ex-?yu|yugo|bollywood|english|anglais|german|allemand|deutsch|deutschland|italia|italian|italien|espana|spanish|espagnol|latino|portugal|portugues|brasil|brazil|arabic|arabe|turkish|turc|turkiye|turk|dutch|nederland|polska|polish|romania|russia|russe|ukrain|greek|grec|albania|albanais|serbia|croatia|bulgaria|czech|hungar|swedish|svenska|norway|danish|finnish|india|hindi|tamil|telugu|malayalam|punjabi|bengali|pakistan|urdu|chinese|chinois|japan|korean|coreen|kurd|persian|iran|afghan|somali|ethiopia|amharic|israel|hebrew|philippin|vietnam|thai|indonesia|malay|caribbean|jamaica|nigeria|ghana|kenya|swahili|armenia|georgia|azer|kazakh)/;
+const FWORD=/(^|[^a-z])(ex-?yu|yugo|bollywood|english|anglais|anglaise|german|allemand|allemande|deutsch|deutschland|italia|italian|italien|italienne|espana|spain|spanish|espagnol|espagnole|latino|latina|portugal|portugues|portuguese|portugais|brasil|brazil|bresil|arabic|arabe|arab|turkish|turc|turque|turkiye|turkey|dutch|nederland|netherlands|polska|polish|polonais|romania|romanian|roumain|russia|russian|russe|ukraine|ukrainian|greek|grec|grece|albania|albanian|albanais|serbia|serbian|croatia|bulgaria|czech|hungary|hungarian|swedish|svenska|sweden|norway|norwegian|danish|denmark|finnish|finland|india|indian|hindi|tamil|telugu|malayalam|punjabi|bengali|bangla|pakistan|urdu|chinese|chinois|china|japan|japanese|japonais|korea|korean|coreen|kurd|kurdish|kurdistan|persian|farsi|iran|afghan|afghanistan|somali|somalia|ethiopia|amharic|israel|hebrew|philippines|filipino|vietnam|vietnamese|thai|thailand|indonesia|malaysia|malay|caribbean|jamaica|nigeria|ghana|kenya|swahili|armenia|armenian|georgian|azeri|azerbaijan|kazakh)([^a-z]|$)/;
 function foreignCat(n){const t=norm(String(n||""));return !FRM.test(t)&&(FMARK.test(t)||FWORD.test(t))}
 function frOnly(pl){const D=DATA[pl.id];if(!D)return 0;const h=new Set(pl.hidden||[]);let n=0;
  for(const [t,m] of [["l",D.lc],["f",D.vc],["s",D.sc]])for(const name of Object.values(m||{}))if(foreignCat(name)){const k=t+":"+catKey(name);if(!h.has(k)){h.add(k);n++}}
@@ -87,7 +87,10 @@ R('''  <div class="it"><span>Titres et chaînes avec plusieurs sources</span><sp
 
 # ---------------------------------------------------------------- 2.1.5 : sources et résumés en français uniquement
 R('const mapCats=a=>', '''/* Langue d'une source : VO ou marque d'un autre pays dans le nom du flux → pas francophone */
-function frSrc(name,tag){if(tag==="VO")return false;const t=norm(String(name||""));if(FRM.test(t))return true;return !(FMARK.test(t)||FWORD.test(t))}
+const FCSET=new Set(FCODE.split("|"));
+function frSrc(name,tag){if(tag==="VO")return false;const raw=String(name||""),t=norm(raw);if(FRM.test(t))return true;
+ const m=raw.match(/^[^A-Za-z0-9]*([A-Z]{2,5})(?:\s*\||\s+[-–»]|:|\s*\]|\s*\))/)||raw.match(/^\s*[|\[(]\s*([A-Z]{2,5})\s*[|\])]/)||raw.match(/[\[(]\s*([A-Z]{2,5})\s*[\])]\s*$/);
+ return !(m&&FCSET.has(m[1].toLowerCase()))}
 /* Le résumé est-il en français ? (mots les plus courants de chaque langue) */
 const FRW=new Set("le les des une et est dans pour qui sur avec son sa ses du au aux il elle ne pas plus ce cette leur leurs par mais lui sont ont été être après tout entre deux".split(" "));
 const ENW=new Set("the and of to in is his her with for on that who when after their an as by from but he she they this was are be has have into".split(" "));
@@ -164,7 +167,9 @@ R(' const SK={get_live_streams:"live",get_vod_streams:"vod",get_series:"series"}
 R(' step(2);D.live=await fillCats(pl,"get_live_streams",D.lc,await all("get_live_streams",mL,90000),mL,D);',
   ''' const sel=async(action,map,to,t,cm)=>{const ids=Object.keys(cm||{});
   const vis=ids.filter(k=>!hset.has(t+":"+catKey(cm[k]))&&(S.set.adult||!isAdultCat(cm[k])));
-  if(!hset.size||vis.length>80||vis.length>=ids.length*0.6)return all(action,map,to);
+  if(!hset.size||vis.length>=ids.length*0.6)return all(action,map,to);
+  {const full=await all(action,map,to);if(full.length)return full}
+  LOG(`${pl.name} · ${SK[action]} : liste complète indisponible, chargement des catégories gardées une par une`);
   D.sel=true;const out=[],seen=new Set();
   for(const c of vis){try{const r=await getJSON(api(pl,action,"&category_id="+encodeURIComponent(c)),60000,SK[action]||"");
    (Array.isArray(r)?r:Object.values(r||{}).filter(x=>x&&typeof x==="object")).forEach(x=>{const m=map(x);const p0=m.cat;m.cat=String(c);if(p0&&p0!==m.cat){m.cs=[m.cat,...(m.cs||[p0]).filter(z=>z!==m.cat)]}if(!seen.has(m.id)){seen.add(m.id);out.push(m)}})}
@@ -205,3 +210,13 @@ R('  case "sset":', '''  case "pk":{const P2=S.pick;if(!P2)break;const hk=v+":"+
   case "pknone":{const P2=S.pick;if(!P2)break;for(const t of ["l","f","s"])for(const [k] of pickList(t))P2.h.add(t+":"+k);render(F.dataset.fid);break}
   case "pkgo":{const P2=S.pick;if(!P2)break;P2.pl.hidden=[...P2.h];S.pick=null;S.loading=true;render();P2.res(true);break}
   case "sset":''')
+
+# ---------------------------------------------------------------- 2.1.10 : titres propres et fusion prudente
+# 3) préfixes en tête de nom : |FR|, FR|, VF -, NETFLIX |, [FR]… (répétés), sans toucher aux titres comme « It : Chapitre 2 »
+R(' let s=String(raw||"").replace(/^\\s*[\\[(]?[A-Z]{2,4}[\\])]?\\s*[|:\\-–•]\\s*/i,"").replace(/^\\s*[A-Z]{2,4}\\s*\\|\\s*/,"");',
+  ' let s=String(raw||"");for(let i=0;i<4;i++){const s2=s.replace(/^\\s*[|\\[(]\\s*[A-Z0-9+]{2,8}\\s*[|\\])]\\s*[-–•:]?\\s*/,"").replace(/^\\s*(?:[A-Z]{2,4}|VOSTFR|MULTI|4K|UHD|FHD|NETFLIX|DISNEY\\+?|AMAZON|PRIME|APPLE TV\\+?|CANAL\\+?|HBO|MAX|PARAMOUNT\\+?)(?:\\s*\\||\\s+[-–•]|:)\\s*/,"");if(s2===s)break;s=s2}')
+# 4) sans identifiant TMDB ni année : pas de fusion avec un homonyme (remakes)
+R('const p=parseName(v.n),key=v.tmdb&&v.tmdb!=="0"?"t"+v.tmdb:norm(p.title)+"|"+p.year;',
+  'const p=parseName(v.n),key=v.tmdb&&v.tmdb!=="0"?"t"+v.tmdb:p.year?norm(p.title)+"|"+p.year:norm(p.title)+"|?"+pl.id+":"+v.id;')
+R('const p=parseName(v.n),key=v.tmdb&&v.tmdb!=="0"?"t"+v.tmdb:norm(p.title)+"|"+(p.year||v.year);',
+  'const p=parseName(v.n),key=v.tmdb&&v.tmdb!=="0"?"t"+v.tmdb:(p.year||v.year)?norm(p.title)+"|"+(p.year||v.year):norm(p.title)+"|?"+pl.id+":"+v.id;')
