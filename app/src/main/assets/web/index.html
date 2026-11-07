@@ -1545,8 +1545,8 @@ function move(dir){
 }
 let DIRTY=0;const dirty=()=>{DIRTY++;HOMEC.k=""};
 function snapshot(t){const sc=[];view.querySelectorAll(".sx,.sy").forEach((e,i)=>{if(e.scrollLeft||e.scrollTop)sc.push([i,e.scrollLeft,e.scrollTop])});
- const fr=document.createDocumentFragment();while(view.firstChild)fr.appendChild(view.firstChild);t.dom=fr;t.sc=sc;t.ver=DIRTY+"|"+CATV}
-function restore(t){view.replaceChildren(t.dom);t.dom=null;const els=view.querySelectorAll(".sx,.sy");
+ view.querySelectorAll(".modal").forEach(x=>x.remove());const fr=document.createDocumentFragment();while(view.firstChild)fr.appendChild(view.firstChild);t.dom=fr;t.sc=sc;t.ver=DIRTY+"|"+CATV}
+function restore(t){view.replaceChildren(t.dom);t.dom=null;if(!S.modal)view.querySelectorAll(".modal").forEach(x=>x.remove());const els=view.querySelectorAll(".sx,.sy");
  t.sc.forEach(([i,l,tp])=>{const e=els[i];if(!e)return;e.style.scrollBehavior="auto";e.scrollLeft=l;e.scrollTop=tp;e._tx=l;e._ty=tp;e._tt=0;e._tt2=0;e.style.scrollBehavior=""});
  document.documentElement.classList.toggle("vplay",false);view.querySelectorAll(".foc").forEach(x=>x.classList.remove("foc"));F=null;bgFor(t);
  const el=(t.last&&view.querySelector(`[data-fid="${CSS.escape(t.last)}"]`))||view.querySelector("[data-default]")||view.querySelector("[data-f]");setFocus(el,true)}
@@ -1627,7 +1627,7 @@ function act(a){
   case "ctry":S.modal={type:"ctry",ret:"lcat-ctry"};render("cy-"+S.ctry);break;
   case "setctry":S.ctry=v;S.modal=null;S.lcat="all";save();render("lcat-ctry");break;
   case "srcplay":{const vv=srcs(v).find(x=>x.id===w);if(vv&&!compat(vv)){toast("Source 4K non lisible sur ton Fire TV Stick (1080p max)");break}S.srcSel[v]=w;save();act("play:"+v);break}
-  case "msrc":{const m=S.modal,ret=m.ret;{const vv=srcs(m.k).find(x=>x.id===v);if(vv&&!compat(vv)){toast("Source 4K non lisible sur ton Fire TV Stick (1080p max)");break}}S.srcSel[m.k]=v;save();S.modal=null;const vv=srcs(m.k).find(x=>x.id===v);
+  case "msrc":{const m=S.modal;if(!m){render(F&&F.dataset.fid);break}const ret=m.ret;{const vv=srcs(m.k).find(x=>x.id===v);if(vv&&!compat(vv)){toast("Source 4K non lisible sur ton Fire TV Stick (1080p max)");break}}S.srcSel[m.k]=v;save();S.modal=null;const vv=srcs(m.k).find(x=>x.id===v);
    if(topS().t==="player"&&P){P.src=v;P.audio=null;P.sub=null;P.err=0;P.aSync=null;if(NATIVE)Prisme.play(streamUrl(),P.kind==="vod"?Math.round(P.pos*1000):0,P.kind==="live");render("p-src");toast(`Source : ${vv.p.name} · ${vv.q}`)}
    else if(m.k.startsWith("ch:")){const id=m.k.slice(3);push({t:"player"});S.stack[S.stack.length-2].last=ret;startPlayer({kind:"live",id,src:v,playing:true});render(null)}
    else act("play:"+m.k);break}

@@ -308,3 +308,8 @@ function diagHtml(){''')
 R('  <div class="it tall" data-f data-fid="dg-test" data-act="diag:test">',
   '''  ${S.playlists.map(p=>`<div class="it tall"><span>Films · ${esc(p.name)}<small>${esc(diagCat(p,"f"))}</small></span><span></span></div><div class="it tall"><span>Séries · ${esc(p.name)}<small>${esc(diagCat(p,"s"))}</small></span><span></span></div>`).join("")}
   <div class="it tall" data-f data-fid="dg-test" data-act="diag:test">''')
+# fenêtre de choix de la source restée affichée au retour du lecteur (TV en direct) : elle ne doit jamais être mise de côté avec l'écran
+R(' const fr=document.createDocumentFragment();while(view.firstChild)fr.appendChild(view.firstChild);t.dom=fr;',
+  ' view.querySelectorAll(".modal").forEach(x=>x.remove());const fr=document.createDocumentFragment();while(view.firstChild)fr.appendChild(view.firstChild);t.dom=fr;')
+R('function restore(t){view.replaceChildren(t.dom);t.dom=null;', 'function restore(t){view.replaceChildren(t.dom);t.dom=null;if(!S.modal)view.querySelectorAll(".modal").forEach(x=>x.remove());')
+R('  case "msrc":{const m=S.modal,ret=m.ret;', '  case "msrc":{const m=S.modal;if(!m){render(F&&F.dataset.fid);break}const ret=m.ret;')
