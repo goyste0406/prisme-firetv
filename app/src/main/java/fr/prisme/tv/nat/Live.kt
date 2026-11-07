@@ -214,7 +214,7 @@ class CatRow(ctx: Context, val key: String, label: String, count: Int) : LinearL
 /** Liste de chaînes défilante (seules les lignes visibles existent) */
 class ChList(ctx: Context, private val rw: Float, private val rh: Float, private val gap: Float) : RecyclerView(ctx) {
     var items: List<JSONObject> = emptyList()
-    var focus = -1
+    var fi = -1
     private val lm = LinearLayoutManager(ctx)
 
     init {
@@ -232,18 +232,18 @@ class ChList(ctx: Context, private val rw: Float, private val rh: Float, private
                 r.layoutParams = LayoutParams(K.px(rw), K.px(rh)).apply { bottomMargin = K.px(gap) }
                 return object : ViewHolder(r) {}
             }
-            override fun onBindViewHolder(h: ViewHolder, pos: Int) { (h.itemView as ChRow).bind(items[pos], pos == focus) }
+            override fun onBindViewHolder(h: ViewHolder, pos: Int) { (h.itemView as ChRow).bind(items[pos], pos == fi) }
         }
     }
 
     fun set(list: List<JSONObject>, f: Int) {
-        items = list; focus = f
+        items = list; fi = f
         adapter?.notifyDataSetChanged()
         if (f >= 0) lm.scrollToPositionWithOffset(f, K.px(rh * 2))
     }
 
     fun setFocus(i: Int) {
-        val old = focus; focus = i
+        val old = fi; fi = i
         if (old >= 0) (lm.findViewByPosition(old) as? ChRow)?.setFoc(false) ?: adapter?.notifyItemChanged(old)
         if (i < 0) return
         val v = lm.findViewByPosition(i) as? ChRow
