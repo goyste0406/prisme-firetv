@@ -39,7 +39,7 @@ let NATGB=null;
 function natGenreBump(){clearTimeout(NATGB);NATGB=setTimeout(()=>{NAT.gv++;if(NAT.vis)Prisme.nativeEvent("home","")},4000)}
 
 function metaArr(i){return (i.type==="f"?[i.y||"",i.d?dur(i.d):"",(i.g||[]).slice(0,2).join(" · ")]:[i.y||"",i.se&&i.se.length?`${i.se.length} saison${i.se.length>1?"s":""}`:"",(i.g||[]).slice(0,2).join(" · "),i.net||""]).filter(Boolean).map(String)}
-const tmdbTxt=i=>i.tmdb?(i.tmdb/10).toFixed(1).replace(".",",")+"/10":"";
+const tmdbTxt=i=>i.tmdb&&S.set.meta.tmdb!==false?(i.tmdb/10).toFixed(1).replace(".",",")+"/10":"";
 function nI(i,full){const o={id:i.id,ty:i.type,t:i.t,y:i.y||0,img:tmS(i.img,"w342"),f:i.f,c1:i.c[0],c2:i.c[1],nw:isRecent(i.id),pr:S.prog[i.id]||0};
  if(full){o.bd=tmS(i.bd,"w1280");o.kick=(i.type==="f"?"Film":"Série")+((i.g||[])[0]?" · "+i.g[0]:"");o.meta=metaArr(i);o.s=String(i.s||"").slice(0,280);o.tmdb=tmdbTxt(i);o.age=i.age||""}
  return o}
@@ -130,7 +130,7 @@ function natData(id){
   const it=ALL[id];if(!it)return {error:"introuvable",cast:[]};
   const L=srcs(id),cur=pickSrc(id),isS=it.type==="s";
   const o={id,ty:it.type,t:it.t,f:it.f,c1:it.c[0],c2:it.c[1],img:tmS(it.img,"w342"),bd:tmS(it.bd,"w1280"),
-   kick:(isS?"Série":"Film")+((it.g||[])[0]?" · "+it.g[0]:""),meta:metaArr(it),age:it.age||"",tmdb:tmdbTxt(it),imdb:it.imdb?it.imdb.toFixed(1):"",
+   kick:(isS?"Série":"Film")+((it.g||[])[0]?" · "+it.g[0]:""),meta:metaArr(it),age:it.age||"",tmdb:tmdbTxt(it),imdb:it.imdb&&S.set.meta.imdb!==false?it.imdb.toFixed(1):"",
    s:it.s||(!it.info&&!it.loading&&it.infoErr?`Résumé indisponible : le serveur n'a pas répondu (${it.infoErr})`:""),dir:it.dir||"",loading:!it.info&&!!it.loading,fav:isFav(id)};
   const nm=c=>A[c[0]]||c[2]||"";
   o.castLine=it.cast.slice(0,3).map(nm).filter(Boolean).join(", ");

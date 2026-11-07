@@ -1079,25 +1079,20 @@ function settingsFull(){
   <div class="it"><span>Audio</span><span>${esc(DEVICE.audio)}</span></div>
  </div></section>
  <section data-anchor><h3>Lecteur</h3><div class="grp">
-  <div class="it" data-f data-fid="set-engine" data-act="set:engine"><span>Moteur de lecture</span><span>${st.engine==="vlc"?"VLC (libVLC)":"ExoPlayer (Media3) · recommandé"}</span></div>
-  <div class="it" data-f data-fid="set-hw" data-act="set:hw"><span>Décodage matériel</span>${sw(st.hw)}</div>
-  <div class="it" data-f data-fid="set-afr" data-act="set:afr"><span>Adapter la fréquence d'images</span>${sw(st.afr)}</div>
   <div class="it tall" data-f data-fid="set-alang" data-act="lang:a"><span>Langue audio par défaut<small>Choisie automatiquement au lancement de chaque film ou épisode</small></span><span>${LANGN[st.aLang??"fr"]} ›</span></div>
   <div class="it tall" data-f data-fid="set-slang" data-act="lang:s"><span>Sous-titres par défaut<small>Affichés automatiquement s'ils existent dans la langue choisie</small></span><span>${LANGN[st.sLang??""]||"Aucun"} ›</span></div>
  </div></section>
  <section data-anchor><h3>Notes et métadonnées</h3><div class="grp">
   <div class="it tall"><span>Fiches, affiches et casting<small>Fournis par tes serveurs Xtream (get_vod_info, get_series_info)</small></span><span></span></div>
-  <div class="it tall"><span>Tendances et recommandations<small>TMDB (tendances de la semaine, filmographies) · nécessite une clé gratuite</small></span><span></span></div>
+  <div class="it tall"><span>Tendances, sorties et genres<small>TMDB : top de la semaine, sorties cinéma, genres, résumés manquants et filmographies</small></span><span></span></div>
   <div class="it tall"><span>Clé API TMDB<small>themoviedb.org › Paramètres › API · ${S.set.tmdbKey?"enregistrée":"non renseignée"}</small></span><input class="inp" id="f-tmdb" data-f data-fid="f-tmdb" style="width:360px;height:46px" value="${esc(S.set.tmdbKey||"")}" placeholder="Clé API (v3)" spellcheck="false"></div>
-  <div class="it tall"><span>Agrégateur de notes<small>Prochaine version : MDBList (IMDb, RT, Metacritic, Letterboxd) · What's on? (AlloCiné, SensCritique)</small></span><span></span></div>
-  ${META.map(([k,n])=>`<div class="it" data-f data-fid="meta-${k}" data-act="meta:${k}"><span>Afficher la note ${esc(n)}</span>${sw(st.meta[k]!==false)}</div>`).join("")}
+  ${META.filter(m=>m[0]==="imdb"||m[0]==="tmdb").map(([k,n])=>`<div class="it" data-f data-fid="meta-${k}" data-act="meta:${k}"><span>Afficher la note ${esc(n)}</span>${sw(st.meta[k]!==false)}</div>`).join("")}
  </div></section>
  <section data-anchor><h3>Général</h3><div class="grp">
   <div class="it tall" data-f data-fid="set-probe" data-act="set:probe"><span>Analyser les flux avant la lecture<small>Mesure la qualité réelle (4K, 1080p…) · ouvre une connexion chez le fournisseur : à éviter avec un abonnement 1 écran</small></span>${sw(st.probe)}</div>
   <div class="it tall" data-f data-fid="set-preload" data-act="set:preload"><span>Préchargement depuis la fiche<small>Démarrage plus rapide · ouvre une connexion à l'avance</small></span>${sw(st.preload)}</div>
   ${NAT.ok?`<div class="it tall" data-f data-fid="set-legacy" data-act="set:legacy"><span>Ancienne interface pour les films et séries<small>À activer seulement en cas de problème avec la nouvelle interface</small></span>${sw(st.legacy)}</div>`:""}
-  <div class="it tall" data-f data-fid="set-lite" data-act="set:lite"><span>Mode fluide<small>Effets de verre et ombres allégés · recommandé sur ce Fire TV</small></span>${sw(st.lite)}</div>
-  <div class="it" data-f data-fid="set-par" data-act="set:parental"><span>Contrôle parental (code 0000)</span>${sw(st.parental)}</div>
+  <div class="it tall" data-f data-fid="set-lite" data-act="set:lite"><span>Mode fluide (ancienne interface)<small>Effets de verre et ombres allégés dans l'ancienne interface uniquement</small></span>${sw(st.lite)}</div>
   <div class="it" data-f data-fid="set-diag" data-act="diag"><span>Diagnostic</span><span>analyse des flux, chargements, erreurs ›</span></div>
  </div></section><div style="height:30px"></div></div>`;
 }
@@ -1814,7 +1809,7 @@ let NATGB=null;
 function natGenreBump(){clearTimeout(NATGB);NATGB=setTimeout(()=>{NAT.gv++;if(NAT.vis)Prisme.nativeEvent("home","")},4000)}
 
 function metaArr(i){return (i.type==="f"?[i.y||"",i.d?dur(i.d):"",(i.g||[]).slice(0,2).join(" · ")]:[i.y||"",i.se&&i.se.length?`${i.se.length} saison${i.se.length>1?"s":""}`:"",(i.g||[]).slice(0,2).join(" · "),i.net||""]).filter(Boolean).map(String)}
-const tmdbTxt=i=>i.tmdb?(i.tmdb/10).toFixed(1).replace(".",",")+"/10":"";
+const tmdbTxt=i=>i.tmdb&&S.set.meta.tmdb!==false?(i.tmdb/10).toFixed(1).replace(".",",")+"/10":"";
 function nI(i,full){const o={id:i.id,ty:i.type,t:i.t,y:i.y||0,img:tmS(i.img,"w342"),f:i.f,c1:i.c[0],c2:i.c[1],nw:isRecent(i.id),pr:S.prog[i.id]||0};
  if(full){o.bd=tmS(i.bd,"w1280");o.kick=(i.type==="f"?"Film":"Série")+((i.g||[])[0]?" · "+i.g[0]:"");o.meta=metaArr(i);o.s=String(i.s||"").slice(0,280);o.tmdb=tmdbTxt(i);o.age=i.age||""}
  return o}
@@ -1905,7 +1900,7 @@ function natData(id){
   const it=ALL[id];if(!it)return {error:"introuvable",cast:[]};
   const L=srcs(id),cur=pickSrc(id),isS=it.type==="s";
   const o={id,ty:it.type,t:it.t,f:it.f,c1:it.c[0],c2:it.c[1],img:tmS(it.img,"w342"),bd:tmS(it.bd,"w1280"),
-   kick:(isS?"Série":"Film")+((it.g||[])[0]?" · "+it.g[0]:""),meta:metaArr(it),age:it.age||"",tmdb:tmdbTxt(it),imdb:it.imdb?it.imdb.toFixed(1):"",
+   kick:(isS?"Série":"Film")+((it.g||[])[0]?" · "+it.g[0]:""),meta:metaArr(it),age:it.age||"",tmdb:tmdbTxt(it),imdb:it.imdb&&S.set.meta.imdb!==false?it.imdb.toFixed(1):"",
    s:it.s||(!it.info&&!it.loading&&it.infoErr?`Résumé indisponible : le serveur n'a pas répondu (${it.infoErr})`:""),dir:it.dir||"",loading:!it.info&&!!it.loading,fav:isFav(id)};
   const nm=c=>A[c[0]]||c[2]||"";
   o.castLine=it.cast.slice(0,3).map(nm).filter(Boolean).join(", ");

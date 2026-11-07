@@ -381,3 +381,15 @@ R('function toast(m){', 'function toast(m){if(NATIVE&&typeof NAT!=="undefined"&&
 # 2.5.1 (audit) : le guide n'est demandé que pour les chaînes affichées ; actualisation automatique jamais pendant une lecture
 R('function queueEpg(ch){', 'let NOQ=false;function queueEpg(ch){if(NOQ)return;')
 R('  if(stale.length)(async()=>{for(const p of stale)await refreshPl(p,true)})().then(()=>{', '  if(stale.length)(async()=>{for(const p of stale){while(P)await nap(5000);await refreshPl(p,true)}})().then(()=>{')
+# 2.5.2 : réglages sans effet retirés (moteur VLC, décodage matériel, fréquence d'images, contrôle parental, notes jamais récupérées)
+R('''  <div class="it" data-f data-fid="set-engine" data-act="set:engine"><span>Moteur de lecture</span><span>${st.engine==="vlc"?"VLC (libVLC)":"ExoPlayer (Media3) · recommandé"}</span></div>
+  <div class="it" data-f data-fid="set-hw" data-act="set:hw"><span>Décodage matériel</span>${sw(st.hw)}</div>
+  <div class="it" data-f data-fid="set-afr" data-act="set:afr"><span>Adapter la fréquence d'images</span>${sw(st.afr)}</div>
+''', '')
+R('''  <div class="it" data-f data-fid="set-par" data-act="set:parental"><span>Contrôle parental (code 0000)</span>${sw(st.parental)}</div>
+''', '')
+R('''  <div class="it tall"><span>Agrégateur de notes<small>Prochaine version : MDBList (IMDb, RT, Metacritic, Letterboxd) · What's on? (AlloCiné, SensCritique)</small></span><span></span></div>
+  ${META.map(''', '''  ${META.filter(m=>m[0]==="imdb"||m[0]==="tmdb").map(''')
+R('''  <div class="it tall"><span>Tendances et recommandations<small>TMDB (tendances de la semaine, filmographies) · nécessite une clé gratuite</small></span><span></span></div>''',
+  '''  <div class="it tall"><span>Tendances, sorties et genres<small>TMDB : top de la semaine, sorties cinéma, genres, résumés manquants et filmographies</small></span><span></span></div>''')
+R('''<span>Mode fluide<small>Effets de verre et ombres allégés · recommandé sur ce Fire TV</small></span>''', '''<span>Mode fluide (ancienne interface)<small>Effets de verre et ombres allégés dans l'ancienne interface uniquement</small></span>''')
