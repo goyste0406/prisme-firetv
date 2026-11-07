@@ -132,6 +132,7 @@ function natData(id){
   const o={id,ty:it.type,t:it.t,f:it.f,c1:it.c[0],c2:it.c[1],img:tmS(it.img,"w342"),bd:tmS(it.bd,"w1280"),
    kick:(isS?"Série":"Film")+((it.g||[])[0]?" · "+it.g[0]:""),meta:metaArr(it),age:it.age||"",tmdb:tmdbTxt(it),imdb:it.imdb&&S.set.meta.imdb!==false?it.imdb.toFixed(1):"",
    s:it.s||(!it.info&&!it.loading&&it.infoErr?`Résumé indisponible : le serveur n'a pas répondu (${it.infoErr})`:""),dir:it.dir||"",loading:!it.info&&!!it.loading,fav:isFav(id)};
+  tcApply1(it);tcPhotos(it);
   const nm=c=>A[c[0]]||c[2]||"";
   o.castLine=it.cast.slice(0,3).map(nm).filter(Boolean).join(", ");
   o.cast=it.cast.slice(0,14).map(c=>({id:c[0],n:nm(c),r:c[1]||"",ph:photoOf(nm(c))}));
@@ -197,36 +198,51 @@ let TGSAVE=null;function tgSave(){clearTimeout(TGSAVE);TGSAVE=setTimeout(()=>{ID
 function tgKeys(it){const v=TG[it.id];if(!v||v[0]==="-")return null;const g=v.split(":")[1]||"";if(!g)return null;
  const M=TGM[it.type],out=[];g.split(",").forEach(x=>{const k=M[x];if(k&&!out.includes(k))out.push(k)});return out.length?out:null}
 function tgBump(force){if(!TGS.dirty)return;if(!force&&Date.now()-TGS.lastBump<180000)return;TGS.lastBump=Date.now();TGS.dirty=0;NAT.gv++;if(NAT.vis)Prisme.nativeEvent("home","")}
+/* Fiches TMDB complètes (résumé, fond, note, distribution et photos des acteurs), gardées sur l'appareil */
+let TC={};let TCSAVE=null;function tcSave(){clearTimeout(TCSAVE);TCSAVE=setTimeout(()=>{IDB.put("tc",TC).catch(()=>{})},60000)}
+const TMI="https://image.tmdb.org/t/p/";
+function tcStore(it,r){if(!r)return;const L=((it.type==="f"?r.credits:r.aggregate_credits)||{}).cast||[];
+ TC[it.id]={c:L.slice(0,12).map(c=>[String(c.name||"").replace(/,/g," "),c.character||(c.roles&&c.roles[0]&&c.roles[0].character)||"",c.profile_path||""]),s:r.overview&&isFr(r.overview)?String(r.overview).slice(0,700):"",b:r.backdrop_path||"",v:r.vote_average||0,g:(r.genres||[]).map(g=>g.name).slice(0,3)};
+ tcApply1(it);tcSave()}
+function tcApply1(it){const t=TC[it.id];if(!t)return;if(!it.s&&t.s)it.s=t.s;if(!it.bd&&t.b)it.bd=TMI+"w1280"+t.b;if(!it.tmdb&&t.v)it.tmdb=Math.round(t.v*10);if(!(it.g||[]).length&&t.g&&t.g.length)it.g=t.g.slice();
+ if(!it.cast.length&&t.c.length){it.cast=castList(t.c.map(x=>x[0]).join(","));it.cast.forEach((c,k)=>{c[1]=t.c[k]?t.c[k][1]:"";const C=CRED[c[0]]=CRED[c[0]]||[];if(!C.some(x=>x[0]===it.id))C.push([it.id,c[1]])})}
+ else if(t.c.length)it.cast.forEach(c=>{if(!c[1]){const m=t.c.find(x=>norm(x[0])===norm(c[2]||A[c[0]]||""));if(m)c[1]=m[1]}})}
+function tcPhotos(it){const t=TC[it.id];if(!t)return;t.c.forEach(x=>{if(x[2]&&!photoOf(x[0]))setPhoto(x[0],TMI+"w185"+x[2])})}
+function tcApply(){for(const id in TC){const it=ALL[id];if(it)tcApply1(it)}}
 async function tgRun(){
- if(TGS.run||!S.set.tmdbKey)return;TGS.run=true;
+ if(!S.set.tmdbKey)return;if(TGS.run){if(TGS.full)TGS.fullReq=true;return}TGS.run=true;
  try{
-  if(!TGS.loaded){try{TG=(await IDB.get("tg"))||{}}catch(e){TG={}}TGS.loaded=true;NAT.gv++;if(NAT.vis)Prisme.nativeEvent("home","")}
+  if(!TGS.loaded){try{TG=(await IDB.get("tg"))||{}}catch(e){TG={}}try{TC=(await IDB.get("tc"))||{}}catch(e){TC={}}TGS.loaded=true;tcApply();NAT.gv++;if(NAT.vis)Prisme.nativeEvent("home","")}
   /* titres déjà vus avec un identifiant TMDB faux : une nouvelle chance, par le titre cette fois */
   for(const k of Object.keys(TG))if(TG[k]==="-"&&ALL[k]&&ALL[k].tmdbId&&ALL[k].tmdbId!=="0"&&!TG["~"+k]){delete TG[k];TG["~"+k]=1}
   const d=i=>{const a=added(i.id);return a?a.d:1e9};
-  const todo=[...films(),...series()].filter(i=>!(i.id in TG)).sort((a,b)=>d(a)-d(b));
-  TGS.todo=todo.length;let fails=0;
+  const full=TGS.full;
+  const todo=[...films(),...series()].filter(i=>!(i.id in TG)||(full&&!(i.id in TC)&&TG[i.id][0]!=="-")).sort((a,b)=>d(a)-d(b));
+  TGS.todo=todo.length;TGS.done=0;TGS.found=0;let fails=0;
+  if(full)LOG(`Téléchargement des infos TMDB : ${todo.length} titres à compléter`);
   for(const it of todo){
    if(!S.set.tmdbKey||!ALL[it.id])continue;
    while(P)await nap(5000);
    try{
+    const ty=it.type==="f"?"movie/":"tv/",app="?append_to_response="+(it.type==="f"?"credits":"aggregate_credits");
+    if((!it.tmdbId||it.tmdbId==="0")&&TG[it.id]&&TG[it.id][0]!=="-")it.tmdbId=TG[it.id].split(":")[0];
     /* identifiant TMDB faux chez le fournisseur (404) : on l'oublie et on cherche par le titre */
-    let r0=null;if(it.tmdbId&&it.tmdbId!=="0"){try{r0=await tmdb((it.type==="f"?"movie/":"tv/")+it.tmdbId)}catch(e){if(/404/.test(e.message))it.tmdbId="";else throw e}}
-    if(it.tmdbId&&it.tmdbId!=="0"){const r=r0;
-     TG[it.id]=r&&r.genres?it.tmdbId+":"+r.genres.map(g=>g.id).join(","):"-";
-     if(r){if(!it.s&&r.overview&&isFr(r.overview))it.s=r.overview;if(!it.bd&&r.backdrop_path)it.bd="https://image.tmdb.org/t/p/w1280"+r.backdrop_path;if(!it.tmdb&&r.vote_average)it.tmdb=Math.round(r.vote_average*10)}}
-    else{const y=it.y?(it.type==="f"?"&year=":"&first_air_date_year=")+it.y:"";
-     const r=await tmdb(`search/${it.type==="f"?"movie":"tv"}?query=${encodeURIComponent(String(it.t).slice(0,80))}${y}`);
-     const m=r&&r.results&&r.results[0];TG[it.id]=m?m.id+":"+(m.genre_ids||[]).join(","):"-";
-     if(m){it.tmdbId=String(m.id);if(!it.bd&&m.backdrop_path)it.bd="https://image.tmdb.org/t/p/w1280"+m.backdrop_path;if(!it.tmdb&&m.vote_average)it.tmdb=Math.round(m.vote_average*10)}}
-    if(TG[it.id][0]!=="-")TGS.found++;fails=0;
-   }catch(e){fails++;if(/401/.test(e.message)){LOG("TMDB refuse la clé API : rangement des genres arrêté");break}
+    let r=null;if(it.tmdbId&&it.tmdbId!=="0"){try{r=await tmdb(ty+it.tmdbId+app)}catch(e){if(/404/.test(e.message))it.tmdbId="";else throw e}}
+    if(!r){const y=it.y?(it.type==="f"?"&year=":"&first_air_date_year=")+it.y:"";
+     const q=await tmdb(`search/${it.type==="f"?"movie":"tv"}?query=${encodeURIComponent(String(it.t).slice(0,80))}${y}`);
+     const m=q&&q.results&&q.results[0];if(m){it.tmdbId=String(m.id);await nap(120);r=await tmdb(ty+m.id+app)}}
+    TG[it.id]=r&&r.genres?it.tmdbId+":"+r.genres.map(g=>g.id).join(","):"-";
+    if(r){tcStore(it,r);TGS.found++}
+    fails=0;
+   }catch(e){fails++;if(/401/.test(e.message)){LOG("TMDB refuse la clé API : téléchargement arrêté");break}
     if(/429/.test(e.message)||fails>5){await nap(30000);fails=0}}
    TGS.done++;TGS.dirty++;tgSave();tgBump(false);
    await nap(230);
   }
-  tgBump(true);if(TGS.done)LOG(`Genres TMDB : ${TGS.found} titres classés sur ${TGS.done} vérifiés`);
- }finally{TGS.run=false}}
+  tgBump(true);clearTimeout(TCSAVE);IDB.put("tc",TC).catch(()=>{});
+  if(TGS.done)LOG(`TMDB : ${TGS.found} titres complétés sur ${TGS.done} vérifiés`);
+  if(full){TGS.full=false;toast(`Infos TMDB à jour : ${Object.keys(TC).length} titres avec résumé, distribution et photos`)}
+ }finally{TGS.run=false;if(TGS.fullReq){TGS.fullReq=false;TGS.full=true;setTimeout(tgRun,1000)}}}
 setTimeout(()=>tgRun(),20000);
 
 /* Résumé et fond depuis TMDB quand le fournisseur ne les donne pas */
