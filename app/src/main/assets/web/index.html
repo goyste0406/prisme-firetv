@@ -2126,6 +2126,7 @@ nativeApi.setAct=function(kind,id,a){
  const el=view.querySelector(`[data-act="${CSS.escape(a)}"]`);if(el)setFocus(el,true);
  try{act(a)}catch(e){LOG("Réglage · "+e.message)}
  if(kind==="plm"&&!S.playlists.find(p=>p.id===id))return JSON.stringify({back:true});
+ if(a==="set:legacy"&&S.set.legacy){NAT.vis=false;S.stack=[{t:"home"},{t:"settings"}];render("set-legacy");return JSON.stringify({web:true})}
  if(a.startsWith("hide:")){const [,pid,ty,k]=a.split(":"),pl=S.playlists.find(p=>p.id===pid),h=(pl.hidden||[]).includes(ty+":"+k),n=catCount(pl,ty,k);
   return JSON.stringify({patch:{act:a,sw:!h,s:`${n} ${({l:"chaînes",f:"films",s:"séries"})[ty]}${h?" · masquée":""}`}})}
  if(a==="diag:test")setTimeout(()=>{try{Prisme.nativeEvent("setpage","")}catch(e){}},2500);
