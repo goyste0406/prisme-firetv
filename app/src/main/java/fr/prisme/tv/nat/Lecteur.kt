@@ -337,8 +337,16 @@ class PlayerScreen(ui: NativeUi, init: JSONObject? = null) : Screen(ui) {
             b.setPadding(K.px(10), K.px(5), K.px(10), K.px(5)); b.background = K.round(Color.parseColor("#e5322d"), 7f)
             badges.addView(b)
         }
-        val q = o.optString("q")
+        // qualité réelle mesurée par le décodeur ; à défaut, celle annoncée dans le nom du flux
+        val named = o.optString("q")
+        val real = realQ()
+        shownQ = real
+        val q = real.ifEmpty { named }
         if (q.isNotEmpty()) badges.addView(qBadge(ui.ctx, q, 26f, 13f).apply { (layoutParams as LinearLayout.LayoutParams).leftMargin = K.px(10) })
+        if (real.isNotEmpty() && named.isNotEmpty() && real != named) {
+            val a = K.text(ui.ctx, 13f, K.white(0.7f), 500); a.text = "annoncé $named"
+            badges.addView(a, LinearLayout.LayoutParams(K.WRAP, K.WRAP).apply { leftMargin = K.px(8) })
+        }
         val codec = audioLabel(true)
         if (codec.isNotEmpty()) {
             val a = K.text(ui.ctx, 13f, Color.WHITE, 700); a.text = codec
@@ -365,6 +373,20 @@ class PlayerScreen(ui: NativeUi, init: JSONObject? = null) : Screen(ui) {
             vodBox.visibility = View.VISIBLE; liveBox.visibility = View.GONE
         }
         buildButtons(kindChanged)
+    }
+
+    private var shownQ = ""
+
+    /** Qualité réelle de l'image (largeur ou hauteur décodée, les films en 2,39:1 font 1920×800) */
+    private fun realQ(): String {
+        val w = st.optInt("vw"); val h = st.optInt("vh")
+        if (w <= 0 || h <= 0) return ""
+        return when {
+            w >= 3400 || h >= 1900 -> "4K"
+            w >= 1800 || h >= 1000 -> "1080p"
+            w >= 1200 || h >= 700 -> "720p"
+            else -> "SD ${h}p"
+        }
     }
 
     private fun audioLabel(short: Boolean): String {
@@ -457,6 +479,7 @@ class PlayerScreen(ui: NativeUi, init: JSONObject? = null) : Screen(ui) {
         if (ovOn && playing && scrubT < 0 && side.visibility != View.VISIBLE && now - lastKey > 5000) hideOv()
         if (isLive && now - lastInfo > 30000) refreshInfo()
         if (++ticks % 4 == 0) buildButtons(false)
+        if (realQ() != shownQ) setInfo(info)
     }
 
     private fun showTime(t: Long) {

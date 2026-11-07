@@ -62,7 +62,10 @@ class Player(private val ctx: Context) {
             .setBufferDurationsMs(15000, 40000, 1000, 3000)
             .build()
         val renderers = DefaultRenderersFactory(ctx).setEnableDecoderFallback(true)
+        // flux à plusieurs qualités (certaines chaînes) : on démarre directement en haute qualité
+        val meter = androidx.media3.exoplayer.upstream.DefaultBandwidthMeter.Builder(ctx).setInitialBitrateEstimate(25_000_000L).build()
         return ExoPlayer.Builder(ctx, renderers)
+            .setBandwidthMeter(meter)
             .setMediaSourceFactory(DefaultMediaSourceFactory(http))
             .setLoadControl(load)
             .build().also { p ->
@@ -104,6 +107,7 @@ class Player(private val ctx: Context) {
     private fun applyLangPrefs(p: ExoPlayer) {
         p.trackSelectionParameters = p.trackSelectionParameters.buildUpon()
             .clearOverrides()
+            .setForceHighestSupportedBitrate(true)
             .setPreferredAudioLanguage(audioPref.ifEmpty { null })
             .setPreferredTextLanguage(subPref.ifEmpty { null })
             .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, subPref.isEmpty())
@@ -218,7 +222,7 @@ class Player(private val ctx: Context) {
             .put("playing", p.isPlaying).put("buffering", p.playbackState == androidx.media3.common.Player.STATE_BUFFERING)
             .put("ended", p.playbackState == androidx.media3.common.Player.STATE_ENDED)
             .put("live", live).put("error", error ?: JSONObject.NULL)
-            .put("video", vName).put("audio", audio).put("subs", subs).put("aSel", aSel).put("sSel", sSel)
+            .put("video", vName).put("vw", p.videoSize.width).put("vh", p.videoSize.height).put("audio", audio).put("subs", subs).put("aSel", aSel).put("sSel", sSel)
             .toString()
     }
 }

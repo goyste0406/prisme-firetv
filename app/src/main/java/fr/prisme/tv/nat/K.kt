@@ -111,7 +111,7 @@ object K {
         "1080p" -> Color.parseColor("#7cc4ff")
         "720p" -> Color.parseColor("#c9ced8")
         "SD" -> Color.parseColor("#8e939e")
-        else -> Color.parseColor("#5d6270")
+        else -> if (q.startsWith("SD")) Color.parseColor("#8e939e") else Color.parseColor("#5d6270")
     }
 
     /** Durée en minutes → « 1 h 52 » */
