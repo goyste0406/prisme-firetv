@@ -175,6 +175,15 @@ class MainActivity : Activity(), fr.prisme.tv.nat.NativeUi.Host {
 
     override fun exitApp() { moveTaskToBack(true) }
 
+    override fun videoRect(x: Int, y: Int, w: Int, h: Int) {
+        val lp = player.view.layoutParams as FrameLayout.LayoutParams
+        if (w <= 0) { lp.width = -1; lp.height = -1; lp.leftMargin = 0; lp.topMargin = 0; lp.gravity = android.view.Gravity.NO_GRAVITY }
+        else { lp.width = w; lp.height = h; lp.leftMargin = x; lp.topMargin = y; lp.gravity = android.view.Gravity.TOP or android.view.Gravity.START }
+        player.view.layoutParams = lp
+    }
+
+    override fun playerState(): String = player.stateJson
+
     override fun onPause() { super.onPause(); player.onPause() }
     override fun onDestroy() { player.release(); web.destroy(); super.onDestroy() }
 

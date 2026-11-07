@@ -50,6 +50,10 @@ class NativeUi(val host: Host, val web: WebView) {
     interface Host {
         fun nativeVisible(on: Boolean)
         fun exitApp()
+        /** Place la vidéo (en pixels) ; w <= 0 : plein écran */
+        fun videoRect(x: Int, y: Int, w: Int, h: Int)
+        /** État du lecteur (position, durée, pistes…) en JSON */
+        fun playerState(): String
     }
 
     val ctx: Context = web.context
@@ -139,7 +143,7 @@ class NativeUi(val host: Host, val web: WebView) {
         android.util.Log.e("prisme", "interface native : $where", e)
         try { setVisible(false) } catch (_: Throwable) {}
         val m = "$where : ${e.javaClass.simpleName} ${e.message ?: ""}".take(200)
-        js("NAT.dead=true;NAT.vis=false;LOG(${q("Interface native désactivée · $m")});toast('Nouvelle interface indisponible, retour à l\'ancienne');S.stack=[{t:'home'}];S.modal=null;render('tab-'+S.tab)")
+        js("if(P&&P.natUi)stopPlayer();NAT.dead=true;NAT.vis=false;LOG(${q("Interface native désactivée · $m")});toast('Nouvelle interface indisponible, retour à l\'ancienne');S.stack=[{t:'home'}];S.modal=null;render('tab-'+S.tab)")
     }
 
     // ------------------------------------------------------------------ affichage
@@ -147,6 +151,7 @@ class NativeUi(val host: Host, val web: WebView) {
 
     private fun show0(tab: String) {
         val h = home ?: HomeScreen(this).also { home = it }
+        if (tab == "live") { openLive(); return }
         if (tab == "films" || tab == "series") {
             while (stack.size > 1) popSilently()
             if (stack.isEmpty()) { stack.add(h); layer.addView(h, K.lp(K.MATCH, K.MATCH)) }
@@ -169,6 +174,52 @@ class NativeUi(val host: Host, val web: WebView) {
         visible = on
         root.visibility = if (on) View.VISIBLE else View.GONE
         host.nativeVisible(on)
+        if (!on) { host.videoRect(0, 0, 0, 0); stack.lastOrNull { !it.modal }?.let { if (it.video) it.onHidden() } }
+        syncVideo()
+    }
+
+    /** Écran posé sur la vidéo : le fond de l'interface devient transparent et la vidéo est placée */
+    fun syncVideo() {
+        val s = stack.lastOrNull { !it.modal }
+        val on = visible && s?.video == true
+        root.setBackgroundColor(if (on) Color.TRANSPARENT else Color.BLACK)
+        val v = if (on) View.GONE else View.VISIBLE
+        bgBase.visibility = v; bgImg.visibility = v; scrim.visibility = v
+        if (on) s!!.applyVideo() else if (visible) host.videoRect(0, 0, 0, 0)
+    }
+
+    /** TV en direct native */
+    fun openLive() = safe("tv en direct") {
+        val h = home ?: HomeScreen(this).also { home = it }
+        if (stack.isEmpty()) { stack.add(h); layer.addView(h, K.lp(K.MATCH, K.MATCH)); h.openTab("films", false) }
+        while (stack.size > 1) popSilently()
+        setVisible(true)
+        push(LiveScreen(this))
+        js("S.tab='live';save()")
+    }
+
+    /** Retour à l'accueil Films ou Séries depuis la TV en direct */
+    fun closeLive(tab: String) {
+        while (stack.size > 1) popSilently()
+        val h = home ?: return
+        h.visibility = View.VISIBLE
+        syncVideo()
+        h.openTab(tab, focusTabs = true)
+        js("S.tab=${q(tab)};save()")
+    }
+
+    /** Lecteur natif, une fois la vidéo démarrée */
+    fun openPlayer() {
+        if (stack.lastOrNull() is PlayerScreen) return
+        push(PlayerScreen(this))
+    }
+
+    /** Ferme le lecteur natif (et ce qui est posé dessus) */
+    fun closePlayer() {
+        val i = stack.indexOfLast { it is PlayerScreen }
+        if (i < 1) return
+        while (stack.size > i + 1) popSilently()
+        pop()
     }
 
     /** Passe à l'interface actuelle (TV en direct, recherche, réglages, lecteur) */
@@ -190,6 +241,7 @@ class NativeUi(val host: Host, val web: WebView) {
         stack.add(s)
         layer.addView(s, K.lp(K.MATCH, K.MATCH))
         s.applyBackground()
+        syncVideo()
         s.later { s.apply(true) }
     }
 
@@ -201,6 +253,7 @@ class NativeUi(val host: Host, val web: WebView) {
         val t = stack.last()
         if (t.visibility != View.VISIBLE) t.visibility = View.VISIBLE
         t.applyBackground()
+        syncVideo()
         t.onShown()
         t.restoreFocus()
     }
@@ -208,6 +261,12 @@ class NativeUi(val host: Host, val web: WebView) {
     private fun popSilently() {
         val s = stack.removeAt(stack.size - 1)
         s.onHidden(); layer.removeView(s)
+    }
+
+    /** Remplace l'écran du dessus (sans réafficher celui du dessous entre-temps) */
+    fun replaceTop(s: Screen) {
+        if (stack.size > 1) popSilently()
+        push(s)
     }
 
     fun openDetail(id: String, fromWeb: Boolean = false) = safe("fiche") { openDetail0(id, fromWeb) }
@@ -233,7 +292,8 @@ class NativeUi(val host: Host, val web: WebView) {
         val handled = when (code) {
             KeyEvent.KEYCODE_DPAD_UP, KeyEvent.KEYCODE_DPAD_DOWN, KeyEvent.KEYCODE_DPAD_LEFT, KeyEvent.KEYCODE_DPAD_RIGHT,
             KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER, KeyEvent.KEYCODE_NUMPAD_ENTER, KeyEvent.KEYCODE_BACK,
-            KeyEvent.KEYCODE_MENU, KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE, KeyEvent.KEYCODE_MEDIA_PLAY -> true
+            KeyEvent.KEYCODE_MENU, KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE, KeyEvent.KEYCODE_MEDIA_PLAY, KeyEvent.KEYCODE_MEDIA_PAUSE,
+            KeyEvent.KEYCODE_MEDIA_REWIND, KeyEvent.KEYCODE_MEDIA_FAST_FORWARD, KeyEvent.KEYCODE_CHANNEL_UP, KeyEvent.KEYCODE_CHANNEL_DOWN -> true
             else -> false
         }
         if (!handled) return false
@@ -244,8 +304,10 @@ class NativeUi(val host: Host, val web: WebView) {
         }
         val t = top() ?: return true
         when (code) {
-            KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER, KeyEvent.KEYCODE_NUMPAD_ENTER,
-            KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE, KeyEvent.KEYCODE_MEDIA_PLAY -> if (e.repeatCount == 0) t.ok()
+            KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER, KeyEvent.KEYCODE_NUMPAD_ENTER -> if (e.repeatCount == 0) t.ok()
+            KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE, KeyEvent.KEYCODE_MEDIA_PLAY, KeyEvent.KEYCODE_MEDIA_PAUSE,
+            KeyEvent.KEYCODE_MEDIA_REWIND, KeyEvent.KEYCODE_MEDIA_FAST_FORWARD, KeyEvent.KEYCODE_CHANNEL_UP, KeyEvent.KEYCODE_CHANNEL_DOWN ->
+                if (!t.media(code) && e.repeatCount == 0 && (code == KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE || code == KeyEvent.KEYCODE_MEDIA_PLAY)) t.ok()
             KeyEvent.KEYCODE_MENU -> if (e.repeatCount == 0) t.menu()
             KeyEvent.KEYCODE_BACK -> if (e.repeatCount == 0) back()
             else -> t.key(code)
@@ -281,11 +343,10 @@ class NativeUi(val host: Host, val web: WebView) {
         js("nativeApi.cancel()")
     }
 
-    /** Première image de la vidéo affichée : on laisse la place au lecteur */
+    /** Première image de la vidéo affichée : on laisse la place au lecteur natif */
     fun onFirstFrame() = safe("lecture") {
-        if (loading.visibility != View.VISIBLE) return@safe
-        loading.hide()
-        toWeb()
+        if (loading.visibility == View.VISIBLE) { loading.hide(); openPlayer(); return@safe }
+        stack.lastOrNull()?.onFirstFrame()
     }
 
     /** Messages envoyés par la couche de données */
@@ -297,13 +358,15 @@ class NativeUi(val host: Host, val web: WebView) {
             "detail" -> stack.filterIsInstance<DetailScreen>().filter { it.itemId == o.optString("id") }.forEach { it.update(o) }
             "catalog" -> home?.reload()
             "loading" -> if (loading.visibility == View.VISIBLE) loading.update(o)
-            "playfail" -> { loading.hide(); toast(o.optString("msg")) }
+            "playfail" -> { loading.hide(); toast(o.optString("msg")); stack.lastOrNull { !it.modal }?.onPlayFail(o.optString("msg")) }
+            "epg", "upnext", "pinfo" -> stack.forEach { it.onEvent(kind, o) }
+            "pend" -> closePlayer()
             "toast" -> toast(o.optString("msg"))
             "home" -> home?.reload()
             "task" -> if (o.optBoolean("on")) { taskT.text = o.optString("text"); if (taskV.visibility != View.VISIBLE) { taskV.visibility = View.VISIBLE; taskSpin.start() } }
                       else { taskV.visibility = View.GONE; taskSpin.stop() }
             "actor" -> stack.filterIsInstance<ActorScreen>().filter { it.aid == o.optString("id") }.forEach { it.fill(o) }
-            "started" -> if (loading.visibility == View.VISIBLE) main.postDelayed({ safe("lecture") { if (loading.visibility == View.VISIBLE) { loading.hide(); toWeb() } } }, 700)
+            "started" -> if (loading.visibility == View.VISIBLE) main.postDelayed({ safe("lecture") { if (loading.visibility == View.VISIBLE) { loading.hide(); openPlayer() } } }, 700)
         }
     }
 

@@ -93,6 +93,16 @@ abstract class Screen(val ui: NativeUi) : FrameLayout(ui.ctx) {
     open fun onEdge(dir: Int): Boolean = false
     open fun applyBackground() {}
     open fun refresh() {}
+    /** Écran posé sur la vidéo (fond transparent là où l'image doit apparaître) */
+    open val video = false
+    /** Place la vidéo pour cet écran (appelé quand il passe au premier plan) */
+    open fun applyVideo() {}
+    /** Touches multimédia (lecture, avance, chaînes) : true si l'écran les a gérées */
+    open fun media(code: Int): Boolean = false
+    open fun onFirstFrame() {}
+    open fun onPlayFail(msg: String) {}
+    /** Messages de la couche de données (guide, lecteur…) */
+    open fun onEvent(kind: String, o: org.json.JSONObject) {}
     /** Position verticale voulue pour une ligne (null : calcul par défaut) */
     open fun scrollTargetFor(n: Int): Int? = null
 
@@ -104,7 +114,7 @@ abstract class Screen(val ui: NativeUi) : FrameLayout(ui.ctx) {
         if (delay > 0) postDelayed(r, delay) else post(r)
     }
 
-    fun key(code: Int): Boolean {
+    open fun key(code: Int): Boolean {
         val L = line() ?: return false
         if (L.count == 0) { val n = nextLine(li, 1); if (n >= 0) { go(n); return true } }
         when (code) {
@@ -179,11 +189,11 @@ abstract class Screen(val ui: NativeUi) : FrameLayout(ui.ctx) {
         if (instant) sv.scrollTo(0, y) else if (y != sv.scrollY) sv.smoothScrollTo(0, y)
     }
 
-    fun ok() { val L = line() ?: return; val v = cur ?: L.viewAt(L.idx) ?: return; onOk(L, L.idx, v) }
-    fun menu() { val L = line() ?: return; val v = cur ?: L.viewAt(L.idx) ?: return; onMenu(L, L.idx, v) }
+    open fun ok() { val L = line() ?: return; val v = cur ?: L.viewAt(L.idx) ?: return; onOk(L, L.idx, v) }
+    open fun menu() { val L = line() ?: return; val v = cur ?: L.viewAt(L.idx) ?: return; onMenu(L, L.idx, v) }
 
     /** Focus remis en place quand l'écran redevient visible (retour) */
-    fun restoreFocus() { apply(true) }
+    open fun restoreFocus() { apply(true) }
 }
 
 /** Rangée défilante horizontale avec titre, au format des rangées de l'appli */

@@ -315,15 +315,15 @@ R('function restore(t){view.replaceChildren(t.dom);t.dom=null;', 'function resto
 R('  case "msrc":{const m=S.modal,ret=m.ret;', '  case "msrc":{const m=S.modal;if(!m){render(F&&F.dataset.fid);break}const ret=m.ret;')
 
 # ---------------------------------------------------------------- 2.2.0 : épisode suivant automatique et « Nouveaux épisodes »
-# compte à rebours dans les 20 dernières secondes d'un épisode : OK lance tout de suite, Retour annule
+# compte à rebours dans les 10 dernières secondes d'un épisode : OK lance tout de suite, Retour annule
 R('function uiPing(){', '''const UPN={on:false,el:null};
 function upnHide(){UPN.on=false;if(UPN.el)UPN.el.style.display="none"}
 function upnShow(it,n,left){if(!UPN.el){const d=document.createElement("div");d.id="upn";d.style.cssText="position:fixed;right:64px;bottom:200px;z-index:90;width:430px;padding:20px 22px 18px;border-radius:18px;background:rgba(22,22,28,.94);border:1px solid rgba(255,255,255,.14);box-shadow:0 18px 50px rgba(0,0,0,.55);color:#fff;font-family:inherit";document.body.appendChild(d);UPN.el=d}
  const e=curEpOf(it,n.ss,n.ep)||{},sn=(it.seasons||[])[n.ss-1]||n.ss,s=Math.max(0,Math.ceil(left));
- UPN.el.innerHTML=`<div style="font-size:14px;letter-spacing:.08em;text-transform:uppercase;color:rgba(255,255,255,.6)">Épisode suivant · dans ${s} s</div><div style="font-size:22px;font-weight:700;margin:6px 0 2px">S${esc(String(sn))} · E${n.ep}${e.t&&!/^Épisode \\d+$/.test(e.t)?" · "+esc(e.t):""}</div><div style="font-size:16px;color:rgba(255,255,255,.7)">${esc(it.t)}</div><div style="height:4px;border-radius:2px;background:rgba(255,255,255,.15);margin:14px 0 12px;overflow:hidden"><div style="height:100%;width:${Math.min(100,(20-left)/20*100)}%;background:#fff"></div></div><div style="font-size:15px;color:rgba(255,255,255,.75)"><b style="color:#fff">OK</b> lancer maintenant · <b style="color:#fff">Retour</b> annuler</div>`;
+ UPN.el.innerHTML=`<div style="font-size:14px;letter-spacing:.08em;text-transform:uppercase;color:rgba(255,255,255,.6)">Épisode suivant · dans ${s} s</div><div style="font-size:22px;font-weight:700;margin:6px 0 2px">S${esc(String(sn))} · E${n.ep}${e.t&&!/^Épisode \\d+$/.test(e.t)?" · "+esc(e.t):""}</div><div style="font-size:16px;color:rgba(255,255,255,.7)">${esc(it.t)}</div><div style="height:4px;border-radius:2px;background:rgba(255,255,255,.15);margin:14px 0 12px;overflow:hidden"><div style="height:100%;width:${Math.min(100,(10-left)/10*100)}%;background:#fff"></div></div><div style="font-size:15px;color:rgba(255,255,255,.75)"><b style="color:#fff">OK</b> lancer maintenant · <b style="color:#fff">Retour</b> annuler</div>`;
  UPN.el.style.display="block";UPN.on=true}
 function upnTick(){if(!P||P.kind!=="vod"||P.upnX){if(UPN.on)upnHide();return}const it=ALL[P.id];if(!it||it.type!=="s"||!(P.dur>90)){if(UPN.on)upnHide();return}
- const left=P.dur-P.pos;if(left>20||SC.on){if(UPN.on)upnHide();return}const n=nextEp(it);if(!n){if(UPN.on)upnHide();return}
+ const left=P.dur-P.pos;if(left>10||SC.on){if(UPN.on)upnHide();return}const n=nextEp(it);if(!n){if(UPN.on)upnHide();return}
  if(left<=0.6){upnHide();act("p:nextep");return}upnShow(it,n,left)}
 function uiPing(){''')
 R(' if(P.ui&&!SC.on&&Date.now()-P.last>5000&&!P.info){P.ui=false;', ' upnTick();\n if(P.ui&&!SC.on&&Date.now()-P.last>5000&&!P.info){P.ui=false;')
@@ -338,3 +338,19 @@ R('function key(k){\n LASTKEY=Date.now();\n', 'function key(k){\n LASTKEY=Date.n
 R('seasons:S.seasons,lastEp:S.lastEp,', 'seasons:S.seasons,lastEp:S.lastEp,seen:S.seen,')
 R('function startPlayer(p){P=p;', 'function startPlayer(p){P=p;if(p.kind==="vod"&&ALL[p.id]&&ALL[p.id].type==="s"){S.seen=S.seen||{};S.seen[p.id]=Date.now()}')
 R('else{S.favs.push(k);', 'else{S.favs.push(k);if(ALL[k]&&ALL[k].type==="s"){S.seen=S.seen||{};S.seen[k]=Date.now()}')
+
+# ---------------------------------------------------------------- 2.3.0 : TV en direct et lecteur natifs
+# épisode suivant : avec le lecteur natif, la carte est dessinée par l'interface native
+R('function upnHide(){UPN.on=false;if(UPN.el)UPN.el.style.display="none"}',
+  'function upnHide(){UPN.on=false;if(UPN.el)UPN.el.style.display="none";if(UPN.nat){UPN.nat=false;try{Prisme.nativeEvent("upnext",\'{"on":false}\')}catch(e){}}}')
+R(' const e=curEpOf(it,n.ss,n.ep)||{},sn=(it.seasons||[])[n.ss-1]||n.ss,s=Math.max(0,Math.ceil(left));',
+  ''' const e=curEpOf(it,n.ss,n.ep)||{},sn=(it.seasons||[])[n.ss-1]||n.ss,s=Math.max(0,Math.ceil(left));
+ if(P&&P.natUi){UPN.on=true;UPN.nat=true;Prisme.nativeEvent("upnext",JSON.stringify({on:true,left:s,t:it.t,f:it.f,c1:it.c[0],c2:it.c[1],ep:`Saison ${sn} · Épisode ${n.ep}`+(e.t&&!/^Épisode \\d+$/.test(e.t)?" · "+e.t:""),plot:String(e.plot||"").slice(0,240)}));return}''')
+# fin de lecture avec le lecteur natif : on referme le lecteur natif
+R('toast("Lecture terminée");back();return}', 'if(P.natUi){stopPlayer();S.stack=S.stack.filter(x=>x.t!=="player");Prisme.nativeEvent("pend","");return}toast("Lecture terminée");back();return}')
+R('render("p-nextep");toast(`Saison', 'if(P.natUi){Prisme.nativeEvent("pinfo","")}else render("p-nextep");if(!P.natUi)toast(`Saison')
+# onglet TV en direct : interface native
+R('if(k==="tab"){if(natOn()&&(v==="films"||v==="series")){', 'if(k==="tab"){if(natOn()&&(v==="films"||v==="series"||v==="live")){')
+R('t.t==="home"&&(S.tab==="films"||S.tab==="series"))natShow(S.tab);', 't.t==="home"&&(S.tab==="films"||S.tab==="series"||S.tab==="live"))natShow(S.tab);')
+# guide reçu : l'interface native se met à jour
+R('function refreshEpgViews(){const t=topS();if(!inApp())return;', 'function refreshEpgViews(){if(NAT.vis){try{Prisme.nativeEvent("epg","")}catch(e){}return}const t=topS();if(!inApp())return;')

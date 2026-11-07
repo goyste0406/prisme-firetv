@@ -693,7 +693,7 @@ async function fetchEpg(ch){
   EPGC[ch.id]={list,at:Date.now()}}catch(e){EPGC[ch.id]={list:[],at:Date.now()}}
  clearTimeout(EPGT);EPGT=setTimeout(refreshEpgViews,250);
 }
-function refreshEpgViews(){const t=topS();if(!inApp())return;
+function refreshEpgViews(){if(NAT.vis){try{Prisme.nativeEvent("epg","")}catch(e){}return}const t=topS();if(!inApp())return;
  if(t.t==="home"&&S.tab==="live"){view.querySelectorAll(".lch").forEach(el=>{const c=CH[el.dataset.hov.slice(3)];if(!c)return;const e=epgAt(c);const pg=el.querySelector(".pg"),b=el.querySelector(".bar i");if(pg)pg.textContent=`${fmt(e.cur.s)} · ${e.cur.t}`;if(b)b.style.width=e.pct+"%"});const p=$("#lpanel");if(p&&CH[S.lch])p.innerHTML=panelHtml(CH[S.lch])}
  else if(t.t==="player"&&P&&P.kind==="live"&&!S.modal)render(F&&F.dataset.fid);}
 function nowMin(){const d=new Date();return d.getHours()*60+d.getMinutes()+d.getSeconds()/60}
@@ -1392,7 +1392,7 @@ function tick(){if(!P)return;
  if(NATIVE){let st={};try{st=JSON.parse(Prisme.state()||"{}")}catch(e){}P.nst=st;if(natTick(st))return;
   if(st.pos!=null&&!SC.on){P.pos=st.pos/1000;if(st.dur>0)P.dur=st.dur/1000}
   if(st.error&&!P.err){P.err=1;toast("Lecture impossible : "+st.error);const s=srcs(curKey()).filter(compat);if(s.length>1)toast("Essaie une autre source avec le bouton Source")}
-  if(st.ended&&!P.endH){P.endH=1;upnHide();const it=ALL[P.id];if(P.kind==="vod"&&it&&it.type==="s"&&!P.upnX){const n=nextEp(it);if(n){act("p:nextep");return}}toast("Lecture terminée");back();return}
+  if(st.ended&&!P.endH){P.endH=1;upnHide();const it=ALL[P.id];if(P.kind==="vod"&&it&&it.type==="s"&&!P.upnX){const n=nextEp(it);if(n){act("p:nextep");return}}if(P.natUi){stopPlayer();S.stack=S.stack.filter(x=>x.t!=="player");Prisme.nativeEvent("pend","");return}toast("Lecture terminée");back();return}
   if(P.kind==="vod"&&P.aSync==null&&st.audio&&st.audio.length){P.aSync=1;langFix(st);st.aSel=P.audio??st.aSel;if(P.audio==null)P.audio=Math.max(0,st.aSel);if(P.sub==null)P.sub=st.sSel}}
  else if(P.kind==="vod"&&P.playing&&!SC.on)P.pos=Math.min(P.dur,P.pos+.5);
  if(P.kind==="vod"&&!SC.on){const b=$("#pbar");if(b&&P.dur>0){b.style.width=(P.pos/P.dur*100)+"%";$("#ptime").textContent=hms(P.pos);$("#prem").textContent="−"+hms(P.dur-P.pos)}}
@@ -1422,13 +1422,14 @@ function endScrub(){clearTimeout(SC.t);SC={on:false};const th=$("#pthumb"),tr=$(
  const b=$("#pbar");if(b&&P){b.style.width=(P.pos/P.dur*100)+"%";$("#ptime").textContent=hms(P.pos);$("#prem").textContent="−"+hms(P.dur-P.pos)}}
 function commitScrub(){if(!SC.on||!P)return;P.pos=SC.pos;if(NATIVE)Prisme.seekTo(Math.round(P.pos*1000));endScrub();toast("Lecture à "+hms(P.pos))}
 const UPN={on:false,el:null};
-function upnHide(){UPN.on=false;if(UPN.el)UPN.el.style.display="none"}
+function upnHide(){UPN.on=false;if(UPN.el)UPN.el.style.display="none";if(UPN.nat){UPN.nat=false;try{Prisme.nativeEvent("upnext",'{"on":false}')}catch(e){}}}
 function upnShow(it,n,left){if(!UPN.el){const d=document.createElement("div");d.id="upn";d.style.cssText="position:fixed;right:64px;bottom:200px;z-index:90;width:430px;padding:20px 22px 18px;border-radius:18px;background:rgba(22,22,28,.94);border:1px solid rgba(255,255,255,.14);box-shadow:0 18px 50px rgba(0,0,0,.55);color:#fff;font-family:inherit";document.body.appendChild(d);UPN.el=d}
  const e=curEpOf(it,n.ss,n.ep)||{},sn=(it.seasons||[])[n.ss-1]||n.ss,s=Math.max(0,Math.ceil(left));
- UPN.el.innerHTML=`<div style="font-size:14px;letter-spacing:.08em;text-transform:uppercase;color:rgba(255,255,255,.6)">Épisode suivant · dans ${s} s</div><div style="font-size:22px;font-weight:700;margin:6px 0 2px">S${esc(String(sn))} · E${n.ep}${e.t&&!/^Épisode \d+$/.test(e.t)?" · "+esc(e.t):""}</div><div style="font-size:16px;color:rgba(255,255,255,.7)">${esc(it.t)}</div><div style="height:4px;border-radius:2px;background:rgba(255,255,255,.15);margin:14px 0 12px;overflow:hidden"><div style="height:100%;width:${Math.min(100,(20-left)/20*100)}%;background:#fff"></div></div><div style="font-size:15px;color:rgba(255,255,255,.75)"><b style="color:#fff">OK</b> lancer maintenant · <b style="color:#fff">Retour</b> annuler</div>`;
+ if(P&&P.natUi){UPN.on=true;UPN.nat=true;Prisme.nativeEvent("upnext",JSON.stringify({on:true,left:s,t:it.t,f:it.f,c1:it.c[0],c2:it.c[1],ep:`Saison ${sn} · Épisode ${n.ep}`+(e.t&&!/^Épisode \d+$/.test(e.t)?" · "+e.t:""),plot:String(e.plot||"").slice(0,240)}));return}
+ UPN.el.innerHTML=`<div style="font-size:14px;letter-spacing:.08em;text-transform:uppercase;color:rgba(255,255,255,.6)">Épisode suivant · dans ${s} s</div><div style="font-size:22px;font-weight:700;margin:6px 0 2px">S${esc(String(sn))} · E${n.ep}${e.t&&!/^Épisode \d+$/.test(e.t)?" · "+esc(e.t):""}</div><div style="font-size:16px;color:rgba(255,255,255,.7)">${esc(it.t)}</div><div style="height:4px;border-radius:2px;background:rgba(255,255,255,.15);margin:14px 0 12px;overflow:hidden"><div style="height:100%;width:${Math.min(100,(10-left)/10*100)}%;background:#fff"></div></div><div style="font-size:15px;color:rgba(255,255,255,.75)"><b style="color:#fff">OK</b> lancer maintenant · <b style="color:#fff">Retour</b> annuler</div>`;
  UPN.el.style.display="block";UPN.on=true}
 function upnTick(){if(!P||P.kind!=="vod"||P.upnX){if(UPN.on)upnHide();return}const it=ALL[P.id];if(!it||it.type!=="s"||!(P.dur>90)){if(UPN.on)upnHide();return}
- const left=P.dur-P.pos;if(left>20||SC.on){if(UPN.on)upnHide();return}const n=nextEp(it);if(!n){if(UPN.on)upnHide();return}
+ const left=P.dur-P.pos;if(left>10||SC.on){if(UPN.on)upnHide();return}const n=nextEp(it);if(!n){if(UPN.on)upnHide();return}
  if(left<=0.6){upnHide();act("p:nextep");return}upnShow(it,n,left)}
 function uiPing(){if(!P)return;P.last=Date.now();if(!P.ui){P.ui=true;const o=$("#pov");if(o)o.classList.remove("hid");return true}return false}
 function stopPlayer(){clearInterval(PT);upnHide();NAT.pre=null;if(P&&P.kind==="vod"&&ALL[P.id]&&ALL[P.id].type==="s"&&P.dur>0&&P.ss){S.lastEp=S.lastEp||{};S.lastEp[P.id]={ss:P.ss,ep:P.ep,pct:P.pos/P.dur}}if(P&&P.kind==="vod")dirty();if(NATIVE)Prisme.stop();if(P&&P.kind==="vod"){const pct=P.pos/P.dur;if(pct>0.02&&pct<0.97)S.prog[P.id]=pct;else if(pct>=0.97)delete S.prog[P.id];save()}P=null}
@@ -1462,7 +1463,7 @@ function render(fid){
  document.documentElement.classList.toggle("vplay",t.t==="player");
  bgFor(t);
  afterRender(t,fid);
- if(natOn()&&!NAT.vis&&!S.booting&&!S.modal&&t.t==="home"&&(S.tab==="films"||S.tab==="series"))natShow(S.tab);
+ if(natOn()&&!NAT.vis&&!S.booting&&!S.modal&&t.t==="home"&&(S.tab==="films"||S.tab==="series"||S.tab==="live"))natShow(S.tab);
 }
 function bgFor(t){
  if(!inApp()) setBg(["#2a3a6e","#120c22"]);
@@ -1514,7 +1515,7 @@ function ensureVisible(el,instant){
 let HOVT=null,LPT=null;
 function onHover(h){
  const [k,v,w]=h.split(":");
- if(k==="tab"){if(natOn()&&(v==="films"||v==="series")){S.tab=v;save();natShow(v);return}if(S.tab!==v){S.tab=v;save();render("tab-"+v)}return}
+ if(k==="tab"){if(natOn()&&(v==="films"||v==="series"||v==="live")){S.tab=v;save();natShow(v);return}if(S.tab!==v){S.tab=v;save();render("tab-"+v)}return}
  if(k==="lcat"){if(S.lcat!==v){S.lcat=v;save();render("lcat-"+v)}return}
  if(k==="ch"){S.lch=v;epg(CH[v]);clearTimeout(LPT);LPT=setTimeout(()=>{if(!P&&topS().t==="home"&&S.tab==="live"&&S.lch===v)analyze("ch:"+v)},900);const p=$("#lpanel");if(p)p.innerHTML=panelHtml(CH[v]);setBg([CH[v].col,"#08080c"]);return}
  if(k==="season"){const n=+w;if((S.seasons[v]||1)!==n){S.seasons[v]=n;save();view.querySelectorAll(".chip").forEach((c,i)=>c.classList.toggle("sel",i+1===n));const e=$("#eps");e.innerHTML=epsHtml(ALL[v],n);e.scrollLeft=0;e._tx=0}return}
@@ -1671,7 +1672,7 @@ function act(a){
    else if(v==="chs"){S.modal={type:"chs",ret:"p-chs"};render("zc-"+P.id)}
    else if(v==="fmt"){S.modal={type:"fmt",ret:"p-fmt"};render("fm-"+curFmt()[0])}
    else if(v==="audio"){const t=tracks();if(t.au.length<2&&!t.su.length){toast("Cette source n'a qu'une piste audio et aucun sous-titre");break}curSub();S.modal={type:"tracks",ret:"p-audio"};render("ta-"+(P.audio||0))}
-   else if(v==="nextep"){const it=ALL[P.id],n=nextEp(it);if(!n){toast("Dernier épisode");break}upnHide();Object.assign(P,{ss:n.ss,ep:n.ep,pos:0,err:0,endH:0,upnX:0,aSync:null,audio:null,sub:null});S.seen=S.seen||{};S.seen[P.id]=Date.now();S.seasons[P.id]=n.ss;if(NATIVE)Prisme.play(streamUrl(),0,false);render("p-nextep");toast(`Saison ${(it.seasons||[])[n.ss-1]} · Épisode ${n.ep}`)}
+   else if(v==="nextep"){const it=ALL[P.id],n=nextEp(it);if(!n){toast("Dernier épisode");break}upnHide();Object.assign(P,{ss:n.ss,ep:n.ep,pos:0,err:0,endH:0,upnX:0,aSync:null,audio:null,sub:null});S.seen=S.seen||{};S.seen[P.id]=Date.now();S.seasons[P.id]=n.ss;if(NATIVE)Prisme.play(streamUrl(),0,false);if(P.natUi){Prisme.nativeEvent("pinfo","")}else render("p-nextep");if(!P.natUi)toast(`Saison ${(it.seasons||[])[n.ss-1]} · Épisode ${n.ep}`)}
    break;
  }
 }
@@ -1861,13 +1862,12 @@ window.nativeApi={
   if(it.type==="f"){const pos=(S.prog[id]||0)*(it.d||0)*60;p={kind:"vod",id,src:v.id,dur:(it.d||0)*60,pos,playing:true};if(pos>60)res="reprise à "+dur(Math.round(pos/60))}
   else{const sn=(it.seasons||[])[ss-1];const L=(it.eps||{})[sn]||[];const e=L.find(x=>x.num===ep)||L[0];if(!e)return JSON.stringify({ok:false,msg:"Épisode introuvable"});
    const vv=srcs(id).find(z=>z.p.id===it.srcPl);p={kind:"vod",id,src:vv?vv.id:v.id,ss,ep:e.num,dur:(e.dur||0)*60,pos:0,playing:true};res=`S${sn} · E${e.num}`;S.seasons[id]=ss}
-  p.nat=true;p.t0=Date.now();
-  NAT.vis=false;
+  p.nat=true;p.natUi=true;p.t0=Date.now();
   PQ.splice(0).forEach(([k])=>{if(QPEND[k]==="probe")delete QPEND[k]});
   S.stack.push({t:"player"});
   const busy=NATIVE&&!NAT.pre&&(PQRUN||Prisme.probeBusy());
   NAT.pre=null;
-  startPlayer(p);render(null);
+  startPlayer(p);
   const cv=curVar();
   if(busy)setTimeout(()=>{if(P===p&&!p.go)Prisme.nativeEvent("loading",JSON.stringify({msg:"Analyse du flux en cours, démarrage dans un instant…"}))},300);
   return JSON.stringify({ok:true,t:it.t,f:it.f,c1:it.c[0],c2:it.c[1],bd:tmS(it.bd,"w1280"),img:tmS(it.img,"w342"),q:cv&&qr(cv.q)>0&&cv.q!=="Auto"?cv.q:"",src:[cv?cv.p.name:"",cv?cv.tag:"",res].filter(Boolean).join(" · ")});
@@ -2006,6 +2006,61 @@ nativeApi.actor=function(aid){const n=A[aid]||"";if(n)wantPhotos([n]);
  return JSON.stringify(natActor(aid))};
 /* Après un arrêt de l'interface par manque de mémoire, on l'explique */
 try{if(NATIVE&&typeof Prisme.lastCrash==="function"&&Date.now()-Prisme.lastCrash()<120000){LOG("L'interface a été relancée après un manque de mémoire");setTimeout(()=>toast("L'appli a manqué de mémoire et a été relancée"),4000)}}catch(e){}
+
+/* ========================= ÉTAPES 3 et 4 : TV en direct et lecteur natifs =========================
+   La liste des chaînes, le guide et l'aperçu en direct, puis le lecteur (films, épisodes, chaînes) sont dessinés en natif.
+   Le choix des sources, les reprises, les nouveaux essais et l'épisode suivant restent gérés ici. */
+function chQ(c){let b="";srcs("ch:"+c.id).forEach(v=>{if(qr(v.q)>0&&v.q!=="Auto"&&(!b||qr(v.q)>qr(b)))b=v.q});return b}
+function chO(c,full){const e=epgAt(c);
+ const o={id:c.id,n:c.n,num:c.rank<999?c.rank:c.num,logo:c.logo||"",col:c.col,q:chQ(c),pg:e.cur.t,s:fmt(e.cur.s),pct:Math.round(e.pct),fav:isFav("ch:"+c.id)};
+ if(full){o.e=fmt(e.cur.e);o.g=e.cur.g&&e.cur.g!=="Direct"?e.cur.g:"";o.desc=String(e.cur.desc||"").slice(0,300);o.next=e.next.slice(0,3).map(p=>({s:fmt(p.s),t:p.t}));
+  const L=srcs("ch:"+c.id),v=pickSrc("ch:"+c.id);o.ns=L.length;o.src=v?[v.p.name,qr(v.q)>0&&v.q!=="Auto"?v.q:""].filter(Boolean).join(" · "):""}
+ return o}
+function natLiveCats(){const C=chansC(),cnt=k=>k==="all"?C.length:k==="fav"?chans().filter(c=>isFav("ch:"+c.id)).length:C.filter(c=>c.genre===k).length;
+ return LCATS.filter(([k])=>k==="all"||k==="fav"||cnt(k)>0).map(([k,n])=>({k,n,c:cnt(k)}))}
+const natCatName=()=>(LCATS.find(x=>x[0]===S.lcat)||["","Toutes les chaînes"])[1];
+nativeApi.live=function(cat){if(cat&&cat!==S.lcat){S.lcat=cat;save()}if(!LCATS.some(x=>x[0]===S.lcat))S.lcat="all";
+ const L=liveList();L.slice(0,30).forEach(c=>epg(c));
+ const sel=CH[S.lch]&&L.includes(CH[S.lch])?S.lch:(L[0]||{}).id||"";
+ return JSON.stringify({cat:S.lcat,catName:natCatName(),cats:natLiveCats(),chans:L.slice(0,1500).map(c=>chO(c)),sel})};
+nativeApi.ch=function(id){const c=CH[id];if(!c)return JSON.stringify({});epg(c);S.lch=id;return JSON.stringify(chO(c,true))};
+nativeApi.guide=function(from,n){const L=liveList(),out=[];const a=Math.max(0,+from||0),b=Math.min(L.length,a+(+n||8));
+ for(let i=a;i<b;i++){const c=L[i];const P2=epg(c);out.push({id:c.id,n:c.n,num:c.rank<999?c.rank:c.num,col:c.col,logo:c.logo||"",progs:P2.map(p=>({s:Math.round(p.s),e:Math.round(p.e),t:p.t,g:p.g&&p.g!=="Direct"?p.g:""}))})}
+ return JSON.stringify({total:L.length,from:a,now:nowMin(),catName:natCatName(),chans:out})};
+/* Aperçu en direct dans la liste des chaînes (une seule connexion : on arrête tout le reste) */
+nativeApi.livePrev=function(id){const c=CH[id];if(!c)return "";S.lch=id;if(P&&P.kind==="live"&&P.id===id)return "";
+ if(P)stopPlayer();S.stack=S.stack.filter(x=>x.t!=="player");
+ startPlayer({kind:"live",id,src:srcId("ch:"+id),playing:true,nat:true,natUi:true,prev:true});return ""};
+nativeApi.liveStop=function(){if(P&&P.kind==="live"){stopPlayer();S.stack=S.stack.filter(x=>x.t!=="player")}return ""};
+nativeApi.liveFull=function(id){if(!(P&&P.kind==="live"&&P.id===id))nativeApi.livePrev(id);if(P){P.prev=false;P.natUi=true}if(topS().t!=="player")S.stack.push({t:"player"});return nativeApi.pinfo()};
+nativeApi.unfull=function(){if(P)P.prev=true;S.stack=S.stack.filter(x=>x.t!=="player");return ""};
+/* Lecteur natif */
+nativeApi.pinfo=function(wl){if(!P)return JSON.stringify({none:true});const v=curVar(),fm=curFmt();
+ const o={kind:P.kind,q:v&&qr(v.q)>0&&v.q!=="Auto"?v.q:"",src:v?v.p.name+(qr(v.q)>0&&v.q!=="Auto"?" · "+v.q:""):"",ns:srcs(curKey()).length,fmt:fm[1],fmtk:fm[0]};
+ if(P.kind==="live"){const c=CH[P.id];if(c)Object.assign(o,chO(c,true));o.cat=natCatName();if(wl){const L=liveList();o.list=(L.length?L:chans()).slice(0,1500).map(x=>chO(x))}}
+ else{const it=ALL[P.id];if(it){o.t=it.t;o.kick=(it.type==="f"?"Film":"Série")+(it.y?" · "+it.y:"");o.ser=it.type==="s";o.c1=it.c[0];o.c2=it.c[1];o.d=(it.d||0)*60;
+  if(o.ser){const e=curEp(),sn=(it.seasons||[])[P.ss-1];o.sub=`Saison ${sn} · Épisode ${P.ep}`+(e&&e.t&&!/^Épisode \d+$/.test(e.t)?" · "+e.t:"");const n=nextEp(it);o.next=n?`S${(it.seasons||[])[n.ss-1]} · E${n.ep}`:"";if(e&&e.dur)o.d=e.dur*60}}}
+ return JSON.stringify(o)};
+nativeApi.psrcs=function(){if(!P)return JSON.stringify({sources:[]});return JSON.stringify({t:P.kind==="live"?(CH[P.id]||{}).n:(ALL[P.id]||{}).t,sources:srcs(curKey()).map(v=>({id:v.id,q:v.q,pl:v.p.name,name:v.name||"",codec:v.codec||"",audio:(v.audio||[]).join(" | "),ok:compat(v),def:v.id===P.src}))})};
+nativeApi.pact=function(a,v){if(!P)return JSON.stringify({none:true});
+ switch(a){
+  case "pp":P.playing=!P.playing;P.playing?Prisme.resume():Prisme.pause();break;
+  case "seek":{const s=Math.max(0,+v||0);P.pos=s/1000;Prisme.seekTo(s);break}
+  case "audio":P.audio=+v;Prisme.setAudio(+v);break;
+  case "sub":P.sub=+v;Prisme.setSub(+v);break;
+  case "fmt":S.set.fmt=v;save();Prisme.setFormat(v);break;
+  case "src":{const vv=srcs(curKey()).find(x=>x.id===v);if(!vv)break;if(!compat(vv))return JSON.stringify({msg:"Source 4K non lisible sur ton Fire TV Stick (1080p max)"});
+   S.srcSel[curKey()]=v;save();Object.assign(P,{src:v,audio:null,sub:null,err:0,aSync:null,started:false,retry:0,t0:Date.now()});Prisme.play(streamUrl(),P.kind==="vod"?Math.round(P.pos*1000):0,P.kind==="live");break}
+  case "nextep":upnHide();act("p:nextep");break;
+  case "upnx":P.upnX=1;upnHide();break;
+  case "zap":{if(v==="1"||v==="-1"||v===1||v===-1)zap(+v);else if(CH[v]){Object.assign(P,{id:v,src:srcId("ch:"+v),err:0,audio:null,sub:null,started:false,retry:0,t0:Date.now()});S.lch=v;Prisme.play(streamUrl(),0,true)}P.started=false;P.t0=Date.now();break}
+  case "fav":if(P.kind==="live"&&CH[P.id])toggleFav("ch:"+P.id,CH[P.id].n);break;
+  case "restart":P.pos=0;Prisme.seekTo(0);break;
+  case "stop":stopPlayer();S.stack=S.stack.filter(x=>x.t!=="player");return JSON.stringify({stopped:true});
+ }
+ return nativeApi.pinfo()};
+nativeApi.chFav=function(id){const c=CH[id];if(!c)return "{}";toggleFav("ch:"+id,c.n);const f=isFav("ch:"+id);return JSON.stringify({fav:f,msg:(f?"Ajoutée aux favoris : ":"Retirée des favoris : ")+c.n})};
+nativeApi.livePos=function(){return JSON.stringify({id:P&&P.kind==="live"?P.id:"",started:!!(P&&P.started)})};
 
 boot();
 </script>

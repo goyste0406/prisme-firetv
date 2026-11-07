@@ -96,13 +96,12 @@ window.nativeApi={
   if(it.type==="f"){const pos=(S.prog[id]||0)*(it.d||0)*60;p={kind:"vod",id,src:v.id,dur:(it.d||0)*60,pos,playing:true};if(pos>60)res="reprise à "+dur(Math.round(pos/60))}
   else{const sn=(it.seasons||[])[ss-1];const L=(it.eps||{})[sn]||[];const e=L.find(x=>x.num===ep)||L[0];if(!e)return JSON.stringify({ok:false,msg:"Épisode introuvable"});
    const vv=srcs(id).find(z=>z.p.id===it.srcPl);p={kind:"vod",id,src:vv?vv.id:v.id,ss,ep:e.num,dur:(e.dur||0)*60,pos:0,playing:true};res=`S${sn} · E${e.num}`;S.seasons[id]=ss}
-  p.nat=true;p.t0=Date.now();
-  NAT.vis=false;
+  p.nat=true;p.natUi=true;p.t0=Date.now();
   PQ.splice(0).forEach(([k])=>{if(QPEND[k]==="probe")delete QPEND[k]});
   S.stack.push({t:"player"});
   const busy=NATIVE&&!NAT.pre&&(PQRUN||Prisme.probeBusy());
   NAT.pre=null;
-  startPlayer(p);render(null);
+  startPlayer(p);
   const cv=curVar();
   if(busy)setTimeout(()=>{if(P===p&&!p.go)Prisme.nativeEvent("loading",JSON.stringify({msg:"Analyse du flux en cours, démarrage dans un instant…"}))},300);
   return JSON.stringify({ok:true,t:it.t,f:it.f,c1:it.c[0],c2:it.c[1],bd:tmS(it.bd,"w1280"),img:tmS(it.img,"w342"),q:cv&&qr(cv.q)>0&&cv.q!=="Auto"?cv.q:"",src:[cv?cv.p.name:"",cv?cv.tag:"",res].filter(Boolean).join(" · ")});
@@ -241,3 +240,58 @@ nativeApi.actor=function(aid){const n=A[aid]||"";if(n)wantPhotos([n]);
  return JSON.stringify(natActor(aid))};
 /* Après un arrêt de l'interface par manque de mémoire, on l'explique */
 try{if(NATIVE&&typeof Prisme.lastCrash==="function"&&Date.now()-Prisme.lastCrash()<120000){LOG("L'interface a été relancée après un manque de mémoire");setTimeout(()=>toast("L'appli a manqué de mémoire et a été relancée"),4000)}}catch(e){}
+
+/* ========================= ÉTAPES 3 et 4 : TV en direct et lecteur natifs =========================
+   La liste des chaînes, le guide et l'aperçu en direct, puis le lecteur (films, épisodes, chaînes) sont dessinés en natif.
+   Le choix des sources, les reprises, les nouveaux essais et l'épisode suivant restent gérés ici. */
+function chQ(c){let b="";srcs("ch:"+c.id).forEach(v=>{if(qr(v.q)>0&&v.q!=="Auto"&&(!b||qr(v.q)>qr(b)))b=v.q});return b}
+function chO(c,full){const e=epgAt(c);
+ const o={id:c.id,n:c.n,num:c.rank<999?c.rank:c.num,logo:c.logo||"",col:c.col,q:chQ(c),pg:e.cur.t,s:fmt(e.cur.s),pct:Math.round(e.pct),fav:isFav("ch:"+c.id)};
+ if(full){o.e=fmt(e.cur.e);o.g=e.cur.g&&e.cur.g!=="Direct"?e.cur.g:"";o.desc=String(e.cur.desc||"").slice(0,300);o.next=e.next.slice(0,3).map(p=>({s:fmt(p.s),t:p.t}));
+  const L=srcs("ch:"+c.id),v=pickSrc("ch:"+c.id);o.ns=L.length;o.src=v?[v.p.name,qr(v.q)>0&&v.q!=="Auto"?v.q:""].filter(Boolean).join(" · "):""}
+ return o}
+function natLiveCats(){const C=chansC(),cnt=k=>k==="all"?C.length:k==="fav"?chans().filter(c=>isFav("ch:"+c.id)).length:C.filter(c=>c.genre===k).length;
+ return LCATS.filter(([k])=>k==="all"||k==="fav"||cnt(k)>0).map(([k,n])=>({k,n,c:cnt(k)}))}
+const natCatName=()=>(LCATS.find(x=>x[0]===S.lcat)||["","Toutes les chaînes"])[1];
+nativeApi.live=function(cat){if(cat&&cat!==S.lcat){S.lcat=cat;save()}if(!LCATS.some(x=>x[0]===S.lcat))S.lcat="all";
+ const L=liveList();L.slice(0,30).forEach(c=>epg(c));
+ const sel=CH[S.lch]&&L.includes(CH[S.lch])?S.lch:(L[0]||{}).id||"";
+ return JSON.stringify({cat:S.lcat,catName:natCatName(),cats:natLiveCats(),chans:L.slice(0,1500).map(c=>chO(c)),sel})};
+nativeApi.ch=function(id){const c=CH[id];if(!c)return JSON.stringify({});epg(c);S.lch=id;return JSON.stringify(chO(c,true))};
+nativeApi.guide=function(from,n){const L=liveList(),out=[];const a=Math.max(0,+from||0),b=Math.min(L.length,a+(+n||8));
+ for(let i=a;i<b;i++){const c=L[i];const P2=epg(c);out.push({id:c.id,n:c.n,num:c.rank<999?c.rank:c.num,col:c.col,logo:c.logo||"",progs:P2.map(p=>({s:Math.round(p.s),e:Math.round(p.e),t:p.t,g:p.g&&p.g!=="Direct"?p.g:""}))})}
+ return JSON.stringify({total:L.length,from:a,now:nowMin(),catName:natCatName(),chans:out})};
+/* Aperçu en direct dans la liste des chaînes (une seule connexion : on arrête tout le reste) */
+nativeApi.livePrev=function(id){const c=CH[id];if(!c)return "";S.lch=id;if(P&&P.kind==="live"&&P.id===id)return "";
+ if(P)stopPlayer();S.stack=S.stack.filter(x=>x.t!=="player");
+ startPlayer({kind:"live",id,src:srcId("ch:"+id),playing:true,nat:true,natUi:true,prev:true});return ""};
+nativeApi.liveStop=function(){if(P&&P.kind==="live"){stopPlayer();S.stack=S.stack.filter(x=>x.t!=="player")}return ""};
+nativeApi.liveFull=function(id){if(!(P&&P.kind==="live"&&P.id===id))nativeApi.livePrev(id);if(P){P.prev=false;P.natUi=true}if(topS().t!=="player")S.stack.push({t:"player"});return nativeApi.pinfo()};
+nativeApi.unfull=function(){if(P)P.prev=true;S.stack=S.stack.filter(x=>x.t!=="player");return ""};
+/* Lecteur natif */
+nativeApi.pinfo=function(wl){if(!P)return JSON.stringify({none:true});const v=curVar(),fm=curFmt();
+ const o={kind:P.kind,q:v&&qr(v.q)>0&&v.q!=="Auto"?v.q:"",src:v?v.p.name+(qr(v.q)>0&&v.q!=="Auto"?" · "+v.q:""):"",ns:srcs(curKey()).length,fmt:fm[1],fmtk:fm[0]};
+ if(P.kind==="live"){const c=CH[P.id];if(c)Object.assign(o,chO(c,true));o.cat=natCatName();if(wl){const L=liveList();o.list=(L.length?L:chans()).slice(0,1500).map(x=>chO(x))}}
+ else{const it=ALL[P.id];if(it){o.t=it.t;o.kick=(it.type==="f"?"Film":"Série")+(it.y?" · "+it.y:"");o.ser=it.type==="s";o.c1=it.c[0];o.c2=it.c[1];o.d=(it.d||0)*60;
+  if(o.ser){const e=curEp(),sn=(it.seasons||[])[P.ss-1];o.sub=`Saison ${sn} · Épisode ${P.ep}`+(e&&e.t&&!/^Épisode \d+$/.test(e.t)?" · "+e.t:"");const n=nextEp(it);o.next=n?`S${(it.seasons||[])[n.ss-1]} · E${n.ep}`:"";if(e&&e.dur)o.d=e.dur*60}}}
+ return JSON.stringify(o)};
+nativeApi.psrcs=function(){if(!P)return JSON.stringify({sources:[]});return JSON.stringify({t:P.kind==="live"?(CH[P.id]||{}).n:(ALL[P.id]||{}).t,sources:srcs(curKey()).map(v=>({id:v.id,q:v.q,pl:v.p.name,name:v.name||"",codec:v.codec||"",audio:(v.audio||[]).join(" | "),ok:compat(v),def:v.id===P.src}))})};
+nativeApi.pact=function(a,v){if(!P)return JSON.stringify({none:true});
+ switch(a){
+  case "pp":P.playing=!P.playing;P.playing?Prisme.resume():Prisme.pause();break;
+  case "seek":{const s=Math.max(0,+v||0);P.pos=s/1000;Prisme.seekTo(s);break}
+  case "audio":P.audio=+v;Prisme.setAudio(+v);break;
+  case "sub":P.sub=+v;Prisme.setSub(+v);break;
+  case "fmt":S.set.fmt=v;save();Prisme.setFormat(v);break;
+  case "src":{const vv=srcs(curKey()).find(x=>x.id===v);if(!vv)break;if(!compat(vv))return JSON.stringify({msg:"Source 4K non lisible sur ton Fire TV Stick (1080p max)"});
+   S.srcSel[curKey()]=v;save();Object.assign(P,{src:v,audio:null,sub:null,err:0,aSync:null,started:false,retry:0,t0:Date.now()});Prisme.play(streamUrl(),P.kind==="vod"?Math.round(P.pos*1000):0,P.kind==="live");break}
+  case "nextep":upnHide();act("p:nextep");break;
+  case "upnx":P.upnX=1;upnHide();break;
+  case "zap":{if(v==="1"||v==="-1"||v===1||v===-1)zap(+v);else if(CH[v]){Object.assign(P,{id:v,src:srcId("ch:"+v),err:0,audio:null,sub:null,started:false,retry:0,t0:Date.now()});S.lch=v;Prisme.play(streamUrl(),0,true)}P.started=false;P.t0=Date.now();break}
+  case "fav":if(P.kind==="live"&&CH[P.id])toggleFav("ch:"+P.id,CH[P.id].n);break;
+  case "restart":P.pos=0;Prisme.seekTo(0);break;
+  case "stop":stopPlayer();S.stack=S.stack.filter(x=>x.t!=="player");return JSON.stringify({stopped:true});
+ }
+ return nativeApi.pinfo()};
+nativeApi.chFav=function(id){const c=CH[id];if(!c)return "{}";toggleFav("ch:"+id,c.n);const f=isFav("ch:"+id);return JSON.stringify({fav:f,msg:(f?"Ajoutée aux favoris : ":"Retirée des favoris : ")+c.n})};
+nativeApi.livePos=function(){return JSON.stringify({id:P&&P.kind==="live"?P.id:"",started:!!(P&&P.started)})};
