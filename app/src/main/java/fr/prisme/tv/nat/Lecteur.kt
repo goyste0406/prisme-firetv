@@ -743,7 +743,7 @@ class PlayerScreen(ui: NativeUi, init: JSONObject? = null) : Screen(ui) {
 
     override fun restoreFocus() { paintFocus() }
 
-    init { post(poll) }
+    init { post(poll); if (init == null) refreshInfo() }
 
     override fun onBack(): Boolean {
         if (upOn) { upCancel(); return true }

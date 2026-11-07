@@ -234,7 +234,7 @@ class HomeScreen(ui: NativeUi) : Screen(ui) {
             when (t.key) {
                 "films", "series" -> if (t.key != ty) openTab(t.key, focusTabs = true)
                 "search" -> {}
-                "live" -> later { ui.openLive() }
+                "live" -> later { ui.openLive(true) }
                 else -> ui.webTab(t.key)
             }
             return

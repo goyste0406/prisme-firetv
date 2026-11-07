@@ -284,7 +284,7 @@ class TopBar(ui: NativeUi, parent: FrameLayout) {
 
 // ==================================================================================================== TV en direct
 @SuppressLint("ViewConstructor")
-class LiveScreen(ui: NativeUi) : Screen(ui) {
+class LiveScreen(ui: NativeUi, private val fromTabs: Boolean = false) : Screen(ui) {
     override val video = true
     private val bgv = HoleBg(ui.ctx)
     private val top = TopBar(ui, this)
@@ -395,9 +395,9 @@ class LiveScreen(ui: NativeUi) : Screen(ui) {
             empty.text = if (cat == "fav") "Aucune chaîne en favori.\nAppuie sur ☰ Menu sur une chaîne pour l'ajouter." else "Aucune chaîne dans cette catégorie."
             list.set(chans, if (zone == 2) ci else -1)
             if (zone == 2) list.setFocus(ci)
-            if (first) { zone = if (chans.isEmpty()) 1 else 2; paintFocus() }
+            if (first) { zone = if (fromTabs) 0 else if (chans.isEmpty()) 1 else 2; paintFocus() }
             fillPanel()
-            if (chans.isNotEmpty()) schedulePreview(if (first) 300 else 900) else stopPreview()
+            if (chans.isEmpty()) stopPreview() else if (zone == 2) schedulePreview(if (first) 300 else 900)
         }
     }
 
@@ -523,7 +523,7 @@ class LiveScreen(ui: NativeUi) : Screen(ui) {
                 val i = chans.indexOfFirst { it.optString("id") == id }
                 if (i >= 0 && i != ci) { ci = i; if (zone == 2) list.setFocus(ci); fillPanel() }
                 pvSpin.stop(); pvSpin.visibility = View.GONE; pvMsg.text = ""
-            } else { prevId = ""; schedulePreview(300) }
+            } else { prevId = ""; if (zone == 2) schedulePreview(300) }
         }
     }
 
@@ -548,12 +548,12 @@ class LiveScreen(ui: NativeUi) : Screen(ui) {
             0 -> when (code) {
                 KeyEvent.KEYCODE_DPAD_LEFT -> if (ti > 0) focusTab(ti - 1)
                 KeyEvent.KEYCODE_DPAD_RIGHT -> if (ti < top.tabs.items.size - 1) focusTab(ti + 1)
-                KeyEvent.KEYCODE_DPAD_DOWN -> { zone = if (chans.isEmpty()) 1 else 2; paintFocus() }
+                KeyEvent.KEYCODE_DPAD_DOWN -> { zone = if (chans.isEmpty()) 1 else 2; paintFocus(); if (zone == 2) schedulePreview(300) }
             }
             1 -> when (code) {
                 KeyEvent.KEYCODE_DPAD_UP -> if (cti > 0) { cti--; paintFocus(); removeCallbacks(catRun); postDelayed(catRun, 350) } else { zone = 0; ti = 2; paintFocus() }
                 KeyEvent.KEYCODE_DPAD_DOWN -> if (cti < cats.size - 1) { cti++; paintFocus(); removeCallbacks(catRun); postDelayed(catRun, 350) }
-                KeyEvent.KEYCODE_DPAD_RIGHT -> if (chans.isNotEmpty()) { removeCallbacks(catRun); if (cats.getOrNull(cti)?.key != cat) load(cats[cti].key, false); zone = 2; paintFocus() }
+                KeyEvent.KEYCODE_DPAD_RIGHT -> if (chans.isNotEmpty()) { removeCallbacks(catRun); zone = 2; if (cats.getOrNull(cti)?.key != cat) load(cats[cti].key, false) else { paintFocus(); schedulePreview(300) } }
             }
             2 -> when (code) {
                 KeyEvent.KEYCODE_DPAD_UP -> if (ci > 0) moveCh(ci - 1) else { zone = 0; ti = 2; paintFocus() }

@@ -189,12 +189,12 @@ class NativeUi(val host: Host, val web: WebView) {
     }
 
     /** TV en direct native */
-    fun openLive() = safe("tv en direct") {
+    fun openLive(fromTabs: Boolean = false) = safe("tv en direct") {
         val h = home ?: HomeScreen(this).also { home = it }
         if (stack.isEmpty()) { stack.add(h); layer.addView(h, K.lp(K.MATCH, K.MATCH)); h.openTab("films", false) }
         while (stack.size > 1) popSilently()
         setVisible(true)
-        push(LiveScreen(this))
+        push(LiveScreen(this, fromTabs))
         js("S.tab='live';save()")
     }
 
