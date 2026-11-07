@@ -357,3 +357,6 @@ R('function refreshEpgViews(){const t=topS();if(!inApp())return;', 'function ref
 
 # 2.3.2 : un identifiant TMDB inconnu (404) n'est pas une erreur réseau, il n'encombre plus le journal
 R('if(!/wikipedia/.test(u))LOG("Erreur réseau · "', 'if(!/wikipedia/.test(u)&&!(/themoviedb/.test(u)&&/ 404$/.test(m)))LOG("Erreur réseau · "')
+
+# 2.4.0 : sorties cinéma récentes et séries en diffusion, recalculées quand le catalogue change
+R(' setTimeout(()=>{if(typeof tgRun==="function")tgRun()},30000);\n}', ' setTimeout(()=>{if(typeof tgRun==="function")tgRun()},30000);\n if(typeof NOWP!=="undefined"&&NOWP.at){NOWP.at=0;setTimeout(loadNowPlaying,15000)}\n}')

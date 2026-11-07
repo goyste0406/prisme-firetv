@@ -648,6 +648,7 @@ function buildCatalog(){
  if(!CH[S.lch]&&CHS[0])S.lch=CHS[0].id;
  if(NAT.vis)setTimeout(()=>Prisme.nativeEvent("catalog",""),50);
  setTimeout(()=>{if(typeof tgRun==="function")tgRun()},30000);
+ if(typeof NOWP!=="undefined"&&NOWP.at){NOWP.at=0;setTimeout(loadNowPlaying,15000)}
 }
 function castList(str){return String(str||"").split(",").map(x=>x.trim()).filter(Boolean).slice(0,12).map(n=>{const a="a"+hash(norm(n)).toString(36);A[a]=n;return [a,"",n]})}
 
@@ -1813,7 +1814,7 @@ function nI(i,full){const o={id:i.id,ty:i.type,t:i.t,y:i.y||0,img:tmS(i.img,"w34
 function newEps(){if(!S.seen){S.seen={};const now=Date.now();[...S.favs,...Object.keys(S.lastEp||{}),...Object.keys(S.prog)].forEach(k=>{if(ALL[k]&&ALL[k].type==="s")S.seen[k]=now});save()}
  return Object.keys(S.seen).map(k=>ALL[k]).filter(i=>{if(!i||i.type!=="s"||!anySrc(i.id))return false;let m=0;for(const s of i.src)if(s.added>m)m=s.added;return m*1000>S.seen[i.id]})
   .sort((a,b)=>Math.max(...b.src.map(s=>s.added||0))-Math.max(...a.src.map(s=>s.added||0))).slice(0,30)}
-function natVer(ty){return [CATV,DIRTY,S.favs.length,Object.values(S.seen||{}).reduce((a,b)=>a+b,0)%1e9,Object.keys(S.prog).length,TREND.f.length,TREND.s.length,NAT.gv,ty].join("|")}
+function natVer(ty){return [(typeof NOWP!=="undefined"?NOWP.f.length+"/"+NOWP.s.length:""),CATV,DIRTY,S.favs.length,Object.values(S.seen||{}).reduce((a,b)=>a+b,0)%1e9,Object.keys(S.prog).length,TREND.f.length,TREND.s.length,NAT.gv,ty].join("|")}
 
 window.nativeApi={
  ver(ty){return natVer(ty)},
@@ -1825,7 +1826,8 @@ window.nativeApi={
   const recent=memo("nre"+ty,()=>list.map(i=>[i,added(i.id)]).filter(x=>x[1]).sort((a,b)=>a[1].d-b[1].d).slice(0,30).map(x=>x[0]));
   const trend=memo("ntr"+ty+TREND[ty].length,()=>[...list].sort((a,b)=>trendScore(b)-trendScore(a)).slice(0,10));
   const nep=ty==="s"?newEps():[];
-  const rows=[["cont","Continuer à regarder",cont,""],["nep","Nouveaux épisodes",nep,""],["fav","Ma liste",fav,""],["new","Derniers ajouts",recent,""],["top",ty==="f"?"Top 10 des films du moment":"Top 10 des séries du moment",trend,"rank"]]
+  const nowp=(NOWP[ty]||[]).filter(i=>ok(i)).slice(0,30);
+  const rows=[["cont","Continuer à regarder",cont,""],["nep","Nouveaux épisodes",nep,""],["nowp",ty==="f"?"Sorties récentes au cinéma":"Séries en cours de diffusion",nowp,""],["fav","Ma liste",fav,""],["new","Derniers ajouts",recent,""],["top",ty==="f"?"Top 10 des films du moment":"Top 10 des séries du moment",trend,"rank"]]
    .filter(r=>r[2].length).map(([k,title,items,kind])=>({k,title,small:k==="new"||k==="top"?"":String(items.length),kind,items:items.map(i=>nI(i,true))}));
   const gi=genreIndex(ty);
   const genres=GDEF[ty].filter(g=>(gi[g[0]]||[]).length).map(g=>({k:g[0],n:g[1],c:gi[g[0]].length,c1:g[2],c2:g[3]}));
@@ -2071,6 +2073,23 @@ nativeApi.pact=function(a,v){if(!P)return JSON.stringify({none:true});
  return nativeApi.pinfo()};
 nativeApi.chFav=function(id){const c=CH[id];if(!c)return "{}";toggleFav("ch:"+id,c.n);const f=isFav("ch:"+id);return JSON.stringify({fav:f,msg:(f?"Ajoutée aux favoris : ":"Retirée des favoris : ")+c.n})};
 nativeApi.livePos=function(){return JSON.stringify({id:P&&P.kind==="live"?P.id:"",started:!!(P&&P.started)})};
+
+/* Sorties récentes au cinéma (films) et séries en cours de diffusion, d'après TMDB, croisées avec le catalogue */
+let NOWP={f:[],s:[],at:0};
+async function loadNowPlaying(){
+ if(!S.set.tmdbKey||Date.now()-NOWP.at<6*3600000&&NOWP.f.length)return;
+ try{
+  const get=async(path,pages)=>{const out=[];for(let p=1;p<=pages;p++){try{const r=await tmdb(path+(path.includes("?")?"&":"?")+"page="+p);(r&&r.results||[]).forEach(x=>out.push(x));if(!r||p>=(r.total_pages||1))break}catch(e){break}}return out};
+  const [m,t]=[await get("movie/now_playing?region=FR",4),await get("tv/on_the_air",3)];
+  const match=(list,arr,isF)=>{const byId={},byT={};list.forEach(i=>{if(i.tmdbId)byId[i.tmdbId]=i;const k=norm(i.t);(byT[k]=byT[k]||[]).push(i)});const seen=new Set(),out=[];
+   arr.forEach(r=>{const y=+String(isF?r.release_date:r.first_air_date||"").slice(0,4)||0;let it=byId[String(r.id)];
+    if(!it){const c=byT[norm(r.title||r.name||"")]||byT[norm(r.original_title||r.original_name||"")]||[];it=c.find(i=>!y||!i.y||Math.abs(i.y-y)<=1)}
+    if(it&&!seen.has(it.id)){seen.add(it.id);out.push([it,String(isF?r.release_date:r.first_air_date||"")])}});
+   return out.sort((a,b)=>b[1].localeCompare(a[1])).map(x=>x[0])};
+  NOWP={f:match(films(),m,true),s:match(series(),t,false),at:Date.now()};
+  LOG(`TMDB : ${NOWP.f.length} sorties cinéma récentes et ${NOWP.s.length} séries en diffusion trouvées dans tes playlists`);
+  if(NAT.vis)Prisme.nativeEvent("home","")}catch(e){}}
+setTimeout(loadNowPlaying,12000);setInterval(()=>loadNowPlaying(),6*3600000);
 
 boot();
 </script>
