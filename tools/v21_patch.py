@@ -220,3 +220,21 @@ R('const p=parseName(v.n),key=v.tmdb&&v.tmdb!=="0"?"t"+v.tmdb:norm(p.title)+"|"+
   'const p=parseName(v.n),key=v.tmdb&&v.tmdb!=="0"?"t"+v.tmdb:p.year?norm(p.title)+"|"+p.year:norm(p.title)+"|?"+pl.id+":"+v.id;')
 R('const p=parseName(v.n),key=v.tmdb&&v.tmdb!=="0"?"t"+v.tmdb:norm(p.title)+"|"+(p.year||v.year);',
   'const p=parseName(v.n),key=v.tmdb&&v.tmdb!=="0"?"t"+v.tmdb:(p.year||v.year)?norm(p.title)+"|"+(p.year||v.year):norm(p.title)+"|?"+pl.id+":"+v.id;')
+
+# ---------------------------------------------------------------- 2.1.11 : langue audio et sous-titres par défaut
+R('''  <div class="it" data-f data-fid="set-subs" data-act="set:subs"><span>Sous-titres par défaut</span>${sw(st.subs)}</div>''',
+  '''  <div class="it tall" data-f data-fid="set-alang" data-act="lang:a"><span>Langue audio par défaut<small>Choisie automatiquement au lancement de chaque film ou épisode</small></span><span>${LANGN[st.aLang??"fr"]} ›</span></div>
+  <div class="it tall" data-f data-fid="set-slang" data-act="lang:s"><span>Sous-titres par défaut<small>Affichés automatiquement s'ils existent dans la langue choisie</small></span><span>${LANGN[st.sLang??""]||"Aucun"} ›</span></div>''')
+R('  case "sset":', '''  case "lang":{const opts=v==="a"?["fr","en",""]:["","fr","en"],k=v==="a"?"aLang":"sLang",cur=S.set[k]??(v==="a"?"fr":"");
+   S.set[k]=opts[(opts.indexOf(cur)+1)%opts.length];save();langPrefs();render(F.dataset.fid);break}
+  case "sset":''')
+R('function plmHtml(id){', '''const LANGN={fr:"Français",en:"Anglais","":"Version originale"};
+const LANGRE={fr:/fr|fre|fra|fran|french|\\bvf|vff|vfq|truefrench/i,en:/^en|eng|english|anglais/i};
+function langPrefs(){try{if(NATIVE&&typeof Prisme.setLangPrefs==="function")Prisme.setLangPrefs(S.set.aLang??"fr",S.set.sLang??"")}catch(e){}}
+setTimeout(langPrefs,500);
+/* Pistes sans code de langue (fréquent dans les MKV) : on repère la piste française d'après son nom */
+function langFix(st){const a=S.set.aLang??"fr";if(!a||!st.audio||st.audio.length<2)return;const re=LANGRE[a];if(!re)return;
+ const ok=t=>t&&(re.test(t.code||"")||re.test(t.lang||"")||re.test(t.name||""));
+ if(ok(st.audio[st.aSel]))return;const i=st.audio.findIndex(ok);if(i>=0&&i!==st.aSel){Prisme.setAudio(i);P.audio=i;LOG(`Piste audio ${LANGN[a]} choisie automatiquement`)}}
+function plmHtml(id){''')
+R('  if(P.kind==="vod"&&P.aSync==null&&st.audio&&st.audio.length){P.aSync=1;', '  if(P.kind==="vod"&&P.aSync==null&&st.audio&&st.audio.length){P.aSync=1;langFix(st);st.aSel=P.audio??st.aSel;')

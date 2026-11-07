@@ -42,6 +42,9 @@ class Player(private val ctx: Context) {
     /** Appelé quand la première image de la vidéo est affichée (fin de l'écran de chargement natif) */
     var onFirstFrame: (() -> Unit)? = null
     private var preUrl: String? = null
+    /** Langues préférées (codes ISO : "fr", "en"… ; vide = version originale / pas de sous-titres) */
+    private var audioPref = "fr"
+    private var subPref = ""
     private var preStart = 0L
 
     private val tick = object : Runnable {
@@ -80,6 +83,7 @@ class Player(private val ctx: Context) {
     fun preload(url: String, startMs: Long) {
         if (exo?.playWhenReady == true && exo?.playbackState != androidx.media3.common.Player.STATE_IDLE) return
         val p = exo ?: build().also { exo = it; view.player = it }
+        applyLangPrefs(p)
         error = null; preUrl = url; preStart = startMs; stateJson = "{}"
         p.setMediaItem(MediaItem.fromUri(url), if (startMs > 0) startMs else C.TIME_UNSET)
         p.prepare(); p.playWhenReady = false
@@ -91,8 +95,24 @@ class Player(private val ctx: Context) {
         if (exo?.playWhenReady != true) { exo?.stop(); exo?.clearMediaItems() }
     }
 
+    fun setLangPrefs(audio: String, sub: String) {
+        audioPref = audio; subPref = sub
+        exo?.let { applyLangPrefs(it) }
+    }
+
+    /** Remet les choix de pistes à zéro et applique la langue préférée (à chaque nouvelle vidéo) */
+    private fun applyLangPrefs(p: ExoPlayer) {
+        p.trackSelectionParameters = p.trackSelectionParameters.buildUpon()
+            .clearOverrides()
+            .setPreferredAudioLanguage(audioPref.ifEmpty { null })
+            .setPreferredTextLanguage(subPref.ifEmpty { null })
+            .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, subPref.isEmpty())
+            .build()
+    }
+
     fun play(url: String, startMs: Long, isLive: Boolean) {
         val p = exo ?: build().also { exo = it; view.player = it }
+        if (url != preUrl) applyLangPrefs(p)
         stateJson = "{}"
         if (url == preUrl && p.playbackState != androidx.media3.common.Player.STATE_IDLE && error == null) {
             preUrl = null; live = isLive
@@ -171,7 +191,7 @@ class Player(private val ctx: Context) {
             else -> f.sampleMimeType?.substringAfter("/")?.uppercase()
         }
         val ch = when (f.channelCount) { 1 -> "mono"; 2 -> "stéréo"; 6 -> "5.1"; 8 -> "7.1"; else -> "" }
-        return JSONObject().put("name", f.label ?: lang ?: "Piste").put("lang", lang ?: "")
+        return JSONObject().put("name", f.label ?: lang ?: "Piste").put("lang", lang ?: "").put("code", f.language ?: "")
             .put("codec", listOfNotNull(codec, ch.ifEmpty { null }).joinToString(" "))
     }
 

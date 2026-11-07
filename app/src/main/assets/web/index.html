@@ -1068,7 +1068,8 @@ function settingsFull(){
   <div class="it" data-f data-fid="set-engine" data-act="set:engine"><span>Moteur de lecture</span><span>${st.engine==="vlc"?"VLC (libVLC)":"ExoPlayer (Media3) · recommandé"}</span></div>
   <div class="it" data-f data-fid="set-hw" data-act="set:hw"><span>Décodage matériel</span>${sw(st.hw)}</div>
   <div class="it" data-f data-fid="set-afr" data-act="set:afr"><span>Adapter la fréquence d'images</span>${sw(st.afr)}</div>
-  <div class="it" data-f data-fid="set-subs" data-act="set:subs"><span>Sous-titres par défaut</span>${sw(st.subs)}</div>
+  <div class="it tall" data-f data-fid="set-alang" data-act="lang:a"><span>Langue audio par défaut<small>Choisie automatiquement au lancement de chaque film ou épisode</small></span><span>${LANGN[st.aLang??"fr"]} ›</span></div>
+  <div class="it tall" data-f data-fid="set-slang" data-act="lang:s"><span>Sous-titres par défaut<small>Affichés automatiquement s'ils existent dans la langue choisie</small></span><span>${LANGN[st.sLang??""]||"Aucun"} ›</span></div>
  </div></section>
  <section data-anchor><h3>Notes et métadonnées</h3><div class="grp">
   <div class="it tall"><span>Fiches, affiches et casting<small>Fournis par tes serveurs Xtream (get_vod_info, get_series_info)</small></span><span></span></div>
@@ -1141,6 +1142,14 @@ function pickHtml(){const P2=S.pick;const [a,b]=pickCount();
   <div class="it" data-f data-fid="pk-none" data-act="pknone"><span>Tout décocher</span><span>›</span></div>
  </div></section>${sec("l","Catégories TV en direct")}${sec("f","Catégories films")}${sec("s","Catégories séries")}<div style="height:30px"></div></div>`}
 function pickRefresh(){const [a,b]=pickCount();const n=$("#pkn");if(n)n.textContent=`${a} catégorie${a>1?"s":""} cochée${a>1?"s":""} sur ${b}`}
+const LANGN={fr:"Français",en:"Anglais","":"Version originale"};
+const LANGRE={fr:/fr|fre|fra|fran|french|\bvf|vff|vfq|truefrench/i,en:/^en|eng|english|anglais/i};
+function langPrefs(){try{if(NATIVE&&typeof Prisme.setLangPrefs==="function")Prisme.setLangPrefs(S.set.aLang??"fr",S.set.sLang??"")}catch(e){}}
+setTimeout(langPrefs,500);
+/* Pistes sans code de langue (fréquent dans les MKV) : on repère la piste française d'après son nom */
+function langFix(st){const a=S.set.aLang??"fr";if(!a||!st.audio||st.audio.length<2)return;const re=LANGRE[a];if(!re)return;
+ const ok=t=>t&&(re.test(t.code||"")||re.test(t.lang||"")||re.test(t.name||""));
+ if(ok(st.audio[st.aSel]))return;const i=st.audio.findIndex(ok);if(i>=0&&i!==st.aSel){Prisme.setAudio(i);P.audio=i;LOG(`Piste audio ${LANGN[a]} choisie automatiquement`)}}
 function plmHtml(id){
  const p=S.playlists.find(x=>x.id===id);if(!p)return"";const c=counts(p),hid=p.hidden||[];
  const exp=new Date(p.exp||Date.now()+86400000*214).toLocaleDateString("fr-FR",{day:"numeric",month:"long",year:"numeric"});
@@ -1345,7 +1354,7 @@ function tick(){if(!P)return;
   if(st.pos!=null&&!SC.on){P.pos=st.pos/1000;if(st.dur>0)P.dur=st.dur/1000}
   if(st.error&&!P.err){P.err=1;toast("Lecture impossible : "+st.error);const s=srcs(curKey()).filter(compat);if(s.length>1)toast("Essaie une autre source avec le bouton Source")}
   if(st.ended&&!P.endH){P.endH=1;const it=ALL[P.id];if(P.kind==="vod"&&it&&it.type==="s"){const n=nextEp(it);if(n){act("p:nextep");return}}toast("Lecture terminée");back();return}
-  if(P.kind==="vod"&&P.aSync==null&&st.audio&&st.audio.length){P.aSync=1;if(P.audio==null)P.audio=Math.max(0,st.aSel);if(P.sub==null)P.sub=st.sSel}}
+  if(P.kind==="vod"&&P.aSync==null&&st.audio&&st.audio.length){P.aSync=1;langFix(st);st.aSel=P.audio??st.aSel;if(P.audio==null)P.audio=Math.max(0,st.aSel);if(P.sub==null)P.sub=st.sSel}}
  else if(P.kind==="vod"&&P.playing&&!SC.on)P.pos=Math.min(P.dur,P.pos+.5);
  if(P.kind==="vod"&&!SC.on){const b=$("#pbar");if(b&&P.dur>0){b.style.width=(P.pos/P.dur*100)+"%";$("#ptime").textContent=hms(P.pos);$("#prem").textContent="−"+hms(P.dur-P.pos)}}
  if(P.ui&&!SC.on&&Date.now()-P.last>5000&&!P.info){P.ui=false;const o=$("#pov");if(o)o.classList.add("hid")}}
@@ -1532,6 +1541,8 @@ function act(a){
   case "pkall":{if(S.pick){S.pick.h.clear();render(F.dataset.fid)}break}
   case "pknone":{const P2=S.pick;if(!P2)break;for(const t of ["l","f","s"])for(const [k] of pickList(t))P2.h.add(t+":"+k);render(F.dataset.fid);break}
   case "pkgo":{const P2=S.pick;if(!P2)break;P2.pl.hidden=[...P2.h];S.pick=null;S.loading=true;render();P2.res(true);break}
+  case "lang":{const opts=v==="a"?["fr","en",""]:["","fr","en"],k=v==="a"?"aLang":"sLang",cur=S.set[k]??(v==="a"?"fr":"");
+   S.set[k]=opts[(opts.indexOf(cur)+1)%opts.length];save();langPrefs();render(F.dataset.fid);break}
   case "sset": push({t:"sset",i:+v});break;
   case "ocat": push({t:"cat",ty:v,k:w,sort:"new"});break;
   case "csort":{const t=topS();if(t.t==="cat"&&t.sort!==v){t.sort=v;render("cs-"+v)}break}

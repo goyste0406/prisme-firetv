@@ -199,6 +199,7 @@ class MainActivity : Activity(), fr.prisme.tv.nat.NativeUi.Host {
         @JavascriptInterface fun setAudio(index: Int) = main.post { player.selectTrack(androidx.media3.common.C.TRACK_TYPE_AUDIO, index) }
         @JavascriptInterface fun setSub(index: Int) = main.post { player.selectTrack(androidx.media3.common.C.TRACK_TYPE_TEXT, index) }
         @JavascriptInterface fun setFormat(mode: String) = main.post { player.setFormat(mode) }
+        @JavascriptInterface fun setLangPrefs(audio: String, sub: String) = main.post { player.setLangPrefs(audio, sub) }
         @JavascriptInterface fun state(): String = player.stateJson
         @JavascriptInterface fun probe(id: String, url: String) = prober.probe(id, url)
         @JavascriptInterface fun probeResult(id: String): String = prober.result(id)
