@@ -863,7 +863,7 @@ const DEVNAMES={AFTSSS:"Fire TV Stick (3e génération)",AFTSS:"Fire TV Stick Li
 const UHD=/^AFT(MM|KA|KM|KRT|R|GAZL|N|EU)/.test(DEV.model||"");
 const ANDROID={25:"7.1",26:"8",27:"8.1",28:"9",29:"10",30:"11",31:"12",32:"12L",33:"13",34:"14"};
 const DEVICE={name:DEVNAMES[DEV.model]||("Fire TV "+(DEV.model||"")),os:`${DEV.display||"Fire OS"} · Android ${ANDROID[DEV.sdk]||DEV.sdk}`,maxQ:UHD?"4K":"1080p",hdr:"HDR10, HDR10+, HLG",audio:"Dolby Atmos, AC3, E-AC3 (sortie directe)",ram:"",codecs:UHD?"H.264, HEVC, VP9, AV1 jusqu'en 4K":"H.264, HEVC, VP9 jusqu'en 1080p 60 i/s"};
-const compat=v=>qr(v.q)<=qr(DEVICE.maxQ);
+const maxQ=()=>S.set.allow4k?"4K":DEVICE.maxQ,compat=v=>qr(v.q)<=qr(maxQ());
 function srcs(key){return S.playlists.filter(p=>p.on&&has(p,key)).flatMap(p=>variants(p,key)).sort((a,b)=>(compat(b)-compat(a))||(qr(b.q)-qr(a.q)))}
 function pickSrc(key){const L=srcs(key);return L.find(x=>x.id===S.srcSel[key]&&compat(x))||L.find(compat)||L[0]}
 const srcId=key=>(pickSrc(key)||{}).id;
@@ -1074,7 +1074,7 @@ function settingsFull(){
  </div></section>
  <section data-anchor><h3>Appareil</h3><div class="grp">
   <div class="it tall"><span>${esc(DEVICE.name)}<small>${esc(DEVICE.os)}</small></span><span>${esc(DEV.model||"")}</span></div>
-  <div class="it"><span>Qualité maximale</span><span>${DEVICE.maxQ} · sources 4K ignorées automatiquement</span></div>
+  <div class="it tall" data-f data-fid="set-allow4k" data-act="set:allow4k"><span>Autoriser la 4K<small>${UHD?"Ton appareil lit la 4K : elle est déjà autorisée":S.set.allow4k?"Sources 4K proposées · à activer seulement si ton appareil et ton téléviseur lisent la 4K":"Sources 4K ignorées : cet appareil lit jusqu'en "+DEVICE.maxQ}</small></span>${sw(UHD||!!S.set.allow4k)}</div>
   <div class="it"><span>Vidéo</span><span>${esc(DEVICE.codecs)} · ${esc(DEVICE.hdr)}</span></div>
   <div class="it"><span>Audio</span><span>${esc(DEVICE.audio)}</span></div>
  </div></section>
@@ -1630,6 +1630,7 @@ function act(a){
    if(v==="engine")S.set.engine=S.set.engine==="vlc"?"exo":"vlc";
    else if(v==="epgShift")S.set.epgShift=S.set.epgShift>=3?-3:S.set.epgShift+1;
    else S.set[v]=!S.set[v];
+   if(v==="allow4k"){bump();toast(S.set.allow4k?"4K autorisée : les sources 4K seront proposées et choisies en priorité":"4K désactivée : retour au 1080p maximum")}
    save();render(F.dataset.fid);break;
   case "epg":Object.keys(EPGC).forEach(k=>delete EPGC[k]);toast("Guide TV rechargé");render(F.dataset.fid);break;
   case "fmt":{S.set.fmt=v;save();if(NATIVE)Prisme.setFormat(v);const fr=view.querySelector(".pframe");if(fr)fr.className="pframe f-"+v;
