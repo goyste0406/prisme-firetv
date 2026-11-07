@@ -729,6 +729,13 @@ function qualFromInfo(info){const v=info&&info.video,a=info&&info.audio;if(!v||!
  const lang=a&&a.tags&&(a.tags.language||a.tags.LANGUAGE);
  return {ok:true,w:+v.width||0,h:+v.height||0,q:qLabel(+v.width,+v.height),vc:vcName(v.codec_name),fps:fp>0&&fp<200?Math.round(fp):0,
   hdr:/2084|hlg|arib/i.test(v.color_transfer||""),audio:a&&a.codec_name?[{lang:ISO[String(lang||"").toLowerCase()]||lang||"",codec:acName(a.codec_name),ch:chName(a.channels)}]:[],subs:null,from:"serveur"}}
+function qualFromPlay(st){if(!P||!(st.vw>0&&st.vh>0)||!P.started)return;const v=curVar();if(!v)return;
+ const kind=P.kind==="live"?"l":ALL[P.id]&&ALL[P.id].type==="s"?"s":"v",k=qkey(v.p.id,kind,v.sid),o=QUAL[k];
+ if(P.qk===k&&o&&o.h>=st.vh)return;P.qk=k;
+ const parts=String(st.video||"").split(" · "),fp=+((parts[2]||"").match(/\d+/)||[0])[0];
+ setQual(k,{ok:true,w:st.vw,h:st.vh,q:qLabel(st.vw,st.vh),vc:parts[0]||"",fps:fp||0,hdr:false,
+  audio:(st.audio||[]).map(a=>({lang:a.lang||"",codec:a.codec||""})),subs:(st.subs||[]).map(s=>({lang:s.lang||s.name||""})),from:"lecture"});
+ LOG(`Qualité mesurée pendant la lecture · ${qName(k)} · ${st.vw}×${st.vh}`)}
 function refreshQual(){natPush(NAT.detail);if(inApp()&&topS().t==="home"&&S.tab==="live")view.querySelectorAll(".lch").forEach(el=>{const b=el.querySelector(".qbx");if(b){const h=qBadge(el.dataset.hov);if(b.innerHTML!==h)b.innerHTML=h}});const t=topS();if(!inApp()||S.booting)return;
  if(S.modal&&!S.modal.type)render(F&&F.dataset.fid);
  else if(t.t==="detail"&&!S.modal)render(F&&F.dataset.fid);
@@ -1390,7 +1397,7 @@ function infoBox(){const v=curVar()||{name:"",audio:["—"],subs:["—"]},st=P.n
 function startPlayer(p){P=p;if(p.kind==="vod"&&ALL[p.id]&&ALL[p.id].type==="s"){S.seen=S.seen||{};S.seen[p.id]=Date.now()}P.ui=true;P.audio=null;P.sub=null;clearInterval(PT);PT=setInterval(tick,500);uiPing();
  if(NATIVE){const u=streamUrl();if(!u){toast("Flux introuvable");return}PQ.splice(0).forEach(([k])=>{if(QPEND[k]==="probe")delete QPEND[k]});const go=()=>{if(P!==p||p.go)return;p.go=1;p.t0=Date.now();Prisme.play(u,Math.round((p.pos||0)*1000),p.kind==="live");Prisme.setFormat(curFmt()[0])};if(Prisme.probeBusy()){LOG("Lecture en attente de la fin d'une analyse de flux");const w0=Date.now(),wt=setInterval(()=>{if(P!==p||!Prisme.probeBusy()||Date.now()-w0>26000){clearInterval(wt);go()}},300)}else go()}}
 function tick(){if(!P)return;
- if(NATIVE){let st={};try{st=JSON.parse(Prisme.state()||"{}")}catch(e){}P.nst=st;if(natTick(st))return;
+ if(NATIVE){let st={};try{st=JSON.parse(Prisme.state()||"{}")}catch(e){}P.nst=st;if(natTick(st))return;qualFromPlay(st);
   if(st.pos!=null&&!SC.on){P.pos=st.pos/1000;if(st.dur>0)P.dur=st.dur/1000}
   if(st.error&&!P.err){P.err=1;toast("Lecture impossible : "+st.error);const s=srcs(curKey()).filter(compat);if(s.length>1)toast("Essaie une autre source avec le bouton Source")}
   if(st.ended&&!P.endH){P.endH=1;upnHide();const it=ALL[P.id];if(P.kind==="vod"&&it&&it.type==="s"&&!P.upnX){const n=nextEp(it);if(n){act("p:nextep");return}}if(P.natUi){stopPlayer();S.stack=S.stack.filter(x=>x.t!=="player");Prisme.nativeEvent("pend","");return}toast("Lecture terminée");back();return}

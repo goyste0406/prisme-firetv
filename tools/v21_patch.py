@@ -360,3 +360,13 @@ R('if(!/wikipedia/.test(u))LOG("Erreur réseau · "', 'if(!/wikipedia/.test(u)&&
 
 # 2.4.0 : sorties cinéma récentes et séries en diffusion, recalculées quand le catalogue change
 R(' setTimeout(()=>{if(typeof tgRun==="function")tgRun()},30000);\n}', ' setTimeout(()=>{if(typeof tgRun==="function")tgRun()},30000);\n if(typeof NOWP!=="undefined"&&NOWP.at){NOWP.at=0;setTimeout(loadNowPlaying,15000)}\n}')
+# 2.4.2 : qualité réelle mémorisée pendant la lecture (aucune connexion en plus chez le fournisseur)
+R('P.nst=st;if(natTick(st))return;', 'P.nst=st;if(natTick(st))return;qualFromPlay(st);')
+R('function refreshQual(){', '''function qualFromPlay(st){if(!P||!(st.vw>0&&st.vh>0)||!P.started)return;const v=curVar();if(!v)return;
+ const kind=P.kind==="live"?"l":ALL[P.id]&&ALL[P.id].type==="s"?"s":"v",k=qkey(v.p.id,kind,v.sid),o=QUAL[k];
+ if(P.qk===k&&o&&o.h>=st.vh)return;P.qk=k;
+ const parts=String(st.video||"").split(" · "),fp=+((parts[2]||"").match(/\\d+/)||[0])[0];
+ setQual(k,{ok:true,w:st.vw,h:st.vh,q:qLabel(st.vw,st.vh),vc:parts[0]||"",fps:fp||0,hdr:false,
+  audio:(st.audio||[]).map(a=>({lang:a.lang||"",codec:a.codec||""})),subs:(st.subs||[]).map(s=>({lang:s.lang||s.name||""})),from:"lecture"});
+ LOG(`Qualité mesurée pendant la lecture · ${qName(k)} · ${st.vw}×${st.vh}`)}
+function refreshQual(){''')
