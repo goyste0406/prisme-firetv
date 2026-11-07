@@ -823,7 +823,7 @@ let S={booting:false,playlists:[],adding:false,loading:false,showPw:false,form:{
   tab:"films",lcat:"all",lch:"",q:"",favs:[],prog:{},srcSel:{},
   appVer:"1.0.0",appCode:1,instPerm:false,set:{autoUpd:true,hw:true,afr:true,epgShift:0,parental:false,subs:false,epgAuto:true,engine:"exo",tmdbKey:"",meta:{imdb:true,tmdb:true,rt:true,mc:true,lb:true,ac:true,sc:true}},epgAt:null,stack:[{t:"home"}],seasons:{}};
 try{const sv=JSON.parse(localStorage.getItem("prisme")||"null");if(sv){if(!sv.playlists)sv.playlists=sv.logged&&sv.server?[{...DEFPL,...sv.server}]:[];delete sv.server;delete sv.logged;delete sv.epgAuto;Object.assign(S,sv,{loading:false,adding:false,stack:[{t:"home"}],set:{...S.set,...(sv.set||{})}})}}catch(e){}
-function save(){try{localStorage.setItem("prisme",JSON.stringify({appVer:S.appVer,appCode:S.appCode,instPerm:S.instPerm,playlists:S.playlists,tab:S.tab,favs:S.favs,prog:S.prog,set:S.set,epgAt:S.epgAt,seasons:S.seasons,lastEp:S.lastEp,lcat:S.lcat,ctry:S.ctry,srcSel:S.srcSel}))}catch(e){}}
+function save(){try{localStorage.setItem("prisme",JSON.stringify({appVer:S.appVer,appCode:S.appCode,instPerm:S.instPerm,playlists:S.playlists,tab:S.tab,favs:S.favs,prog:S.prog,set:S.set,epgAt:S.epgAt,seasons:S.seasons,lastEp:S.lastEp,seen:S.seen,lcat:S.lcat,ctry:S.ctry,srcSel:S.srcSel}))}catch(e){}}
 const inApp=()=>S.playlists.length>0&&!S.adding;
 let AUTOCHK=false;
 /* Chaque playlist expose une partie du catalogue (simulation). L'union des playlists actives forme le catalogue affiché ; un titre présent sur plusieurs playlists est fusionné et garde la liste de ses sources. */
@@ -867,7 +867,7 @@ function plStats(pl){return memo("pls"+pl.id,()=>{const r={l:{},f:{},s:{},c:0,ff
  run(CHS,"l","ch:","c");run(FILMS,"f","","ff");run(SERIES,"s","","ss");return r})}
 function counts(pl){const r=plStats(pl);return {c:r.c,f:r.ff,s:r.ss}}
 const isFav=k=>S.favs.includes(k);
-function toggleFav(k,label){dirty();if(isFav(k)){S.favs=S.favs.filter(x=>x!==k);toast(`Retiré des favoris : ${label}`)}else{S.favs.push(k);toast(`Ajouté aux favoris : ${label}`)}save()}
+function toggleFav(k,label){dirty();if(isFav(k)){S.favs=S.favs.filter(x=>x!==k);toast(`Retiré des favoris : ${label}`)}else{S.favs.push(k);if(ALL[k]&&ALL[k].type==="s"){S.seen=S.seen||{};S.seen[k]=Date.now()}toast(`Ajouté aux favoris : ${label}`)}save()}
 
 /* ========================= RENDU : FRAGMENTS ========================= */
 const IC={
@@ -1386,16 +1386,17 @@ function tracksHtml(){const t=tracks(),a=P.audio||0,cs=(curSub(),P.sub),it=ALL[P
  <div class="tcol" data-col="2"><h4>Sous-titres · ${t.su.length}</h4>${row("ts--1","trk:s:-1",cs===-1,"Désactivés","")}${t.su.map((x,i)=>row("ts-"+i,"trk:s:"+i,i===cs,x,"")).join("")}</div>
  </div><div class="mfoot">← → passer de l'audio aux sous-titres · OK choisir · Retour fermer · ☰ Menu pour rouvrir</div></div></div>`}
 function infoBox(){const v=curVar()||{name:"",audio:["—"],subs:["—"]},st=P.nst||{};return `<div class="pinfo"><b>Playlist</b> ${esc(srcName())} · <b>Lecteur</b> ExoPlayer (Media3)<br><b>Flux</b> ${esc(v.name||"")}<br><code>${esc(streamUrl(true))}</code><br><b>Vidéo</b> ${esc(st.video||"en attente")}<br><b>Audio</b> ${esc(curAudio()?curAudio().n+" "+(curAudio().c||""):"—")} · <b>Sous-titres</b> ${esc(curSub()||"désactivés")}${st.buffering?" · <b>Mise en mémoire tampon…</b>":""}</div>`}
-function startPlayer(p){P=p;P.ui=true;P.audio=null;P.sub=null;clearInterval(PT);PT=setInterval(tick,500);uiPing();
+function startPlayer(p){P=p;if(p.kind==="vod"&&ALL[p.id]&&ALL[p.id].type==="s"){S.seen=S.seen||{};S.seen[p.id]=Date.now()}P.ui=true;P.audio=null;P.sub=null;clearInterval(PT);PT=setInterval(tick,500);uiPing();
  if(NATIVE){const u=streamUrl();if(!u){toast("Flux introuvable");return}PQ.splice(0).forEach(([k])=>{if(QPEND[k]==="probe")delete QPEND[k]});const go=()=>{if(P!==p||p.go)return;p.go=1;p.t0=Date.now();Prisme.play(u,Math.round((p.pos||0)*1000),p.kind==="live");Prisme.setFormat(curFmt()[0])};if(Prisme.probeBusy()){LOG("Lecture en attente de la fin d'une analyse de flux");const w0=Date.now(),wt=setInterval(()=>{if(P!==p||!Prisme.probeBusy()||Date.now()-w0>26000){clearInterval(wt);go()}},300)}else go()}}
 function tick(){if(!P)return;
  if(NATIVE){let st={};try{st=JSON.parse(Prisme.state()||"{}")}catch(e){}P.nst=st;if(natTick(st))return;
   if(st.pos!=null&&!SC.on){P.pos=st.pos/1000;if(st.dur>0)P.dur=st.dur/1000}
   if(st.error&&!P.err){P.err=1;toast("Lecture impossible : "+st.error);const s=srcs(curKey()).filter(compat);if(s.length>1)toast("Essaie une autre source avec le bouton Source")}
-  if(st.ended&&!P.endH){P.endH=1;const it=ALL[P.id];if(P.kind==="vod"&&it&&it.type==="s"){const n=nextEp(it);if(n){act("p:nextep");return}}toast("Lecture terminée");back();return}
+  if(st.ended&&!P.endH){P.endH=1;upnHide();const it=ALL[P.id];if(P.kind==="vod"&&it&&it.type==="s"&&!P.upnX){const n=nextEp(it);if(n){act("p:nextep");return}}toast("Lecture terminée");back();return}
   if(P.kind==="vod"&&P.aSync==null&&st.audio&&st.audio.length){P.aSync=1;langFix(st);st.aSel=P.audio??st.aSel;if(P.audio==null)P.audio=Math.max(0,st.aSel);if(P.sub==null)P.sub=st.sSel}}
  else if(P.kind==="vod"&&P.playing&&!SC.on)P.pos=Math.min(P.dur,P.pos+.5);
  if(P.kind==="vod"&&!SC.on){const b=$("#pbar");if(b&&P.dur>0){b.style.width=(P.pos/P.dur*100)+"%";$("#ptime").textContent=hms(P.pos);$("#prem").textContent="−"+hms(P.dur-P.pos)}}
+ upnTick();
  if(P.ui&&!SC.on&&Date.now()-P.last>5000&&!P.info){P.ui=false;const o=$("#pov");if(o)o.classList.add("hid")}}
 /* Défilement rapide : chaque appui rapproché accélère le pas (10 s → 30 s → 1 min → 2 min → 5 min) */
 let SC={on:false};
@@ -1420,8 +1421,17 @@ function drawScrub(st){
 function endScrub(){clearTimeout(SC.t);SC={on:false};const th=$("#pthumb"),tr=$("#ptr");if(th)th.hidden=true;if(tr)tr.classList.remove("scrub");
  const b=$("#pbar");if(b&&P){b.style.width=(P.pos/P.dur*100)+"%";$("#ptime").textContent=hms(P.pos);$("#prem").textContent="−"+hms(P.dur-P.pos)}}
 function commitScrub(){if(!SC.on||!P)return;P.pos=SC.pos;if(NATIVE)Prisme.seekTo(Math.round(P.pos*1000));endScrub();toast("Lecture à "+hms(P.pos))}
+const UPN={on:false,el:null};
+function upnHide(){UPN.on=false;if(UPN.el)UPN.el.style.display="none"}
+function upnShow(it,n,left){if(!UPN.el){const d=document.createElement("div");d.id="upn";d.style.cssText="position:fixed;right:64px;bottom:200px;z-index:90;width:430px;padding:20px 22px 18px;border-radius:18px;background:rgba(22,22,28,.94);border:1px solid rgba(255,255,255,.14);box-shadow:0 18px 50px rgba(0,0,0,.55);color:#fff;font-family:inherit";document.body.appendChild(d);UPN.el=d}
+ const e=curEpOf(it,n.ss,n.ep)||{},sn=(it.seasons||[])[n.ss-1]||n.ss,s=Math.max(0,Math.ceil(left));
+ UPN.el.innerHTML=`<div style="font-size:14px;letter-spacing:.08em;text-transform:uppercase;color:rgba(255,255,255,.6)">Épisode suivant · dans ${s} s</div><div style="font-size:22px;font-weight:700;margin:6px 0 2px">S${esc(String(sn))} · E${n.ep}${e.t&&!/^Épisode \d+$/.test(e.t)?" · "+esc(e.t):""}</div><div style="font-size:16px;color:rgba(255,255,255,.7)">${esc(it.t)}</div><div style="height:4px;border-radius:2px;background:rgba(255,255,255,.15);margin:14px 0 12px;overflow:hidden"><div style="height:100%;width:${Math.min(100,(20-left)/20*100)}%;background:#fff"></div></div><div style="font-size:15px;color:rgba(255,255,255,.75)"><b style="color:#fff">OK</b> lancer maintenant · <b style="color:#fff">Retour</b> annuler</div>`;
+ UPN.el.style.display="block";UPN.on=true}
+function upnTick(){if(!P||P.kind!=="vod"||P.upnX){if(UPN.on)upnHide();return}const it=ALL[P.id];if(!it||it.type!=="s"||!(P.dur>90)){if(UPN.on)upnHide();return}
+ const left=P.dur-P.pos;if(left>20||SC.on){if(UPN.on)upnHide();return}const n=nextEp(it);if(!n){if(UPN.on)upnHide();return}
+ if(left<=0.6){upnHide();act("p:nextep");return}upnShow(it,n,left)}
 function uiPing(){if(!P)return;P.last=Date.now();if(!P.ui){P.ui=true;const o=$("#pov");if(o)o.classList.remove("hid");return true}return false}
-function stopPlayer(){clearInterval(PT);NAT.pre=null;if(P&&P.kind==="vod"&&ALL[P.id]&&ALL[P.id].type==="s"&&P.dur>0&&P.ss){S.lastEp=S.lastEp||{};S.lastEp[P.id]={ss:P.ss,ep:P.ep,pct:P.pos/P.dur}}if(P&&P.kind==="vod")dirty();if(NATIVE)Prisme.stop();if(P&&P.kind==="vod"){const pct=P.pos/P.dur;if(pct>0.02&&pct<0.97)S.prog[P.id]=pct;else if(pct>=0.97)delete S.prog[P.id];save()}P=null}
+function stopPlayer(){clearInterval(PT);upnHide();NAT.pre=null;if(P&&P.kind==="vod"&&ALL[P.id]&&ALL[P.id].type==="s"&&P.dur>0&&P.ss){S.lastEp=S.lastEp||{};S.lastEp[P.id]={ss:P.ss,ep:P.ep,pct:P.pos/P.dur}}if(P&&P.kind==="vod")dirty();if(NATIVE)Prisme.stop();if(P&&P.kind==="vod"){const pct=P.pos/P.dur;if(pct>0.02&&pct<0.97)S.prog[P.id]=pct;else if(pct>=0.97)delete S.prog[P.id];save()}P=null}
 function zap(d){const L=liveList().length?liveList():chans();let i=L.findIndex(c=>c.id===P.id);i=(i+d+L.length)%L.length;P.id=L[i].id;P.src=srcId("ch:"+P.id);P.err=0;P.audio=null;P.sub=null;S.lch=P.id;if(NATIVE)Prisme.play(streamUrl(),0,true);render("p-src");uiPing()}
 
 /* ========================= MOTEUR DE RENDU / FOCUS ========================= */
@@ -1661,7 +1671,7 @@ function act(a){
    else if(v==="chs"){S.modal={type:"chs",ret:"p-chs"};render("zc-"+P.id)}
    else if(v==="fmt"){S.modal={type:"fmt",ret:"p-fmt"};render("fm-"+curFmt()[0])}
    else if(v==="audio"){const t=tracks();if(t.au.length<2&&!t.su.length){toast("Cette source n'a qu'une piste audio et aucun sous-titre");break}curSub();S.modal={type:"tracks",ret:"p-audio"};render("ta-"+(P.audio||0))}
-   else if(v==="nextep"){const it=ALL[P.id],n=nextEp(it);if(!n){toast("Dernier épisode");break}Object.assign(P,{ss:n.ss,ep:n.ep,pos:0,err:0,endH:0,aSync:null,audio:null,sub:null});S.seasons[P.id]=n.ss;if(NATIVE)Prisme.play(streamUrl(),0,false);render("p-nextep");toast(`Saison ${(it.seasons||[])[n.ss-1]} · Épisode ${n.ep}`)}
+   else if(v==="nextep"){const it=ALL[P.id],n=nextEp(it);if(!n){toast("Dernier épisode");break}upnHide();Object.assign(P,{ss:n.ss,ep:n.ep,pos:0,err:0,endH:0,upnX:0,aSync:null,audio:null,sub:null});S.seen=S.seen||{};S.seen[P.id]=Date.now();S.seasons[P.id]=n.ss;if(NATIVE)Prisme.play(streamUrl(),0,false);render("p-nextep");toast(`Saison ${(it.seasons||[])[n.ss-1]} · Épisode ${n.ep}`)}
    break;
  }
 }
@@ -1696,6 +1706,7 @@ async function boot(){if(S.set.lite==null){S.set.lite=!UHD;save()}document.docum
 /* ========================= ENTRÉES ========================= */
 function key(k){
  LASTKEY=Date.now();
+ if(UPN.on&&P&&topS().t==="player"){if(k==="ok"){upnHide();act("p:nextep");return}if(k==="back"){P.upnX=1;upnHide();toast("Épisode suivant annulé");return}}
  if(S.loading)return;
  if(S.modal){if(k==="back"){const r=S.modal.ret;S.modal=null;render(r);return}
   if(k==="up"||k==="down"||k==="left"||k==="right"){move(k);return}
@@ -1797,7 +1808,11 @@ const tmdbTxt=i=>i.tmdb?(i.tmdb/10).toFixed(1).replace(".",",")+"/10":"";
 function nI(i,full){const o={id:i.id,ty:i.type,t:i.t,y:i.y||0,img:tmS(i.img,"w342"),f:i.f,c1:i.c[0],c2:i.c[1],nw:isRecent(i.id),pr:S.prog[i.id]||0};
  if(full){o.bd=tmS(i.bd,"w1280");o.kick=(i.type==="f"?"Film":"Série")+((i.g||[])[0]?" · "+i.g[0]:"");o.meta=metaArr(i);o.s=String(i.s||"").slice(0,280);o.tmdb=tmdbTxt(i);o.age=i.age||""}
  return o}
-function natVer(ty){return [CATV,DIRTY,S.favs.length,Object.keys(S.prog).length,TREND.f.length,TREND.s.length,NAT.gv,ty].join("|")}
+/* Séries suivies (regardées ou dans Ma liste) mises à jour chez le fournisseur depuis la dernière visite */
+function newEps(){if(!S.seen){S.seen={};const now=Date.now();[...S.favs,...Object.keys(S.lastEp||{}),...Object.keys(S.prog)].forEach(k=>{if(ALL[k]&&ALL[k].type==="s")S.seen[k]=now});save()}
+ return Object.keys(S.seen).map(k=>ALL[k]).filter(i=>{if(!i||i.type!=="s"||!anySrc(i.id))return false;let m=0;for(const s of i.src)if(s.added>m)m=s.added;return m*1000>S.seen[i.id]})
+  .sort((a,b)=>Math.max(...b.src.map(s=>s.added||0))-Math.max(...a.src.map(s=>s.added||0))).slice(0,30)}
+function natVer(ty){return [CATV,DIRTY,S.favs.length,Object.values(S.seen||{}).reduce((a,b)=>a+b,0)%1e9,Object.keys(S.prog).length,TREND.f.length,TREND.s.length,NAT.gv,ty].join("|")}
 
 window.nativeApi={
  ver(ty){return natVer(ty)},
@@ -1808,7 +1823,8 @@ window.nativeApi={
   const fav=S.favs.map(k=>ALL[k]).filter(ok).slice(0,40);
   const recent=memo("nre"+ty,()=>list.map(i=>[i,added(i.id)]).filter(x=>x[1]).sort((a,b)=>a[1].d-b[1].d).slice(0,30).map(x=>x[0]));
   const trend=memo("ntr"+ty+TREND[ty].length,()=>[...list].sort((a,b)=>trendScore(b)-trendScore(a)).slice(0,10));
-  const rows=[["cont","Continuer à regarder",cont,""],["fav","Ma liste",fav,""],["new","Derniers ajouts",recent,""],["top",ty==="f"?"Top 10 des films du moment":"Top 10 des séries du moment",trend,"rank"]]
+  const nep=ty==="s"?newEps():[];
+  const rows=[["cont","Continuer à regarder",cont,""],["nep","Nouveaux épisodes",nep,""],["fav","Ma liste",fav,""],["new","Derniers ajouts",recent,""],["top",ty==="f"?"Top 10 des films du moment":"Top 10 des séries du moment",trend,"rank"]]
    .filter(r=>r[2].length).map(([k,title,items,kind])=>({k,title,small:k==="new"||k==="top"?"":String(items.length),kind,items:items.map(i=>nI(i,true))}));
   const gi=genreIndex(ty);
   const genres=GDEF[ty].filter(g=>(gi[g[0]]||[]).length).map(g=>({k:g[0],n:g[1],c:gi[g[0]].length,c1:g[2],c2:g[3]}));

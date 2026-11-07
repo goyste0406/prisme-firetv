@@ -43,7 +43,11 @@ const tmdbTxt=i=>i.tmdb?(i.tmdb/10).toFixed(1).replace(".",",")+"/10":"";
 function nI(i,full){const o={id:i.id,ty:i.type,t:i.t,y:i.y||0,img:tmS(i.img,"w342"),f:i.f,c1:i.c[0],c2:i.c[1],nw:isRecent(i.id),pr:S.prog[i.id]||0};
  if(full){o.bd=tmS(i.bd,"w1280");o.kick=(i.type==="f"?"Film":"Série")+((i.g||[])[0]?" · "+i.g[0]:"");o.meta=metaArr(i);o.s=String(i.s||"").slice(0,280);o.tmdb=tmdbTxt(i);o.age=i.age||""}
  return o}
-function natVer(ty){return [CATV,DIRTY,S.favs.length,Object.keys(S.prog).length,TREND.f.length,TREND.s.length,NAT.gv,ty].join("|")}
+/* Séries suivies (regardées ou dans Ma liste) mises à jour chez le fournisseur depuis la dernière visite */
+function newEps(){if(!S.seen){S.seen={};const now=Date.now();[...S.favs,...Object.keys(S.lastEp||{}),...Object.keys(S.prog)].forEach(k=>{if(ALL[k]&&ALL[k].type==="s")S.seen[k]=now});save()}
+ return Object.keys(S.seen).map(k=>ALL[k]).filter(i=>{if(!i||i.type!=="s"||!anySrc(i.id))return false;let m=0;for(const s of i.src)if(s.added>m)m=s.added;return m*1000>S.seen[i.id]})
+  .sort((a,b)=>Math.max(...b.src.map(s=>s.added||0))-Math.max(...a.src.map(s=>s.added||0))).slice(0,30)}
+function natVer(ty){return [CATV,DIRTY,S.favs.length,Object.values(S.seen||{}).reduce((a,b)=>a+b,0)%1e9,Object.keys(S.prog).length,TREND.f.length,TREND.s.length,NAT.gv,ty].join("|")}
 
 window.nativeApi={
  ver(ty){return natVer(ty)},
@@ -54,7 +58,8 @@ window.nativeApi={
   const fav=S.favs.map(k=>ALL[k]).filter(ok).slice(0,40);
   const recent=memo("nre"+ty,()=>list.map(i=>[i,added(i.id)]).filter(x=>x[1]).sort((a,b)=>a[1].d-b[1].d).slice(0,30).map(x=>x[0]));
   const trend=memo("ntr"+ty+TREND[ty].length,()=>[...list].sort((a,b)=>trendScore(b)-trendScore(a)).slice(0,10));
-  const rows=[["cont","Continuer à regarder",cont,""],["fav","Ma liste",fav,""],["new","Derniers ajouts",recent,""],["top",ty==="f"?"Top 10 des films du moment":"Top 10 des séries du moment",trend,"rank"]]
+  const nep=ty==="s"?newEps():[];
+  const rows=[["cont","Continuer à regarder",cont,""],["nep","Nouveaux épisodes",nep,""],["fav","Ma liste",fav,""],["new","Derniers ajouts",recent,""],["top",ty==="f"?"Top 10 des films du moment":"Top 10 des séries du moment",trend,"rank"]]
    .filter(r=>r[2].length).map(([k,title,items,kind])=>({k,title,small:k==="new"||k==="top"?"":String(items.length),kind,items:items.map(i=>nI(i,true))}));
   const gi=genreIndex(ty);
   const genres=GDEF[ty].filter(g=>(gi[g[0]]||[]).length).map(g=>({k:g[0],n:g[1],c:gi[g[0]].length,c1:g[2],c2:g[3]}));

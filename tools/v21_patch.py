@@ -313,3 +313,28 @@ R(' const fr=document.createDocumentFragment();while(view.firstChild)fr.appendCh
   ' view.querySelectorAll(".modal").forEach(x=>x.remove());const fr=document.createDocumentFragment();while(view.firstChild)fr.appendChild(view.firstChild);t.dom=fr;')
 R('function restore(t){view.replaceChildren(t.dom);t.dom=null;', 'function restore(t){view.replaceChildren(t.dom);t.dom=null;if(!S.modal)view.querySelectorAll(".modal").forEach(x=>x.remove());')
 R('  case "msrc":{const m=S.modal,ret=m.ret;', '  case "msrc":{const m=S.modal;if(!m){render(F&&F.dataset.fid);break}const ret=m.ret;')
+
+# ---------------------------------------------------------------- 2.2.0 : épisode suivant automatique et « Nouveaux épisodes »
+# compte à rebours dans les 20 dernières secondes d'un épisode : OK lance tout de suite, Retour annule
+R('function uiPing(){', '''const UPN={on:false,el:null};
+function upnHide(){UPN.on=false;if(UPN.el)UPN.el.style.display="none"}
+function upnShow(it,n,left){if(!UPN.el){const d=document.createElement("div");d.id="upn";d.style.cssText="position:fixed;right:64px;bottom:200px;z-index:90;width:430px;padding:20px 22px 18px;border-radius:18px;background:rgba(22,22,28,.94);border:1px solid rgba(255,255,255,.14);box-shadow:0 18px 50px rgba(0,0,0,.55);color:#fff;font-family:inherit";document.body.appendChild(d);UPN.el=d}
+ const e=curEpOf(it,n.ss,n.ep)||{},sn=(it.seasons||[])[n.ss-1]||n.ss,s=Math.max(0,Math.ceil(left));
+ UPN.el.innerHTML=`<div style="font-size:14px;letter-spacing:.08em;text-transform:uppercase;color:rgba(255,255,255,.6)">Épisode suivant · dans ${s} s</div><div style="font-size:22px;font-weight:700;margin:6px 0 2px">S${esc(String(sn))} · E${n.ep}${e.t&&!/^Épisode \\d+$/.test(e.t)?" · "+esc(e.t):""}</div><div style="font-size:16px;color:rgba(255,255,255,.7)">${esc(it.t)}</div><div style="height:4px;border-radius:2px;background:rgba(255,255,255,.15);margin:14px 0 12px;overflow:hidden"><div style="height:100%;width:${Math.min(100,(20-left)/20*100)}%;background:#fff"></div></div><div style="font-size:15px;color:rgba(255,255,255,.75)"><b style="color:#fff">OK</b> lancer maintenant · <b style="color:#fff">Retour</b> annuler</div>`;
+ UPN.el.style.display="block";UPN.on=true}
+function upnTick(){if(!P||P.kind!=="vod"||P.upnX){if(UPN.on)upnHide();return}const it=ALL[P.id];if(!it||it.type!=="s"||!(P.dur>90)){if(UPN.on)upnHide();return}
+ const left=P.dur-P.pos;if(left>20||SC.on){if(UPN.on)upnHide();return}const n=nextEp(it);if(!n){if(UPN.on)upnHide();return}
+ if(left<=0.6){upnHide();act("p:nextep");return}upnShow(it,n,left)}
+function uiPing(){''')
+R(' if(P.ui&&!SC.on&&Date.now()-P.last>5000&&!P.info){P.ui=false;', ' upnTick();\n if(P.ui&&!SC.on&&Date.now()-P.last>5000&&!P.info){P.ui=false;')
+# fin réelle de l'épisode : on respecte l'annulation
+R('if(st.ended&&!P.endH){P.endH=1;const it=ALL[P.id];if(P.kind==="vod"&&it&&it.type==="s"){const n=nextEp(it);if(n){act("p:nextep");return}}',
+  'if(st.ended&&!P.endH){P.endH=1;upnHide();const it=ALL[P.id];if(P.kind==="vod"&&it&&it.type==="s"&&!P.upnX){const n=nextEp(it);if(n){act("p:nextep");return}}')
+R('Object.assign(P,{ss:n.ss,ep:n.ep,pos:0,err:0,endH:0,aSync:null,audio:null,sub:null});',
+  'upnHide();Object.assign(P,{ss:n.ss,ep:n.ep,pos:0,err:0,endH:0,upnX:0,aSync:null,audio:null,sub:null});S.seen=S.seen||{};S.seen[P.id]=Date.now();')
+R('function stopPlayer(){clearInterval(PT);', 'function stopPlayer(){clearInterval(PT);upnHide();')
+R('function key(k){\n LASTKEY=Date.now();\n', 'function key(k){\n LASTKEY=Date.now();\n if(UPN.on&&P&&topS().t==="player"){if(k==="ok"){upnHide();act("p:nextep");return}if(k==="back"){P.upnX=1;upnHide();toast("Épisode suivant annulé");return}}\n')
+# dernière visite d'une série (regardée ou ajoutée à Ma liste) : repère des nouveaux épisodes
+R('seasons:S.seasons,lastEp:S.lastEp,', 'seasons:S.seasons,lastEp:S.lastEp,seen:S.seen,')
+R('function startPlayer(p){P=p;', 'function startPlayer(p){P=p;if(p.kind==="vod"&&ALL[p.id]&&ALL[p.id].type==="s"){S.seen=S.seen||{};S.seen[p.id]=Date.now()}')
+R('else{S.favs.push(k);', 'else{S.favs.push(k);if(ALL[k]&&ALL[k].type==="s"){S.seen=S.seen||{};S.seen[k]=Date.now()}')
