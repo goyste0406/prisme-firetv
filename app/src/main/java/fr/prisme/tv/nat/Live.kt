@@ -299,7 +299,7 @@ class LiveScreen(ui: NativeUi, private val fromTabs: Boolean = false) : Screen(u
     private val pvChip = K.text(ui.ctx, 14f, Color.WHITE, 700)
     private val pvTime = K.text(ui.ctx, 16f, K.white(0.7f))
     private val pvGenre = K.text(ui.ctx, 13f, Color.WHITE, 500)
-    private val pvTitle = K.text(ui.ctx, 27f, Color.WHITE, 700, 2)
+    private val pvTitle = K.text(ui.ctx, 27f, Color.WHITE, 700, 1)
     private val pvBar = Bar(ui.ctx, dark = true)
     private val pvDesc = K.text(ui.ctx, 15f, K.white(0.66f), 400, 3)
     private val pvNext = K.text(ui.ctx, 15f, K.white(0.62f), 400, 1)
@@ -497,7 +497,7 @@ class LiveScreen(ui: NativeUi, private val fromTabs: Boolean = false) : Screen(u
     override fun onEvent(kind: String, o: JSONObject) {
         if (kind != "epg" || !shown) return
         val now = System.currentTimeMillis()
-        if (now - lastEpg < 2500) return
+        if (now - lastEpg < 4000) return
         lastEpg = now
         ui.api("live()") { r ->
             if (r == null || r.optString("cat") != cat) return@api

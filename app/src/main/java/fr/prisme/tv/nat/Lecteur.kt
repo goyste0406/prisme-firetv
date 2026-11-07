@@ -238,8 +238,8 @@ class PlayerScreen(ui: NativeUi, init: JSONObject? = null) : Screen(ui) {
         val tl = LinearLayout(ui.ctx).apply { orientation = LinearLayout.VERTICAL }
         kick.letterSpacing = 0.08f
         tl.addView(kick)
-        tl.addView(title, LinearLayout.LayoutParams(K.px(860), K.WRAP).apply { topMargin = K.px(4) })
-        tl.addView(sub, LinearLayout.LayoutParams(K.px(860), K.WRAP).apply { topMargin = K.px(6) })
+        tl.addView(title, LinearLayout.LayoutParams(K.px(700), K.WRAP).apply { topMargin = K.px(4) })
+        tl.addView(sub, LinearLayout.LayoutParams(K.px(700), K.WRAP).apply { topMargin = K.px(6) })
         ov.addView(tl, FrameLayout.LayoutParams(K.WRAP, K.WRAP).apply { leftMargin = K.px(64); topMargin = K.px(44) })
         badges.orientation = LinearLayout.HORIZONTAL; badges.gravity = Gravity.CENTER_VERTICAL
         ov.addView(badges, FrameLayout.LayoutParams(K.WRAP, K.WRAP, Gravity.END).apply { rightMargin = K.px(64); topMargin = K.px(46) })

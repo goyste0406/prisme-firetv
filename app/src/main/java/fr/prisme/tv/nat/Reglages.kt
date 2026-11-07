@@ -106,7 +106,7 @@ class SetRow(ctx: Context, private val compact: Boolean = false) : LinearLayout(
                 sw.visibility = if (hasSw) View.VISIBLE else View.GONE
                 if (hasSw) sw.on = o.optBoolean("sw")
                 val vv = o.optString("v")
-                v.text = vv; v.visibility = if (vv.isEmpty() || (hasSw && vv.length > 40)) View.GONE else View.VISIBLE
+                v.text = vv; v.visibility = if (vv.isEmpty()) View.GONE else View.VISIBLE
             }
         }
         setFoc(focused)

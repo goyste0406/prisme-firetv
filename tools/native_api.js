@@ -175,6 +175,11 @@ function natTick(st){
    return true}
   if(!P.started){P.err=1;LOG("Erreur de lecture · "+String(st.error).slice(0,160));if(natSwitch("erreur"))return true;if(natFail(String(st.error).slice(0,120)))return true;P.err=0}
  }
+ /* coupure pendant la lecture (réseau, fin de flux en direct) : reconnexion au même endroit, 3 fois en 2 minutes au plus */
+ if(P&&P.started&&(st.error||(st.ended&&(P.kind==="live"||(P.dur>0&&P.pos<P.dur-120))))){const now=Date.now();P.rc=(P.rc||[]).filter(t=>now-t<120000);
+  if(P.rc.length<3){P.rc.push(now);P.err=1;P.endH=0;P.retryAt=now+1500;P.started=false;P.t0=now;
+   LOG(`Coupure pendant la lecture (${st.error?String(st.error).slice(0,80):"fin du flux"}) : reconnexion ${P.rc.length} sur 3`);
+   if(P.natUi)Prisme.nativeEvent("toast",JSON.stringify({msg:"Connexion perdue, reprise en cours…"}));return true}}
  if(P&&!P.started&&!st.error&&P.nat&&!P.slowMsg&&Date.now()-(P.t0||0)>10000){P.slowMsg=1;Prisme.nativeEvent("loading",JSON.stringify({msg:"Le serveur met du temps à répondre…"}))}
  if(P&&!P.started&&!st.error&&P.nat&&Date.now()-(P.t0||0)>25000){P.t0=Date.now();P.slowMsg=0;if(natSwitch("délai dépassé"))return true;if(!P.slowFail){P.slowFail=1;return false}if(natFail("la vidéo ne démarre pas (pas de réponse du serveur)"))return true}
  return false}
@@ -256,7 +261,7 @@ try{if(NATIVE&&typeof Prisme.lastCrash==="function"&&Date.now()-Prisme.lastCrash
 function epTitle(e,it){let t=String(e&&e.t||"");const m=t.match(/S\d{1,2}\s*E\d{1,3}\s*[-–:·|]*\s*(.*)$/i);if(m)t=m[1];t=t.replace(/^[\s\-–:·|]+/,"").trim();
  if(!t||/^(É|E)pisode \d+$/i.test(t)||(it&&norm(t).includes(norm(it.t))))return "";return t}
 function chQ(c){let b="";srcs("ch:"+c.id).forEach(v=>{if(qr(v.q)>0&&v.q!=="Auto"&&(!b||qr(v.q)>qr(b)))b=v.q});return b}
-function chO(c,full){const e=epgAt(c);
+function chO(c,full){let e;if(full)e=epgAt(c);else{NOQ=true;try{e=epgAt(c)}finally{NOQ=false}}
  const o={id:c.id,n:c.n,num:c.rank<999?c.rank:c.num,logo:c.logo||"",col:c.col,q:chQ(c),pg:e.cur.t,s:fmt(e.cur.s),pct:Math.round(e.pct),fav:isFav("ch:"+c.id)};
  if(full){o.e=fmt(e.cur.e);o.g=e.cur.g&&e.cur.g!=="Direct"?e.cur.g:"";o.desc=String(e.cur.desc||"").slice(0,300);o.next=e.next.slice(0,3).map(p=>({s:fmt(p.s),t:p.t}));
   const L=srcs("ch:"+c.id),v=pickSrc("ch:"+c.id);o.ns=L.length;o.src=v?[v.p.name,qr(v.q)>0&&v.q!=="Auto"?v.q:""].filter(Boolean).join(" · "):""}
@@ -268,7 +273,7 @@ nativeApi.live=function(cat){if(cat&&cat!==S.lcat){S.lcat=cat;save()}if(!LCATS.s
  const L=liveList();L.slice(0,30).forEach(c=>epg(c));
  const sel=CH[S.lch]&&L.includes(CH[S.lch])?S.lch:(L[0]||{}).id||"";
  return JSON.stringify({cat:S.lcat,catName:natCatName(),cats:natLiveCats(),chans:L.slice(0,1500).map(c=>chO(c)),sel})};
-nativeApi.ch=function(id){const c=CH[id];if(!c)return JSON.stringify({});epg(c);S.lch=id;return JSON.stringify(chO(c,true))};
+nativeApi.ch=function(id){const c=CH[id];if(!c)return JSON.stringify({});epg(c);S.lch=id;{const L=liveList(),i=L.indexOf(c);if(i>=0)L.slice(Math.max(0,i-3),i+8).forEach(x=>epg(x))}return JSON.stringify(chO(c,true))};
 nativeApi.guide=function(from,n){const L=liveList(),out=[];const a=Math.max(0,+from||0),b=Math.min(L.length,a+(+n||8));
  for(let i=a;i<b;i++){const c=L[i];const P2=epg(c);out.push({id:c.id,n:c.n,num:c.rank<999?c.rank:c.num,col:c.col,logo:c.logo||"",progs:P2.map(p=>({s:Math.round(p.s),e:Math.round(p.e),t:p.t,g:p.g&&p.g!=="Direct"?p.g:""}))})}
  return JSON.stringify({total:L.length,from:a,now:nowMin(),catName:natCatName(),chans:out})};

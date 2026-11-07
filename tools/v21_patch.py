@@ -377,3 +377,7 @@ R('  <div class="it"><span>Qualité maximale</span><span>${DEVICE.maxQ} · sourc
 R('   else S.set[v]=!S.set[v];', '   else S.set[v]=!S.set[v];\n   if(v==="allow4k"){bump();toast(S.set.allow4k?"4K autorisée : les sources 4K seront proposées et choisies en priorité":"4K désactivée : retour au 1080p maximum")}')
 # 2.5.0 : réglages natifs · les messages de la couche de données s'affichent dans l'interface native
 R('function toast(m){', 'function toast(m){if(NATIVE&&typeof NAT!=="undefined"&&NAT.vis){try{Prisme.nativeEvent("toast",JSON.stringify({msg:String(m)}))}catch(e){}return}')
+
+# 2.5.1 (audit) : le guide n'est demandé que pour les chaînes affichées ; actualisation automatique jamais pendant une lecture
+R('function queueEpg(ch){', 'let NOQ=false;function queueEpg(ch){if(NOQ)return;')
+R('  if(stale.length)(async()=>{for(const p of stale)await refreshPl(p,true)})().then(()=>{', '  if(stale.length)(async()=>{for(const p of stale){while(P)await nap(5000);await refreshPl(p,true)}})().then(()=>{')
