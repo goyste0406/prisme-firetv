@@ -20,12 +20,12 @@ function lSoon(g,win=90){const n=nowMin();return lvis().flatMap(c=>epg(c).filter
 function deckList(d){if(d==="Reprendre")return LS.hist.filter(id=>CH[id]&&srcs("ch:"+id).length).slice(0,3).map(id=>({c:CH[id],e:epgAt(CH[id])}));
  if(d==="Favoris")return lvis().filter(c=>isFav("ch:"+c.id)).map(c=>({c,e:epgAt(c)}));return lNow(d)}
 function deckOrder(){return ["Reprendre","Favoris",...[...LGEN].sort((a,b)=>(LS.gw[b]||0)-(LS.gw[a]||0))].filter(d=>deckList(d).length)}
-const since=p=>{const n=nowMin();return p.s<=n?"depuis "+dur(Math.max(1,Math.round(n-p.s))):"dans "+dur(Math.max(1,Math.round(p.s-n)))};
+const since=p=>{if(p.e-p.s>600)return "guide non communiqué";const n=nowMin();return p.s<=n?"depuis "+dur(Math.max(1,Math.round(n-p.s))):"dans "+dur(Math.max(1,Math.round(p.s-n)))};
 const lbest=key=>{const L=srcs(key).filter(compat);return L[0]};
 function lpref(key){const P=LS.pref[key];if(!P)return null;let b=null,n=0;for(const k in P)if(P[k]>n){n=P[k];b=k}return n>=2?srcs(key).find(v=>v.id===b):null}
 /* ---------- fragments ---------- */
 function lth(c,inner,p){p=p||epgAt(c).cur;const g=pgen(p),h=hash(p.t||c.id)%360,h2=(h+50)%360;
- return `<div class="lth" style="--c:${c.col};--h1:${h};--h2:${h2};--x:${20+hash(p.t||c.id)%55}%"><div class="lart">${lsvg(g)}<span>${esc(p.t||"")}</span></div>${p.img?`<img class="limg" src="${esc(p.img)}" alt="" loading="lazy" onerror="this.remove()">`:""}<span class="llogo" style="--c:${c.col}">${esc(c.n)}</span>${inner||""}</div>`}
+ return `<div class="lth" style="--c:${c.col};--h1:${h};--h2:${h2};--x:${20+hash(p.t||c.id)%55}%"><div class="lart">${lsvg(g)}<span>${esc(p.t||"")}</span></div>${(im=>im?`<img class="limg" src="${esc(im)}" alt="" onerror="this.remove()"><div class="limgs"></div>`:"")(typeof imgProg==="function"?imgProg(p):p.img)}${(lg=>lg?`<span class="llogo li"><img src="${esc(lg)}" alt="${esc(c.n)}"></span>`:`<span class="llogo" style="--c:${c.col}">${esc(c.n)}</span>`)(typeof imgLogo==="function"?imgLogo(c):"")}${inner||""}</div>`}
 function lheroHtml(c,p){if(!c)return `<div class="lhero"><h1>Aucune chaîne</h1></div>`;const n=nowMin();p=p||epgAt(c).cur;const on=p.s<=n,L=srcs("ch:"+c.id),b=lbest("ch:"+c.id);
  return `<div class="k">${on?'<span class="lbd">EN DIRECT</span>':'<span class="lbd soon">À VENIR</span>'}${esc(c.n.toUpperCase())} · ${esc(pgen(p).toUpperCase())}</div><h1>${esc(p.t)}</h1>
  <div class="m">${fmt(p.s)} – ${fmt(p.e)} · ${since(p)}${on?" · reste "+dur(Math.max(1,Math.round(p.e-n))):""} · ${L.length} source${L.length>1?"s":""}${b?` <span class="qb q${b.q}" style="height:20px;font-size:11px">${b.q}</span>`:""}</div>${on?`<div class="lpb"><i style="width:${Math.round((n-p.s)/(p.e-p.s)*100)}%"></i></div>`:""}`}

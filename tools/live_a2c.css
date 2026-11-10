@@ -160,3 +160,7 @@
 .lside,.lmain{z-index:2}.lmain{z-index:1}
 .lfan .lart span{font-size:18px;top:50px}
 .ldk .lart span{display:none}
+.limg{z-index:1}.limgs{position:absolute;inset:0;z-index:1;background:linear-gradient(0deg,rgba(0,0,0,.55),transparent 45%),linear-gradient(180deg,rgba(0,0,0,.35),transparent 30%)}
+.lth:has(.limg) .lart{display:none}
+.llogo.li{background:rgba(10,12,18,.55);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);padding:3px 7px;min-width:0}
+.llogo.li img{display:block;height:22px;max-width:90px;object-fit:contain}

@@ -93,6 +93,99 @@ async function rImport(files,provName,status){
   if(txt.length<4.4e6){try{localStorage.setItem("prisme-real",txt);return {...st,keptF:nf,keptS:ns,totF:R.films.length,totS:R.series.length,pls:R.pls.length}}catch(e){}}
   nf=Math.floor(nf*.7);ns=Math.floor(ns*.7);if(tries===6){for(const k in R.epg)R.epg[k]=R.epg[k].slice(0,25)}}
  throw new Error("Trop de données pour la mémoire du navigateur, même après réduction.")}
+const RICMD=`cat > /tmp/prisme-images.pl <<'PRISME_FIN'
+#!/usr/bin/perl
+# prisme : récupère les affiches TMDB des programmes du jour et les logos des chaînes
+# Lit les dossiers prisme-* du Bureau et écrit images.json dans chacun.
+use strict; use warnings; use JSON::PP; use MIME::Base64; use Time::Local; use File::Temp qw(tempdir);
+my $TMDB = $ENV{PRISME_TMDB} || "https://api.themoviedb.org/3";
+my $IMGB = $ENV{PRISME_TMDB_IMG} || "https://image.tmdb.org/t/p";
+my $MAXT = 300; my $MAXL = 600;
+my @dirs = grep { -d $_ } glob("$ENV{HOME}/Desktop/prisme-*");
+die "Aucun dossier prisme-... sur le Bureau. Lance d'abord la commande des données.\\n" unless @dirs;
+print "Clé API TMDB (elle ne s'affiche pas quand tu tapes) : ";
+system("stty", "-echo"); my $key = <STDIN>; system("stty", "echo"); print "\\n";
+$key = "" unless defined $key; $key =~ s/\\s+//g;
+die "Aucune clé saisie.\\n" unless length $key;
+my @auth = length($key) > 40 ? ("-H", "Authorization: Bearer $key") : ();
+my $akey = length($key) > 40 ? "" : "&api_key=$key";
+my $tmp = tempdir(CLEANUP => 1);
+my $J = JSON::PP->new->utf8->canonical;
+my $hasSips = (-x "/usr/bin/sips") ? 1 : 0;
+
+sub slurp { my ($f) = @_; open(my $h, "<:raw", $f) or return ""; local $/; my $d = <$h>; close $h; return defined $d ? $d : "" }
+sub enc { my ($s) = @_; $s =~ s/([^A-Za-z0-9\\-_.~])/sprintf("%%%02X", ord $1)/ge; return $s }
+sub ent { my ($s) = @_; $s =~ s/<!\\[CDATA\\[(.*?)\\]\\]>/$1/gs; $s =~ s/&lt;/</g; $s =~ s/&gt;/>/g; $s =~ s/&quot;/"/g; $s =~ s/&(apos|#39);/'/g; $s =~ s/&amp;/&/g; $s =~ s/^\\s+|\\s+$//g; return $s }
+sub tsec { my ($v) = @_; return undef unless $v && $v =~ /^(\\d{4})(\\d\\d)(\\d\\d)(\\d\\d)(\\d\\d)(\\d\\d)?\\s*([+-])?(\\d\\d)?(\\d\\d)?/;
+  my $t = timegm($6 || 0, $5, $4, $3, $2 - 1, $1); if (defined $7) { my $o = ($8 * 60 + $9) * 60; $t -= ($7 eq "-" ? -$o : $o) } else { $t = timelocal($6 || 0, $5, $4, $3, $2 - 1, $1) } return $t }
+sub simp { my ($s) = @_; $s = lc $s; $s =~ s/[^a-z0-9\\x80-\\xff]+//g; return $s }
+sub clean { my ($t) = @_; $t =~ s/\\s*[-:–]\\s*(S\\d+\\s*E\\d+|saison\\s*\\d+|[ée]pisode\\s*\\d+).*$//i; $t =~ s/\\s*\\([^)]*\\)\\s*$//; $t =~ s/\\s*\\|.*$//; $t =~ s/^\\s+|\\s+$//g; return $t }
+sub fetch_many { # [[url, file], ...] en parallèle
+  my ($list, @h) = @_; return unless @$list;
+  my $cfg = "$tmp/cfg" . int(rand(1e9)); open(my $c, ">", $cfg) or die; for my $u (@$list) { my ($url, $f) = @$u; $url =~ s/"/%22/g; print $c "url = \\"$url\\"\\noutput = \\"$f\\"\\n" } close $c;
+  system("curl", "-sSL", "--compressed", "--max-time", "20", "--retry", "1", "-A", "Mozilla/5.0", "--parallel", "--parallel-max", "12", @h, "-K", $cfg);
+}
+sub datauri { my ($f, $maxkb) = @_; return undef unless -s $f;
+  if ($hasSips) { my $o = "$f.png"; system("/usr/bin/sips -s format png -Z 300 '$f' --out '$o' >/dev/null 2>&1"); $f = $o if -s $o }
+  my $d = slurp($f); return undef if length($d) > $maxkb * 1024;
+  my $m = substr($d, 0, 4) eq "\\x89PNG" ? "image/png" : substr($d, 0, 2) eq "\\xff\\xd8" ? "image/jpeg" : substr($d, 0, 4) eq "RIFF" ? "image/webp" : substr($d, 0, 3) eq "GIF" ? "image/gif" : undef;
+  return undef unless $m; return "data:$m;base64," . encode_base64($d, "") }
+
+# --- vérifie la clé ---
+my $chk = "$tmp/chk.json"; fetch_many([["$TMDB/configuration?x=1$akey", $chk]], @auth);
+my $cj = eval { $J->decode(slurp($chk)) } || {};
+die "TMDB refuse cette clé (" . ($cj->{status_message} || "réponse illisible") . "). Vérifie-la sur themoviedb.org > Paramètres > API.\\n" if !$cj->{images};
+print "✓ Clé TMDB acceptée\\n";
+
+my $now = time; my %done;
+for my $dir (@dirs) {
+  print "== $dir\\n";
+  my $x = slurp("$dir/xmltv.xml"); if (substr($x, 0, 2) eq "\\x1f\\x8b") { $x = \`gunzip -c "$dir/xmltv.xml"\` }
+  my $ls = eval { $J->decode(slurp("$dir/get_live_streams.json")) }; $ls = [] unless ref $ls eq "ARRAY";
+  # --- logos ---
+  my %icon; while ($x =~ /<channel\\b[^>]*\\bid="([^"]*)"[^>]*>(.*?)<\\/channel>/gs) { my ($id, $b) = ($1, $2); $icon{ent($id)} = ent($1) if $b =~ /<icon[^>]*\\bsrc="([^"]*)"/ }
+  my (@lg, %seenu); my $n = 0;
+  for my $s (@$ls) { next unless ref $s eq "HASH"; my $e = defined $s->{epg_channel_id} ? "$s->{epg_channel_id}" : ""; my $u = ($e ne "" && $icon{$e}) || $s->{stream_icon} || ""; next unless $u =~ /^https?:/;
+    next if $s->{name} && $s->{name} =~ /adult|xxx|porn|\\+ ?18/i; $u =~ s/ /%20/g;
+    my $f = $seenu{$u} //= do { $n++; "$tmp/l$n" }; my $nm = "" . ($s->{name} || ""); utf8::encode($nm) if utf8::is_utf8($nm); utf8::encode($e) if utf8::is_utf8($e); push @lg, [$e, $nm, $u, $f]; last if $n >= $MAXL }
+  print "Logos des chaînes : ", scalar(keys %seenu), " à télécharger…\\n";
+  fetch_many([map { [$_, $seenu{$_}] } keys %seenu]);
+  my (@logos, %lu); for my $l (@lg) { my $f = $l->[3]; $lu{$f} //= datauri($f, 120) // ""; push @logos, [$l->[0], $l->[1], $lu{$f}] if $lu{$f} ne "" }
+  # --- programmes du jour ---
+  my %tit; my $order = 0;
+  while ($x =~ /<programme\\b([^>]*)>(.*?)<\\/programme>/gs) { my ($a, $b) = ($1, $2);
+    my ($st) = $a =~ /\\bstart="([^"]*)"/; my ($en) = $a =~ /\\bstop="([^"]*)"/; my $s = tsec($st); my $e = tsec($en); next unless defined $s && defined $e;
+    next if $e < $now - 3600 || $s > $now + 8 * 3600;
+    my ($t) = $b =~ /<title[^>]*>(.*?)<\\/title>/s; next unless defined $t; $t = ent($t); next if length($t) < 2;
+    my @cat = $b =~ /<category[^>]*>(.*?)<\\/category>/gs; my $cat = join(" ", map { ent($_) } @cat);
+    next if $cat =~ /sport|foot|rugby|tennis|info|news|journal|m[ée]t[ée]o|magazine|jeu|game|t[ée]l[ée]achat|d[ée]bat|politique/i;
+    next if $t =~ /^(journal|le journal|jt|m[ée]t[ée]o|info|infos|programme|fin des programmes|t[ée]l[ée]shopping|le 20h|le 13h|tirage)/i;
+    my $c = clean($t); next if length($c) < 2;
+    my $live = ($s <= $now && $e > $now) ? 0 : 1;
+    $tit{$c} //= { t => $c, raw => {}, live => $live, ord => $order++, film => ($cat =~ /film|cin[ée]|t[ée]l[ée]film|movie/i ? 1 : 0) };
+    $tit{$c}{raw}{$t} = 1; $tit{$c}{live} = 0 if !$live }
+  my @T = sort { $a->{live} <=> $b->{live} || $a->{ord} <=> $b->{ord} } values %tit; @T = @T[0 .. $MAXT - 1] if @T > $MAXT;
+  print "Programmes à rechercher sur TMDB : ", scalar(@T), "…\\n";
+  my $i = 0; fetch_many([map { $i++; $_->{q} = "$tmp/q$i.json"; ["$TMDB/search/multi?query=" . enc($_->{t}) . "&language=fr-FR&include_adult=false$akey", $_->{q}] } @T], @auth);
+  my (@dl, %pf); my $k = 0;
+  for my $p (@T) { my $r = eval { $J->decode(slurp($p->{q})) } || {}; my $want = simp($p->{t}); my $best;
+    for my $m (@{ $r->{results} || [] }) { next unless ($m->{media_type} || "") =~ /^(movie|tv)$/; next unless $m->{backdrop_path} || $m->{poster_path};
+      my @names = grep { defined } ($m->{title}, $m->{name}, $m->{original_title}, $m->{original_name});
+      my $ok = grep { my $s = simp(do { my $z = $_; utf8::encode($z) if utf8::is_utf8($z); $z }); $s eq $want || (length($want) >= 6 && (index($s, $want) == 0 || index($want, $s) == 0) && length($s) >= 6) } @names;
+      next unless $ok; $best = $m if !$best || ($p->{film} && $m->{media_type} eq "movie" && $best->{media_type} ne "movie"); last if $best && (!$p->{film} || $best->{media_type} eq "movie") }
+    next unless $best; my $path = $best->{backdrop_path} ? "/w300$best->{backdrop_path}" : "/w185$best->{poster_path}";
+    $k++; $p->{f} = "$tmp/p$k"; push @dl, ["$IMGB$path", $p->{f}] }
+  print "Affiches trouvées : ", scalar(@dl), ", téléchargement…\\n";
+  fetch_many(\\@dl);
+  my %prog; for my $p (@T) { next unless $p->{f}; my $u = datauri($p->{f}, 160); next unless $u; $prog{$_} = $u for keys %{ $p->{raw} } }
+  my $out = { v => 1, at => $now, logos => \\@logos, progs => \\%prog };
+  open(my $o, ">:raw", "$dir/images.json") or die "Impossible d'écrire $dir/images.json\\n"; print $o JSON::PP->new->canonical->encode($out); close $o;
+  printf "✓ images.json : %d logos, %d affiches, %.1f Mo\\n", scalar(@logos), scalar(keys %prog), (-s "$dir/images.json") / 1048576;
+}
+print "Terminé. Ajoute images.json dans le simulateur (bouton « Choisir les fichiers… »).\\n";
+system("open", $dirs[0]) if -x "/usr/bin/open";
+PRISME_FIN
+perl /tmp/prisme-images.pl`;
 /* ---------- panneau sous la télécommande ---------- */
 const RCMD=`c(){ curl -sSLG --compressed -A "Mozilla/5.0" "$@"; }; printf "Nom de ce fournisseur (ex. IPTV1) : "; read -r F; printf "Adresse du serveur (ex. http://monserveur.com:8080) : "; read -r U; printf "Nom d'utilisateur : "; read -r N; printf "Mot de passe : "; read -rs P; echo; case "$U" in http*) ;; *) U="http://$U";; esac; U="\${U%%/get.php*}"; U="\${U%%/player_api.php*}"; U="\${U%/}"; R=$(c "$U/player_api.php" --data-urlencode "username=$N" --data-urlencode "password=$P"); case "$R" in *'"auth":1'*|*'"auth": 1'*|*'"auth":"1"'*) echo "✓ Connexion acceptée";; *) echo "⚠ Le serveur refuse la connexion ou répond autre chose. Début de la réponse :"; echo "\${R:0:200}";; esac; D=~/Desktop/prisme-"\${F// /-}"; mkdir -p "$D" && cd "$D" && for a in get_live_categories get_live_streams get_vod_categories get_vod_streams get_series_categories get_series; do c "$U/player_api.php" --data-urlencode "username=$N" --data-urlencode "password=$P" --data-urlencode "action=$a" -o "$a.json"; echo "✓ $a : $(wc -c < "$a.json" | tr -d ' ') octets, début : $(head -c 60 "$a.json")"; done; c "$U/xmltv.php" --data-urlencode "username=$N" --data-urlencode "password=$P" -o xmltv.xml; echo "✓ guide : $(wc -c < xmltv.xml | tr -d ' ') octets"; unset P R; open "$D"`;
 document.querySelector(".ldemo").insertAdjacentHTML("afterend",`<section class="rimp">
@@ -102,12 +195,16 @@ document.querySelector(".ldemo").insertAdjacentHTML("afterend",`<section class="
  <div class="rcmd"><code id="rcmd">${esc(RCMD)}</code><button type="button" id="rcopy">Copier</button></div>
  <ol start="2"><li>Choisis ici <b>tous les fichiers</b> de ce dossier (7 fichiers). Pour un 2ᵉ fournisseur, refais les deux étapes : les catalogues sont fusionnés.</li></ol>
  <div class="rrow"><label for="rname">Nom du fournisseur</label><input id="rname" value="${REAL?"Fournisseur "+(REAL.pls.length+1):"Mon fournisseur"}" autocomplete="off"><label class="rbtn" for="rfiles">Choisir les fichiers…</label><input type="file" id="rfiles" multiple accept=".json,.xml,.gz,.txt,application/json,text/xml" hidden>${REAL?'<button type="button" id="rdemo">Revenir aux données de démo</button>':""}</div>
+ <ol start="3"><li><b>Affiches et logos</b> (après les données) : dans Terminal, colle cette 2ᵉ commande. Elle te demande ta clé API TMDB (qui ne s'affiche pas), cherche les affiches des films et séries diffusés aujourd'hui, récupère les logos des chaînes et crée <b>images.json</b> dans chaque dossier prisme-… Choisis ensuite ce fichier avec le même bouton.</li></ol>
+ <div class="rcmd"><code id="ricmd">Script de récupération des affiches · ${RICMD.split("\n").length} lignes · utilise le bouton Copier</code><button type="button" id="ricopy">Copier</button></div>
  <div class="rlog" id="rlog" role="status"></div>
 </section>`);
 $("#rcopy").addEventListener("click",()=>{const done=()=>{$("#rcopy").textContent="Copié";setTimeout(()=>$("#rcopy").textContent="Copier",1600)};
  if(navigator.clipboard&&navigator.clipboard.writeText)navigator.clipboard.writeText(RCMD).then(done,()=>{const r=document.createRange();r.selectNodeContents($("#rcmd"));const s=getSelection();s.removeAllRanges();s.addRange(r)});
  else{const r=document.createRange();r.selectNodeContents($("#rcmd"));const s=getSelection();s.removeAllRanges();s.addRange(r)}});
 $("#rname").addEventListener("keydown",e=>e.stopPropagation());
+$("#ricopy").addEventListener("click",()=>{const b=$("#ricopy");const done=()=>{b.textContent="Copié";setTimeout(()=>b.textContent="Copier",1600)};const fb=()=>{const t=document.createElement("textarea");t.value=RICMD;t.style.cssText="position:fixed;left:-9999px";document.body.appendChild(t);t.select();try{document.execCommand("copy");done()}catch(e){b.textContent="Copie impossible"}t.remove()};
+ if(navigator.clipboard&&navigator.clipboard.writeText)navigator.clipboard.writeText(RICMD).then(done,fb);else fb()});
 $("#rfiles").addEventListener("change",async e=>{const files=[...e.target.files];if(!files.length)return;const log=$("#rlog");const say=m=>{log.textContent=m};log.classList.remove("err");
  RWARN.length=0;try{const name=($("#rname").value||"Mon fournisseur").trim().slice(0,40);const r=await rImport(files,name,say);
   const R=JSON.parse(localStorage.getItem("prisme-real"));
@@ -118,3 +215,23 @@ $("#rfiles").addEventListener("change",async e=>{const files=[...e.target.files]
  catch(err){log.classList.add("err");say("Import impossible : "+err.message)}
  e.target.value=""});
 if($("#rdemo"))$("#rdemo").addEventListener("click",()=>{try{localStorage.removeItem("prisme-real");localStorage.removeItem("prisme-atv-live")}catch(_){}S.playlists=[];S.stack=[{t:"home"}];S.tab="films";save();location.reload()});
+/* ---------- images : affiches TMDB et logos (stockés dans IndexedDB, données plus lourdes) ---------- */
+const IMG={l:{},n:{},p:{},count:0};
+function idb(){return new Promise((ok,ko)=>{try{const r=indexedDB.open("prisme",1);r.onupgradeneeded=()=>r.result.createObjectStore("kv");r.onsuccess=()=>ok(r.result);r.onerror=()=>ko(r.error)}catch(e){ko(e)}})}
+async function idbSet(k,v){const db=await idb();return new Promise((ok,ko)=>{const t=db.transaction("kv","readwrite");t.objectStore("kv").put(v,k);t.oncomplete=ok;t.onerror=()=>ko(t.error)})}
+async function idbGet(k){const db=await idb();return new Promise((ok,ko)=>{const t=db.transaction("kv","readonly");const r=t.objectStore("kv").get(k);r.onsuccess=()=>ok(r.result);r.onerror=()=>ko(r.error)})}
+function imgLoad(d){if(!d)return;for(const [e,n,u] of d.logos||[]){if(e)IMG.l[e]=u;if(n)IMG.n[RI.strip(RI.base(n))]=u}for(const t in d.progs||{})IMG.p[RI.strip(t)]=d.progs[t];IMG.count=Object.keys(IMG.p).length+Object.keys(IMG.l).length}
+const imgProg=p=>p&&(p.img||IMG.p[RI.strip(p.t||"")])||"";
+const imgLogo=c=>c&&c._real&&(IMG.l[c._real.e]||IMG.n[RI.strip(c.n)])||"";
+if(REAL)idbGet("images").then(list=>{if(!list||!list.length)return;list.forEach(imgLoad);const st=$("#rst");if(st)st.textContent+=` · ${Object.keys(IMG.p).length} affiches · ${Object.keys(IMG.l).length} logos`;if(inApp()&&!S.loading)render(F&&F.dataset.fid)}).catch(()=>{});
+async function rImportImages(files,status){const out=[];for(const f of files){status(`Lecture de ${f.name}…`);let d=null;try{d=JSON.parse((await f.text()).replace(/^\uFEFF/,""))}catch(e){};if(!d||typeof d!=="object"||!d.progs)throw new Error(`${f.name} n'est pas un fichier d'images prisme`);out.push(d)}
+ let list=[];try{list=(await idbGet("images"))||[]}catch(e){}list=list.concat(out).slice(-4);await idbSet("images",list);
+ return out.reduce((a,d)=>[a[0]+Object.keys(d.progs).length,a[1]+(d.logos||[]).length],[0,0])}
+{const inp=$("#rfiles");inp.addEventListener("change",async e=>{const all=[...e.target.files];const im=all.filter(f=>/^images.*\.json$/i.test(f.name));if(!im.length)return;
+ e.stopImmediatePropagation();const rest=all.filter(f=>!im.includes(f));const log=$("#rlog");const say=m=>{log.textContent=m};log.classList.remove("err");
+ try{if(rest.length){RWARN.length=0;const name=($("#rname").value||"Mon fournisseur").trim().slice(0,40);await rImport(rest,name,say);const R=JSON.parse(localStorage.getItem("prisme-real"));
+   S.playlists=R.pls.map((p,i)=>({id:p.id,name:p.name,url:"Importé le "+new Date(p.at).toLocaleDateString("fr-FR"),user:"données réelles",pass:"",epg:true,on:true,seed:i+1,real:true}));S.adding=false;S.stack=[{t:"home"}];S.tab="live";save()}
+  else if(!REAL)throw new Error("importe d'abord les données de ton fournisseur (les 7 fichiers), puis images.json");
+  const [np,nl]=await rImportImages(im,say);say(`Images importées : ${np} affiches de programmes, ${nl} logos de chaînes. Redémarrage du simulateur…`);setTimeout(()=>location.reload(),1400)}
+ catch(err){log.classList.add("err");say("Import impossible : "+err.message)}e.target.value=""},true)}
+if($("#rdemo"))$("#rdemo").addEventListener("click",()=>{idbSet("images",[]).catch(()=>{})},true);
