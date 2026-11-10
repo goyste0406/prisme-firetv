@@ -36,7 +36,8 @@ function lsideHtml(){const items=["Accueil","Replay",...LGEN];
 function liveHtml(){
  if(!LS.seeded){const x=[...lNow("Sport"),...lNow()].find(y=>srcs("ch:"+y.c.id).length>1);if(x){const k="ch:"+x.c.id;LS.pref[k]={[srcs(k)[1].id]:2};LS.demo=x.c.id}LS.seeded=true;lsave()}
  let main="";
- if(LS.view==="Accueil"){const D=deckOrder();const first=deckList(D[0]||"Sport")[0];
+ if(LS.view==="Accueil"&&typeof homeMain==="function"&&HV!=="A"&&(main=homeMain())){}
+ else if(LS.view==="Accueil"){const D=deckOrder();const first=deckList(D[0]||"Sport")[0];
   main=`<div class="lhero" id="lhero">${first?lheroHtml(first.c):""}</div>
   <div class="lh3">Tes paquets<small>rangés selon ce que tu regardes vers ${Math.floor(nowMin()/60)} h · OK pour ouvrir · maintenir pour les options</small></div>
   <div class="ldecks">${D.map((d,i)=>{const L=deckList(d),lays=L.slice(0,3).reverse(),top=L[0];const soon=!["Reprendre","Favoris"].includes(d)&&lSoon(d,10)[0];
