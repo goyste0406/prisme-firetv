@@ -6,7 +6,7 @@ const LIC={"Accueil":'<path d="M3.5 11 12 4l8.5 7"/><path d="M6 9.5V20h12V9.5"/>
  "Sport":'<circle cx="12" cy="12" r="8.5"/><path d="M12 7.5l4 3-1.5 4.5h-5L8 10.5z"/>',"Info":'<path d="M5 5h11v14H6a1 1 0 0 1-1-1z"/><path d="M16 9h3v9a1 1 0 0 1-1 1h-2M8 9h5M8 12h5M8 15h3"/>',
  "Divertissement":'<path d="M12 3l2.6 5.4 5.9.8-4.3 4.1 1 5.8L12 16.4 6.8 19.1l1-5.8L3.5 9.2l5.9-.8z"/>',"Jeunesse":'<circle cx="12" cy="13" r="7"/><circle cx="7" cy="6" r="2.5"/><circle cx="17" cy="6" r="2.5"/><path d="M9.5 15c1.5 1.3 3.5 1.3 5 0"/>',
  "Découverte":'<circle cx="12" cy="12" r="8.5"/><path d="M3.5 12h17M12 3.5c2.5 2.4 3.5 5.3 3.5 8.5s-1 6.1-3.5 8.5c-2.5-2.4-3.5-5.3-3.5-8.5s1-6.1 3.5-8.5z"/>',
- "Reprendre":'<path d="M4 12a8 8 0 1 0 2.3-5.6"/><path d="M4 4v4h4"/><path d="M12 8v4l3 2"/>',"Favoris":'<path d="M12 20s-7-4.4-9-9C1.7 7.8 3.7 4.5 7 4.5c2 0 3.4 1.1 5 3 1.6-1.9 3-3 5-3 3.3 0 5.3 3.3 4 6.5-2 4.6-9 9-9 9z"/>'};
+ "Reprendre":'<path d="M4 12a8 8 0 1 0 2.3-5.6"/><path d="M4 4v4h4"/><path d="M12 8v4l3 2"/>',"Replay":'<path d="M4 12a8 8 0 1 0 2.3-5.6"/><path d="M4 4v4h4"/><path d="M10 9l5 3-5 3z"/>',"Favoris":'<path d="M12 20s-7-4.4-9-9C1.7 7.8 3.7 4.5 7 4.5c2 0 3.4 1.1 5 3 1.6-1.9 3-3 5-3 3.3 0 5.3 3.3 4 6.5-2 4.6-9 9-9 9z"/>'};
 const lsvg=k=>`<svg viewBox="0 0 24 24">${LIC[k]||""}</svg>`;
 /* État propre à la TV en direct (mémorisé à part) */
 const L0={view:"Accueil",deck:null,hist:["bein1","tf1","f2"],gw:{"Sport":7,"Cinéma":5,"Info":3,"Séries":2,"Divertissement":2,"Découverte":1,"Jeunesse":0},pref:{},seeded:false,direct:{},asked:{},hidden:[],lbest:false,fail:5,loadedAt:null};
@@ -26,13 +26,13 @@ function lpref(key){const P=LS.pref[key];if(!P)return null;let b=null,n=0;for(co
 /* ---------- fragments ---------- */
 function lth(c,inner,p){p=p||epgAt(c).cur;const g=pgen(p),h=hash(p.t||c.id)%360,h2=(h+50)%360;
  return `<div class="lth" style="--c:${c.col};--h1:${h};--h2:${h2};--x:${20+hash(p.t||c.id)%55}%"><div class="lart">${lsvg(g)}<span>${esc(p.t||"")}</span></div>${(im=>im?`<img class="limg" src="${esc(im)}" alt="" onerror="this.remove()"><div class="limgs"></div>`:"")(typeof imgProg==="function"?imgProg(p):p.img)}${(lg=>lg?`<span class="llogo li"><img src="${esc(lg)}" alt="${esc(c.n)}"></span>`:`<span class="llogo" style="--c:${c.col}">${esc(c.n)}</span>`)(typeof imgLogo==="function"?imgLogo(c):"")}${inner||""}</div>`}
-function lheroHtml(c,p){if(!c)return `<div class="lhero"><h1>Aucune chaîne</h1></div>`;const n=nowMin();p=p||epgAt(c).cur;const on=p.s<=n,L=srcs("ch:"+c.id),b=lbest("ch:"+c.id);
- return `<div class="k">${on?'<span class="lbd">EN DIRECT</span>':'<span class="lbd soon">À VENIR</span>'}${esc(c.n.toUpperCase())} · ${esc(pgen(p).toUpperCase())}</div><h1>${esc(p.t)}</h1>
- <div class="m">${fmt(p.s)} – ${fmt(p.e)} · ${since(p)}${on?" · reste "+dur(Math.max(1,Math.round(p.e-n))):""} · ${L.length} source${L.length>1?"s":""}${b?` <span class="qb q${b.q}" style="height:20px;font-size:11px">${b.q}</span>`:""}</div>${on?`<div class="lpb"><i style="width:${Math.round((n-p.s)/(p.e-p.s)*100)}%"></i></div>`:""}`}
+function lheroHtml(c,p){if(!c)return `<div class="lhero"><h1>Aucune chaîne</h1></div>`;const n=nowMin();p=p||epgAt(c).cur;const past=p.e<=n,on=p.s<=n&&!past,L=srcs("ch:"+c.id),b=lbest("ch:"+c.id),ad=arDays(c);
+ return `<div class="k">${past?'<span class="lbd rp">REPLAY</span>':on?'<span class="lbd">EN DIRECT</span>':'<span class="lbd soon">À VENIR</span>'}${esc(c.n.toUpperCase())} · ${esc(pgen(p).toUpperCase())}</div><h1>${esc(p.t)}</h1>
+ <div class="m">${fmt(p.s)} – ${fmt(p.e)} · ${past?"diffusé "+lday(p.s)+" · "+dur(Math.round(p.e-p.s)):since(p)+(on?" · reste "+dur(Math.max(1,Math.round(p.e-n))):"")} · ${L.length} source${L.length>1?"s":""}${ad?` · <span class="rpb">↺ Replay ${ad} j</span>`:""}${b?` <span class="qb q${b.q}" style="height:20px;font-size:11px">${b.q}</span>`:""}</div>${on?`<div class="lpb"><i style="width:${Math.round((n-p.s)/(p.e-p.s)*100)}%"></i></div>`:""}`}
 function lcard(c,row,soonP){const e=epgAt(c),p=soonP||e.cur,on=!soonP,g=pgen(p);
  return `<div class="lcard" data-f data-fid="${row}-${c.id}${soonP?"-"+p.s:""}" data-row="${row}" data-act="${on?"lp:"+c.id:"lrem:"+c.id+":"+p.s}" data-hov="lp:${c.id}${soonP?":"+p.s:""}" data-lp="${c.id}">${lth(c,`${on?'<span class="lbd">DIRECT</span>':`<span class="lbd soon">${fmt(p.s)}</span>`}${on?`<div class="lpb"><i style="width:${e.pct}%"></i></div>`:""}`,p)}<div class="t">${esc(p.t)}</div><div class="s">${esc(c.n)} · ${since(p)}</div></div>`}
-function lsideHtml(){const items=["Accueil",...LGEN];
- return `<div class="lside" data-col="0">${items.map(k=>`<div class="lsi ${LS.view===k?"sel":""}" data-f data-fid="lsv-${k}" data-row="lside" data-act="lsv:${k}" data-hov="lsv:${k}">${lsvg(k)}<span>${k}</span><small>${k==="Accueil"?lNow().length:lNow(k).length}</small></div>`).join("")}</div>`}
+function lsideHtml(){const items=["Accueil","Replay",...LGEN];
+ return `<div class="lside" data-col="0">${items.map(k=>`<div class="lsi ${LS.view===k?"sel":""}" data-f data-fid="lsv-${k}" data-row="lside" data-act="lsv:${k}" data-hov="lsv:${k}">${lsvg(k)}<span>${k}</span><small>${k==="Accueil"?lNow().length:k==="Replay"?lPast().length:lNow(k).length}</small></div>`).join("")}</div>`}
 function liveHtml(){
  if(!LS.seeded){const x=[...lNow("Sport"),...lNow()].find(y=>srcs("ch:"+y.c.id).length>1);if(x){const k="ch:"+x.c.id;LS.pref[k]={[srcs(k)[1].id]:2};LS.demo=x.c.id}LS.seeded=true;lsave()}
  let main="";
@@ -42,6 +42,10 @@ function liveHtml(){
   <div class="ldecks">${D.map((d,i)=>{const L=deckList(d),lays=L.slice(0,3).reverse(),top=L[0];const soon=!["Reprendre","Favoris"].includes(d)&&lSoon(d,10)[0];
    return `<div class="ldk" data-f data-fid="dk-${d}" data-row="dks" data-act="ldeck:${d}" data-hov="ldk:${d}">${lays.map((x,j)=>{const lv=lays.length-j;return `<div class="lay l${lv}">${lth(x.c,lv===1?`<div class="sh"></div><span class="ltag" style="--g:${LGC[d]}">${esc(d.toUpperCase())}</span><div class="tx"><b>${esc(x.e.cur.t)}</b><span>${esc(x.c.n)} · reste ${dur(Math.max(1,Math.round(x.e.cur.e-nowMin())))}</span></div><div class="lpb"><i style="width:${x.e.pct}%"></i></div>`:"")}</div>`}).join("")}
    <div class="lab"><b>${d==="Reprendre"?"↺ Reprendre":esc(d)}</b><span>${d==="Reprendre"?L.length+(L.length>1?" récentes":" récente"):L.length+" en direct"}</span></div>${soon?`<span class="lsoon">${fmt(soon.p.s)} · ${esc(soon.p.t)}</span>`:""}</div>`}).join("")}</div>`}
+ else if(LS.view==="Replay"){const P=lPast(),A=lvis().filter(c=>arDays(c)).length;
+  if(!A)main=`<div class="lhero" id="lhero"><div class="k"><span class="lbd rp">REPLAY</span></div><h1 style="font-size:32px">Pas de replay chez ton fournisseur</h1><div class="m">Aucune de tes chaînes n'indique d'archive (tv_archive). Le replay apparaîtra ici dès qu'un fournisseur le propose.</div></div>`;
+  else{const first=P[0];const G=[["Revoir l'émission en cours depuis le début",lNow().filter(x=>arDays(x.c)&&nowMin()-x.e.cur.s>3).map(x=>({c:x.c,p:x.e.cur}))],...LGEN.map(g=>[g,P.filter(x=>pgen(x.p)===g)])].filter(r=>r[1].length);
+   main=`<div class="lhero" id="lhero">${first?lheroHtml(first.c,first.p):""}</div>${G.map(([g,L],i)=>`<section data-anchor><div class="lh3">${esc(g)}<small>${i===0&&g.startsWith("Revoir")?L.length+" en cours":L.length+" · "+A+" chaînes avec replay"}</small></div><div class="lrow sx">${L.slice(0,30).map(x=>lrpCard(x.c,x.p,"rp"+i)).join("")}</div></section>`).join("")}`}}
  else{const g=LS.view,N=lNow(g),Sn=lSoon(g).slice(0,10);const first=N[0];
   main=`<div class="lhero" id="lhero">${first?lheroHtml(first.c):`<h1 style="font-size:30px">Rien en direct en ${esc(g.toLowerCase())}</h1>`}</div>
   <section data-anchor><div class="lh3">En ce moment<small>${N.length} · ${esc(g.toLowerCase())}</small></div><div class="lrow sx">${N.map(x=>lcard(x.c,"gn")).join("")}</div></section>
@@ -60,7 +64,7 @@ const LMODAL={
  lctx(){const m=S.modal,c=CH[m.id],e=epgAt(c),n=e.next[0],fav=isFav("ch:"+c.id),k="ch:"+c.id,ps=lpref(k)||lbest(k);
   return `<div class="modal"><div class="lglass lctx"><div class="hd"><span class="llogo" style="--c:${c.col}">${esc(c.n)}</span><div><b>${esc(e.cur.t)}</b><span>${esc(c.n)} · ${srcs(k).length} sources</span></div></div>
   <div class="lci" data-f data-fid="cx-fav" data-act="lcx:fav" data-default><i>${fav?"♥":"♡"}</i>${fav?"Retirer des favoris":"Ajouter aux favoris"}</div>
-  <div class="lci" data-f data-fid="cx-rem" data-act="lcx:rem"><i>🔔</i>Rappel pour la suite<small>${n?fmt(n.s)+" · "+esc(n.t):""}</small></div>
+  ${arDays(c)&&nowMin()-e.cur.s>3?`<div class="lci" data-f data-fid="cx-rs" data-act="lrp:${c.id}:${e.cur.s}"><i>↺</i>Reprendre depuis le début<small>replay · commencé à ${fmt(e.cur.s)}</small></div>`:""}<div class="lci" data-f data-fid="cx-rem" data-act="lcx:rem"><i>🔔</i>Rappel pour la suite<small>${n?fmt(n.s)+" · "+esc(n.t):""}</small></div>
   <div class="lci" data-f data-fid="cx-src" data-act="lcx:src"><i>◎</i>Choisir la source<small>${ps?ps.q+" "+(lpref(k)?"habituelle":"conseillée"):""}</small></div>
   <div class="lci red" data-f data-fid="cx-hide" data-act="lcx:hide"><i>⊘</i>Masquer cette chaîne<small>réaffichable dans Réglages</small></div></div></div>`},
  ldirect(){const m=S.modal,c=CH[m.k.slice(3)],v=srcs(m.k).find(x=>x.id===m.src);
@@ -101,6 +105,7 @@ function lneedsPlayer(){if(topS().t==="player"&&P&&P.kind==="live")return true;t
  if(k==="ldeck"){LS.deck=v;lsave();const L=deckList(v);render(L[0]?"fc-"+L[0].c.id:"fan-close");return}
  if(k==="lclose"){const d=LS.deck;LS.deck=null;render("dk-"+d);return}
  if(k==="lp"){lopen(v);return}
+ if(k==="lrp"){S.modal=null;lreplay(v,+w);return}
  if(k==="lrem"){toast(`Rappel : prisme passera sur ${CH[v].n} à ${fmt(+w)}`);return}
  if(k==="lcx"){const id=S.modal.id,c=CH[id],ret=S.modal.ret;S.modal=null;
   if(v==="fav"){toggleFav("ch:"+id,c.n);render(ret);return}
@@ -175,5 +180,18 @@ const LMEM={};
 let LBG=null,LBGT=null;
 function lbgInner(c){return c?`<div class="vid" style="--c:${c.col}"></div><div class="scan"></div><div class="lbgs"></div><span class="lbgtag"><i></i>EN DIRECT · ${esc(c.n)}</span>`:""}
 function lbgPlay(id){clearTimeout(LBGT);LBGT=setTimeout(()=>{if(S.tab!=="live"||topS().t!=="home"||!CH[id]||LBG===id)return;LBG=id;const el=$("#lbgv");if(el){el.classList.remove("on");el.innerHTML=lbgInner(CH[id]);requestAnimationFrame(()=>el.classList.add("on"))}},900)}
-{const _oh2=onHover;onHover=function(h){_oh2(h);const [k,v]=h.split(":");if(k==="lp"&&CH[v])lbgPlay(v);else if(k==="ldk"){const x=deckList(v)[0];if(x)lbgPlay(x.c.id)}}}
+{const _oh2=onHover;onHover=function(h){_oh2(h);const [k,v,w]=h.split(":");if(k==="lp"&&CH[v]&&!(w&&+w<nowMin()-1))lbgPlay(v);else if(k==="ldk"){const x=deckList(v)[0];if(x)lbgPlay(x.c.id)}}}
 {const _r2=render;render=function(fid){_r2(fid);const el=$("#lbgv");if(el&&LBG)el.classList.add("on")}}
+
+/* ===================== Replay (catch-up Xtream : tv_archive) ===================== */
+function arDays(c){if(!c)return 0;if(c._real)return c._real.ar||0;return hash(c.id+"#ar")%3?7:0}
+function lday(s){const n=nowMin(),d0=Math.floor(n/1440)*0;const dd=Math.floor((s+0)/1440)-Math.floor(n/1440);return (s<0?(s<-1440?"avant-hier":"hier"):"aujourd'hui")+" à "+fmt(s)}
+function lPast(){const n=nowMin();return lvis().filter(c=>arDays(c)).flatMap(c=>epg(c).filter(p=>p.e<=n&&p.s>=n-arDays(c)*1440&&p.t!=="Programme non communiqué").map(p=>({c,p}))).sort((a,b)=>b.p.e-a.p.e)}
+function lrpCard(c,p,row){const past=p.e<=nowMin();return `<div class="lcard" data-f data-fid="${row}-${c.id}-${Math.round(p.s)}" data-row="${row}" data-act="lrp:${c.id}:${p.s}" data-hov="lp:${c.id}:${p.s}" data-lp="${c.id}">${lth(c,`<span class="lbd rp">${past?"REPLAY":"↺ DÉBUT"}</span>${past?"":`<div class="lpb"><i style="width:${Math.round((nowMin()-p.s)/(p.e-p.s)*100)}%"></i></div>`}`,p)}<div class="t">${esc(p.t)}</div><div class="s">${esc(c.n)} · ${past?lday(p.s):"commencé à "+fmt(p.s)} · ${dur(Math.round(p.e-p.s))}</div></div>`}
+function lreplay(id,s){const c=CH[id];const p=epg(c).find(q=>Math.abs(q.s-s)<0.5);if(!c||!p){toast("Programme introuvable");return}
+ const rid="rp_"+c.id+"_"+Math.round(p.s+1440*10);
+ ALL[rid]={id:rid,type:"f",t:p.t,y:new Date().getFullYear(),d:Math.max(5,Math.round(p.e-p.s)),g:[pgen(p)],cat:[],imdb:0,tmdb:0,age:"Tous publics",dir:"",f:"black",c:[c.col,"#08080c"],s:`Replay de ${c.n}, diffusé ${lday(p.s)}.`,cast:[],rp:{c:c.id,s:p.s,e:p.e}};
+ lrecord(c.id);act("play:"+rid);toast(`Replay · ${c.n} · ${p.t}`)}
+{const _srcs=srcs;srcs=function(key){if(key.startsWith("rp_")){const it=ALL[key];if(!it)return [];const c=CH[it.rp.c],v=_srcs("ch:"+c.id).find(x=>x.p)||{p:S.playlists[0],i:0};return [{id:"rp|0",i:0,p:v.p,q:v.q||"1080p",tag:"VF",name:`Replay ${c.n} · ${fmt(it.rp.s)}`,codec:v.codec||"H.264 · 1920×1080",audio:["Français"],subs:["Aucun"],size:"—",ext:"ts"}]}return _srcs(key)}}
+{const _su=streamUrl;streamUrl=function(){if(P&&P.kind==="vod"&&String(P.id).startsWith("rp_")){const it=ALL[P.id],c=CH[it.rp.c],s=(curVar()||{}).p||S.playlists[0],u=s.url.replace(/\/+$/,""),d=new Date(Date.now()-(nowMin()-it.rp.s)*60000),z=n=>String(n).padStart(2,"0");
+  return `${u}/timeshift/${s.user}/••••/${it.d}/${d.getFullYear()}-${z(d.getMonth()+1)}-${z(d.getDate())}:${z(d.getHours())}-${z(d.getMinutes())}/${1000+c.num}.ts`}return _su()}}

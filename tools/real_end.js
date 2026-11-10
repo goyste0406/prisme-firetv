@@ -46,7 +46,7 @@ const RWARN=[];
 async function rReadEpg(f,want,status){
  let stream=f.stream();const head=new Uint8Array(await f.slice(0,2).arrayBuffer());
  if(head[0]===0x1f&&head[1]===0x8b){if(typeof DecompressionStream==="undefined")throw new Error("Guide compressé non pris en charge par ce navigateur");stream=stream.pipeThrough(new DecompressionStream("gzip"))}
- const rd=stream.pipeThrough(new TextDecoderStream()).getReader();const out={};let buf="",n=0,kept=0;const now=Date.now()/60000,lo=now-360,hi=now+1800;
+ const rd=stream.pipeThrough(new TextDecoderStream()).getReader();const out={};let buf="",n=0,kept=0;const now=Date.now()/60000,lo=now-1440*2,hi=now+1800;
  const re=/<programme\b([^>]*)>([\s\S]*?)<\/programme>/g;
  for(;;){const {value,done}=await rd.read();if(value)buf+=value;let m,last=0;re.lastIndex=0;
   while((m=re.exec(buf))){last=re.lastIndex;n++;const a=m[1],ch=(/channel="([^"]*)"/.exec(a)||[])[1];if(!ch||!want.has(ch))continue;
@@ -56,7 +56,7 @@ async function rReadEpg(f,want,status){
   buf=buf.slice(last);if(buf.length>4e6)buf=buf.slice(-2e6);
   if(n%2000<50)status(`Guide des programmes : ${n.toLocaleString("fr-FR")} programmes lus, ${kept.toLocaleString("fr-FR")} gardés…`);
   if(done)break}
- for(const k in out)out[k]=out[k].sort((a,b)=>a[0]-b[0]).slice(0,70);return out}
+ for(const k in out)out[k]=out[k].sort((a,b)=>a[0]-b[0]).slice(-140);return out}
 async function rImport(files,provName,status){
  const by={};for(const f of files){const n=f.name.toLowerCase();
   if(/xmltv|epg|\.xml|\.gz$/.test(n))by.epg=f;else for(const k of ["get_live_categories","get_live_streams","get_vod_categories","get_vod_streams","get_series_categories","get_series"])if(n.startsWith(k+".")||n===k+".json"||n.startsWith(k+" "))by[k]=f}
@@ -72,7 +72,7 @@ async function rImport(files,provName,status){
  const merge=(arr,pref,key,make,add)=>{let it=arr.find(x=>x.k===key);if(!it){it=make();it.k=key;it.id=RI.id(pref,key);it.s=[];arr.push(it)}add(it);return it};
  if(by.get_live_streams){status("Lecture des chaînes…");const L=await rReadJson(by.get_live_streams);let n=0;
   const frOnly=!Object.keys(lc).length&&L.some(x=>RI.FR.test(x.name||""));for(const x of L){const ck=lc[String(x.category_id)];if(Object.keys(lc).length&&!ck)continue;if(frOnly&&!RI.FR.test(x.name||""))continue;if(RI.ADULT.test(x.name||""))continue;const nm=RI.base(x.name),key=RI.strip(nm);if(!key)continue;n++;
-   merge(R.chans,"rc",key,()=>({n:nm,c:[],e:"",num:+x.num||0}),it=>{if(ck&&!it.c.includes(ck))it.c.push(ck);if(!it.e&&x.epg_channel_id)it.e=String(x.epg_channel_id);if(it.s.length<8)it.s.push([pid,String(x.name).slice(0,60),RI.q(x.name)])})}
+   merge(R.chans,"rc",key,()=>({n:nm,c:[],e:"",num:+x.num||0}),it=>{if(ck&&!it.c.includes(ck))it.c.push(ck);if(!it.e&&x.epg_channel_id)it.e=String(x.epg_channel_id);const ad=String(x.tv_archive)==="1"?Math.max(1,+x.tv_archive_duration||1):0;if(ad){it.ar=Math.max(it.ar||0,ad);st.arch=(st.arch||0)+1}if(it.s.length<8)it.s.push([pid,String(x.name).slice(0,60),RI.q(x.name),ad])})}
   st.chans=n}
  if(by.get_vod_streams){status("Lecture des films…");const L=await rReadJson(by.get_vod_streams);let n=0;
   const frOnly=!Object.keys(fc).length&&L.some(x=>RI.FR.test(x.name||""));for(const x of L){const ck=fc[String(x.category_id)];if(Object.keys(fc).length&&!ck)continue;if(frOnly&&!RI.FR.test(x.name||""))continue;if(RI.ADULT.test(x.name||""))continue;const t=RI.title(x.name),y=+x.year||RI.year(x.name),key=RI.strip(t)+"#"+(y||"");if(!t)continue;n++;
@@ -236,7 +236,7 @@ $("#rfiles").addEventListener("change",async e=>{const files=[...e.target.files]
   const R=JSON.parse(localStorage.getItem("prisme-real"));
   S.playlists=R.pls.map((p,i)=>({id:p.id,name:p.name,url:"Importé le "+new Date(p.at).toLocaleDateString("fr-FR"),user:"données réelles",pass:"",epg:true,on:true,seed:i+1,real:true}));S.adding=false;S.stack=[{t:"home"}];S.tab="live";save();
   try{localStorage.removeItem("prisme-atv-live")}catch(_){}
-  say(`Import réussi : ${r.chans??0} flux de chaînes, ${r.films??0} films, ${r.series??0} séries${r.epg?`, ${r.epg.toLocaleString("fr-FR")} programmes`:""}.${r.keptF<r.totF?` ${r.keptF} films les plus récents gardés sur ${r.totF} (mémoire du navigateur).`:""} ${RWARN.length?" Attention : "+RWARN.join(" · "):""} Redémarrage du simulateur…`);
+  say(`${r.arch?`Replay disponible : ${r.arch} flux de chaînes l'acceptent. `:r.chans?"Replay : ton fournisseur ne l'indique sur aucune chaîne. ":""}Import réussi : ${r.chans??0} flux de chaînes, ${r.films??0} films, ${r.series??0} séries${r.epg?`, ${r.epg.toLocaleString("fr-FR")} programmes`:""}.${r.keptF<r.totF?` ${r.keptF} films les plus récents gardés sur ${r.totF} (mémoire du navigateur).`:""} ${RWARN.length?" Attention : "+RWARN.join(" · "):""} Redémarrage du simulateur…`);
   setTimeout(()=>location.reload(),RWARN.length?6000:1400)}
  catch(err){log.classList.add("err");say("Import impossible : "+err.message)}
  e.target.value=""});

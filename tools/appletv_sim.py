@@ -252,6 +252,7 @@ R("const CH={}; CHS.forEach(c=>CH[c.id]=c);", rd("real_block2.js") + "const CH={
 R("render();\n</script>", rd("live_a2c.js") + "\n" + rd("real_end.js") + "\nrender();if(inApp())lPreload(()=>render());\n</script>")
 R("<kbd>M</kbd> (ou maintenir le clic) ajouter/retirer des favoris", "<kbd>M</kbd> (ou maintenir le clic) favoris, ou options d'une chaîne dans la TV en direct")
 
+R('<div class="pkick">${it.type==="s"?"Série · "+esc(it.net):"Film · "+it.y}', '<div class="pkick">${it.rp?"Replay · "+esc(CH[it.rp.c].n)+" · diffusé "+lday(it.rp.s):it.type==="s"?"Série · "+esc(it.net):"Film · "+it.y}')
 assert "fire tv" not in src.lower().replace("prisme-firetv", ""), [m.start() for m in re.finditer("(?i)fire ?tv", src)]
 open(OUT, "w", encoding="utf-8").write(src)
 print("OK", OUT, len(src))
