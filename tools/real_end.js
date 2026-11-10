@@ -7,7 +7,7 @@ if(REAL){
  const plsOf=r=>r._pl||(r._pl=new Set(r.s.map(x=>x[0])));
  base=function(pl,key){const r=itemOf(key);return r?plsOf(r).has(pl.id):false};
  variants=function(pl,key){const r=itemOf(key);if(!r)return [];const L=r.s.filter(x=>x[0]===pl.id);
-  if(key.startsWith("ch:"))return L.map((x,i)=>({id:pl.id+"|"+i,i,p:pl,q:x[2],name:x[1],codec:RCODEC[x[2]],audio:["Français"],subs:["Télétexte si diffusé"],ext:"ts"}));
+  if(key.startsWith("ch:"))return L.map((x,i)=>({id:pl.id+"|"+i,i,p:pl,q:x[2],name:x[1],codec:RCODEC[x[2]],audio:["Français"],subs:["Télétexte si diffusé"],ext:"ts",ar:x[3]||0}));
   return L.map((x,i)=>{const tag=/vostfr/i.test(x[1])?"VOSTFR":/multi/i.test(x[1])?"MULTI":"VF";return {id:pl.id+"|"+i,i,p:pl,q:x[2],tag,name:x[1],codec:RCODEC[x[2]],audio:tag==="VOSTFR"?["Anglais (VO)"]:tag==="MULTI"?["Français (VF)","Anglais (VO)"]:["Français (VF)"],subs:tag==="VOSTFR"?["Français"]:["Aucun"],size:"—",ext:x[3]||"mkv"}})};
  addDays=function(pl,it){const a=it._real&&it._real.a;return a?Math.max(0,Math.floor((Date.now()/1000-a)/86400)):400};
  const M0=new Date().setHours(0,0,0,0)/60000;

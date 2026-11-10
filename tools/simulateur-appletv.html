@@ -1773,7 +1773,7 @@ function lreplay(id,s){const c=CH[id];const p=epg(c).find(q=>Math.abs(q.s-s)<0.5
  const rid="rp_"+c.id+"_"+Math.round(p.s+1440*10);
  ALL[rid]={id:rid,type:"f",t:p.t,y:new Date().getFullYear(),d:Math.max(5,Math.round(p.e-p.s)),g:[pgen(p)],cat:[],imdb:0,tmdb:0,age:"Tous publics",dir:"",f:"black",c:[c.col,"#08080c"],s:`Replay de ${c.n}, diffusé ${lday(p.s)}.`,cast:[],rp:{c:c.id,s:p.s,e:p.e}};
  lrecord(c.id);act("play:"+rid);toast(`Replay · ${c.n} · ${p.t}`)}
-{const _srcs=srcs;srcs=function(key){if(key.startsWith("rp_")){const it=ALL[key];if(!it)return [];const c=CH[it.rp.c],v=_srcs("ch:"+c.id).find(x=>x.p)||{p:S.playlists[0],i:0};return [{id:"rp|0",i:0,p:v.p,q:v.q||"1080p",tag:"VF",name:`Replay ${c.n} · ${fmt(it.rp.s)}`,codec:v.codec||"H.264 · 1920×1080",audio:["Français"],subs:["Aucun"],size:"—",ext:"ts"}]}return _srcs(key)}}
+{const _srcs=srcs;srcs=function(key){if(key.startsWith("rp_")){const it=ALL[key];if(!it)return [];const c=CH[it.rp.c],L0=_srcs("ch:"+c.id),v=L0.find(x=>x.ar)||L0.find(x=>x.p)||{p:S.playlists[0],i:0};return [{id:"rp|0",i:0,p:v.p,q:v.q||"1080p",tag:"VF",name:`Replay ${c.n} · ${fmt(it.rp.s)}${v.name?" · flux "+v.name:""}`,codec:v.codec||"H.264 · 1920×1080",audio:["Français"],subs:["Aucun"],size:"—",ext:"ts"}]}return _srcs(key)}}
 {const _su=streamUrl;streamUrl=function(){if(P&&P.kind==="vod"&&String(P.id).startsWith("rp_")){const it=ALL[P.id],c=CH[it.rp.c],s=(curVar()||{}).p||S.playlists[0],u=s.url.replace(/\/+$/,""),d=new Date(Date.now()-(nowMin()-it.rp.s)*60000),z=n=>String(n).padStart(2,"0");
   return `${u}/timeshift/${s.user}/••••/${it.d}/${d.getFullYear()}-${z(d.getMonth()+1)}-${z(d.getDate())}:${z(d.getHours())}-${z(d.getMinutes())}/${1000+c.num}.ts`}return _su()}}
 
@@ -1786,7 +1786,7 @@ if(REAL){
  const plsOf=r=>r._pl||(r._pl=new Set(r.s.map(x=>x[0])));
  base=function(pl,key){const r=itemOf(key);return r?plsOf(r).has(pl.id):false};
  variants=function(pl,key){const r=itemOf(key);if(!r)return [];const L=r.s.filter(x=>x[0]===pl.id);
-  if(key.startsWith("ch:"))return L.map((x,i)=>({id:pl.id+"|"+i,i,p:pl,q:x[2],name:x[1],codec:RCODEC[x[2]],audio:["Français"],subs:["Télétexte si diffusé"],ext:"ts"}));
+  if(key.startsWith("ch:"))return L.map((x,i)=>({id:pl.id+"|"+i,i,p:pl,q:x[2],name:x[1],codec:RCODEC[x[2]],audio:["Français"],subs:["Télétexte si diffusé"],ext:"ts",ar:x[3]||0}));
   return L.map((x,i)=>{const tag=/vostfr/i.test(x[1])?"VOSTFR":/multi/i.test(x[1])?"MULTI":"VF";return {id:pl.id+"|"+i,i,p:pl,q:x[2],tag,name:x[1],codec:RCODEC[x[2]],audio:tag==="VOSTFR"?["Anglais (VO)"]:tag==="MULTI"?["Français (VF)","Anglais (VO)"]:["Français (VF)"],subs:tag==="VOSTFR"?["Français"]:["Aucun"],size:"—",ext:x[3]||"mkv"}})};
  addDays=function(pl,it){const a=it._real&&it._real.a;return a?Math.max(0,Math.floor((Date.now()/1000-a)/86400)):400};
  const M0=new Date().setHours(0,0,0,0)/60000;
