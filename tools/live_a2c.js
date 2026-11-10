@@ -132,7 +132,7 @@ function lneedsPlayer(){if(topS().t==="player"&&P&&P.kind==="live")return true;t
 /* Survol : la une suit la sélection, la barre s'ouvre quand on y est */
 {const _oh=onHover;onHover=function(h){const [k,v,w]=h.split(":");
  if(k==="lsv"){if(LS.view!==v){LS.view=v;LS.deck=null;lsave();render("lsv-"+v)}return}
- if(k==="ldk"){const x=deckList(v)[0],hr=$("#lhero");if(x&&hr)hr.innerHTML=lheroHtml(x.c);if(x)setBg([x.c.col,"#08080c"]);return}
+ if(k==="ldk"){const x=(w&&CH[w])?{c:CH[w]}:deckList(v)[0],hr=$("#lhero");if(x&&hr)hr.innerHTML=lheroHtml(x.c);if(x)setBg([x.c.col,"#08080c"]);return}
  if(k==="lp"&&CH[v]){const hr=$("#lhero");const p=w?epg(CH[v]).find(q=>q.s===+w):null;if(hr)hr.innerHTML=lheroHtml(CH[v],p);setBg([CH[v].col,"#08080c"]);S.lch=v;return}
  _oh(h)}}
 let LPV=null;
@@ -184,7 +184,7 @@ const LMEM={};
 let LBG=null,LBGT=null;
 function lbgInner(c){return c?`<div class="vid" style="--c:${c.col}"></div><div class="scan"></div><div class="lbgs"></div><span class="lbgtag"><i></i>EN DIRECT · ${esc(c.n)}</span>`:""}
 function lbgPlay(id){clearTimeout(LBGT);LBGT=setTimeout(()=>{if(S.tab!=="live"||topS().t!=="home"||!CH[id]||LBG===id)return;LBG=id;const el=$("#lbgv");if(el){el.classList.remove("on");el.innerHTML=lbgInner(CH[id]);requestAnimationFrame(()=>el.classList.add("on"))}},900)}
-{const _oh2=onHover;onHover=function(h){_oh2(h);const [k,v,w]=h.split(":");if(k==="lp"&&CH[v]&&!(w&&+w<nowMin()-1))lbgPlay(v);else if(k==="ldk"){const x=deckList(v)[0];if(x)lbgPlay(x.c.id)}}}
+{const _oh2=onHover;onHover=function(h){_oh2(h);const [k,v,w]=h.split(":");if(k==="lp"&&CH[v]&&!(w&&+w<nowMin()-1))lbgPlay(v);else if(k==="ldk"){const x=(w&&CH[w])?{c:CH[w]}:deckList(v)[0];if(x)lbgPlay(x.c.id)}}}
 {const _r2=render;render=function(fid){_r2(fid);const el=$("#lbgv");if(el&&LBG)el.classList.add("on")}}
 
 /* ===================== Replay (catch-up Xtream : tv_archive) ===================== */
