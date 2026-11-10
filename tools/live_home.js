@@ -26,12 +26,21 @@ function homeMain(){
   <section data-anchor><div class="lh3">Pour toi, maintenant<small>selon ce que tu regardes vers ${Math.floor(nowMin()/60)} h</small></div><div class="lrow sx">${F.map(x=>hBig(x,"hf")).join("")}</div></section>
   <section data-anchor><div class="lh3">Tous les genres<small>${D.length} paquets</small></div><div class="lrow sx hdecks">${D.map(d=>hdeck(d,"hd",180)).join("")}</div></section>
   ${hrow("Commence bientôt","dans l'heure",soonC)}<div style="height:30px"></div></div>`}
+ if(HV==="F"){const F=hForYou();return `<div class="lhero hsmall" id="lhero">${first?lheroHtml(first.c):""}</div><div class="hscroll sy">
+  <section data-anchor><div class="lh3">Pour toi, maintenant<small>selon ce que tu regardes vers ${Math.floor(nowMin()/60)} h</small></div><div class="lrow sx">${F.map(x=>hBig(x,"hf")).join("")}</div></section>
+  <section data-anchor><div class="lh3">Tes paquets<small>OK pour ouvrir · maintenir pour les options</small></div><div class="lrow sx hdecks">${D.map(d=>hdeck(d,"hd",190)).join("")}</div></section>
+  ${hrow("Commence bientôt","dans l'heure · OK pour un rappel",soonC)}${hrow("Replay récent","déjà diffusé · OK pour revoir",pastC)}${hrow("Ce soir","première partie de soirée",tonC)}<div style="height:30px"></div></div>`}
+ if(HV==="G"){const F=hForYou();return `${hero}<div class="hscroll sy">
+  <section data-anchor><div class="lh3">Tes paquets<small>OK pour ouvrir · maintenir pour les options</small></div><div class="lrow sx hdecks">${D.map(d=>hdeck(d,"hd")).join("")}</div></section>
+  ${hrow("Commence bientôt","dans l'heure · OK pour un rappel",soonC)}
+  <section data-anchor><div class="lh3">Pour toi, maintenant<small>selon tes habitudes</small></div><div class="lrow sx">${F.map(x=>hBig(x,"hf")).join("")}</div></section>
+  ${hrow("Replay récent","déjà diffusé · OK pour revoir",pastC)}${hrow("Ce soir","première partie de soirée",tonC)}<div style="height:30px"></div></div>`}
  if(HV==="E")return `<div class="lhero hsmall" id="lhero">${first?lheroHtml(first.c):""}</div><div class="hscroll sy">
   <section data-anchor><div class="lrow sx hdecks">${D.map(d=>hdeck(d,"hd",168)).join("")}</div></section>
   <section data-anchor><div class="lh3">Tes chaînes<small>maintenant et ensuite · OK pour regarder ou programmer</small></div><div class="hgrid">${hGuideRows()}</div></section><div style="height:30px"></div></div>`;
  return null}
 /* sélecteur de variante au-dessus de l'écran */
-{const V=[["A","Actuel","une + paquets"],["B","Paquets + rangées","bientôt, replay, ce soir"],["C","Rangées par genre","comme l'app Apple TV"],["D","Pour toi","3 suggestions + paquets"],["E","Tes chaînes","paquets + mini-guide"]];
+{const V=[["A","Actuel","une + paquets"],["B","Paquets + rangées","bientôt, replay, ce soir"],["C","Rangées par genre","comme l'app Apple TV"],["D","Pour toi","3 suggestions + paquets"],["E","Tes chaînes","paquets + mini-guide"],["F","B + D · Pour toi en haut","suggestions, paquets, rangées"],["G","B + D · Paquets en haut","paquets, bientôt, suggestions"]];
  document.querySelector(".top").insertAdjacentHTML("afterend",`<div class="hvsel" role="group" aria-label="Variante d'accueil">${V.map(([k,n,d])=>`<button type="button" data-hv="${k}" aria-pressed="${k===HV}">${k} · ${n}<small>${d}</small></button>`).join("")}</div>`);
  document.querySelectorAll(".hvsel button").forEach(b=>b.addEventListener("click",()=>{HV=b.dataset.hv;try{localStorage.setItem("prisme-hv",HV)}catch(e){}document.querySelectorAll(".hvsel button").forEach(x=>x.setAttribute("aria-pressed",String(x===b)));
-  if(!inApp())return;if(P)stopPlayer();S.modal=null;S.stack=[{t:"home"}];S.tab="live";LS.view="Accueil";LS.deck=null;render("lsv-Accueil")}))}
+  if(!inApp())return;if(P)stopPlayer();S.modal=null;S.stack=[{t:"home"}];S.tab="live";LS.view="Accueil";LS.deck=null;delete LMEM.Accueil;render("lsv-Accueil")}))}

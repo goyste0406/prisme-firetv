@@ -168,7 +168,7 @@
 .rpb{font-size:12px;font-weight:700;color:#d6b4fc;background:rgba(191,90,242,.18);padding:2px 8px;border-radius:6px}
 
 /* variantes d'accueil */
-.hvsel{display:grid;grid-template-columns:repeat(5,1fr);gap:4px;background:#17191f;padding:4px;border-radius:14px;max-width:1100px;margin:0 auto 14px}
+.hvsel{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;background:#17191f;padding:4px;border-radius:14px;max-width:1100px;margin:0 auto 14px}
 .hvsel button{all:unset;cursor:pointer;text-align:center;padding:9px 6px;border-radius:10px;font-size:13px;font-weight:600;color:#c4c8d2;line-height:1.25}
 .hvsel button small{display:block;font-weight:500;font-size:11px;color:#8e94a3}
 .hvsel button[aria-pressed="true"]{background:#f1f3f7;color:#0a0b0f}.hvsel button[aria-pressed="true"] small{color:#4b505c}

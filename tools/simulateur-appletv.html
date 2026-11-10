@@ -597,7 +597,7 @@ kbd{font-family:var(--ui);font-size:12px;background:#1c1f27;border:1px solid #2a
 .rpb{font-size:12px;font-weight:700;color:#d6b4fc;background:rgba(191,90,242,.18);padding:2px 8px;border-radius:6px}
 
 /* variantes d'accueil */
-.hvsel{display:grid;grid-template-columns:repeat(5,1fr);gap:4px;background:#17191f;padding:4px;border-radius:14px;max-width:1100px;margin:0 auto 14px}
+.hvsel{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;background:#17191f;padding:4px;border-radius:14px;max-width:1100px;margin:0 auto 14px}
 .hvsel button{all:unset;cursor:pointer;text-align:center;padding:9px 6px;border-radius:10px;font-size:13px;font-weight:600;color:#c4c8d2;line-height:1.25}
 .hvsel button small{display:block;font-weight:500;font-size:11px;color:#8e94a3}
 .hvsel button[aria-pressed="true"]{background:#f1f3f7;color:#0a0b0f}.hvsel button[aria-pressed="true"] small{color:#4b505c}
@@ -2101,15 +2101,24 @@ function homeMain(){
   <section data-anchor><div class="lh3">Pour toi, maintenant<small>selon ce que tu regardes vers ${Math.floor(nowMin()/60)} h</small></div><div class="lrow sx">${F.map(x=>hBig(x,"hf")).join("")}</div></section>
   <section data-anchor><div class="lh3">Tous les genres<small>${D.length} paquets</small></div><div class="lrow sx hdecks">${D.map(d=>hdeck(d,"hd",180)).join("")}</div></section>
   ${hrow("Commence bientôt","dans l'heure",soonC)}<div style="height:30px"></div></div>`}
+ if(HV==="F"){const F=hForYou();return `<div class="lhero hsmall" id="lhero">${first?lheroHtml(first.c):""}</div><div class="hscroll sy">
+  <section data-anchor><div class="lh3">Pour toi, maintenant<small>selon ce que tu regardes vers ${Math.floor(nowMin()/60)} h</small></div><div class="lrow sx">${F.map(x=>hBig(x,"hf")).join("")}</div></section>
+  <section data-anchor><div class="lh3">Tes paquets<small>OK pour ouvrir · maintenir pour les options</small></div><div class="lrow sx hdecks">${D.map(d=>hdeck(d,"hd",190)).join("")}</div></section>
+  ${hrow("Commence bientôt","dans l'heure · OK pour un rappel",soonC)}${hrow("Replay récent","déjà diffusé · OK pour revoir",pastC)}${hrow("Ce soir","première partie de soirée",tonC)}<div style="height:30px"></div></div>`}
+ if(HV==="G"){const F=hForYou();return `${hero}<div class="hscroll sy">
+  <section data-anchor><div class="lh3">Tes paquets<small>OK pour ouvrir · maintenir pour les options</small></div><div class="lrow sx hdecks">${D.map(d=>hdeck(d,"hd")).join("")}</div></section>
+  ${hrow("Commence bientôt","dans l'heure · OK pour un rappel",soonC)}
+  <section data-anchor><div class="lh3">Pour toi, maintenant<small>selon tes habitudes</small></div><div class="lrow sx">${F.map(x=>hBig(x,"hf")).join("")}</div></section>
+  ${hrow("Replay récent","déjà diffusé · OK pour revoir",pastC)}${hrow("Ce soir","première partie de soirée",tonC)}<div style="height:30px"></div></div>`}
  if(HV==="E")return `<div class="lhero hsmall" id="lhero">${first?lheroHtml(first.c):""}</div><div class="hscroll sy">
   <section data-anchor><div class="lrow sx hdecks">${D.map(d=>hdeck(d,"hd",168)).join("")}</div></section>
   <section data-anchor><div class="lh3">Tes chaînes<small>maintenant et ensuite · OK pour regarder ou programmer</small></div><div class="hgrid">${hGuideRows()}</div></section><div style="height:30px"></div></div>`;
  return null}
 /* sélecteur de variante au-dessus de l'écran */
-{const V=[["A","Actuel","une + paquets"],["B","Paquets + rangées","bientôt, replay, ce soir"],["C","Rangées par genre","comme l'app Apple TV"],["D","Pour toi","3 suggestions + paquets"],["E","Tes chaînes","paquets + mini-guide"]];
+{const V=[["A","Actuel","une + paquets"],["B","Paquets + rangées","bientôt, replay, ce soir"],["C","Rangées par genre","comme l'app Apple TV"],["D","Pour toi","3 suggestions + paquets"],["E","Tes chaînes","paquets + mini-guide"],["F","B + D · Pour toi en haut","suggestions, paquets, rangées"],["G","B + D · Paquets en haut","paquets, bientôt, suggestions"]];
  document.querySelector(".top").insertAdjacentHTML("afterend",`<div class="hvsel" role="group" aria-label="Variante d'accueil">${V.map(([k,n,d])=>`<button type="button" data-hv="${k}" aria-pressed="${k===HV}">${k} · ${n}<small>${d}</small></button>`).join("")}</div>`);
  document.querySelectorAll(".hvsel button").forEach(b=>b.addEventListener("click",()=>{HV=b.dataset.hv;try{localStorage.setItem("prisme-hv",HV)}catch(e){}document.querySelectorAll(".hvsel button").forEach(x=>x.setAttribute("aria-pressed",String(x===b)));
-  if(!inApp())return;if(P)stopPlayer();S.modal=null;S.stack=[{t:"home"}];S.tab="live";LS.view="Accueil";LS.deck=null;render("lsv-Accueil")}))}
+  if(!inApp())return;if(P)stopPlayer();S.modal=null;S.stack=[{t:"home"}];S.tab="live";LS.view="Accueil";LS.deck=null;delete LMEM.Accueil;render("lsv-Accueil")}))}
 
 render();if(inApp())lPreload(()=>render());
 </script>
