@@ -59,6 +59,7 @@ function liveHtml(){
   <div class="lrow sx">${L.map((x,i)=>{const c=x.c,key="ch:"+c.id,ns=srcs(key).length,b=lbest(key),last=pickSrc(key);
    return `<div class="lcard" style="animation-delay:${i*45}ms" data-f data-fid="fc-${c.id}" data-row="fan" data-act="lp:${c.id}" data-hov="lp:${c.id}" data-lp="${c.id}" ${i===0?"data-default":""}>${lth(c,`<span class="lbd">DIRECT</span><div class="lpb"><i style="width:${x.e.pct}%"></i></div>`)}<div class="t">${esc(x.e.cur.t)}</div><div class="s">${d==="Reprendre"&&last?`${esc(c.n)} · reprend en <i class="q${last.q}">${last.q}</i> ${esc(last.p.name)}`:`${esc(c.n)} · ${ns} source${ns>1?"s":""}${b?`<i class="q${b.q}">${b.q}</i>`:""}`}</div></div>`}).join("")}</div>
   <div class="btn lclose" data-f data-fid="fan-close" data-act="lclose">✕ Refermer</div></div>`}
+ if(!main.includes("hscroll")&&main.includes("<section")){const i=main.indexOf("<section");main=main.slice(0,i)+`<div class="hscroll sy">${main.slice(i)}<div style="height:30px"></div></div>`}
  let bgh=lsideHtml()+`<div class="lmain">${main}</div>`;if(LS.deck)bgh=bgh.replace(/ data-f /g," ");
  return `<div class="lv"><div class="lbgv" id="lbgv">${LBG?lbgInner(CH[LBG]):""}</div>${bgh}${fan}</div>`;
 }

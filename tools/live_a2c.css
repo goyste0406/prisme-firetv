@@ -175,7 +175,7 @@
 .hvsel button:focus-visible{outline:2px solid #fff;outline-offset:2px}
 @media (max-width:760px){.hvsel{grid-template-columns:repeat(2,1fr)}}
 .lmain{display:flex;flex-direction:column}
-.hscroll{flex:1;min-height:0;overflow-y:auto;overflow-x:hidden;scrollbar-width:none;margin:0 -24px 0 -24px;padding:0 24px;-webkit-mask-image:linear-gradient(transparent 0,#000 14px);mask-image:linear-gradient(transparent 0,#000 14px)}
+.hscroll{position:relative;flex:1;min-height:0;overflow-y:auto;overflow-x:hidden;scrollbar-width:none;margin:0 -24px 0 -24px;padding:0 24px;-webkit-mask-image:linear-gradient(transparent 0,#000 14px);mask-image:linear-gradient(transparent 0,#000 14px)}
 .hscroll::-webkit-scrollbar{display:none}
 .lhero{flex:none}.lhero.hsmall{height:128px}.lhero.hsmall h1{font-size:32px}
 .hdecks{padding-top:30px;gap:22px}
@@ -195,3 +195,4 @@
 .hlogos i{font-style:normal;height:22px;min-width:30px;padding:0 5px;border-radius:6px;display:grid;place-items:center;font-size:9.5px;font-weight:800;color:#fff;background:var(--c,rgba(255,255,255,.14));white-space:nowrap}
 .hlogos i.li{background:rgba(255,255,255,.1);padding:0 4px}.hlogos i.li img{height:15px;max-width:44px;object-fit:contain}
 .hlogos i.more{background:rgba(255,255,255,.14);color:rgba(255,255,255,.8)}
+.lrow{position:relative}

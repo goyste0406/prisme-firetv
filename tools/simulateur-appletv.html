@@ -604,7 +604,7 @@ kbd{font-family:var(--ui);font-size:12px;background:#1c1f27;border:1px solid #2a
 .hvsel button:focus-visible{outline:2px solid #fff;outline-offset:2px}
 @media (max-width:760px){.hvsel{grid-template-columns:repeat(2,1fr)}}
 .lmain{display:flex;flex-direction:column}
-.hscroll{flex:1;min-height:0;overflow-y:auto;overflow-x:hidden;scrollbar-width:none;margin:0 -24px 0 -24px;padding:0 24px;-webkit-mask-image:linear-gradient(transparent 0,#000 14px);mask-image:linear-gradient(transparent 0,#000 14px)}
+.hscroll{position:relative;flex:1;min-height:0;overflow-y:auto;overflow-x:hidden;scrollbar-width:none;margin:0 -24px 0 -24px;padding:0 24px;-webkit-mask-image:linear-gradient(transparent 0,#000 14px);mask-image:linear-gradient(transparent 0,#000 14px)}
 .hscroll::-webkit-scrollbar{display:none}
 .lhero{flex:none}.lhero.hsmall{height:128px}.lhero.hsmall h1{font-size:32px}
 .hdecks{padding-top:30px;gap:22px}
@@ -624,6 +624,7 @@ kbd{font-family:var(--ui);font-size:12px;background:#1c1f27;border:1px solid #2a
 .hlogos i{font-style:normal;height:22px;min-width:30px;padding:0 5px;border-radius:6px;display:grid;place-items:center;font-size:9.5px;font-weight:800;color:#fff;background:var(--c,rgba(255,255,255,.14));white-space:nowrap}
 .hlogos i.li{background:rgba(255,255,255,.1);padding:0 4px}.hlogos i.li img{height:15px;max-width:44px;object-fit:contain}
 .hlogos i.more{background:rgba(255,255,255,.14);color:rgba(255,255,255,.8)}
+.lrow{position:relative}
 </style>
 
 <div class="page">
@@ -1669,6 +1670,7 @@ function liveHtml(){
   <div class="lrow sx">${L.map((x,i)=>{const c=x.c,key="ch:"+c.id,ns=srcs(key).length,b=lbest(key),last=pickSrc(key);
    return `<div class="lcard" style="animation-delay:${i*45}ms" data-f data-fid="fc-${c.id}" data-row="fan" data-act="lp:${c.id}" data-hov="lp:${c.id}" data-lp="${c.id}" ${i===0?"data-default":""}>${lth(c,`<span class="lbd">DIRECT</span><div class="lpb"><i style="width:${x.e.pct}%"></i></div>`)}<div class="t">${esc(x.e.cur.t)}</div><div class="s">${d==="Reprendre"&&last?`${esc(c.n)} · reprend en <i class="q${last.q}">${last.q}</i> ${esc(last.p.name)}`:`${esc(c.n)} · ${ns} source${ns>1?"s":""}${b?`<i class="q${b.q}">${b.q}</i>`:""}`}</div></div>`}).join("")}</div>
   <div class="btn lclose" data-f data-fid="fan-close" data-act="lclose">✕ Refermer</div></div>`}
+ if(!main.includes("hscroll")&&main.includes("<section")){const i=main.indexOf("<section");main=main.slice(0,i)+`<div class="hscroll sy">${main.slice(i)}<div style="height:30px"></div></div>`}
  let bgh=lsideHtml()+`<div class="lmain">${main}</div>`;if(LS.deck)bgh=bgh.replace(/ data-f /g," ");
  return `<div class="lv"><div class="lbgv" id="lbgv">${LBG?lbgInner(CH[LBG]):""}</div>${bgh}${fan}</div>`;
 }
