@@ -180,7 +180,7 @@
 .lhero{flex:none}.lhero.hsmall{height:128px}.lhero.hsmall h1{font-size:32px}
 .hdecks{padding-top:30px;gap:22px}
 .hdk .lay{height:124px}.hdk .lab{top:132px}.hdk .lsoon{top:152px}.hdk{height:172px}
-.hbig{flex:0 0 340px}.hbig .lth{height:190px}.hbig .tx b{font-size:19px}.hbig .s{margin-top:9px}
+.hbig{flex:0 0 290px}.hbig .lth{height:162px}.hbig .tx b{font-size:17px}.hbig .s{margin-top:9px}
 .hgrid{display:flex;flex-direction:column;gap:8px;padding:12px 0}
 .hgr{display:grid;grid-template-columns:150px 1.3fr 1fr 1fr;gap:10px;align-items:stretch}
 .hgc{display:flex;align-items:center;gap:10px;font-size:14px;min-width:0}.hgc b{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}

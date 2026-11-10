@@ -1,6 +1,6 @@
 /* ===================== Accueil TV en direct : variantes ===================== */
-let HV="A";try{HV=localStorage.getItem("prisme-hv")||"A"}catch(e){}
-function hdeck(d,row,w){const L=deckList(d),lays=L.slice(0,3).reverse();const soon=!["Reprendre","Favoris"].includes(d)&&lSoon(d,10)[0];
+const HV="F";
+function hdeck(d,row,w,ex){const L=deckList(d),L2=ex?L.filter(x=>!ex.has(x.c.id)):L,lays=(L2.length?L2:L).slice(0,3).reverse();const soon=!["Reprendre","Favoris"].includes(d)&&lSoon(d,10)[0];
  return `<div class="ldk hdk" style="flex:0 0 ${w||220}px" data-f data-fid="dk-${d}" data-row="${row}" data-act="ldeck:${d}" data-hov="ldk:${d}">${lays.map((x,j)=>{const lv=lays.length-j;return `<div class="lay l${lv}">${lth(x.c,lv===1?`<div class="sh"></div><span class="ltag" style="--g:${LGC[d]}">${esc(d.toUpperCase())}</span><div class="tx"><b>${esc(x.e.cur.t)}</b><span>${esc(x.c.n)}</span></div><div class="lpb"><i style="width:${x.e.pct}%"></i></div>`:"")}</div>`}).join("")}
  <div class="lab"><b>${d==="Reprendre"?"↺ Reprendre":esc(d)}</b><span>${L.length}</span></div>${soon?`<span class="lsoon">${fmt(soon.p.s)} · ${esc(soon.p.t)}</span>`:""}</div>`}
 function hrow(title,sub,cards){return cards?`<section data-anchor><div class="lh3">${esc(title)}<small>${sub}</small></div><div class="lrow sx">${cards}</div></section>`:""}
@@ -28,7 +28,7 @@ function homeMain(){
   ${hrow("Commence bientôt","dans l'heure",soonC)}<div style="height:30px"></div></div>`}
  if(HV==="F"){const F=hForYou();return `<div class="lhero hsmall" id="lhero">${first?lheroHtml(first.c):""}</div><div class="hscroll sy">
   <section data-anchor><div class="lh3">Pour toi, maintenant<small>selon ce que tu regardes vers ${Math.floor(nowMin()/60)} h</small></div><div class="lrow sx">${F.map(x=>hBig(x,"hf")).join("")}</div></section>
-  <section data-anchor><div class="lh3">Tes paquets<small>OK pour ouvrir · maintenir pour les options</small></div><div class="lrow sx hdecks">${D.map(d=>hdeck(d,"hd",190)).join("")}</div></section>
+  <section data-anchor><div class="lh3">Tes paquets<small>OK pour ouvrir · maintenir pour les options</small></div><div class="lrow sx hdecks">${(ex=>D.map(d=>hdeck(d,"hd",190,ex)).join(""))(new Set(F.map(x=>x.c.id)))}</div></section>
   ${hrow("Commence bientôt","dans l'heure · OK pour un rappel",soonC)}${hrow("Replay récent","déjà diffusé · OK pour revoir",pastC)}${hrow("Ce soir","première partie de soirée",tonC)}<div style="height:30px"></div></div>`}
  if(HV==="G"){const F=hForYou();return `${hero}<div class="hscroll sy">
   <section data-anchor><div class="lh3">Tes paquets<small>OK pour ouvrir · maintenir pour les options</small></div><div class="lrow sx hdecks">${D.map(d=>hdeck(d,"hd")).join("")}</div></section>
@@ -39,8 +39,3 @@ function homeMain(){
   <section data-anchor><div class="lrow sx hdecks">${D.map(d=>hdeck(d,"hd",168)).join("")}</div></section>
   <section data-anchor><div class="lh3">Tes chaînes<small>maintenant et ensuite · OK pour regarder ou programmer</small></div><div class="hgrid">${hGuideRows()}</div></section><div style="height:30px"></div></div>`;
  return null}
-/* sélecteur de variante au-dessus de l'écran */
-{const V=[["A","Actuel","une + paquets"],["B","Paquets + rangées","bientôt, replay, ce soir"],["C","Rangées par genre","comme l'app Apple TV"],["D","Pour toi","3 suggestions + paquets"],["E","Tes chaînes","paquets + mini-guide"],["F","B + D · Pour toi en haut","suggestions, paquets, rangées"],["G","B + D · Paquets en haut","paquets, bientôt, suggestions"]];
- document.querySelector(".top").insertAdjacentHTML("afterend",`<div class="hvsel" role="group" aria-label="Variante d'accueil">${V.map(([k,n,d])=>`<button type="button" data-hv="${k}" aria-pressed="${k===HV}">${k} · ${n}<small>${d}</small></button>`).join("")}</div>`);
- document.querySelectorAll(".hvsel button").forEach(b=>b.addEventListener("click",()=>{HV=b.dataset.hv;try{localStorage.setItem("prisme-hv",HV)}catch(e){}document.querySelectorAll(".hvsel button").forEach(x=>x.setAttribute("aria-pressed",String(x===b)));
-  if(!inApp())return;if(P)stopPlayer();S.modal=null;S.stack=[{t:"home"}];S.tab="live";LS.view="Accueil";LS.deck=null;delete LMEM.Accueil;render("lsv-Accueil")}))}
