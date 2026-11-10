@@ -1,0 +1,68 @@
+/* ---- connexion unique ---- */
+.lcxw{position:absolute;right:40px;top:66px;z-index:6;pointer-events:none}
+.lcx{display:inline-flex;align-items:center;gap:7px;height:24px;padding:0 11px;border-radius:12px;font-size:12px;font-weight:600;color:rgba(255,255,255,.75);background:rgba(20,22,30,.55);border:1px solid rgba(255,255,255,.14);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);white-space:nowrap}
+.lcx i{width:7px;height:7px;border-radius:50%;background:rgba(255,255,255,.4)}
+.lcx.apercu i{background:#f59e0b;box-shadow:0 0 8px #f59e0b}
+.lcx.ouverture i{background:#60a5fa;animation:lcxb .6s ease-in-out infinite alternate}
+.lcx.lecture i{background:#22c55e;box-shadow:0 0 8px #22c55e}
+.pbadges .lcx{height:28px;border-radius:7px}
+@keyframes lcxb{from{opacity:.25}to{opacity:1}}
+/* ---- zapping ---- */
+.lzap{position:absolute;left:48px;top:50%;transform:translate(-30px,-50%);width:480px;display:flex;flex-direction:column;gap:8px;opacity:0;transition:opacity .3s,transform .35s cubic-bezier(.2,.8,.2,1);pointer-events:none;z-index:5}
+.lzap.on{opacity:1;transform:translate(0,-50%)}
+.lzap .uni{align-self:flex-start;font-size:12px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;padding:5px 11px;border-radius:10px;background:rgba(0,0,0,.55);border-left:3px solid var(--g);margin-bottom:2px}
+.lzr{display:flex;align-items:center;gap:14px;padding:10px;border-radius:18px;background:rgba(25,27,36,.5);border:1px solid rgba(255,255,255,.1);backdrop-filter:blur(30px) saturate(1.4);-webkit-backdrop-filter:blur(30px) saturate(1.4)}
+.lzr .lzl{width:112px;height:63px;flex:none;border-radius:10px}
+.lzr .tx{min-width:0;flex:1}
+.lzr b{display:block;font-size:15px}
+.lzr span{display:block;font-size:13px;color:rgba(255,255,255,.65);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.lzr.up,.lzr.dn{opacity:.55;transform:scale(.94)}
+.lzr.up::before{content:"▲";font-size:11px;opacity:.7}.lzr.dn::before{content:"▼";font-size:11px;opacity:.7}
+.lzr.cur{background:rgba(40,42,54,.72);border-color:rgba(255,255,255,.3);padding:14px;box-shadow:0 20px 50px rgba(0,0,0,.5)}
+.lzr.cur .lzl{width:160px;height:90px}
+.lzr.cur b{font-size:19px}.lzr.cur span{font-size:15px;color:#fff;white-space:normal}
+.lzr .lpb{position:static;height:3px;margin:8px 0 6px;border-radius:2px;background:rgba(255,255,255,.2)}
+.lzr .lpb i{display:block;height:100%;background:#fff;border-radius:2px}
+.lzr small{display:block;font-size:12px;color:rgba(255,255,255,.6);line-height:1.35}
+.lzr em.rpb{font-style:normal;font-size:11px;font-weight:700;padding:4px 8px;border-radius:8px;background:rgba(255,255,255,.14);white-space:nowrap;align-self:flex-start}
+/* ---- reprendre au début ---- */
+.modal.lstartm{background:rgba(0,0,0,.45)}
+.lst{width:560px;padding:24px}
+.lst .hd{display:flex;gap:16px;align-items:center}
+.lst .hd .lth{width:200px;height:112px;flex:none;border-radius:14px}
+.lst .k{font-size:11px;letter-spacing:.08em;font-weight:700;color:rgba(255,255,255,.6)}
+.lst .hd b{display:block;font-size:22px;line-height:1.2;margin:6px 0 4px}
+.lst .hd span{font-size:14px;color:rgba(255,255,255,.7)}
+.lst .tl{margin:22px 0 4px}
+.lst .tr{position:relative;height:6px;border-radius:3px;background:rgba(255,255,255,.18)}
+.lst .tr i{position:absolute;left:0;top:0;bottom:0;border-radius:3px;background:linear-gradient(90deg,#60a5fa,#fff)}
+.lst .tr em{position:absolute;top:50%;width:14px;height:14px;margin:-7px 0 0 -7px;border-radius:50%;background:#ff3b30;box-shadow:0 0 0 4px rgba(255,59,48,.3)}
+.lst .lb{position:relative;height:20px;margin-top:8px;font-size:12px;color:rgba(255,255,255,.6)}
+.lst .lb span{position:absolute;top:0;white-space:nowrap}
+.lst .lb span:first-child{left:0}.lst .lb span:last-child{right:0}
+.lst .tl{position:relative;padding-top:20px}.lst .tl .now{position:absolute;top:0;transform:translateX(-50%);font-size:12px;color:#ff8a80;font-weight:600;white-space:nowrap}
+.lst .bt{display:flex;gap:12px;margin-top:16px}
+.lst .btn{height:50px;font-size:17px;padding:0 22px;flex:1;justify-content:center}
+.lst .lnk{margin-top:12px;text-align:center;font-size:13px;color:rgba(255,255,255,.55);padding:8px;border-radius:10px;cursor:pointer}
+.lst .lnk.foc{background:rgba(255,255,255,.9);color:#000}
+/* ---- recherche ---- */
+.lqs{display:flex;gap:28px;height:100%;min-height:0}
+.lqk{flex:0 0 330px;display:flex;flex-direction:column;gap:14px;padding-top:6px}
+.lqbox{display:flex;align-items:center;gap:10px;height:52px;padding:0 16px;border-radius:16px;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.18);font-size:20px;font-weight:600;overflow:hidden;white-space:nowrap}
+.lqbox svg{width:22px;height:22px;flex:none;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;opacity:.7}
+.lqbox .ph{color:rgba(255,255,255,.4);font-weight:500}
+.lqbox .caret{width:2px;height:24px;background:#fff;animation:lcxb .55s steps(1) infinite alternate;margin-left:-6px}
+.lkb{display:grid;grid-template-columns:repeat(6,1fr);gap:6px}
+.lkey{height:44px;border-radius:11px;display:grid;place-items:center;font-size:18px;font-weight:600;background:rgba(255,255,255,.06);color:rgba(255,255,255,.85);cursor:pointer;transition:transform .12s,background .12s}
+.lkey.w3{grid-column:span 3;font-size:15px}.lkey.w2{grid-column:span 2}.lkey.w1{grid-column:span 1}
+.lkey.foc{background:#fff;color:#000;transform:scale(1.1);box-shadow:0 10px 24px rgba(0,0,0,.5)}
+.lqmic{font-size:12px;color:rgba(255,255,255,.5);line-height:1.4}
+.lqres{flex:1;min-width:0;position:relative;overflow-y:auto;overflow-x:hidden;scrollbar-width:none}
+.lqres::-webkit-scrollbar{display:none}
+.lchips{display:flex;flex-wrap:wrap;gap:10px;padding:4px 2px 8px}
+.lchip{height:42px;padding:0 18px;border-radius:21px;display:flex;align-items:center;font-size:16px;font-weight:600;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.14);cursor:pointer;transition:transform .12s}
+.lchip.h{color:#c7d2fe}
+.lchip.foc{background:#fff;color:#000;transform:scale(1.06)}
+.lqempty{padding:60px 10px;font-size:18px;color:rgba(255,255,255,.6)}
+.lqmain{padding-top:8px}
+.live-row .pgrp{gap:8px}.live-row .pc{padding:0 12px 0 11px;gap:8px}.live-row .pc small{max-width:132px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
