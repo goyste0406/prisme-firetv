@@ -1954,7 +1954,7 @@ document.querySelector(".ldemo").insertAdjacentHTML("afterend",`<section class="
  <div class="rcmd"><code id="rcmd">${esc(RCMD)}</code><button type="button" id="rcopy">Copier</button></div>
  <ol start="2"><li>Choisis ici <b>tous les fichiers</b> de ce dossier (7 fichiers). Pour un 2ᵉ fournisseur, refais les deux étapes : les catalogues sont fusionnés.</li></ol>
  <div class="rrow"><label for="rname">Nom du fournisseur</label><input id="rname" value="${REAL?"Fournisseur "+(REAL.pls.length+1):"Mon fournisseur"}" autocomplete="off"><label class="rbtn" for="rfiles">Choisir les fichiers…</label><input type="file" id="rfiles" multiple accept=".json,.xml,.gz,.txt,application/json,text/xml" hidden>${REAL?'<button type="button" id="rdemo">Revenir aux données de démo</button>':""}</div>
- <ol start="3"><li><b>Affiches et logos</b> (après les données) : dans Terminal, colle cette 2ᵉ commande. Elle te demande ta clé API TMDB (qui ne s'affiche pas), cherche les affiches des films et séries diffusés aujourd'hui, récupère les logos des chaînes et crée <b>images.json</b> dans chaque dossier prisme-… Choisis ensuite ce fichier avec le même bouton.</li></ol>
+ <ol start="3"><li><b>Affiches et logos</b> (après les données) : dans Terminal, colle cette 2ᵉ commande. Elle te demande ta clé API TMDB (qui ne s'affiche pas), cherche les affiches des films et séries diffusés aujourd'hui, récupère les logos des chaînes et crée <b>images.json</b> dans chaque dossier prisme-… Choisis ensuite les 8 fichiers du dossier (les 7 + images.json) avec le même bouton : ⌘A dans la fenêtre de choix les sélectionne tous.</li></ol>
  <div class="rcmd"><code id="ricmd">Script de récupération des affiches · ${RICMD.split("\n").length} lignes · utilise le bouton Copier</code><button type="button" id="ricopy">Copier</button></div>
  <div class="rlog" id="rlog" role="status"></div>
 </section>`);
@@ -1990,8 +1990,9 @@ async function rImportImages(files,status){const out=[];for(const f of files){st
  e.stopImmediatePropagation();const rest=all.filter(f=>!im.includes(f));const log=$("#rlog");const say=m=>{log.textContent=m};log.classList.remove("err");
  try{if(rest.length){RWARN.length=0;const name=($("#rname").value||"Mon fournisseur").trim().slice(0,40);await rImport(rest,name,say);const R=JSON.parse(localStorage.getItem("prisme-real"));
    S.playlists=R.pls.map((p,i)=>({id:p.id,name:p.name,url:"Importé le "+new Date(p.at).toLocaleDateString("fr-FR"),user:"données réelles",pass:"",epg:true,on:true,seed:i+1,real:true}));S.adding=false;S.stack=[{t:"home"}];S.tab="live";save()}
-  else if(!REAL)throw new Error("importe d'abord les données de ton fournisseur (les 7 fichiers), puis images.json");
-  const [np,nl]=await rImportImages(im,say);say(`Images importées : ${np} affiches de programmes, ${nl} logos de chaînes. Redémarrage du simulateur…`);setTimeout(()=>location.reload(),1400)}
+  const [np,nl]=await rImportImages(im,say);
+  if(!rest.length&&!REAL){say(`Images enregistrées (${np} affiches, ${nl} logos), mais le simulateur ne trouve pas tes données fournisseur dans ce navigateur : il affiche encore les données de démo. Sélectionne en une seule fois les 7 fichiers du dossier prisme-… ET images.json (8 fichiers), avec la touche ⌘ pour en choisir plusieurs.`);return}
+  say(`Images importées : ${np} affiches de programmes, ${nl} logos de chaînes. Redémarrage du simulateur…`);setTimeout(()=>location.reload(),1400)}
  catch(err){log.classList.add("err");say("Import impossible : "+err.message)}e.target.value=""},true)}
 if($("#rdemo"))$("#rdemo").addEventListener("click",()=>{idbSet("images",[]).catch(()=>{})},true);
 
