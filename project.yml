@@ -11,7 +11,7 @@ targets:
     info:
       path: IPTVPerso/Info.plist
       properties:
-        CFBundleDisplayName: IPTV Perso
+        CFBundleDisplayName: prisme
         UILaunchScreen: {}
         NSAppTransportSecurity:
           NSAllowsArbitraryLoads: true

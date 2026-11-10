@@ -5,15 +5,14 @@ on:
     branches: [appletv]
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   build:
-    # macos-15 (arm64) n'a jamais été attribué : on essaie plusieurs types de machines
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [macos-15-intel, macos-14, macos-15]
-    runs-on: ${{ matrix.os }}
-    timeout-minutes: 40
+    # Les Mac arm64 (macos-15, macos-14) ne sont jamais attribués : on utilise le Mac Intel
+    runs-on: macos-15-intel
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
 
@@ -26,31 +25,43 @@ jobs:
       - name: Générer le projet Xcode
         run: xcodegen generate
 
-      - name: Compiler pour le simulateur Apple TV
+      - name: Ajouter le lecteur VLC (CocoaPods)
+        run: pod install --repo-update
+
+      - name: Compiler pour l'Apple TV (sans signature)
         run: |
           set -o pipefail
-          xcodebuild -project IPTVPerso.xcodeproj -scheme IPTVPerso \
-            -destination 'generic/platform=tvOS Simulator' \
-            CODE_SIGNING_ALLOWED=NO build 2>&1 | tee build.log | grep -E "error:|warning:|BUILD (SUCCEEDED|FAILED)" || true
+          xcodebuild -workspace IPTVPerso.xcworkspace -scheme IPTVPerso -configuration Release \
+            -sdk appletvos -destination 'generic/platform=tvOS' -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" build 2>&1 \
+            | tee build.log | grep -E "error:|warning: .*\.swift|BUILD (SUCCEEDED|FAILED)" || true
           grep -q "BUILD SUCCEEDED" build.log
 
-      - name: Préparer le projet prêt à ouvrir
-        if: success()
+      - name: Fabriquer le fichier .ipa
         run: |
-          mkdir -p livraison
-          cp -R IPTVPerso IPTVPerso.xcodeproj livraison/
-          cd livraison && zip -qr ../IPTVPerso-Xcode.zip .
+          APP=build/Build/Products/Release-appletvos/IPTVPerso.app
+          ls "$APP/Frameworks"
+          mkdir -p Payload && cp -R "$APP" Payload/
+          zip -qry prisme-AppleTV.ipa Payload
+          ls -lh prisme-AppleTV.ipa
 
-      - name: Mettre à disposition le projet
-        if: success()
-        uses: actions/upload-artifact@v4
-        with:
-          name: IPTVPerso-Xcode-${{ matrix.os }}
-          path: IPTVPerso-Xcode.zip
+      - name: Publier la dernière version (Releases)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          NOTE="Version du $(date -u '+%d/%m/%Y %H:%M') UTC · commit ${GITHUB_SHA::7}
+          À installer avec Sideloadly (Apple ID gratuit), à refaire tous les 7 jours."
+          if gh release view appletv-latest >/dev/null 2>&1; then
+            gh release upload appletv-latest prisme-AppleTV.ipa --clobber
+            gh release edit appletv-latest --notes "$NOTE"
+          else
+            gh release create appletv-latest prisme-AppleTV.ipa --target appletv --prerelease \
+              --title "prisme pour Apple TV" --notes "$NOTE"
+          fi
 
       - name: Journal de compilation
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: build-log-${{ matrix.os }}
+          name: build-log
           path: build.log

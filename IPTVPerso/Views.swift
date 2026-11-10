@@ -1,5 +1,5 @@
 import SwiftUI
-import AVKit
+import TVVLCKit
 
 // MARK: - Connexion
 
@@ -116,28 +116,153 @@ struct PlayItem: Identifiable {
     let title: String
 }
 
-struct PlayerView: UIViewControllerRepresentable {
+/// Lecteur basé sur VLC (TVVLCKit) : lit directement les flux .ts, .mkv, .avi… que le lecteur d'Apple refuse.
+struct PlayerView: View {
     let item: PlayItem
+    @Environment(\.dismiss) private var dismiss
 
-    func makeUIViewController(context: Context) -> AVPlayerViewController {
-        let playerItem = AVPlayerItem(url: item.url)
-        let title = AVMutableMetadataItem()
-        title.identifier = .commonIdentifierTitle
-        title.value = item.title as NSString
-        title.extendedLanguageTag = "und"
-        playerItem.externalMetadata = [title]
+    var body: some View {
+        VLCPlayerRepresentable(item: item, onClose: { dismiss() })
+            .ignoresSafeArea()
+    }
+}
 
-        let player = AVPlayer(playerItem: playerItem)
-        let controller = AVPlayerViewController()
-        controller.player = player
-        player.play()
-        return controller
+struct VLCPlayerRepresentable: UIViewControllerRepresentable {
+    let item: PlayItem
+    let onClose: () -> Void
+
+    func makeUIViewController(context: Context) -> VLCPlayerController {
+        VLCPlayerController(url: item.url, title: item.title, onClose: onClose)
     }
 
-    func updateUIViewController(_ controller: AVPlayerViewController, context: Context) {}
+    func updateUIViewController(_ controller: VLCPlayerController, context: Context) {}
 
-    static func dismantleUIViewController(_ controller: AVPlayerViewController, coordinator: ()) {
-        controller.player?.pause()
+    static func dismantleUIViewController(_ controller: VLCPlayerController, coordinator: ()) {
+        controller.stop()
+    }
+}
+
+final class VLCPlayerController: UIViewController, VLCMediaPlayerDelegate {
+    private let url: URL
+    private let titleText: String
+    private let onClose: () -> Void
+    private let player = VLCMediaPlayer()
+    private let videoView = UIView()
+    private let spinner = UIActivityIndicatorView(style: .large)
+    private let banner = UILabel()
+    private let message = UILabel()
+    private var hideBanner: DispatchWorkItem?
+
+    init(url: URL, title: String, onClose: @escaping () -> Void) {
+        self.url = url
+        self.titleText = title
+        self.onClose = onClose
+        super.init(nibName: nil, bundle: nil)
+    }
+
+    required init?(coder: NSCoder) { fatalError("init(coder:) non utilisé") }
+
+    override func viewDidLoad() {
+        super.viewDidLoad()
+        view.backgroundColor = .black
+
+        videoView.frame = view.bounds
+        videoView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+        view.addSubview(videoView)
+
+        spinner.color = .white
+        spinner.translatesAutoresizingMaskIntoConstraints = false
+        view.addSubview(spinner)
+
+        banner.text = titleText
+        banner.font = .systemFont(ofSize: 38, weight: .semibold)
+        banner.textColor = .white
+        banner.shadowColor = .black
+        banner.translatesAutoresizingMaskIntoConstraints = false
+        view.addSubview(banner)
+
+        message.font = .systemFont(ofSize: 30, weight: .medium)
+        message.textColor = .white
+        message.numberOfLines = 0
+        message.textAlignment = .center
+        message.isHidden = true
+        message.translatesAutoresizingMaskIntoConstraints = false
+        view.addSubview(message)
+
+        NSLayoutConstraint.activate([
+            spinner.centerXAnchor.constraint(equalTo: view.centerXAnchor),
+            spinner.centerYAnchor.constraint(equalTo: view.centerYAnchor),
+            banner.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 90),
+            banner.bottomAnchor.constraint(equalTo: view.bottomAnchor, constant: -70),
+            message.centerXAnchor.constraint(equalTo: view.centerXAnchor),
+            message.centerYAnchor.constraint(equalTo: view.centerYAnchor),
+            message.widthAnchor.constraint(lessThanOrEqualToConstant: 1200),
+        ])
+
+        player.drawable = videoView
+        player.delegate = self
+        let media = VLCMedia(url: url)
+        media.addOption(":network-caching=1500")
+        player.media = media
+        spinner.startAnimating()
+        player.play()
+        showBanner()
+    }
+
+    override func viewWillDisappear(_ animated: Bool) {
+        super.viewWillDisappear(animated)
+        stop()
+    }
+
+    func stop() {
+        if player.isPlaying || player.state != .stopped { player.stop() }
+    }
+
+    private func showBanner() {
+        hideBanner?.cancel()
+        banner.alpha = 1
+        let work = DispatchWorkItem { [weak self] in
+            UIView.animate(withDuration: 0.4) { self?.banner.alpha = 0 }
+        }
+        hideBanner = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 4, execute: work)
+    }
+
+    override func pressesBegan(_ presses: Set<UIPress>, with event: UIPressesEvent?) {
+        guard let press = presses.first else { return super.pressesBegan(presses, with: event) }
+        switch press.type {
+        case .menu:
+            stop()
+            onClose()
+        case .playPause, .select:
+            if player.isPlaying { player.pause() } else { player.play() }
+            showBanner()
+        default:
+            super.pressesBegan(presses, with: event)
+        }
+    }
+
+    func mediaPlayerStateChanged(_ aNotification: Notification) {
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            switch self.player.state {
+            case .playing, .paused:
+                self.spinner.stopAnimating()
+                self.message.isHidden = true
+            case .opening, .buffering:
+                if !self.player.isPlaying { self.spinner.startAnimating() }
+            case .error:
+                self.spinner.stopAnimating()
+                self.message.text = "Lecture impossible.\nLe flux ne répond pas ou ton abonnement est déjà utilisé sur un autre appareil."
+                self.message.isHidden = false
+            case .ended:
+                self.spinner.stopAnimating()
+                self.message.text = "Fin de la diffusion."
+                self.message.isHidden = false
+            default:
+                break
+            }
+        }
     }
 }
 
@@ -169,7 +294,7 @@ struct ChannelListView: View {
     let api: XtreamAPI
     let categoryID: String?
     let title: String
-    @AppStorage("liveFormat") private var liveFormat = "m3u8"
+    @AppStorage("liveFormat") private var liveFormat = "ts"
     @State private var search = ""
     @State private var playing: PlayItem?
 
@@ -198,7 +323,7 @@ struct ChannelListView: View {
         }
         .searchable(text: $search)
         .navigationTitle(title)
-        .fullScreenCover(item: $playing) { PlayerView(item: $0).ignoresSafeArea() }
+        .fullScreenCover(item: $playing) { PlayerView(item: $0) }
     }
 }
 
@@ -248,7 +373,7 @@ struct MovieGridView: View {
             }
         }
         .navigationTitle(title)
-        .fullScreenCover(item: $playing) { PlayerView(item: $0).ignoresSafeArea() }
+        .fullScreenCover(item: $playing) { PlayerView(item: $0) }
     }
 }
 
@@ -325,7 +450,7 @@ struct SeriesDetailView: View {
             }
         }
         .navigationTitle(serie.displayName)
-        .fullScreenCover(item: $playing) { PlayerView(item: $0).ignoresSafeArea() }
+        .fullScreenCover(item: $playing) { PlayerView(item: $0) }
     }
 }
 
@@ -333,7 +458,7 @@ struct SeriesDetailView: View {
 
 struct SettingsView: View {
     @EnvironmentObject var state: AppState
-    @AppStorage("liveFormat") private var liveFormat = "m3u8"
+    @AppStorage("liveFormat") private var liveFormat = "ts"
 
     var body: some View {
         NavigationStack {
@@ -344,8 +469,8 @@ struct SettingsView: View {
                 }
                 Section("Lecture") {
                     Picker("Format TV en direct", selection: $liveFormat) {
-                        Text("HLS (m3u8) – recommandé").tag("m3u8")
-                        Text("MPEG-TS (ts)").tag("ts")
+                        Text("MPEG-TS (ts) – recommandé").tag("ts")
+                        Text("HLS (m3u8)").tag("m3u8")
                     }
                 }
                 Section {
