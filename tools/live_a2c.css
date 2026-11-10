@@ -179,7 +179,7 @@
 .hscroll::-webkit-scrollbar{display:none}
 .lhero{flex:none}.lhero.hsmall{height:128px}.lhero.hsmall h1{font-size:32px}
 .hdecks{padding-top:30px;gap:22px}
-.hdk .lay{height:124px}.hdk .lab{top:132px}.hdk .lsoon{top:152px}.hdk{height:172px}
+.hdk .lay{height:124px}.hdk .lab{top:132px}.hdk .lsoon{top:-14px;left:auto;right:0;z-index:4}.hdk{height:186px}
 .hbig{flex:0 0 290px}.hbig .lth{height:162px}.hbig .tx b{font-size:17px}.hbig .s{margin-top:9px}
 .hgrid{display:flex;flex-direction:column;gap:8px;padding:12px 0}
 .hgr{display:grid;grid-template-columns:150px 1.3fr 1fr 1fr;gap:10px;align-items:stretch}
@@ -191,3 +191,7 @@
 .hgp .lpb{height:3px;margin-top:4px}
 .hgp.now{background:rgba(255,255,255,.12)}
 .hgp.foc{background:#fff;color:#000;transform:scale(1.03)}.hgp.foc small{color:rgba(0,0,0,.55)}
+.hlogos{position:absolute;left:0;right:0;top:154px;display:flex;gap:4px;overflow:hidden}
+.hlogos i{font-style:normal;height:22px;min-width:30px;padding:0 5px;border-radius:6px;display:grid;place-items:center;font-size:9.5px;font-weight:800;color:#fff;background:var(--c,rgba(255,255,255,.14));white-space:nowrap}
+.hlogos i.li{background:rgba(255,255,255,.1);padding:0 4px}.hlogos i.li img{height:15px;max-width:44px;object-fit:contain}
+.hlogos i.more{background:rgba(255,255,255,.14);color:rgba(255,255,255,.8)}

@@ -608,7 +608,7 @@ kbd{font-family:var(--ui);font-size:12px;background:#1c1f27;border:1px solid #2a
 .hscroll::-webkit-scrollbar{display:none}
 .lhero{flex:none}.lhero.hsmall{height:128px}.lhero.hsmall h1{font-size:32px}
 .hdecks{padding-top:30px;gap:22px}
-.hdk .lay{height:124px}.hdk .lab{top:132px}.hdk .lsoon{top:152px}.hdk{height:172px}
+.hdk .lay{height:124px}.hdk .lab{top:132px}.hdk .lsoon{top:-14px;left:auto;right:0;z-index:4}.hdk{height:186px}
 .hbig{flex:0 0 290px}.hbig .lth{height:162px}.hbig .tx b{font-size:17px}.hbig .s{margin-top:9px}
 .hgrid{display:flex;flex-direction:column;gap:8px;padding:12px 0}
 .hgr{display:grid;grid-template-columns:150px 1.3fr 1fr 1fr;gap:10px;align-items:stretch}
@@ -620,6 +620,10 @@ kbd{font-family:var(--ui);font-size:12px;background:#1c1f27;border:1px solid #2a
 .hgp .lpb{height:3px;margin-top:4px}
 .hgp.now{background:rgba(255,255,255,.12)}
 .hgp.foc{background:#fff;color:#000;transform:scale(1.03)}.hgp.foc small{color:rgba(0,0,0,.55)}
+.hlogos{position:absolute;left:0;right:0;top:154px;display:flex;gap:4px;overflow:hidden}
+.hlogos i{font-style:normal;height:22px;min-width:30px;padding:0 5px;border-radius:6px;display:grid;place-items:center;font-size:9.5px;font-weight:800;color:#fff;background:var(--c,rgba(255,255,255,.14));white-space:nowrap}
+.hlogos i.li{background:rgba(255,255,255,.1);padding:0 4px}.hlogos i.li img{height:15px;max-width:44px;object-fit:contain}
+.hlogos i.more{background:rgba(255,255,255,.14);color:rgba(255,255,255,.8)}
 </style>
 
 <div class="page">
@@ -1621,7 +1625,9 @@ function lsave(){try{localStorage.setItem("prisme-atv-live",JSON.stringify(LS))}
 /* Genre d'un programme, déduit du guide */
 function pgen(p){const g=norm(p.g||"");return /film|cinema|telefilm|movie/.test(g)?"Cinéma":/serie|feuilleton|fiction|drama|soap|sitcom/.test(g)?"Séries":/sport|foot|rugby|tennis|cyclisme|match|basket|golf|moteur|f1/.test(g)?"Sport":/info|journal|politique|debat|actualite|news|meteo/.test(g)?"Info":/dessin|anim|jeunesse|enfant|kids|children|cartoon/.test(g)?"Jeunesse":/docu|decouverte|nature|histoire|science|voyage|animaux/.test(g)?"Découverte":"Divertissement"}
 const lvis=()=>chans().filter(c=>!LS.hidden.includes(c.id));
-function lNow(g){return lvis().map(c=>({c,e:epgAt(c)})).filter(x=>!g||pgen(x.e.cur)===g).sort((a,b)=>b.e.cur.s-a.e.cur.s)}
+function chanGenre(c){if(c._cg!==undefined)return c._cg;const lab=((typeof LCATS!=="undefined"&&LCATS.find(x=>x[0]===c.cat))||[])[1]||"";let g=lab?pgen({g:lab}):"Divertissement";
+ if(g==="Divertissement"){const t={sport:"Sport",info:"Info",cine:"Cinéma",kids:"Jeunesse",doc:"Découverte"}[c.tpl];g=t||null}return c._cg=g}
+function lNow(g){return lvis().map(c=>({c,e:epgAt(c)})).filter(x=>!g||pgen(x.e.cur)===g||chanGenre(x.c)===g).sort((a,b)=>((g&&pgen(b.e.cur)===g)-(g&&pgen(a.e.cur)===g))||(b.e.cur.s-a.e.cur.s))}
 function lSoon(g,win=90){const n=nowMin();return lvis().flatMap(c=>epg(c).filter(p=>p.s>n&&p.s<=n+win&&(!g||pgen(p)===g)).map(p=>({c,p}))).sort((a,b)=>a.p.s-b.p.s)}
 function deckList(d){if(d==="Reprendre")return LS.hist.filter(id=>CH[id]&&srcs("ch:"+id).length).slice(0,3).map(id=>({c:CH[id],e:epgAt(CH[id])}));
  if(d==="Favoris")return lvis().filter(c=>isFav("ch:"+c.id)).map(c=>({c,e:epgAt(c)}));return lNow(d)}
@@ -2077,7 +2083,7 @@ if($("#rdemo"))$("#rdemo").addEventListener("click",()=>{idbSet("images",[]).cat
 const HV="F";
 function hdeck(d,row,w,ex){const L=deckList(d),L2=ex?L.filter(x=>!ex.has(x.c.id)):L,lays=(L2.length?L2:L).slice(0,3).reverse();const soon=!["Reprendre","Favoris"].includes(d)&&lSoon(d,10)[0];
  return `<div class="ldk hdk" style="flex:0 0 ${w||220}px" data-f data-fid="dk-${d}" data-row="${row}" data-act="ldeck:${d}" data-hov="ldk:${d}">${lays.map((x,j)=>{const lv=lays.length-j;return `<div class="lay l${lv}">${lth(x.c,lv===1?`<div class="sh"></div><span class="ltag" style="--g:${LGC[d]}">${esc(d.toUpperCase())}</span><div class="tx"><b>${esc(x.e.cur.t)}</b><span>${esc(x.c.n)}</span></div><div class="lpb"><i style="width:${x.e.pct}%"></i></div>`:"")}</div>`}).join("")}
- <div class="lab"><b>${d==="Reprendre"?"↺ Reprendre":esc(d)}</b><span>${L.length}</span></div>${soon?`<span class="lsoon">${fmt(soon.p.s)} · ${esc(soon.p.t)}</span>`:""}</div>`}
+ <div class="lab"><b>${d==="Reprendre"?"↺ Reprendre":esc(d)}</b><span>${L.length} chaîne${L.length>1?"s":""}</span></div><div class="hlogos">${L.slice(0,5).map(x=>{const lg=typeof imgLogo==="function"&&imgLogo(x.c);return lg?`<i class="li"><img src="${esc(lg)}" alt="${esc(x.c.n)}"></i>`:`<i style="--c:${x.c.col}">${esc(x.c.n.replace(/[^A-Za-z0-9+ ]/g,"").split(" ").map(w=>w.length<=3?w:w[0]).join("").slice(0,4))}</i>`}).join("")}${L.length>5?`<i class="more">+${L.length-5}</i>`:""}</div>${soon?`<span class="lsoon">${fmt(soon.p.s)} · ${esc(soon.p.t)}</span>`:""}</div>`}
 function hrow(title,sub,cards){return cards?`<section data-anchor><div class="lh3">${esc(title)}<small>${sub}</small></div><div class="lrow sx">${cards}</div></section>`:""}
 function hTonight(){const L=[];for(const c of lvis()){const p=epg(c).find(q=>q.s>=1230&&q.s<=1320&&q.e-q.s>=40);if(p)L.push({c,p})}return L.sort((a,b)=>a.p.s-b.p.s)}
 function hForYou(){const order=[...LGEN].sort((a,b)=>(LS.gw[b]||0)-(LS.gw[a]||0));const out=[],seen=new Set();
@@ -2103,7 +2109,7 @@ function homeMain(){
   ${hrow("Commence bientôt","dans l'heure",soonC)}<div style="height:30px"></div></div>`}
  if(HV==="F"){const F=hForYou();return `<div class="lhero hsmall" id="lhero">${first?lheroHtml(first.c):""}</div><div class="hscroll sy">
   <section data-anchor><div class="lh3">Pour toi, maintenant<small>selon ce que tu regardes vers ${Math.floor(nowMin()/60)} h</small></div><div class="lrow sx">${F.map(x=>hBig(x,"hf")).join("")}</div></section>
-  <section data-anchor><div class="lh3">Tes paquets<small>OK pour ouvrir · maintenir pour les options</small></div><div class="lrow sx hdecks">${(ex=>D.map(d=>hdeck(d,"hd",190,ex)).join(""))(new Set(F.map(x=>x.c.id)))}</div></section>
+  <section data-anchor><div class="lh3">Explorer par univers<small>OK pour voir toutes les chaînes · maintenir pour les options</small></div><div class="lrow sx hdecks">${(ex=>D.map(d=>hdeck(d,"hd",190,ex)).join(""))(new Set(F.map(x=>x.c.id)))}</div></section>
   ${hrow("Commence bientôt","dans l'heure · OK pour un rappel",soonC)}${hrow("Replay récent","déjà diffusé · OK pour revoir",pastC)}${hrow("Ce soir","première partie de soirée",tonC)}<div style="height:30px"></div></div>`}
  if(HV==="G"){const F=hForYou();return `${hero}<div class="hscroll sy">
   <section data-anchor><div class="lh3">Tes paquets<small>OK pour ouvrir · maintenir pour les options</small></div><div class="lrow sx hdecks">${D.map(d=>hdeck(d,"hd")).join("")}</div></section>
