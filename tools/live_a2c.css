@@ -48,7 +48,7 @@
 .ldk .lab b{color:#fff}
 .ldk .lsoon{position:absolute;left:0;top:170px;font-size:11px;font-weight:800;padding:2px 7px;border-radius:6px;background:#0a84ff;white-space:nowrap;max-width:250px;overflow:hidden;text-overflow:ellipsis}
 /* rangées (vue genre) */
-.lrow{display:flex;gap:18px;padding:12px 4px 4px;margin:0 -4px;overflow-x:auto;scrollbar-width:none}
+.lrow{display:flex;justify-content:flex-start;gap:18px;padding:12px 4px 4px;margin:0 -4px;overflow-x:auto;scrollbar-width:none}
 .lrow::-webkit-scrollbar{display:none}
 .lcard{flex:0 0 210px;cursor:pointer}
 .lcard .lth{height:118px;transition:transform .2s cubic-bezier(.2,.8,.2,1),box-shadow .2s}
@@ -66,7 +66,7 @@
 .lfan .lrow{padding:22px 140px;margin:0;gap:22px}
 .lfan .lcard{flex:0 0 272px;animation:lfanin .45s cubic-bezier(.2,.8,.2,1) both}
 @keyframes lfanin{from{opacity:0;transform:translateX(-60px) rotate(-4deg)}to{opacity:1;transform:none}}
-.lfan .lcard .lth{height:153px;background-position:0% 0%;filter:saturate(.55) brightness(.8);transition:transform .2s,box-shadow .2s,filter .5s}
+.lfan .lcard .lth{height:153px}
 .lfan .lcard.pv .lth{filter:none;animation:lpv 5s ease-in-out infinite alternate}
 @keyframes lpv{to{background-position:100% 100%}}
 .lfan .lcard .pvb{position:absolute;left:10px;bottom:18px;z-index:3;font-size:10.5px;font-weight:800;letter-spacing:.06em;padding:3px 8px;border-radius:6px;background:#fff;color:#000;opacity:0;transition:opacity .3s}
@@ -141,3 +141,22 @@
 .rrow label[for="rname"]{color:#9aa0ad}
 .rrow input{font:inherit;color:#e6e8ee;background:#0a0b0f;border:1px solid #2c303b;border-radius:10px;padding:7px 10px;min-width:0;width:170px}
 .rlog{margin-top:10px;color:#30d158;min-height:20px}.rlog.err{color:#ff6961}
+
+/* vignette de programme (image fixe, pas de vidéo) */
+.lth{background:radial-gradient(60% 80% at 85% 20%,hsl(var(--h1) 70% 55% / .55),transparent 60%),radial-gradient(70% 90% at 10% 100%,hsl(var(--h2) 65% 45% / .5),transparent 65%),linear-gradient(150deg,hsl(var(--h1) 40% 22%),hsl(var(--h2) 45% 9%))}
+.lth::after{background:linear-gradient(115deg,rgba(255,255,255,.10),transparent 38%)}
+.lart{position:absolute;inset:0;overflow:hidden;pointer-events:none}
+.lart svg{position:absolute;right:-8%;top:-12%;width:62%;height:auto;aspect-ratio:1;fill:none;stroke:rgba(255,255,255,.16);stroke-width:1.1}
+.lart span{position:absolute;left:10px;right:34%;top:46px;font-size:15px;font-weight:800;line-height:1.05;letter-spacing:-.01em;color:rgba(255,255,255,.22);text-transform:uppercase;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+.limg{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;z-index:0}
+.lfan .lcard.pv .lth{animation:none}
+/* vidéo en direct en fond */
+.lbgv{position:absolute;inset:0;z-index:0;overflow:hidden;opacity:0;transition:opacity .8s ease}
+.lbgv.on{opacity:1}
+.lbgv .vid{animation-duration:14s}
+.lbgv .lbgs{position:absolute;inset:0;background:linear-gradient(90deg,rgba(0,0,0,.82) 0%,rgba(0,0,0,.45) 45%,rgba(0,0,0,.15) 75%),linear-gradient(0deg,rgba(0,0,0,.9) 22%,rgba(0,0,0,.2) 60%,rgba(0,0,0,.35))}
+.lbgtag{position:absolute;right:40px;top:96px;display:flex;align-items:center;gap:8px;font-size:12px;font-weight:800;letter-spacing:.07em;color:rgba(255,255,255,.85);background:rgba(0,0,0,.35);padding:5px 10px;border-radius:8px}
+.lbgtag i{width:7px;height:7px;border-radius:50%;background:var(--live);animation:blink 1.4s infinite}
+.lside,.lmain{z-index:2}.lmain{z-index:1}
+.lfan .lart span{font-size:18px;top:50px}
+.ldk .lart span{display:none}

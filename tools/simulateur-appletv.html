@@ -477,7 +477,7 @@ kbd{font-family:var(--ui);font-size:12px;background:#1c1f27;border:1px solid #2a
 .ldk .lab b{color:#fff}
 .ldk .lsoon{position:absolute;left:0;top:170px;font-size:11px;font-weight:800;padding:2px 7px;border-radius:6px;background:#0a84ff;white-space:nowrap;max-width:250px;overflow:hidden;text-overflow:ellipsis}
 /* rangées (vue genre) */
-.lrow{display:flex;gap:18px;padding:12px 4px 4px;margin:0 -4px;overflow-x:auto;scrollbar-width:none}
+.lrow{display:flex;justify-content:flex-start;gap:18px;padding:12px 4px 4px;margin:0 -4px;overflow-x:auto;scrollbar-width:none}
 .lrow::-webkit-scrollbar{display:none}
 .lcard{flex:0 0 210px;cursor:pointer}
 .lcard .lth{height:118px;transition:transform .2s cubic-bezier(.2,.8,.2,1),box-shadow .2s}
@@ -495,7 +495,7 @@ kbd{font-family:var(--ui);font-size:12px;background:#1c1f27;border:1px solid #2a
 .lfan .lrow{padding:22px 140px;margin:0;gap:22px}
 .lfan .lcard{flex:0 0 272px;animation:lfanin .45s cubic-bezier(.2,.8,.2,1) both}
 @keyframes lfanin{from{opacity:0;transform:translateX(-60px) rotate(-4deg)}to{opacity:1;transform:none}}
-.lfan .lcard .lth{height:153px;background-position:0% 0%;filter:saturate(.55) brightness(.8);transition:transform .2s,box-shadow .2s,filter .5s}
+.lfan .lcard .lth{height:153px}
 .lfan .lcard.pv .lth{filter:none;animation:lpv 5s ease-in-out infinite alternate}
 @keyframes lpv{to{background-position:100% 100%}}
 .lfan .lcard .pvb{position:absolute;left:10px;bottom:18px;z-index:3;font-size:10.5px;font-weight:800;letter-spacing:.06em;padding:3px 8px;border-radius:6px;background:#fff;color:#000;opacity:0;transition:opacity .3s}
@@ -570,6 +570,25 @@ kbd{font-family:var(--ui);font-size:12px;background:#1c1f27;border:1px solid #2a
 .rrow label[for="rname"]{color:#9aa0ad}
 .rrow input{font:inherit;color:#e6e8ee;background:#0a0b0f;border:1px solid #2c303b;border-radius:10px;padding:7px 10px;min-width:0;width:170px}
 .rlog{margin-top:10px;color:#30d158;min-height:20px}.rlog.err{color:#ff6961}
+
+/* vignette de programme (image fixe, pas de vidéo) */
+.lth{background:radial-gradient(60% 80% at 85% 20%,hsl(var(--h1) 70% 55% / .55),transparent 60%),radial-gradient(70% 90% at 10% 100%,hsl(var(--h2) 65% 45% / .5),transparent 65%),linear-gradient(150deg,hsl(var(--h1) 40% 22%),hsl(var(--h2) 45% 9%))}
+.lth::after{background:linear-gradient(115deg,rgba(255,255,255,.10),transparent 38%)}
+.lart{position:absolute;inset:0;overflow:hidden;pointer-events:none}
+.lart svg{position:absolute;right:-8%;top:-12%;width:62%;height:auto;aspect-ratio:1;fill:none;stroke:rgba(255,255,255,.16);stroke-width:1.1}
+.lart span{position:absolute;left:10px;right:34%;top:46px;font-size:15px;font-weight:800;line-height:1.05;letter-spacing:-.01em;color:rgba(255,255,255,.22);text-transform:uppercase;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+.limg{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;z-index:0}
+.lfan .lcard.pv .lth{animation:none}
+/* vidéo en direct en fond */
+.lbgv{position:absolute;inset:0;z-index:0;overflow:hidden;opacity:0;transition:opacity .8s ease}
+.lbgv.on{opacity:1}
+.lbgv .vid{animation-duration:14s}
+.lbgv .lbgs{position:absolute;inset:0;background:linear-gradient(90deg,rgba(0,0,0,.82) 0%,rgba(0,0,0,.45) 45%,rgba(0,0,0,.15) 75%),linear-gradient(0deg,rgba(0,0,0,.9) 22%,rgba(0,0,0,.2) 60%,rgba(0,0,0,.35))}
+.lbgtag{position:absolute;right:40px;top:96px;display:flex;align-items:center;gap:8px;font-size:12px;font-weight:800;letter-spacing:.07em;color:rgba(255,255,255,.85);background:rgba(0,0,0,.35);padding:5px 10px;border-radius:8px}
+.lbgtag i{width:7px;height:7px;border-radius:50%;background:var(--live);animation:blink 1.4s infinite}
+.lside,.lmain{z-index:2}.lmain{z-index:1}
+.lfan .lart span{font-size:18px;top:50px}
+.ldk .lart span{display:none}
 </style>
 
 <div class="page">
@@ -1580,12 +1599,13 @@ const since=p=>{const n=nowMin();return p.s<=n?"depuis "+dur(Math.max(1,Math.rou
 const lbest=key=>{const L=srcs(key).filter(compat);return L[0]};
 function lpref(key){const P=LS.pref[key];if(!P)return null;let b=null,n=0;for(const k in P)if(P[k]>n){n=P[k];b=k}return n>=2?srcs(key).find(v=>v.id===b):null}
 /* ---------- fragments ---------- */
-function lth(c,inner){return `<div class="lth" style="--c:${c.col};--x:${20+hash(c.id)%55}%"><span class="llogo" style="--c:${c.col}">${esc(c.n)}</span>${inner||""}</div>`}
+function lth(c,inner,p){p=p||epgAt(c).cur;const g=pgen(p),h=hash(p.t||c.id)%360,h2=(h+50)%360;
+ return `<div class="lth" style="--c:${c.col};--h1:${h};--h2:${h2};--x:${20+hash(p.t||c.id)%55}%"><div class="lart">${lsvg(g)}<span>${esc(p.t||"")}</span></div>${p.img?`<img class="limg" src="${esc(p.img)}" alt="" loading="lazy" onerror="this.remove()">`:""}<span class="llogo" style="--c:${c.col}">${esc(c.n)}</span>${inner||""}</div>`}
 function lheroHtml(c,p){if(!c)return `<div class="lhero"><h1>Aucune chaîne</h1></div>`;const n=nowMin();p=p||epgAt(c).cur;const on=p.s<=n,L=srcs("ch:"+c.id),b=lbest("ch:"+c.id);
  return `<div class="k">${on?'<span class="lbd">EN DIRECT</span>':'<span class="lbd soon">À VENIR</span>'}${esc(c.n.toUpperCase())} · ${esc(pgen(p).toUpperCase())}</div><h1>${esc(p.t)}</h1>
  <div class="m">${fmt(p.s)} – ${fmt(p.e)} · ${since(p)}${on?" · reste "+dur(Math.max(1,Math.round(p.e-n))):""} · ${L.length} source${L.length>1?"s":""}${b?` <span class="qb q${b.q}" style="height:20px;font-size:11px">${b.q}</span>`:""}</div>${on?`<div class="lpb"><i style="width:${Math.round((n-p.s)/(p.e-p.s)*100)}%"></i></div>`:""}`}
 function lcard(c,row,soonP){const e=epgAt(c),p=soonP||e.cur,on=!soonP,g=pgen(p);
- return `<div class="lcard" data-f data-fid="${row}-${c.id}${soonP?"-"+p.s:""}" data-row="${row}" data-act="${on?"lp:"+c.id:"lrem:"+c.id+":"+p.s}" data-hov="lp:${c.id}${soonP?":"+p.s:""}" data-lp="${c.id}">${lth(c,`${on?'<span class="lbd">DIRECT</span>':`<span class="lbd soon">${fmt(p.s)}</span>`}${on?`<div class="lpb"><i style="width:${e.pct}%"></i></div>`:""}`)}<div class="t">${esc(p.t)}</div><div class="s">${esc(c.n)} · ${since(p)}</div></div>`}
+ return `<div class="lcard" data-f data-fid="${row}-${c.id}${soonP?"-"+p.s:""}" data-row="${row}" data-act="${on?"lp:"+c.id:"lrem:"+c.id+":"+p.s}" data-hov="lp:${c.id}${soonP?":"+p.s:""}" data-lp="${c.id}">${lth(c,`${on?'<span class="lbd">DIRECT</span>':`<span class="lbd soon">${fmt(p.s)}</span>`}${on?`<div class="lpb"><i style="width:${e.pct}%"></i></div>`:""}`,p)}<div class="t">${esc(p.t)}</div><div class="s">${esc(c.n)} · ${since(p)}</div></div>`}
 function lsideHtml(){const items=["Accueil",...LGEN];
  return `<div class="lside" data-col="0">${items.map(k=>`<div class="lsi ${LS.view===k?"sel":""}" data-f data-fid="lsv-${k}" data-row="lside" data-act="lsv:${k}" data-hov="lsv:${k}">${lsvg(k)}<span>${k}</span><small>${k==="Accueil"?lNow().length:lNow(k).length}</small></div>`).join("")}</div>`}
 function liveHtml(){
@@ -1605,10 +1625,10 @@ function liveHtml(){
  if(LS.deck){const d=LS.deck,L=deckList(d);
   fan=`<div class="lfan"><h2>${lsvg(d)}${d==="Reprendre"?"Reprendre":esc(d)}<small>${d==="Reprendre"?"tes dernières chaînes · reprise sur la même source, sans question":L.length+" en direct"}</small></h2><div class="hint2">OK pour regarder · maintiens le clic (ou M) pour plus d'options · Retour pour refermer</div>
   <div class="lrow sx">${L.map((x,i)=>{const c=x.c,key="ch:"+c.id,ns=srcs(key).length,b=lbest(key),last=pickSrc(key);
-   return `<div class="lcard" style="animation-delay:${i*45}ms" data-f data-fid="fc-${c.id}" data-row="fan" data-act="lp:${c.id}" data-hov="lp:${c.id}" data-lp="${c.id}" ${i===0?"data-default":""}>${lth(c,`<span class="lbd">DIRECT</span><span class="pvb">APERÇU</span><div class="lpb"><i style="width:${x.e.pct}%"></i></div>`)}<div class="t">${esc(x.e.cur.t)}</div><div class="s">${d==="Reprendre"&&last?`${esc(c.n)} · reprend en <i class="q${last.q}">${last.q}</i> ${esc(last.p.name)}`:`${esc(c.n)} · ${ns} source${ns>1?"s":""}${b?`<i class="q${b.q}">${b.q}</i>`:""}`}</div></div>`}).join("")}</div>
+   return `<div class="lcard" style="animation-delay:${i*45}ms" data-f data-fid="fc-${c.id}" data-row="fan" data-act="lp:${c.id}" data-hov="lp:${c.id}" data-lp="${c.id}" ${i===0?"data-default":""}>${lth(c,`<span class="lbd">DIRECT</span><div class="lpb"><i style="width:${x.e.pct}%"></i></div>`)}<div class="t">${esc(x.e.cur.t)}</div><div class="s">${d==="Reprendre"&&last?`${esc(c.n)} · reprend en <i class="q${last.q}">${last.q}</i> ${esc(last.p.name)}`:`${esc(c.n)} · ${ns} source${ns>1?"s":""}${b?`<i class="q${b.q}">${b.q}</i>`:""}`}</div></div>`}).join("")}</div>
   <div class="btn lclose" data-f data-fid="fan-close" data-act="lclose">✕ Refermer</div></div>`}
  let bgh=lsideHtml()+`<div class="lmain">${main}</div>`;if(LS.deck)bgh=bgh.replace(/ data-f /g," ");
- return `<div class="lv">${bgh}${fan}</div>`;
+ return `<div class="lv"><div class="lbgv" id="lbgv">${LBG?lbgInner(CH[LBG]):""}</div>${bgh}${fan}</div>`;
 }
 /* ---------- fenêtres ---------- */
 const LMODAL={
@@ -1726,6 +1746,13 @@ const LMEM={};
  if(inLive&&(dir==="up"||dir==="down")&&F.closest(".lside")){const L=[...view.querySelectorAll(".lside [data-f]")],i=L.indexOf(F),j=i+(dir==="down"?1:-1);if(j>=0&&j<L.length){setFocus(L[j]);return}if(dir==="down")return}
  _mv(dir)}}
 
+/* Vidéo en direct en fond : la chaîne sélectionnée se lance derrière la page après un court instant (une seule connexion) */
+let LBG=null,LBGT=null;
+function lbgInner(c){return c?`<div class="vid" style="--c:${c.col}"></div><div class="scan"></div><div class="lbgs"></div><span class="lbgtag"><i></i>EN DIRECT · ${esc(c.n)}</span>`:""}
+function lbgPlay(id){clearTimeout(LBGT);LBGT=setTimeout(()=>{if(S.tab!=="live"||topS().t!=="home"||!CH[id]||LBG===id)return;LBG=id;const el=$("#lbgv");if(el){el.classList.remove("on");el.innerHTML=lbgInner(CH[id]);requestAnimationFrame(()=>el.classList.add("on"))}},900)}
+{const _oh2=onHover;onHover=function(h){_oh2(h);const [k,v]=h.split(":");if(k==="lp"&&CH[v])lbgPlay(v);else if(k==="ldk"){const x=deckList(v)[0];if(x)lbgPlay(x.c.id)}}}
+{const _r2=render;render=function(fid){_r2(fid);const el=$("#lbgv");if(el&&LBG)el.classList.add("on")}}
+
 /* ===================== Données réelles du fournisseur ===================== */
 const RCODEC={"4K":"HEVC · 3840×2160","1080p":"H.264 · 1920×1080","720p":"H.264 · 1280×720","SD":"H.264 · 720×576"};
 if(REAL){
@@ -1741,7 +1768,7 @@ if(REAL){
  const M0=new Date().setHours(0,0,0,0)/60000;
  const TPLG={sport:"Sport",info:"Information",cine:"Film",kids:"Dessin animé",doc:"Documentaire",series:"Divertissement"};
  const _e=epg;epg=function(ch){if(!ch._real)return _e(ch);if(EPGC[ch.id])return EPGC[ch.id];
-  let L=(REAL.epg[ch._real.e]||[]).map(([s,e,t,g])=>({s:s-M0,e:e-M0,t,g:g||TPLG[ch.tpl]})).filter(p=>p.e>p.s).sort((a,b)=>a.s-b.s);
+  let L=(REAL.epg[ch._real.e]||[]).map(([s,e,t,g,img])=>({s:s-M0,e:e-M0,t,g:g||TPLG[ch.tpl],img})).filter(p=>p.e>p.s).sort((a,b)=>a.s-b.s);
   if(!L.length)L=[{s:-360,e:1800,t:"Programme non communiqué",g:TPLG[ch.tpl]}];
   return EPGC[ch.id]=L};
 }
@@ -1780,7 +1807,7 @@ async function rReadEpg(f,want,status){
   while((m=re.exec(buf))){last=re.lastIndex;n++;const a=m[1],ch=(/channel="([^"]*)"/.exec(a)||[])[1];if(!ch||!want.has(ch))continue;
    const s=RI.t((/start="([^"]*)"/.exec(a)||[])[1]),e=RI.t((/stop="([^"]*)"/.exec(a)||[])[1]);if(s==null||e==null||e<lo||s>hi)continue;
    const t=RI.ent((/<title[^>]*>([\s\S]*?)<\/title>/.exec(m[2])||[])[1]||"").trim(),g=RI.ent((/<category[^>]*>([\s\S]*?)<\/category>/.exec(m[2])||[])[1]||"").trim();
-   (out[ch]=out[ch]||[]).push([s,e,t.slice(0,90),g.slice(0,40)]);kept++}
+   const ic=(/<icon[^>]*src="([^"]*)"/.exec(m[2])||[])[1]||"";(out[ch]=out[ch]||[]).push(ic&&ic.length<220?[s,e,t.slice(0,90),g.slice(0,40),ic]:[s,e,t.slice(0,90),g.slice(0,40)]);kept++}
   buf=buf.slice(last);if(buf.length>4e6)buf=buf.slice(-2e6);
   if(n%2000<50)status(`Guide des programmes : ${n.toLocaleString("fr-FR")} programmes lus, ${kept.toLocaleString("fr-FR")} gardés…`);
   if(done)break}

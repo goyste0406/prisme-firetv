@@ -13,7 +13,7 @@ if(REAL){
  const M0=new Date().setHours(0,0,0,0)/60000;
  const TPLG={sport:"Sport",info:"Information",cine:"Film",kids:"Dessin animé",doc:"Documentaire",series:"Divertissement"};
  const _e=epg;epg=function(ch){if(!ch._real)return _e(ch);if(EPGC[ch.id])return EPGC[ch.id];
-  let L=(REAL.epg[ch._real.e]||[]).map(([s,e,t,g])=>({s:s-M0,e:e-M0,t,g:g||TPLG[ch.tpl]})).filter(p=>p.e>p.s).sort((a,b)=>a.s-b.s);
+  let L=(REAL.epg[ch._real.e]||[]).map(([s,e,t,g,img])=>({s:s-M0,e:e-M0,t,g:g||TPLG[ch.tpl],img})).filter(p=>p.e>p.s).sort((a,b)=>a.s-b.s);
   if(!L.length)L=[{s:-360,e:1800,t:"Programme non communiqué",g:TPLG[ch.tpl]}];
   return EPGC[ch.id]=L};
 }
@@ -52,7 +52,7 @@ async function rReadEpg(f,want,status){
   while((m=re.exec(buf))){last=re.lastIndex;n++;const a=m[1],ch=(/channel="([^"]*)"/.exec(a)||[])[1];if(!ch||!want.has(ch))continue;
    const s=RI.t((/start="([^"]*)"/.exec(a)||[])[1]),e=RI.t((/stop="([^"]*)"/.exec(a)||[])[1]);if(s==null||e==null||e<lo||s>hi)continue;
    const t=RI.ent((/<title[^>]*>([\s\S]*?)<\/title>/.exec(m[2])||[])[1]||"").trim(),g=RI.ent((/<category[^>]*>([\s\S]*?)<\/category>/.exec(m[2])||[])[1]||"").trim();
-   (out[ch]=out[ch]||[]).push([s,e,t.slice(0,90),g.slice(0,40)]);kept++}
+   const ic=(/<icon[^>]*src="([^"]*)"/.exec(m[2])||[])[1]||"";(out[ch]=out[ch]||[]).push(ic&&ic.length<220?[s,e,t.slice(0,90),g.slice(0,40),ic]:[s,e,t.slice(0,90),g.slice(0,40)]);kept++}
   buf=buf.slice(last);if(buf.length>4e6)buf=buf.slice(-2e6);
   if(n%2000<50)status(`Guide des programmes : ${n.toLocaleString("fr-FR")} programmes lus, ${kept.toLocaleString("fr-FR")} gardés…`);
   if(done)break}

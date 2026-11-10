@@ -24,12 +24,13 @@ const since=p=>{const n=nowMin();return p.s<=n?"depuis "+dur(Math.max(1,Math.rou
 const lbest=key=>{const L=srcs(key).filter(compat);return L[0]};
 function lpref(key){const P=LS.pref[key];if(!P)return null;let b=null,n=0;for(const k in P)if(P[k]>n){n=P[k];b=k}return n>=2?srcs(key).find(v=>v.id===b):null}
 /* ---------- fragments ---------- */
-function lth(c,inner){return `<div class="lth" style="--c:${c.col};--x:${20+hash(c.id)%55}%"><span class="llogo" style="--c:${c.col}">${esc(c.n)}</span>${inner||""}</div>`}
+function lth(c,inner,p){p=p||epgAt(c).cur;const g=pgen(p),h=hash(p.t||c.id)%360,h2=(h+50)%360;
+ return `<div class="lth" style="--c:${c.col};--h1:${h};--h2:${h2};--x:${20+hash(p.t||c.id)%55}%"><div class="lart">${lsvg(g)}<span>${esc(p.t||"")}</span></div>${p.img?`<img class="limg" src="${esc(p.img)}" alt="" loading="lazy" onerror="this.remove()">`:""}<span class="llogo" style="--c:${c.col}">${esc(c.n)}</span>${inner||""}</div>`}
 function lheroHtml(c,p){if(!c)return `<div class="lhero"><h1>Aucune chaîne</h1></div>`;const n=nowMin();p=p||epgAt(c).cur;const on=p.s<=n,L=srcs("ch:"+c.id),b=lbest("ch:"+c.id);
  return `<div class="k">${on?'<span class="lbd">EN DIRECT</span>':'<span class="lbd soon">À VENIR</span>'}${esc(c.n.toUpperCase())} · ${esc(pgen(p).toUpperCase())}</div><h1>${esc(p.t)}</h1>
  <div class="m">${fmt(p.s)} – ${fmt(p.e)} · ${since(p)}${on?" · reste "+dur(Math.max(1,Math.round(p.e-n))):""} · ${L.length} source${L.length>1?"s":""}${b?` <span class="qb q${b.q}" style="height:20px;font-size:11px">${b.q}</span>`:""}</div>${on?`<div class="lpb"><i style="width:${Math.round((n-p.s)/(p.e-p.s)*100)}%"></i></div>`:""}`}
 function lcard(c,row,soonP){const e=epgAt(c),p=soonP||e.cur,on=!soonP,g=pgen(p);
- return `<div class="lcard" data-f data-fid="${row}-${c.id}${soonP?"-"+p.s:""}" data-row="${row}" data-act="${on?"lp:"+c.id:"lrem:"+c.id+":"+p.s}" data-hov="lp:${c.id}${soonP?":"+p.s:""}" data-lp="${c.id}">${lth(c,`${on?'<span class="lbd">DIRECT</span>':`<span class="lbd soon">${fmt(p.s)}</span>`}${on?`<div class="lpb"><i style="width:${e.pct}%"></i></div>`:""}`)}<div class="t">${esc(p.t)}</div><div class="s">${esc(c.n)} · ${since(p)}</div></div>`}
+ return `<div class="lcard" data-f data-fid="${row}-${c.id}${soonP?"-"+p.s:""}" data-row="${row}" data-act="${on?"lp:"+c.id:"lrem:"+c.id+":"+p.s}" data-hov="lp:${c.id}${soonP?":"+p.s:""}" data-lp="${c.id}">${lth(c,`${on?'<span class="lbd">DIRECT</span>':`<span class="lbd soon">${fmt(p.s)}</span>`}${on?`<div class="lpb"><i style="width:${e.pct}%"></i></div>`:""}`,p)}<div class="t">${esc(p.t)}</div><div class="s">${esc(c.n)} · ${since(p)}</div></div>`}
 function lsideHtml(){const items=["Accueil",...LGEN];
  return `<div class="lside" data-col="0">${items.map(k=>`<div class="lsi ${LS.view===k?"sel":""}" data-f data-fid="lsv-${k}" data-row="lside" data-act="lsv:${k}" data-hov="lsv:${k}">${lsvg(k)}<span>${k}</span><small>${k==="Accueil"?lNow().length:lNow(k).length}</small></div>`).join("")}</div>`}
 function liveHtml(){
@@ -49,10 +50,10 @@ function liveHtml(){
  if(LS.deck){const d=LS.deck,L=deckList(d);
   fan=`<div class="lfan"><h2>${lsvg(d)}${d==="Reprendre"?"Reprendre":esc(d)}<small>${d==="Reprendre"?"tes dernières chaînes · reprise sur la même source, sans question":L.length+" en direct"}</small></h2><div class="hint2">OK pour regarder · maintiens le clic (ou M) pour plus d'options · Retour pour refermer</div>
   <div class="lrow sx">${L.map((x,i)=>{const c=x.c,key="ch:"+c.id,ns=srcs(key).length,b=lbest(key),last=pickSrc(key);
-   return `<div class="lcard" style="animation-delay:${i*45}ms" data-f data-fid="fc-${c.id}" data-row="fan" data-act="lp:${c.id}" data-hov="lp:${c.id}" data-lp="${c.id}" ${i===0?"data-default":""}>${lth(c,`<span class="lbd">DIRECT</span><span class="pvb">APERÇU</span><div class="lpb"><i style="width:${x.e.pct}%"></i></div>`)}<div class="t">${esc(x.e.cur.t)}</div><div class="s">${d==="Reprendre"&&last?`${esc(c.n)} · reprend en <i class="q${last.q}">${last.q}</i> ${esc(last.p.name)}`:`${esc(c.n)} · ${ns} source${ns>1?"s":""}${b?`<i class="q${b.q}">${b.q}</i>`:""}`}</div></div>`}).join("")}</div>
+   return `<div class="lcard" style="animation-delay:${i*45}ms" data-f data-fid="fc-${c.id}" data-row="fan" data-act="lp:${c.id}" data-hov="lp:${c.id}" data-lp="${c.id}" ${i===0?"data-default":""}>${lth(c,`<span class="lbd">DIRECT</span><div class="lpb"><i style="width:${x.e.pct}%"></i></div>`)}<div class="t">${esc(x.e.cur.t)}</div><div class="s">${d==="Reprendre"&&last?`${esc(c.n)} · reprend en <i class="q${last.q}">${last.q}</i> ${esc(last.p.name)}`:`${esc(c.n)} · ${ns} source${ns>1?"s":""}${b?`<i class="q${b.q}">${b.q}</i>`:""}`}</div></div>`}).join("")}</div>
   <div class="btn lclose" data-f data-fid="fan-close" data-act="lclose">✕ Refermer</div></div>`}
  let bgh=lsideHtml()+`<div class="lmain">${main}</div>`;if(LS.deck)bgh=bgh.replace(/ data-f /g," ");
- return `<div class="lv">${bgh}${fan}</div>`;
+ return `<div class="lv"><div class="lbgv" id="lbgv">${LBG?lbgInner(CH[LBG]):""}</div>${bgh}${fan}</div>`;
 }
 /* ---------- fenêtres ---------- */
 const LMODAL={
@@ -169,3 +170,10 @@ const LMEM={};
  if(inLive&&(dir==="up"||dir==="down")&&F.closest(".lmain")){const sd=[...view.querySelectorAll(".lside [data-f]")];sd.forEach(e=>e.removeAttribute("data-f"));try{_mv(dir)}finally{sd.forEach(e=>e.setAttribute("data-f",""))}return}
  if(inLive&&(dir==="up"||dir==="down")&&F.closest(".lside")){const L=[...view.querySelectorAll(".lside [data-f]")],i=L.indexOf(F),j=i+(dir==="down"?1:-1);if(j>=0&&j<L.length){setFocus(L[j]);return}if(dir==="down")return}
  _mv(dir)}}
+
+/* Vidéo en direct en fond : la chaîne sélectionnée se lance derrière la page après un court instant (une seule connexion) */
+let LBG=null,LBGT=null;
+function lbgInner(c){return c?`<div class="vid" style="--c:${c.col}"></div><div class="scan"></div><div class="lbgs"></div><span class="lbgtag"><i></i>EN DIRECT · ${esc(c.n)}</span>`:""}
+function lbgPlay(id){clearTimeout(LBGT);LBGT=setTimeout(()=>{if(S.tab!=="live"||topS().t!=="home"||!CH[id]||LBG===id)return;LBG=id;const el=$("#lbgv");if(el){el.classList.remove("on");el.innerHTML=lbgInner(CH[id]);requestAnimationFrame(()=>el.classList.add("on"))}},900)}
+{const _oh2=onHover;onHover=function(h){_oh2(h);const [k,v]=h.split(":");if(k==="lp"&&CH[v])lbgPlay(v);else if(k==="ldk"){const x=deckList(v)[0];if(x)lbgPlay(x.c.id)}}}
+{const _r2=render;render=function(fid){_r2(fid);const el=$("#lbgv");if(el&&LBG)el.classList.add("on")}}
