@@ -13,7 +13,7 @@ const L0={view:"Accueil",deck:null,hist:["bein1","tf1","f2"],gw:{"Sport":7,"Cin�
 let LS=L0;try{const v=JSON.parse(localStorage.getItem("prisme-atv-live")||"null");if(v)LS={...L0,...v,deck:null,view:"Accueil"}}catch(e){}
 function lsave(){try{localStorage.setItem("prisme-atv-live",JSON.stringify(LS))}catch(e){}}
 /* Genre d'un programme, déduit du guide */
-function pgen(p){const g=norm(p.g||"");return /film|cinema|telefilm/.test(g)?"Cinéma":/serie|feuilleton|fiction/.test(g)?"Séries":/sport|foot|rugby|tennis|cyclisme|match/.test(g)?"Sport":/info|journal|politique|debat|actualite/.test(g)?"Info":/dessin|anim|jeunesse|enfant/.test(g)?"Jeunesse":/docu|decouverte|nature|histoire/.test(g)?"Découverte":"Divertissement"}
+function pgen(p){const g=norm(p.g||"");return /film|cinema|telefilm|movie/.test(g)?"Cinéma":/serie|feuilleton|fiction|drama|soap|sitcom/.test(g)?"Séries":/sport|foot|rugby|tennis|cyclisme|match|basket|golf|moteur|f1/.test(g)?"Sport":/info|journal|politique|debat|actualite|news|meteo/.test(g)?"Info":/dessin|anim|jeunesse|enfant|kids|children|cartoon/.test(g)?"Jeunesse":/docu|decouverte|nature|histoire|science|voyage|animaux/.test(g)?"Découverte":"Divertissement"}
 const lvis=()=>chans().filter(c=>!LS.hidden.includes(c.id));
 function lNow(g){return lvis().map(c=>({c,e:epgAt(c)})).filter(x=>!g||pgen(x.e.cur)===g).sort((a,b)=>b.e.cur.s-a.e.cur.s)}
 function lSoon(g,win=90){const n=nowMin();return lvis().flatMap(c=>epg(c).filter(p=>p.s>n&&p.s<=n+win&&(!g||pgen(p)===g)).map(p=>({c,p}))).sort((a,b)=>a.p.s-b.p.s)}

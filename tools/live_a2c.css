@@ -126,3 +126,18 @@
 .ldemo button:hover{background:#2a2e39}
 .ldemo button:focus-visible{outline:2px solid #fff;outline-offset:2px}
 @media (prefers-reduced-motion:reduce){.lfan .lcard.pv .lth{animation:none}.lfan .lcard{animation:none}}
+/* import des données du fournisseur */
+.rimp{max-width:900px;margin:18px auto 0;padding:18px 20px;border-radius:16px;background:#12141a;border:1px solid #232733;color:#d9dce4;font-size:13.5px;line-height:1.55}
+.rimp h2{margin:0 0 6px;font-size:16px;display:flex;flex-wrap:wrap;align-items:baseline;gap:6px 12px}
+.rimp .rst{font-size:12.5px;font-weight:600;color:#30d158}
+.rimp p{margin:0 0 8px;color:#9aa0ad}
+.rimp ol{margin:6px 0;padding-left:20px}
+.rcmd{display:flex;gap:8px;align-items:flex-start;margin:6px 0 10px}
+.rcmd code{flex:1;min-width:0;max-height:96px;overflow:auto;font:12px/1.5 ui-monospace,Menlo,monospace;background:#0a0b0f;border:1px solid #232733;border-radius:10px;padding:10px 12px;color:#c9d1e0;word-break:break-all;white-space:pre-wrap}
+.rimp button,.rimp .rbtn{all:unset;cursor:pointer;font-size:13px;font-weight:600;padding:8px 14px;border-radius:18px;background:#e9ebf0;color:#0a0b0f;white-space:nowrap}
+.rimp #rdemo,.rimp #rcopy{background:#1d2029;color:#e6e8ee;border:1px solid #2c303b}
+.rimp button:focus-visible,.rimp .rbtn:focus-visible{outline:2px solid #fff;outline-offset:2px}
+.rrow{display:flex;flex-wrap:wrap;align-items:center;gap:8px 10px;margin-top:6px}
+.rrow label[for="rname"]{color:#9aa0ad}
+.rrow input{font:inherit;color:#e6e8ee;background:#0a0b0f;border:1px solid #2c303b;border-radius:10px;padding:7px 10px;min-width:0;width:170px}
+.rlog{margin-top:10px;color:#30d158;min-height:20px}.rlog.err{color:#ff6961}
