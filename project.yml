@@ -1,0 +1,25 @@
+name: IPTVPerso
+options:
+  bundleIdPrefix: com.steven
+  deploymentTarget:
+    tvOS: "17.0"
+targets:
+  IPTVPerso:
+    type: application
+    platform: tvOS
+    sources: [IPTVPerso]
+    info:
+      path: IPTVPerso/Info.plist
+      properties:
+        CFBundleDisplayName: IPTV Perso
+        UILaunchScreen: {}
+        NSAppTransportSecurity:
+          NSAllowsArbitraryLoads: true
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.steven.iptvperso
+        MARKETING_VERSION: "1.0"
+        CURRENT_PROJECT_VERSION: "1"
+        CODE_SIGN_STYLE: Automatic
+        SWIFT_VERSION: "5.0"
+        GENERATE_INFOPLIST_FILE: NO
