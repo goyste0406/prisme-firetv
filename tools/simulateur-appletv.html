@@ -1595,7 +1595,7 @@ function liveHtml(){
   main=`<div class="lhero" id="lhero">${first?lheroHtml(first.c):""}</div>
   <div class="lh3">Tes paquets<small>rangés selon ce que tu regardes vers ${Math.floor(nowMin()/60)} h · OK pour ouvrir · maintenir pour les options</small></div>
   <div class="ldecks">${D.map((d,i)=>{const L=deckList(d),lays=L.slice(0,3).reverse(),top=L[0];const soon=!["Reprendre","Favoris"].includes(d)&&lSoon(d,10)[0];
-   return `<div class="ldk" data-f data-fid="dk-${d}" data-row="dk${Math.floor(i/4)}" data-act="ldeck:${d}" data-hov="ldk:${d}">${lays.map((x,j)=>{const lv=lays.length-j;return `<div class="lay l${lv}">${lth(x.c,lv===1?`<div class="sh"></div><span class="ltag" style="--g:${LGC[d]}">${esc(d.toUpperCase())}</span><div class="tx"><b>${esc(x.e.cur.t)}</b><span>${esc(x.c.n)} · reste ${dur(Math.max(1,Math.round(x.e.cur.e-nowMin())))}</span></div><div class="lpb"><i style="width:${x.e.pct}%"></i></div>`:"")}</div>`}).join("")}
+   return `<div class="ldk" data-f data-fid="dk-${d}" data-row="dks" data-act="ldeck:${d}" data-hov="ldk:${d}">${lays.map((x,j)=>{const lv=lays.length-j;return `<div class="lay l${lv}">${lth(x.c,lv===1?`<div class="sh"></div><span class="ltag" style="--g:${LGC[d]}">${esc(d.toUpperCase())}</span><div class="tx"><b>${esc(x.e.cur.t)}</b><span>${esc(x.c.n)} · reste ${dur(Math.max(1,Math.round(x.e.cur.e-nowMin())))}</span></div><div class="lpb"><i style="width:${x.e.pct}%"></i></div>`:"")}</div>`}).join("")}
    <div class="lab"><b>${d==="Reprendre"?"↺ Reprendre":esc(d)}</b><span>${d==="Reprendre"?L.length+(L.length>1?" récentes":" récente"):L.length+" en direct"}</span></div>${soon?`<span class="lsoon">${fmt(soon.p.s)} · ${esc(soon.p.t)}</span>`:""}</div>`}).join("")}</div>`}
  else{const g=LS.view,N=lNow(g),Sn=lSoon(g).slice(0,10);const first=N[0];
   main=`<div class="lhero" id="lhero">${first?lheroHtml(first.c):`<h1 style="font-size:30px">Rien en direct en ${esc(g.toLowerCase())}</h1>`}</div>
@@ -1715,6 +1715,16 @@ function lPreload(done){const pls=S.playlists.filter(p=>p.on);const steps=[...pl
 document.querySelector(".hint").insertAdjacentHTML("afterend",`<div class="ldemo"><span>Démo TV en direct (pendant la lecture d'une chaîne) :</span><button type="button" id="ld-fail">Simuler une coupure de la source</button><button type="button" id="ld-end">Simuler la fin du programme</button></div>`);
 $("#ld-fail").addEventListener("click",()=>{if(lneedsPlayer())lFailStart()});
 $("#ld-end").addEventListener("click",()=>{if(lneedsPlayer())lEndStart()});
+/* Navigation barre ↔ page : la barre et la page ne sont pas alignées, on gère le passage explicitement */
+const LMEM={};
+{const _sf2=setFocus;setFocus=function(el,inst){_sf2(el,inst);if(el&&el.isConnected&&el.closest(".lmain"))LMEM[LS.view]=el.dataset.fid}}
+{const _mv=move;move=function(dir){
+ const inLive=S.tab==="live"&&topS().t==="home"&&!S.modal&&!LS.deck&&F&&F.isConnected;
+ if(inLive&&dir==="right"&&F.closest(".lside")){const m=view.querySelector(".lmain");const t=(LMEM[LS.view]&&m.querySelector(`[data-fid="${CSS.escape(LMEM[LS.view])}"]`))||m.querySelector("[data-f]");if(t)setFocus(t);return}
+ if(inLive&&dir==="left"&&F.closest(".lmain")){const before=F;_mv(dir);if(F===before||(F&&F.closest(".lside"))){const s=view.querySelector(`[data-fid="lsv-${CSS.escape(LS.view)}"]`);if(s)setFocus(s)}return}
+ if(inLive&&(dir==="up"||dir==="down")&&F.closest(".lmain")){const sd=[...view.querySelectorAll(".lside [data-f]")];sd.forEach(e=>e.removeAttribute("data-f"));try{_mv(dir)}finally{sd.forEach(e=>e.setAttribute("data-f",""))}return}
+ if(inLive&&(dir==="up"||dir==="down")&&F.closest(".lside")){const L=[...view.querySelectorAll(".lside [data-f]")],i=L.indexOf(F),j=i+(dir==="down"?1:-1);if(j>=0&&j<L.length){setFocus(L[j]);return}if(dir==="down")return}
+ _mv(dir)}}
 
 /* ===================== Données réelles du fournisseur ===================== */
 const RCODEC={"4K":"HEVC · 3840×2160","1080p":"H.264 · 1920×1080","720p":"H.264 · 1280×720","SD":"H.264 · 720×576"};
