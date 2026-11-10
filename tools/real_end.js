@@ -33,7 +33,16 @@ const RI={
  ent(s){return s.replace(/&amp;/g,"&").replace(/&lt;/g,"<").replace(/&gt;/g,">").replace(/&quot;/g,'"').replace(/&apos;|&#39;/g,"'").replace(/&#x([0-9a-f]+);/gi,(_,h)=>String.fromCodePoint(parseInt(h,16))).replace(/&#(\d+);/g,(_,d)=>String.fromCodePoint(+d))},
  t(v){const m=/^(\d{4})(\d\d)(\d\d)(\d\d)(\d\d)(\d\d)?\s*([+-]\d{4})?/.exec(v||"");if(!m)return null;let ms=Date.UTC(+m[1],+m[2]-1,+m[3],+m[4],+m[5],+(m[6]||0));if(m[7]){const sg=m[7][0]==="-"?-1:1;ms-=sg*(+m[7].slice(1,3)*60+ +m[7].slice(3,5))*60000}else ms+=new Date().getTimezoneOffset()*60000;return Math.round(ms/60000)}
 };
-async function rReadJson(f){const t=await f.text();try{return JSON.parse(t)}catch(e){throw new Error(`${f.name} n'est pas un fichier JSON valide`)}}
+async function rReadJson(f,optional){
+ let buf=new Uint8Array(await f.arrayBuffer());
+ if(buf[0]===0x1f&&buf[1]===0x8b&&typeof DecompressionStream!=="undefined"){buf=new Uint8Array(await new Response(new Blob([buf]).stream().pipeThrough(new DecompressionStream("gzip"))).arrayBuffer())}
+ const t=new TextDecoder().decode(buf).replace(/^﻿/,"").trim();
+ const fail=m=>{if(optional){RWARN.push(`${f.name} ignoré (${m})`);return null}throw new Error(`${f.name} : ${m}`)};
+ if(!t)return fail("le fichier est vide, le serveur n'a rien renvoyé. Vérifie l'adresse (avec le port, ex. :8080), l'utilisateur et le mot de passe, puis relance la commande");
+ if(/^</.test(t))return fail(`le serveur a renvoyé une page web au lieu des données (${/cloudflare|captcha/i.test(t)?"protection anti-robot":/403|forbidden/i.test(t)?"accès refusé":/404|not found/i.test(t)?"adresse introuvable":"réponse inattendue"}). Début : « ${t.replace(/<[^>]*>/g," ").replace(/\s+/g," ").trim().slice(0,90)} »`);
+ try{const j=JSON.parse(t);if(j&&!Array.isArray(j)&&typeof j==="object"){if(j.user_info&&String(j.user_info.auth)==="0")return fail("identifiants refusés par le serveur");const arr=Object.values(j).find(Array.isArray);if(arr)return arr;const vals=Object.values(j);if(vals.length&&vals.every(v=>v&&typeof v==="object"))return vals}return j}
+ catch(e){return fail(`le contenu n'est pas du JSON valide. Début : « ${t.replace(/\s+/g," ").slice(0,90)} »`)}}
+const RWARN=[];
 async function rReadEpg(f,want,status){
  let stream=f.stream();const head=new Uint8Array(await f.slice(0,2).arrayBuffer());
  if(head[0]===0x1f&&head[1]===0x8b){if(typeof DecompressionStream==="undefined")throw new Error("Guide compressé non pris en charge par ce navigateur");stream=stream.pipeThrough(new DecompressionStream("gzip"))}
@@ -56,21 +65,21 @@ async function rImport(files,provName,status){
  const R=old&&old.pls?old:{pls:[],lcats:[],fcats:[],scats:[],chans:[],films:[],series:[],epg:{}};
  const pid="rp"+(R.pls.length+1);R.pls.push({id:pid,name:provName,at:Date.now()});
  const st={};
- const cats=async(file,pref,arr)=>{const m={};if(!file)return m;const L=await rReadJson(file);const all=L.filter(c=>!RI.ADULT.test(c.category_name||""));const fr=all.filter(c=>RI.FR.test(c.category_name||""));
+ const cats=async(file,pref,arr)=>{const m={};if(!file)return m;const L=await rReadJson(file,true);if(!Array.isArray(L))return m;const all=L.filter(c=>!RI.ADULT.test(c.category_name||""));const fr=all.filter(c=>RI.FR.test(c.category_name||""));
   (fr.length?fr:all).forEach(c=>{const nm=RI.cleanCat(c.category_name),key=RI.id(pref,RI.strip(nm));m[String(c.category_id)]=key;if(!arr.some(x=>x[0]===key))arr.push([key,nm])});return m};
  status("Lecture des catégories…");
  const lc=await cats(by.get_live_categories,"l",R.lcats),fc=await cats(by.get_vod_categories,"f",R.fcats),sc=await cats(by.get_series_categories,"s",R.scats);
  const merge=(arr,pref,key,make,add)=>{let it=arr.find(x=>x.k===key);if(!it){it=make();it.k=key;it.id=RI.id(pref,key);it.s=[];arr.push(it)}add(it);return it};
  if(by.get_live_streams){status("Lecture des chaînes…");const L=await rReadJson(by.get_live_streams);let n=0;
-  for(const x of L){const ck=lc[String(x.category_id)];if(Object.keys(lc).length&&!ck)continue;if(RI.ADULT.test(x.name||""))continue;const nm=RI.base(x.name),key=RI.strip(nm);if(!key)continue;n++;
+  const frOnly=!Object.keys(lc).length&&L.some(x=>RI.FR.test(x.name||""));for(const x of L){const ck=lc[String(x.category_id)];if(Object.keys(lc).length&&!ck)continue;if(frOnly&&!RI.FR.test(x.name||""))continue;if(RI.ADULT.test(x.name||""))continue;const nm=RI.base(x.name),key=RI.strip(nm);if(!key)continue;n++;
    merge(R.chans,"rc",key,()=>({n:nm,c:[],e:"",num:+x.num||0}),it=>{if(ck&&!it.c.includes(ck))it.c.push(ck);if(!it.e&&x.epg_channel_id)it.e=String(x.epg_channel_id);if(it.s.length<8)it.s.push([pid,String(x.name).slice(0,60),RI.q(x.name)])})}
   st.chans=n}
  if(by.get_vod_streams){status("Lecture des films…");const L=await rReadJson(by.get_vod_streams);let n=0;
-  for(const x of L){const ck=fc[String(x.category_id)];if(Object.keys(fc).length&&!ck)continue;if(RI.ADULT.test(x.name||""))continue;const t=RI.title(x.name),y=+x.year||RI.year(x.name),key=RI.strip(t)+"#"+(y||"");if(!t)continue;n++;
+  const frOnly=!Object.keys(fc).length&&L.some(x=>RI.FR.test(x.name||""));for(const x of L){const ck=fc[String(x.category_id)];if(Object.keys(fc).length&&!ck)continue;if(frOnly&&!RI.FR.test(x.name||""))continue;if(RI.ADULT.test(x.name||""))continue;const t=RI.title(x.name),y=+x.year||RI.year(x.name),key=RI.strip(t)+"#"+(y||"");if(!t)continue;n++;
    merge(R.films,"rf",key,()=>({t,y,c:[],r:+x.rating||0,a:+x.added||0}),it=>{if(ck&&!it.c.includes(ck))it.c.push(ck);it.a=Math.max(it.a,+x.added||0);if(!it.r&&+x.rating)it.r=+x.rating;if(it.s.length<6)it.s.push([pid,String(x.name).slice(0,70),RI.q(x.name),x.container_extension||"mkv"])})}
   st.films=n}
  if(by.get_series){status("Lecture des séries…");const L=await rReadJson(by.get_series);let n=0;
-  for(const x of L){const ck=sc[String(x.category_id)];if(Object.keys(sc).length&&!ck)continue;if(RI.ADULT.test(x.name||""))continue;const t=RI.title(x.name),y=RI.year(x.releaseDate||x.release_date||"")||RI.year(x.name),key=RI.strip(t);if(!t)continue;n++;
+  const frOnly=!Object.keys(sc).length&&L.some(x=>RI.FR.test(x.name||""));for(const x of L){const ck=sc[String(x.category_id)];if(Object.keys(sc).length&&!ck)continue;if(frOnly&&!RI.FR.test(x.name||""))continue;if(RI.ADULT.test(x.name||""))continue;const t=RI.title(x.name),y=RI.year(x.releaseDate||x.release_date||"")||RI.year(x.name),key=RI.strip(t);if(!t)continue;n++;
    merge(R.series,"rs",key,()=>({t,y,c:[],r:+x.rating||0,a:+x.last_modified||0,p:(x.plot||"").slice(0,400),cast:(x.cast||"").slice(0,200),dir:(x.director||"").slice(0,80),g:(x.genre||"").slice(0,60)}),it=>{if(ck&&!it.c.includes(ck))it.c.push(ck);if(!it.p&&x.plot)it.p=x.plot.slice(0,400);if(it.s.length<6)it.s.push([pid,String(x.name).slice(0,70),RI.q(x.name)])})}
   st.series=n}
  R.chans.sort((a,b)=>(a.num||9999)-(b.num||9999));R.chans=R.chans.slice(0,700);
@@ -85,7 +94,7 @@ async function rImport(files,provName,status){
   nf=Math.floor(nf*.7);ns=Math.floor(ns*.7);if(tries===6){for(const k in R.epg)R.epg[k]=R.epg[k].slice(0,25)}}
  throw new Error("Trop de données pour la mémoire du navigateur, même après réduction.")}
 /* ---------- panneau sous la télécommande ---------- */
-const RCMD=`printf "Nom de ce fournisseur (ex. IPTV1) : "; read -r F; printf "Adresse du serveur (ex. http://monserveur.com:8080) : "; read -r U; printf "Nom d'utilisateur : "; read -r N; printf "Mot de passe : "; read -rs P; echo; case "$U" in http*) ;; *) U="http://$U";; esac; U="\${U%/}"; D=~/Desktop/prisme-"\${F// /-}"; mkdir -p "$D" && cd "$D" && for a in get_live_categories get_live_streams get_vod_categories get_vod_streams get_series_categories get_series; do curl -sSLG -A "Mozilla/5.0" "$U/player_api.php" --data-urlencode "username=$N" --data-urlencode "password=$P" --data-urlencode "action=$a" -o "$a.json" && echo "✓ $a"; done; curl -sSLG -A "Mozilla/5.0" "$U/xmltv.php" --data-urlencode "username=$N" --data-urlencode "password=$P" -o xmltv.xml && echo "✓ guide des programmes"; unset P; open "$D"`;
+const RCMD=`printf "Nom de ce fournisseur (ex. IPTV1) : "; read -r F; printf "Adresse du serveur (ex. http://monserveur.com:8080) : "; read -r U; printf "Nom d'utilisateur : "; read -r N; printf "Mot de passe : "; read -rs P; echo; case "$U" in http*) ;; *) U="http://$U";; esac; U="\${U%%/get.php*}"; U="\${U%%/player_api.php*}"; U="\${U%/}"; C="curl -sSLG --compressed -A Mozilla/5.0"; R=$($C "$U/player_api.php" --data-urlencode "username=$N" --data-urlencode "password=$P"); case "$R" in *'"auth":1'*) echo "✓ Connexion acceptée";; *) echo "⚠ Le serveur refuse la connexion ou répond autre chose. Début de la réponse :"; echo "\${R:0:200}";; esac; D=~/Desktop/prisme-"\${F// /-}"; mkdir -p "$D" && cd "$D" && for a in get_live_categories get_live_streams get_vod_categories get_vod_streams get_series_categories get_series; do $C "$U/player_api.php" --data-urlencode "username=$N" --data-urlencode "password=$P" --data-urlencode "action=$a" -o "$a.json"; echo "✓ $a : $(wc -c < "$a.json" | tr -d ' ') octets, début : $(head -c 60 "$a.json")"; done; $C "$U/xmltv.php" --data-urlencode "username=$N" --data-urlencode "password=$P" -o xmltv.xml; echo "✓ guide : $(wc -c < xmltv.xml | tr -d ' ') octets"; unset P R; open "$D"`;
 document.querySelector(".ldemo").insertAdjacentHTML("afterend",`<section class="rimp">
  <h2>Mes données fournisseur <span class="rst" id="rst">${REAL?`Données réelles : ${REAL.pls.map(p=>esc(p.name)).join(" + ")} · ${REAL.chans.length} chaînes · ${REAL.films.length} films · ${REAL.series.length} séries`:"Données de démonstration"}</span></h2>
  <p>Tes chaînes, films, séries et ton guide des programmes, sans aucune lecture vidéo. Tes identifiants restent sur ton Mac : seules les listes sont lues ici, et elles restent dans ce navigateur.</p>
@@ -100,12 +109,12 @@ $("#rcopy").addEventListener("click",()=>{const done=()=>{$("#rcopy").textConten
  else{const r=document.createRange();r.selectNodeContents($("#rcmd"));const s=getSelection();s.removeAllRanges();s.addRange(r)}});
 $("#rname").addEventListener("keydown",e=>e.stopPropagation());
 $("#rfiles").addEventListener("change",async e=>{const files=[...e.target.files];if(!files.length)return;const log=$("#rlog");const say=m=>{log.textContent=m};log.classList.remove("err");
- try{const name=($("#rname").value||"Mon fournisseur").trim().slice(0,40);const r=await rImport(files,name,say);
+ RWARN.length=0;try{const name=($("#rname").value||"Mon fournisseur").trim().slice(0,40);const r=await rImport(files,name,say);
   const R=JSON.parse(localStorage.getItem("prisme-real"));
   S.playlists=R.pls.map((p,i)=>({id:p.id,name:p.name,url:"Importé le "+new Date(p.at).toLocaleDateString("fr-FR"),user:"données réelles",pass:"",epg:true,on:true,seed:i+1,real:true}));S.adding=false;S.stack=[{t:"home"}];S.tab="live";save();
   try{localStorage.removeItem("prisme-atv-live")}catch(_){}
-  say(`Import réussi : ${r.chans??0} flux de chaînes, ${r.films??0} films, ${r.series??0} séries${r.epg?`, ${r.epg.toLocaleString("fr-FR")} programmes`:""}.${r.keptF<r.totF?` ${r.keptF} films les plus récents gardés sur ${r.totF} (mémoire du navigateur).`:""} Redémarrage du simulateur…`);
-  setTimeout(()=>location.reload(),1400)}
+  say(`Import réussi : ${r.chans??0} flux de chaînes, ${r.films??0} films, ${r.series??0} séries${r.epg?`, ${r.epg.toLocaleString("fr-FR")} programmes`:""}.${r.keptF<r.totF?` ${r.keptF} films les plus récents gardés sur ${r.totF} (mémoire du navigateur).`:""} ${RWARN.length?" Attention : "+RWARN.join(" · "):""} Redémarrage du simulateur…`);
+  setTimeout(()=>location.reload(),RWARN.length?6000:1400)}
  catch(err){log.classList.add("err");say("Import impossible : "+err.message)}
  e.target.value=""});
 if($("#rdemo"))$("#rdemo").addEventListener("click",()=>{try{localStorage.removeItem("prisme-real");localStorage.removeItem("prisme-atv-live")}catch(_){}S.playlists=[];S.stack=[{t:"home"}];S.tab="films";save();location.reload()});
