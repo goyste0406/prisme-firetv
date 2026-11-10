@@ -1,7 +1,7 @@
 #!/usr/bin/perl
 # prisme : récupère les affiches TMDB des programmes du jour et les logos des chaînes
 # Lit les dossiers prisme-* du Bureau et écrit images.json dans chacun.
-use strict; use warnings; use JSON::PP; use MIME::Base64; use Time::Local; use File::Temp qw(tempdir);
+use strict; use warnings; use JSON::PP; use MIME::Base64; use Time::Local; use File::Temp qw(tempdir); use Unicode::Normalize;
 my $TMDB = $ENV{PRISME_TMDB} || "https://api.themoviedb.org/3";
 my $IMGB = $ENV{PRISME_TMDB_IMG} || "https://image.tmdb.org/t/p";
 my $MAXT = 300; my $MAXL = 600;
@@ -42,6 +42,24 @@ die "TMDB refuse cette clé (" . ($cj->{status_message} || "réponse illisible")
 print "✓ Clé TMDB acceptée\n";
 
 my $now = time; my %done;
+# --- guide public français (xmltvfr.fr) : images par programme, comme les applis TV ---
+sub cnorm { my ($s) = @_; $s = "" unless defined $s; utf8::decode($s) unless utf8::is_utf8($s); $s = NFD(lc $s); $s =~ s/\p{M}//g;
+  $s =~ s/^\s*(\[|\()?\s*(fr|fra|france|be|ch)\s*(\]|\))?\s*[|:\-]+\s*//; $s =~ s/\b(uhd|fhd|full ?hd|hd|sd|4k|hevc|h\.?26[45]|backup|vip|raw|50 ?fps|\d{3,4}p|\.fr|\.be)\b//g; $s =~ s/[^a-z0-9+]//g; return $s }
+my ($pub, $pubsrc) = ("", "");
+for my $u (($ENV{PRISME_PUB} ? ($ENV{PRISME_PUB}) : ()), "https://xmltvfr.fr/xmltv/xmltv.xml.gz", "https://xmltvfr.fr/xmltv/xmltv_fr.xml.gz", "https://xmltvfr.fr/xmltv/xmltv_tnt.xml.gz", "https://xmltvfr.fr/xmltv/xmltv.zip", "https://xmltvfr.fr/xmltv/xmltv.xml") {
+  my $f = "$tmp/pub"; unlink $f; print "Guide public : essai de $u…\n"; system("curl", "-sSL", "--max-time", "180", "-A", "Mozilla/5.0", "-o", $f, $u);
+  next unless -s $f; my $h = substr(slurp_head($f), 0, 4); my $d;
+  if (substr($h, 0, 2) eq "\x1f\x8b") { $d = `gunzip -c "$f" 2>/dev/null` } elsif ($h eq "PK\x03\x04") { $d = `unzip -p "$f" 2>/dev/null` } else { $d = slurp($f) }
+  if ($d && $d =~ /<programme\b/) { $pub = $d; $pubsrc = $u; last } }
+sub slurp_head { my ($f) = @_; open(my $h, "<:raw", $f) or return ""; read($h, my $b, 8); close $h; return defined $b ? $b : "" }
+my (%pubch, %pubprog);
+if ($pub) { while ($pub =~ /<channel\b[^>]*\bid="([^"]*)"[^>]*>(.*?)<\/channel>/gs) { my ($id, $b) = ($1, $2); my @dn = $b =~ /<display-name[^>]*>(.*?)<\/display-name>/gs; my $idn = $id; $idn =~ s/\.[a-z]{2,3}$//; for my $n (@dn, $idn) { my $k = cnorm(ent($n)); $pubch{$k} //= $id if length $k } }
+  my $pc = 0; while ($pub =~ /<programme\b([^>]*)>(.*?)<\/programme>/gs) { my ($a, $b) = ($1, $2); my ($ch) = $a =~ /\bchannel="([^"]*)"/; next unless $ch;
+    my ($st) = $a =~ /\bstart="([^"]*)"/; my ($en) = $a =~ /\bstop="([^"]*)"/; my $s = tsec($st); my $e = tsec($en); next unless defined $s && defined $e; next if $e < $now - 3600 || $s > $now + 8 * 3600;
+    my ($t) = $b =~ /<title[^>]*>(.*?)<\/title>/s; next unless defined $t; my ($g) = $b =~ /<category[^>]*>(.*?)<\/category>/s; my ($ic) = $b =~ /<icon[^>]*\bsrc="([^"]*)"/;
+    push @{ $pubprog{$ch} }, [int($s / 60), int($e / 60), ent($t), defined $g ? ent($g) : "", defined $ic ? ent($ic) : ""]; $pc++ }
+  printf "✓ Guide public : %d chaînes, %d programmes dans les 8 prochaines heures\n", scalar(keys %pubch), $pc }
+else { print "⚠ Guide public indisponible : seules les affiches TMDB seront utilisées.\n" }
 for my $dir (@dirs) {
   print "== $dir\n";
   my $x = slurp("$dir/xmltv.xml"); if (substr($x, 0, 2) eq "\x1f\x8b") { $x = `gunzip -c "$dir/xmltv.xml"` }
@@ -82,9 +100,17 @@ for my $dir (@dirs) {
   print "Affiches trouvées : ", scalar(@dl), ", téléchargement…\n";
   fetch_many(\@dl);
   my %prog; for my $p (@T) { next unless $p->{f}; my $u = datauri($p->{f}, 160); next unless $u; $prog{$_} = $u for keys %{ $p->{raw} } }
-  my $out = { v => 1, at => $now, logos => \@logos, progs => \%prog };
+  my (@pch, %pdl); my $pi = 0;
+  if ($pub) { my %by; for my $s (@$ls) { next unless ref $s eq "HASH"; my $nm = "" . ($s->{name} || ""); next if $nm =~ /adult|xxx|porn|\+ ?18/i; my $id = $pubch{cnorm($nm)}; next unless $id && $pubprog{$id}; utf8::encode($nm) if utf8::is_utf8($nm); push @{ $by{$id} }, $nm }
+    for my $id (sort keys %by) { my @pp; for my $q (sort { $a->[0] <=> $b->[0] } @{ $pubprog{$id} }) { my @r = @$q; my $ic = pop @r;
+        if ($ic =~ /^https?:/ && $pi < 700) { $ic =~ s/ /%20/g; my $f = $pdl{$ic} //= do { $pi++; "$tmp/g$pi" }; push @r, $f } push @pp, \@r }
+      push @pch, { n => $by{$id}, p => \@pp } }
+    print "Guide public : ", scalar(@pch), " de tes chaînes reconnues, $pi images de programmes à télécharger…\n"; fetch_many([map { [$_, $pdl{$_}] } keys %pdl]);
+    my %du; for my $c (@pch) { for my $r (@{ $c->{p} }) { if (@$r == 5) { my $f = pop @$r; $du{$f} //= datauri($f, 200) // ""; push @$r, $du{$f} if $du{$f} ne "" } } } }
+  my $out = { v => 2, at => $now, logos => \@logos, progs => \%prog, chans => \@pch, pubsrc => $pubsrc };
   open(my $o, ">:raw", "$dir/images.json") or die "Impossible d'écrire $dir/images.json\n"; print $o JSON::PP->new->canonical->encode($out); close $o;
-  printf "✓ images.json : %d logos, %d affiches, %.1f Mo\n", scalar(@logos), scalar(keys %prog), (-s "$dir/images.json") / 1048576;
+  my $ni = 0; for my $c (@pch) { $ni += grep { @$_ == 5 } @{ $c->{p} } }
+  printf "✓ images.json : %d logos, %d affiches TMDB, %d chaînes avec le guide public dont %d images de programmes, %.1f Mo\n", scalar(@logos), scalar(keys %prog), scalar(@pch), $ni, (-s "$dir/images.json") / 1048576;
 }
 print "Terminé. Ajoute images.json dans le simulateur (bouton « Choisir les fichiers… »).\n";
 system("open", $dirs[0]) if -x "/usr/bin/open";
