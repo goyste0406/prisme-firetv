@@ -7,9 +7,18 @@ on:
 
 jobs:
   build:
-    runs-on: macos-15
+    # macos-15 (arm64) n'a jamais été attribué : on essaie plusieurs types de machines
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-15-intel, macos-14, macos-15]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 40
     steps:
       - uses: actions/checkout@v4
+
+      - name: Version de Xcode
+        run: xcodebuild -version && xcrun --sdk appletvos --show-sdk-version
 
       - name: Installer XcodeGen
         run: brew install xcodegen
@@ -36,12 +45,12 @@ jobs:
         if: success()
         uses: actions/upload-artifact@v4
         with:
-          name: IPTVPerso-Xcode
+          name: IPTVPerso-Xcode-${{ matrix.os }}
           path: IPTVPerso-Xcode.zip
 
       - name: Journal de compilation
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: build-log
+          name: build-log-${{ matrix.os }}
           path: build.log
