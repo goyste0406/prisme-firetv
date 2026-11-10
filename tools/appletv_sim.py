@@ -242,6 +242,12 @@ for a, b in [("Non compatible avec ton Fire Stick (1080p max)", "Non compatible 
              ("Appuyez sur Accueil pour revenir au début", "Appuie sur le bouton TV pour revenir au début")]:
     src = src.replace(a, b)
 
+
+# ------------------------------------------------------------- TV en direct : version A2C
+R("</style>", open(os.path.join(D, "live_a2c.css"), encoding="utf-8").read() + "</style>")
+R("render();\n</script>", open(os.path.join(D, "live_a2c.js"), encoding="utf-8").read() + "\nrender();if(inApp())lPreload(()=>render());\n</script>")
+R("<kbd>M</kbd> (ou maintenir le clic) ajouter/retirer des favoris", "<kbd>M</kbd> (ou maintenir le clic) favoris, ou options d'une chaîne dans la TV en direct")
+
 assert "fire tv" not in src.lower().replace("prisme-firetv", ""), [m.start() for m in re.finditer("(?i)fire ?tv", src)]
 open(OUT, "w", encoding="utf-8").write(src)
 print("OK", OUT, len(src))

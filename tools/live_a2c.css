@@ -1,0 +1,128 @@
+/* ===================== TV en direct : version A2C ===================== */
+.lv{position:absolute;inset:0}
+.lside{position:absolute;left:24px;top:104px;bottom:24px;width:68px;padding:14px 8px;box-sizing:border-box;border-radius:24px;background:rgba(30,32,40,.42);border:1px solid rgba(255,255,255,.14);backdrop-filter:blur(36px) saturate(1.4);-webkit-backdrop-filter:blur(36px) saturate(1.4);display:flex;flex-direction:column;gap:4px;z-index:8;overflow:hidden;transition:width .35s cubic-bezier(.2,.8,.2,1),box-shadow .35s}
+.lv.open .lside{width:236px;box-shadow:30px 0 80px rgba(0,0,0,.6)}
+.lsi{display:flex;align-items:center;gap:12px;height:44px;padding:0 12px;border-radius:14px;font-size:16px;font-weight:600;color:rgba(255,255,255,.8);white-space:nowrap;cursor:pointer;transition:background .15s,color .15s,transform .15s}
+.lsi svg{width:24px;height:24px;flex:none;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.lsi span,.lsi small{opacity:0;transition:opacity .2s}
+.lv.open .lsi span,.lv.open .lsi small{opacity:1}
+.lsi small{margin-left:auto;font-size:12px;color:rgba(255,255,255,.5)}
+.lsi.sel{background:rgba(255,255,255,.16);color:#fff}
+.lsi.foc{background:#fff;color:#000;transform:scale(1.04)}.lsi.foc small{color:rgba(0,0,0,.5)}
+.lmain{position:absolute;left:116px;right:40px;top:104px;bottom:0;transition:filter .35s}
+.lv.open .lmain{filter:brightness(.5)}
+.lhero{height:168px;display:flex;flex-direction:column;justify-content:flex-end;gap:7px;padding-bottom:8px}
+.lhero .k{display:flex;align-items:center;gap:10px;font-size:13px;font-weight:700;letter-spacing:.08em;color:rgba(255,255,255,.75)}
+.lhero .k .lbd{position:static}
+.lhero h1{margin:0;font-size:40px;line-height:1.05;font-weight:800;letter-spacing:-.02em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:900px}
+.lhero .m{font-size:15px;color:rgba(255,255,255,.78);display:flex;align-items:center;gap:10px}
+.lhero .lpb{width:320px}
+.lbd{display:inline-flex;align-items:center;gap:6px;background:var(--live);color:#fff;font-size:11px;font-weight:800;letter-spacing:.07em;padding:4px 8px;border-radius:6px}
+.lbd::before{content:"";width:6px;height:6px;border-radius:50%;background:#fff;animation:blink 1.4s infinite}
+.lbd.soon{background:#0a84ff}.lbd.soon::before{display:none}
+.lpb{height:4px;border-radius:2px;background:rgba(255,255,255,.22);overflow:hidden}.lpb i{display:block;height:100%;background:var(--live)}
+.lh3{margin:18px 0 0;font-size:18px;font-weight:700;display:flex;align-items:baseline;gap:10px}
+.lh3 small{font-size:13px;color:rgba(255,255,255,.5);font-weight:500}
+/* vignettes */
+.lth{position:relative;border-radius:14px;overflow:hidden;background:radial-gradient(45% 60% at var(--x,30%) 40%,color-mix(in srgb,var(--c) 85%,#fff 15%) 0%,transparent 70%),radial-gradient(50% 60% at 78% 70%,color-mix(in srgb,var(--c) 55%,#ff9f0a 45%) 0%,transparent 70%),linear-gradient(160deg,color-mix(in srgb,var(--c) 60%,#000),#06070a);background-size:140% 140%;background-position:0% 0%}
+.lth::after{content:"";position:absolute;inset:0;background:repeating-linear-gradient(0deg,rgba(255,255,255,.02) 0 2px,transparent 2px 4px)}
+.llogo{position:absolute;left:10px;top:10px;height:30px;min-width:48px;padding:0 6px;border-radius:7px;display:grid;place-items:center;background:var(--c);font-size:11px;font-weight:800;color:#fff;box-shadow:0 2px 6px rgba(0,0,0,.35);z-index:2;max-width:110px;overflow:hidden;white-space:nowrap}
+.lth .lbd,.lth .ltag{position:absolute;right:10px;top:10px;z-index:2}
+.ltag{font-size:10.5px;font-weight:800;letter-spacing:.05em;padding:3px 8px;border-radius:6px;background:var(--g);color:#000}
+.lth .lpb{position:absolute;left:10px;right:10px;bottom:9px;height:3px;z-index:2}
+.lth .tx{position:absolute;left:12px;right:12px;bottom:16px;z-index:2}
+.lth .tx b{display:block;font-size:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-shadow:0 1px 8px rgba(0,0,0,.6)}
+.lth .tx span{font-size:12px;color:rgba(255,255,255,.75)}
+.lth .sh{position:absolute;inset:0;background:linear-gradient(0deg,rgba(0,0,0,.85),transparent 62%);z-index:1}
+/* paquets */
+.ldecks{display:grid;grid-template-columns:repeat(4,252px);gap:22px 22px;padding-top:26px}
+.ldk{position:relative;height:184px;cursor:pointer}
+.ldk .lay{position:absolute;left:0;right:0;top:0;height:142px;border-radius:14px;box-shadow:0 8px 20px rgba(0,0,0,.5);transition:transform .3s cubic-bezier(.2,.8,.2,1),box-shadow .2s}
+.ldk .lay .lth{height:100%}
+.ldk .lay.l2{transform:translate(9px,-9px) scale(.94);filter:brightness(.5)}
+.ldk .lay.l3{transform:translate(18px,-18px) scale(.88);filter:brightness(.32)}
+.ldk.foc .lay.l1{transform:scale(1.06);box-shadow:0 20px 40px rgba(0,0,0,.6),0 0 0 3px #fff}
+.ldk.foc .lay.l2{transform:translate(20px,-16px) scale(.94)}
+.ldk.foc .lay.l3{transform:translate(38px,-30px) scale(.88)}
+.ldk .lab{position:absolute;left:0;right:0;top:150px;display:flex;justify-content:space-between;font-size:13px;color:rgba(255,255,255,.65)}
+.ldk .lab b{color:#fff}
+.ldk .lsoon{position:absolute;left:0;top:170px;font-size:11px;font-weight:800;padding:2px 7px;border-radius:6px;background:#0a84ff;white-space:nowrap;max-width:250px;overflow:hidden;text-overflow:ellipsis}
+/* rangées (vue genre) */
+.lrow{display:flex;gap:18px;padding:12px 4px 4px;margin:0 -4px;overflow-x:auto;scrollbar-width:none}
+.lrow::-webkit-scrollbar{display:none}
+.lcard{flex:0 0 210px;cursor:pointer}
+.lcard .lth{height:118px;transition:transform .2s cubic-bezier(.2,.8,.2,1),box-shadow .2s}
+.lcard .t{margin-top:9px;font-size:15px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;transition:transform .2s}
+.lcard .s{font-size:12.5px;color:rgba(255,255,255,.55);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;transition:transform .2s}
+.lcard.foc .lth{transform:scale(1.08);box-shadow:0 18px 36px rgba(0,0,0,.6),0 0 0 3px #fff}
+.lcard.foc .t,.lcard.foc .s{transform:translateY(6px)}
+/* éventail */
+.lfan{position:absolute;inset:0;z-index:9;background:rgba(6,7,10,.74);backdrop-filter:blur(22px);-webkit-backdrop-filter:blur(22px);display:flex;flex-direction:column;justify-content:center;animation:lfade .3s ease}
+@keyframes lfade{from{opacity:0}to{opacity:1}}
+.lfan h2{margin:0 0 4px 140px;font-size:30px;display:flex;align-items:center;gap:12px}
+.lfan h2 svg{width:30px;height:30px;fill:none;stroke:#fff;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.lfan h2 small{font-size:14px;color:rgba(255,255,255,.55);font-weight:500}
+.lfan .hint2{margin:0 0 0 140px;font-size:13px;color:rgba(255,255,255,.5)}
+.lfan .lrow{padding:22px 140px;margin:0;gap:22px}
+.lfan .lcard{flex:0 0 272px;animation:lfanin .45s cubic-bezier(.2,.8,.2,1) both}
+@keyframes lfanin{from{opacity:0;transform:translateX(-60px) rotate(-4deg)}to{opacity:1;transform:none}}
+.lfan .lcard .lth{height:153px;background-position:0% 0%;filter:saturate(.55) brightness(.8);transition:transform .2s,box-shadow .2s,filter .5s}
+.lfan .lcard.pv .lth{filter:none;animation:lpv 5s ease-in-out infinite alternate}
+@keyframes lpv{to{background-position:100% 100%}}
+.lfan .lcard .pvb{position:absolute;left:10px;bottom:18px;z-index:3;font-size:10.5px;font-weight:800;letter-spacing:.06em;padding:3px 8px;border-radius:6px;background:#fff;color:#000;opacity:0;transition:opacity .3s}
+.lfan .lcard.pv .pvb{opacity:1}
+.lfan .lcard .s i{font-style:normal;font-size:10.5px;font-weight:800;padding:1px 6px;border-radius:5px;margin-left:6px;background:#d4d7de;color:#000}
+.lfan .lcard .s i.q4K{background:#f2c14e}.lfan .lcard .s i.q1080p{background:#7cc4ff}
+.lfan .lclose{margin-left:140px;align-self:flex-start;height:46px;font-size:17px}
+/* fenêtres (verre) */
+.lglass{border-radius:30px;background:rgba(40,42,52,.42);border:1px solid rgba(255,255,255,.2);backdrop-filter:blur(40px) saturate(1.6);-webkit-backdrop-filter:blur(40px) saturate(1.6);box-shadow:0 40px 90px rgba(0,0,0,.6),inset 0 1px 0 rgba(255,255,255,.28)}
+.lctx{width:460px;padding:20px 14px 14px}
+.lctx .hd{display:flex;gap:12px;align-items:center;padding:0 8px 12px}
+.lctx .hd .llogo{position:static}
+.lctx .hd b{display:block;font-size:18px}.lctx .hd span{font-size:13px;color:rgba(255,255,255,.65)}
+.lci{display:flex;align-items:center;gap:14px;padding:0 16px;height:50px;border-radius:16px;font-size:17px;font-weight:600;transition:all .15s}
+.lci i{font-style:normal;width:22px;text-align:center}
+.lci small{margin-left:auto;font-size:13px;font-weight:500;color:rgba(255,255,255,.55)}
+.lci.foc{background:#fff;color:#000;transform:scale(1.02)}.lci.foc small{color:rgba(0,0,0,.55)}
+.lci.red{color:#ff6961}.lci.red.foc{color:#c0392b}
+.hab{display:inline-block;margin-left:8px;font-style:normal;font-size:11px;font-weight:800;letter-spacing:.04em;padding:3px 8px;border-radius:6px;background:#bf5af2;color:#fff;vertical-align:middle}
+.modal.lside-m{place-items:start end;padding:110px 56px 0 0;background:rgba(0,0,0,.15);backdrop-filter:none;-webkit-backdrop-filter:none}
+.lcardm{width:430px;padding:18px}
+.lcardm .k{font-size:11px;letter-spacing:.08em;font-weight:700;color:rgba(255,255,255,.6)}
+.lcardm b.tt{display:block;font-size:19px;margin:8px 0 4px;line-height:1.2}
+.lcardm p{margin:0;font-size:14px;color:rgba(255,255,255,.72);line-height:1.45}
+.lcardm .bd{display:flex;gap:14px;margin-top:10px;align-items:center}
+.lcardm .bd .lth{width:150px;height:84px;flex:none}
+.lcardm .bd span{font-size:13px;color:rgba(255,255,255,.65)}
+.lcardm .cd{height:3px;border-radius:2px;background:rgba(255,255,255,.2);margin-top:12px;overflow:hidden}
+.lcardm .cd i{display:block;height:100%;background:#fff;animation:lcd 15s linear forwards}
+@keyframes lcd{from{width:100%}to{width:0}}
+.lcardm .bt{display:flex;gap:10px;margin-top:14px}
+.lcardm .btn{height:44px;font-size:16px;padding:0 18px}
+.lfailb{width:500px;padding:26px;text-align:center}
+.lfailb .ring{width:86px;height:86px;margin:0 auto 14px;position:relative}
+.lfailb .ring svg{width:86px;height:86px;transform:rotate(-90deg)}
+.lfailb .ring circle{fill:none;stroke-width:6}
+.lfailb .ring .bg{stroke:rgba(255,255,255,.18)}.lfailb .ring .fg{stroke:#fff;stroke-linecap:round;transition:stroke-dashoffset 1s linear}
+.lfailb .ring b{position:absolute;inset:0;display:grid;place-items:center;font-size:28px}
+.lfailb h3{margin:0 0 6px;font-size:21px}.lfailb p{margin:0;font-size:15px;color:rgba(255,255,255,.72);line-height:1.45}
+.lfailb .bt{display:flex;gap:10px;justify-content:center;margin-top:18px}.lfailb .btn{height:46px;font-size:16px;padding:0 20px}
+.modal.lfailm{background:rgba(0,0,0,.35);backdrop-filter:none;-webkit-backdrop-filter:none}
+.modal.lfailm~*{}
+.player.lcut .pframe{filter:grayscale(1) blur(6px) brightness(.45);transition:filter .5s}
+/* préchargement */
+.lsplash{position:absolute;inset:0;z-index:50;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;background:radial-gradient(60% 60% at 50% 40%,#1b2133,#05060a)}
+.lsplash .lg{font-size:56px;font-weight:800;letter-spacing:-.03em;display:flex;align-items:center;gap:14px}
+.lsplash .lg i{width:44px;height:44px;border-radius:12px;background:conic-gradient(from 200deg,#ff375f,#ff9f0a,#30d158,#0a84ff,#bf5af2,#ff375f)}
+.lsplash .bar{width:440px;height:6px;border-radius:3px;background:rgba(255,255,255,.15);overflow:hidden}
+.lsplash .bar i{display:block;height:100%;width:4%;background:#fff;border-radius:3px;transition:width .35s ease}
+.lsplash .st{font-size:15px;color:rgba(255,255,255,.7);min-height:20px}
+.lsplash ul{list-style:none;margin:6px 0 0;padding:0;font-size:14px;color:rgba(255,255,255,.5);display:flex;flex-direction:column;gap:6px;width:440px}
+.lsplash li.ok{color:rgba(255,255,255,.88)}.lsplash li.ok::before{content:"✓ ";color:#30d158;font-weight:800}
+/* boutons de démo sous la télécommande */
+.ldemo{display:flex;flex-wrap:wrap;justify-content:center;align-items:center;gap:8px;margin:14px auto 0;max-width:900px}
+.ldemo span{color:var(--muted);font-size:12.5px}
+.ldemo button{all:unset;cursor:pointer;font-size:13px;font-weight:600;padding:8px 14px;border-radius:18px;background:#1d2029;color:#e6e8ee;border:1px solid #2c303b}
+.ldemo button:hover{background:#2a2e39}
+.ldemo button:focus-visible{outline:2px solid #fff;outline-offset:2px}
+@media (prefers-reduced-motion:reduce){.lfan .lcard.pv .lth{animation:none}.lfan .lcard{animation:none}}
