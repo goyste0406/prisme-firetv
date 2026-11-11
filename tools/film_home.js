@@ -307,9 +307,9 @@ const SRCM=new Map();const srcmClear=()=>SRCM.clear();
 {const _s=srcs;srcs=function(key){let v=SRCM.get(key);if(v===undefined){v=_s(key);SRCM.set(key,v)}return v}}
 {const _r=render;render=function(fid){srcmClear();
  /* l'accueil et la fiche se redessinent sans sauter : on garde la position verticale et celle de chaque rangée */
- const t0=topS(),sc0=view.querySelector("#hscr,#fxscr,#hscroll"),keep=sc0?{y:sc0.scrollTop,x:[...sc0.querySelectorAll(".sx,.lrow")].map(r=>r.scrollLeft),id:sc0.id}:null;
+ const t0=topS(),sc0=view.querySelector("#hscr,#fxscr,.hscroll"),keep=sc0?{y:sc0.scrollTop,x:[...sc0.querySelectorAll(".sx,.lrow")].map(r=>r.scrollLeft),sel:sc0.id?"#"+sc0.id:".hscroll"}:null;
  const out=_r(fid);
- if(keep&&topS()===t0){const sc=view.querySelector("#"+keep.id);if(sc){const rows=[...sc.querySelectorAll(".sx,.lrow")],all=[sc,...rows];
+ if(keep&&topS()===t0){const sc=view.querySelector(keep.sel);if(sc){const rows=[...sc.querySelectorAll(".sx,.lrow")],all=[sc,...rows];
   all.forEach(e=>e.style.scrollBehavior="auto");sc.scrollTop=keep.y;sc._ty=keep.y;sc._tt2=0;if(rows.length===keep.x.length)rows.forEach((r,i)=>{r.scrollLeft=keep.x[i];r._tx=keep.x[i];r._tt=0});
   const f=S.modal?null:F;if(f&&sc.contains(f))ensureVisible(f,true);requestAnimationFrame(()=>all.forEach(e=>e.style.scrollBehavior=""))}}
  return out}}
