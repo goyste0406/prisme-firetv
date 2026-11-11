@@ -25,7 +25,7 @@ function tmApply(){let n=0;for(const f of FILMS){const r=f._real;if(!r)continue;
 async function fxImportFilms(files,say){const out=[];for(const f of files){say(`Lecture de ${f.name}…`);let d=null;try{d=JSON.parse((await f.text()).replace(/^﻿/,""))}catch(e){}
   if(!d||typeof d!=="object"||!d.m)throw new Error(`${f.name} n'est pas un fichier de fiches films prisme`);out.push(d)}
  let list=[];try{list=(await idbGet("films"))||[]}catch(e){}list=list.concat(out).slice(-4);await idbSet("films",list);return out.reduce((a,d)=>a+Object.keys(d.m).length,0)}
-if(typeof REAL!=="undefined"&&REAL)idbGet("films").then(list=>{if(!list||!list.length)return;for(const d of list){Object.assign(TMD.m,d.m);Object.assign(TMD.names,d.names||{});Object.assign(TMD.sids,d.sids||{})}
+if(typeof REAL!=="undefined"&&REAL)idbGet("films").then(list=>{if(!list||!list.length)return;for(const d of list){Object.assign(TMD.m,d.m);Object.assign(TMD.names,d.names||{});Object.assign(TMD.sids,d.sids||{});TMD.co=Object.assign(TMD.co||{},d.co||{});if(d.tr)TMD.tr=d.tr;if(d.trp)TMD.trp=d.trp;if(d.soon)TMD.soon=d.soon}
  const n=tmApply();const st=$("#rst");if(st)st.textContent+=` · ${n} fiches films TMDB`;if(inApp()&&!S.loading)render(F&&F.dataset.fid)}).catch(()=>{});
 
 /* ---------- profils (toute l'appli) ---------- */

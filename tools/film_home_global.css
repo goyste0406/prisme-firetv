@@ -1,0 +1,9 @@
+.fhbub{position:absolute;z-index:30;width:340px;padding:16px 18px;border-radius:18px;background:rgba(22,24,32,.88);backdrop-filter:blur(24px);-webkit-backdrop-filter:blur(24px);border:1px solid rgba(255,255,255,.14);box-shadow:0 20px 50px rgba(0,0,0,.5);animation:fhbin .25s ease;pointer-events:none;font-family:Outfit,system-ui,sans-serif;color:#fff}
+.fhbub b{font-size:18px;display:block;margin-bottom:6px}.fhbub p{margin:0 0 10px;font-size:13.5px;line-height:1.4;opacity:.85;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+.fhbub .bm{display:flex;flex-wrap:wrap;gap:4px 12px;font-size:13px;font-weight:600;margin-bottom:8px}.fhbub .bm .ok2{color:#9ef0b0}.fhbub .bm .lt{color:#ffb4a8}.fhbub .bm .st{color:#ffd36b}.fhbub small{font-size:11.5px;opacity:.5}
+@keyframes fhbin{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+.fhzap{position:absolute;left:8px;bottom:8px;z-index:5;font-size:11px;font-weight:800;padding:3px 8px;border-radius:8px;background:#ffd36b;color:#000;animation:fhbin .3s ease}
+.fhzap:only-child,.fx-btn .fhzap{left:auto;right:-8px;bottom:auto;top:-10px}
+#view>.brand,#view>.clock,#view>.tabbar{transition:opacity .3s ease}
+#view.fhdown>.brand,#view.fhdown>.clock,#view.fhdown>.tabbar{opacity:0}
+#view.fhdown .fx-hero{opacity:.35;transition:opacity .3s}

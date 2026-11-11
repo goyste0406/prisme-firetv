@@ -212,7 +212,7 @@ RX(r'  const top=\[\.\.\.list\]\.sort.*?cats\.forEach\(\(\[k,l\]\)=>\{[^\n]*\}\)
 ''')
 
 R(' else if(t.t==="actor") html=actorHtml(t.id);',
-  ' else if(t.t==="actor") html=actorHtml(t.id);\n else if(t.t==="genre") html=genreHtml(t.ty,t.k);')
+  ' else if(t.t==="actor") html=actorHtml(t.id);\n else if(t.t==="genre") html=genreHtml(t.ty,t.k);\n else if(t.t==="fhcoll") html=fhCollHtml(t.k);')
 R(' else if(t.t==="actor"){const h=hash(t.id)%360;',
   ' else if(t.t==="genre"){const g=GDEF[t.ty].find(x=>x[0]===t.k);setBg([g[2],g[3]])}\n else if(t.t==="actor"){const h=hash(t.id)%360;')
 
@@ -253,11 +253,11 @@ import json as _json, sys as _sys
 _sys.path.insert(0, D)
 from fx_css import build as _fxbuild
 _simcss = src[src.index("<style>"):src.index("</style>")]
-_fxcss, _fxren = _fxbuild(rd("film_ab1.css"), _simcss)
-R("</style>", _fxcss + "\n" + rd("film_ab1_global.css") + "</style>")
+_fxcss, _fxren = _fxbuild(rd("film_ab1.css") + "\n" + rd("film_home.css"), _simcss)
+R("</style>", _fxcss + "\n" + rd("film_ab1_global.css") + rd("film_home_global.css") + "</style>")
 _pl = rd("prisme-films.pl").replace("\\", "\\\\").replace("`", "\\`").replace("${", "\\${")
 RFCMD = "const RFCMD=`cat > /tmp/prisme-films.pl <<'PRISME_FIN'\n" + _pl + "PRISME_FIN\nperl /tmp/prisme-films.pl`;\n"
-R("render();\n</script>", RFCMD + "const FXR=" + _json.dumps(_fxren) + ";\n" + rd("live_a2c.js") + "\n" + rd("real_end.js") + "\n" + rd("live_home.js") + "\n" + rd("live_plus.js") + "\n" + rd("film_ab1.js") + "\nrender();if(inApp())lPreload(()=>render());\n</script>")
+R("render();\n</script>", RFCMD + "const FXR=" + _json.dumps(_fxren) + ";\n" + rd("live_a2c.js") + "\n" + rd("real_end.js") + "\n" + rd("live_home.js") + "\n" + rd("live_plus.js") + "\n" + rd("film_ab1.js") + "\n" + rd("film_home.js") + "\nrender();if(inApp())lPreload(()=>render());\n</script>")
 R("<kbd>M</kbd> (ou maintenir le clic) ajouter/retirer des favoris", "<kbd>M</kbd> (ou maintenir le clic) favoris, ou options d'une chaîne dans la TV en direct")
 
 R('<div class="pkick">${it.type==="s"?"Série · "+esc(it.net):"Film · "+it.y}', '<div class="pkick">${it.rp?"Replay · "+esc(CH[it.rp.c].n)+" · diffusé "+lday(it.rp.s):it.type==="s"?"Série · "+esc(it.net):"Film · "+it.y}')

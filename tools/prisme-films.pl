@@ -80,7 +80,7 @@ for my $dir (@dirs) {
   my %need; for my $g (@ok) { my $f = "$CACHE/d/$g->{tm}.json"; $need{$g->{tm}} = $f unless -s $f && $now - (stat($f))[9] < $TTL }
   my %uid = map { $_->{tm} => 1 } @ok; print "Fiches à télécharger : ", scalar(keys %need), " (", scalar(keys %uid) - scalar(keys %need), " déjà en cache)…\n";
   fetch_many([map { ["$TMDB/movie/$_?language=fr-FR&append_to_response=keywords,credits,recommendations,videos,release_dates,watch/providers&include_video_language=fr,en,null$akey", $need{$_}] } keys %need], @auth);
-  my (%M, @imgs); my $rank = 0;
+  my (%M, @imgs, %CO); my $rank = 0;
   for my $g (@ok) { my $id = $g->{tm}; next if $M{$id}; my $d = eval { $J->decode(slurp("$CACHE/d/$id.json")) }; next unless ref $d eq "HASH" && $d->{id}; $rank++;
     my $cr = $d->{credits} || {}; my (@dir, $w, $mu, $ph);
     for my $c (@{ $cr->{crew} || [] }) { my $j = $c->{job} // ""; push @dir, $c->{name} if $j eq "Director"; $w //= $c->{name} if $j =~ /^(Screenplay|Writer)$/; $mu //= $c->{name} if $j eq "Original Music Composer"; $ph //= $c->{name} if $j eq "Director of Photography" }
@@ -95,7 +95,9 @@ for my $dir (@dirs) {
       lang => $d->{original_language} // "", pays => join(", ", map { $_->{iso_3166_1} } @{ $d->{production_countries} || [] }),
       kw => [map { $_->{name} } @{ ($d->{keywords} || {})->{keywords} || [] }], dir => join(", ", @dir), w => $w // "", mu => $mu // "", ph => $ph // "",
       cast => \@cast, rec => [map { $_->{id} + 0 } @{ ($d->{recommendations} || {})->{results} || [] }], col => $col ? [$col->{id} + 0, $col->{name}] : undef,
-      wp => \%W, yt => $yt // "", imdb => $cid };
+      wp => \%W, yt => $yt // "", imdb => $cid, a => ($g->{a} || 0) + 0,
+      co => [map { $_->{id} + 0 } grep { $_->{id} } @{ $d->{production_companies} || [] }] };
+    for my $c (@{ $d->{production_companies} || [] }) { next unless $c->{id}; my $e = $CO{$c->{id}} //= { n => $c->{name}, lp => $c->{logo_path} // "", k => 0 }; $e->{k}++ }
     my $po = $d->{poster_path}; my $bd = $d->{backdrop_path};
     push @imgs, ["$IMGB/w185$po", "$CACHE/i/p$id", 220, 60, $id, "po"] if $po;
     push @imgs, ["$IMGB/w780$bd", "$CACHE/i/b$id", 720, 55, $id, "bd"] if $bd && $rank <= $MAXB }
@@ -104,10 +106,32 @@ for my $dir (@dirs) {
   fetch_many([map { [$_->[0], $_->[1]] } @dl]); jpeg($_->[1], $_->[2], $_->[3]) for @dl;
   for my $im (@imgs) { my $u = datauri($im->[1]); $M{$im->[4]}{$im->[5]} = $u if $u }
   my (%byName, %bySid); for my $g (@ok) { next unless $M{$g->{tm}}; $byName{$_} = $g->{tm} + 0 for @{ $g->{names} }; for (@{ $g->{sids} }) { $bySid{$_} = $g->{tm} + 0 if $_ ne "" } }
-  my $out = { v => 1, at => $now, names => \%byName, sids => \%bySid, m => \%M };
+  # --- studios : on garde ceux qui ont au moins 3 films ici, avec leur logo ---
+  my @cos = grep { $CO{$_}{k} >= 3 } sort { $CO{$b}{k} <=> $CO{$a}{k} } keys %CO; @cos = @cos[0 .. 23] if @cos > 24; my %COUT;
+  my @lg = map { ["$IMGB/w185$CO{$_}{lp}", "$CACHE/i/l$_.png", $_] } grep { $CO{$_}{lp} } @cos;
+  fetch_many([map { [$_->[0], $_->[1]] } grep { !-s $_->[1] } @lg]);
+  for my $c (@cos) { $COUT{$c} = { n => $CO{$c}{n}, k => $CO{$c}{k} + 0 } } for my $l (@lg) { my $u = datauri($l->[1]); $COUT{$l->[2]}{lg} = $u if $u }
+  # --- tendances en France (films populaires cette semaine), gardées si le film est chez ce fournisseur ---
+  my @pp = map { ["$TMDB/movie/popular?language=fr-FR&region=FR&page=$_$akey", "$tmp/pop$_.json"] } 1 .. 5; fetch_many(\@pp, @auth);
+  my @tr; for my $p (@pp) { my $r = eval { $J->decode(slurp($p->[1])) } || {}; for my $m (@{ $r->{results} || [] }) { push @tr, $m->{id} + 0 if $M{$m->{id}} && !grep { $_ == $m->{id} } @tr } }
+  @tr = @tr[0 .. 9] if @tr > 10;
+  my $pf = "$CACHE/top-" . simp($dir) . ".json"; my $prev = eval { $J->decode(slurp($pf)) } || {};
+  my $trp = $prev->{at} && $now - $prev->{at} > 5 * 86400 ? $prev->{tr} : ($prev->{trp} || []);
+  spew($pf, $J->encode({ at => ($prev->{at} && $now - $prev->{at} <= 5 * 86400 ? $prev->{at} : $now), tr => ($prev->{at} && $now - $prev->{at} <= 5 * 86400 ? $prev->{tr} : \@tr), trp => $trp }));
+  # --- au cinéma en France, pas encore chez le fournisseur : date de sortie en streaming si TMDB la connaît ---
+  my @np = map { ["$TMDB/movie/now_playing?language=fr-FR&region=FR&page=$_$akey", "$tmp/np$_.json"] } 1 .. 2; fetch_many(\@np, @auth);
+  my @soon; for my $p (@np) { my $r = eval { $J->decode(slurp($p->[1])) } || {}; for my $m (@{ $r->{results} || [] }) { next if $M{$m->{id}} || $m->{adult}; push @soon, $m unless grep { $_->{id} == $m->{id} } @soon } }
+  @soon = (sort { ($b->{popularity} || 0) <=> ($a->{popularity} || 0) } @soon)[0 .. 7]; @soon = grep { defined } @soon;
+  fetch_many([map { ["$TMDB/movie/$_->{id}/release_dates?x=1$akey", "$tmp/rd$_->{id}.json"] } @soon], @auth);
+  my @SOON; for my $m (@soon) { my $r = eval { $J->decode(slurp("$tmp/rd$m->{id}.json")) } || {}; my ($cine, $vod) = ("", "");
+    for my $c (@{ $r->{results} || [] }) { next unless ($c->{iso_3166_1} // "") eq "FR"; for my $x (@{ $c->{release_dates} || [] }) { my $d = substr($x->{release_date} // "", 0, 10); $cine ||= $d if ($x->{type} // 0) == 3; $vod ||= $d if ($x->{type} // 0) == 4 } }
+    $cine ||= $m->{release_date} // ""; my $bd = $m->{backdrop_path}; my $f = "$CACHE/i/sb$m->{id}";
+    if ($bd && !-s $f) { fetch_many([["$IMGB/w780$bd", $f]]); jpeg($f, 720, 55) }
+    push @SOON, { id => $m->{id} + 0, t => $m->{title}, y => (($m->{release_date} // "") =~ /^(\d{4})/ ? $1 + 0 : 0), ov => $m->{overview} // "", cine => $cine, vod => $vod, va => ($m->{vote_average} || 0) + 0, bd => datauri($f) } }
+  my $out = { v => 2, at => $now, names => \%byName, sids => \%bySid, m => \%M, co => \%COUT, tr => \@tr, trp => $trp, soon => \@SOON };
   open(my $o, ">:raw", "$dir/films.json") or die "Impossible d'écrire $dir/films.json\n"; print $o $J->encode($out); close $o;
   my $np = grep { $_->{po} } values %M; my $nb = grep { $_->{bd} } values %M; my $ns = grep { @{ $_->{wp}{f} || [] } || @{ $_->{wp}{g} || [] } } values %M;
-  printf "✓ films.json : %d fiches TMDB, %d affiches, %d grandes images, %d films disponibles aussi en streaming, %.1f Mo\n", scalar(keys %M), $np, $nb, $ns, (-s "$dir/films.json") / 1048576;
+  printf "✓ films.json : %d fiches TMDB, %d affiches, %d grandes images, %d films aussi en streaming, %d studios, top 10 : %d films, au cinéma : %d, %.1f Mo\n", scalar(keys %M), $np, $nb, $ns, scalar(keys %COUT), scalar(@tr), scalar(@SOON), (-s "$dir/films.json") / 1048576;
 }
 print "Terminé. Ajoute films.json dans le simulateur (bouton « Choisir les fichiers… »).\n";
 system("open", $dirs[0]) if -x "/usr/bin/open";
