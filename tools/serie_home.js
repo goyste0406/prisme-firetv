@@ -512,13 +512,21 @@ function bubArm2(el){bubOff2();const it=ALL[el.dataset.hid];if(!it||el.closest(f
  const i=h.indexOf("<section data-anchor><h3>Lecteur</h3>");return i<0?h+sec:h.slice(0,i)+sec+h.slice(i)}}
 window.__sx={X,MX,sUp,sRes,slides,WEEK,nextEp,epInfo,sxStart,verOf,EPS,NS,EPT,EPS_,ED,setSp,spNextEp,SET,isDone,spOf,pv:e=>{PV=e}};
 })();
+/* ---------- résumés en français uniquement : un texte qui ressemble à de l'anglais est écarté ---------- */
+const FR_W=new Set("le la les de des du un une et est dans pour sur qui que son sa ses leur leurs avec au aux il elle ils elles ce cette ces par pas ne se plus mais où sont été être fait après lors doit va entre tout tous".split(" "));
+const EN_W=new Set("the and of to is in his her with when where what which who whose their them they he she him this that these those by but be are was were has have had an new must into while its it as at find finds discovers about only young small town life family world how out up all can will would there been more years after from for on your you our we".split(" "));
+function frText(t){if(!t)return "";const w=String(t).toLowerCase().match(/[a-zàâäéèêëîïôöùûüç']+/g)||[];if(w.length<4)return /[àâéèêëîïôùûç]/i.test(t)?t:(w.some(x=>EN_W.has(x))?"":t);
+ let f=0,e=0;for(const x of w){if(FR_W.has(x))f++;if(EN_W.has(x)||(x.length>5&&/ing$/.test(x)))e++}if(/[àâéèêëîïôùûç]/i.test(t))f+=2;if(f===0&&w.length>=5)return "";return e>=2&&e>f?"":t}
+window.frText=frText;
+const NOFR="Résumé en français pas encore disponible : lance le script « Fiches séries » pour le récupérer sur TMDB.";
+if(typeof REAL!=="undefined"&&REAL)for(const it of SERIES)if(it._real&&!frText(it.s))it.s=NOFR;
 /* ---------- fiches séries TMDB (series.json : affiches, grandes images, résumé, casting, chaîne, top 10) ---------- */
 const SXD={m:{},names:{},nl:{},top:[],n:0};
 function sxApply(){let n=0;const byK={};
  for(const it of SERIES){const r=it._real;if(!r)continue;let k="";for(const s of r.s||[]){if(SXD.names[s[1]]){k=SXD.names[s[1]];break}}
   const d=k&&SXD.m[k];if(!d)continue;n++;byK[k]=byK[k]||it.id;it.sxk=k;
   if(d.po)it.po=d.po;if(d.bd)it.bd=d.bd;if(!/^t/.test(k))continue;
-  if(d.t)it.t=d.t;if(d.y)it.y=d.y;if(d.g&&d.g.length)it.g=d.g.slice(0,2);if(d.ov)it.s=d.ov;if(d.net)it.net=d.net;if(d.cr)it.dir=d.cr;if(d.ep)it.ep=d.ep;
+  if(d.t)it.t=d.t;if(d.y)it.y=d.y;if(d.g&&d.g.length)it.g=d.g.slice(0,2);if(d.ov)it.s=d.ov;else if(!frText(it.s))it.s=NOFR;if(d.net)it.net=d.net;if(d.cr)it.dir=d.cr;if(d.ep)it.ep=d.ep;
   if(d.va){it.imdb=+(+d.va).toFixed(1);it.tmdb=Math.round(d.va*10)}if(d.age)it.age=fxAge(d.age);if(d.yt){it.yt=d.yt;it.ytl=d.ytl||""}
   if(d.cast&&d.cast.length)it.cast=d.cast.map(([nm,ch])=>{const aid="ra"+(hash(nm)>>>0).toString(36);A[aid]=nm;if(typeof CRED!=="undefined")(CRED[aid]=CRED[aid]||[]).some(x=>x[0]===it.id)||CRED[aid].push([it.id,ch||""]);return [aid,ch||""]})}
  /* même série TMDB proposée sous plusieurs noms (« Lupin », « Lupin - Partie 2 », « Lupin VOSTFR »…) : une seule fiche avec toutes ses versions */
@@ -545,10 +553,10 @@ function sxEpApply(){let n=0;const now=Date.now(),W=[];window.SXDATA=window.SXDA
    d.se.forEach((c,i)=>{best.se[i]=Math.max(best.se[i]||0,c)});for(const k in d.e)if(!best.e[k]||(!best.e[k][0]&&d.e[k][0]))best.e[k]=d.e[k]}
   if(best)for(let i=0;i<best.se.length;i++)best.se[i]=best.se[i]||0;
   if(!best||!best.se||!best.se.length)continue;n++;it.se=best.se.slice();const M={},sy={},dl=[];let ad=[];
-  for(const k in best.e){const [t,d,o,rt,dt,a]=best.e[k];M[k]={t,d,o,r:rt||null};if(d)dl.push(d);const s=+k.split("-")[0];if(dt){const y=+dt.slice(0,4);if(y&&(!sy[s]||y<sy[s]))sy[s]=y}if(a)ad.push([a,k])}
+  for(const k in best.e){const [t,d,o,rt,dt,a]=best.e[k];M[k]={t,d,o:frText(o),r:rt||null};if(d)dl.push(d);const s=+k.split("-")[0];if(dt){const y=+dt.slice(0,4);if(y&&(!sy[s]||y<sy[s]))sy[s]=y}if(a)ad.push([a,k])}
   /* titres, résumés et notes en français de TMDB (series.json) quand le fournisseur n'en donne pas */
   const T=it.sxk&&SXD.m[it.sxk]&&SXD.m[it.sxk].eps;
-  if(T){for(const k in M){const x=T[k];if(!x)continue;if(!M[k].t&&x[0])M[k].t=x[0];if(!M[k].o&&x[1])M[k].o=x[1];if(!M[k].r&&x[2])M[k].r=x[2]}
+  if(T){for(const k in M){const x=T[k];if(!x)continue;if(x[0])M[k].t=x[0];if(x[1])M[k].o=x[1];if(!M[k].r&&x[2])M[k].r=x[2]}
    /* épisodes annoncés dans les 7 prochains jours (dates TMDB) */
    const t0=new Date();t0.setHours(0,0,0,0);for(const k in T){const ad=T[k][3];if(!ad||M[k])continue;const j=Math.round((new Date(ad+"T00:00:00")-t0)/864e5);if(j>=1&&j<=7){const [s,e]=k.split("-").map(Number);W.push({j,id:it.id,s,e})}}}
   SXDATA.ep[it.id]=M;SXDATA.sy[it.id]=sy;if(dl.length){dl.sort((a,b)=>a-b);it.ep=dl[dl.length>>1]}
