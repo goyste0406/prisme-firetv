@@ -133,12 +133,18 @@ function fhCollHtml(k){const c=fhColl(k)||{n:"Collection",why:"",items:()=>[]},s
 
 /* ---------- Parcourir : Catégories / Licences et sagas ---------- */
 const LICS_DEMO=[["Disney","Studio",412,"#3b6fd8"],["Pixar","Studio",27,"#4aa3df"],["Marvel","Univers",34,"#c8423b"],["Star Wars","Saga",12,"#d8c25a"],["Harry Potter","Saga",11,"#a0824e"],["DC","Univers",29,"#3a7bd5"],["James Bond","Saga",25,"#9aa3ad"],["Le Seigneur des anneaux","Saga",6,"#b88a3e"],["Jurassic Park","Saga",7,"#6c9b4a"],["Mission: Impossible","Saga",8,"#d0563a"],["Fast & Furious","Saga",11,"#e08a3c"]];
-function fhLics(){const C=fhColls().filter(c=>c.lic);if(C.length)return C.map(c=>({n:c.n,k:c.k.startsWith("co:")?"Studio":"Saga",d:c.items().length,c:"#"+((hash(c.k)&0xffffff)|0x404040).toString(16).slice(-6),a:"fhcoll:"+c.k,lg:c.lg})).filter(x=>x.d>=2).sort((a,b)=>(b.lg?1:0)-(a.lg?1:0)||b.d-a.d);
- return LICS_DEMO.map(([n,k,d,c])=>({n,k,d,c,a:"fhdemo:"+encodeURIComponent(n)}))}
+/* tendance d'une licence : films populaires en France cette semaine (films.json), sinon classement de démonstration */
+function fhTrendOf(L){const pop=TMD.pop||{};let sc=0;for(const f of L){const r=f.tm&&pop[f.tm];if(r)sc+=101-r}
+ const tl=fhTop().map(x=>x.f.id);L.forEach(f=>{const i=tl.indexOf(f.id);if(i>=0)sc+=30-i*2});
+ const ts=L.map(f=>trendScore(f)).sort((a,b)=>b-a).slice(0,3);return sc*10+ts.reduce((a,b)=>a+b,0)/Math.max(1,ts.length)+Math.max(0,...L.map(f=>f.y))/1e4}
+function fhLics(){const C=fhColls().filter(c=>c.lic);
+ if(C.length)return C.map(c=>{const L=c.items();return {n:c.n,k:c.k.startsWith("co:")?"Studio":"Saga",d:L.length,c:"#"+((hash(c.k)&0xffffff)|0x404040).toString(16).slice(-6),a:"fhcoll:"+c.k,lg:c.lg,tr:fhTrendOf(L)}}).filter(x=>x.d>=2).sort((a,b)=>b.tr-a.tr).map((x,i)=>({...x,rk:i+1}));
+ return LICS_DEMO.map(([n,k,d,c],i)=>({n,k,d,c,a:"fhdemo:"+encodeURIComponent(n),tr:LICS_TR[i]||0})).sort((a,b)=>b.tr-a.tr).map((x,i)=>({...x,rk:i+1}))}
+const LICS_TR=[70,40,95,88,55,48,62,20,35,66,58];
 function fhBrowse(){const t=FH.catT,G=genreList("f"),L=fhLics();
  const inner=t==="cat"?G.map(({g,items})=>`<div class="gword" style="--cc:${g[2]}" data-f data-fid="fhg-${g[0]}" data-act="genre:f:${g[0]}" data-row="fhg"><b>${esc(g[1])}</b><small>${items.length} films</small></div>`).join("")
-  :L.map(l=>`<div class="lic2" style="--cc:${l.c}" data-f data-fid="fhx-${hash(l.n)}" data-act="${l.a}" data-row="fhx">${l.lg?`<img class="lgo" src="${l.lg}" alt="">`:`<span class="ph">LOGO</span>`}<b>${esc(l.n)}</b><small>${l.k} · ${l.d} films</small></div>`).join("");
- return `<section data-anchor data-rk="browse" class="hsec browse"><div class="lh">Parcourir</div><div class="btabs hline">${[["cat","Catégories",G.length],["lic","Licences et sagas",L.length]].map(([k,n,c])=>`<div class="btab ${k===t?"sel":""}" data-f data-fid="fhbt-${k}" data-bt="${k}" data-act="fhbt:${k}" data-row="fhbt">${n}<small>${c}</small></div>`).join("")}</div><div class="row sx">${inner}</div></section>`}
+  :L.map(l=>`<div class="lic2" style="--cc:${l.c}" data-f data-fid="fhx-${hash(l.n)}" data-act="${l.a}" data-row="fhx">${l.rk<=3?`<span class="ltr">🔥 ${l.rk===1?"N° 1":"Top "+l.rk}</span>`:""}${l.lg?`<img class="lgo" src="${l.lg}" alt="">`:`<span class="ph">LOGO</span>`}<b>${esc(l.n)}</b><small>${l.k} · ${l.d} films</small></div>`).join("");
+ return `<section data-anchor data-rk="browse" class="hsec browse"><div class="lh">Parcourir${t==="lic"?`<small>classées selon les tendances de la semaine${TMD.pop?" en France":""}</small>`:""}</div><div class="btabs hline">${[["cat","Catégories",G.length],["lic","Licences et sagas",L.length]].map(([k,n,c])=>`<div class="btab ${k===t?"sel":""}" data-f data-fid="fhbt-${k}" data-bt="${k}" data-act="fhbt:${k}" data-row="fhbt">${n}<small>${c}</small></div>`).join("")}</div><div class="row sx">${inner}</div></section>`}
 
 /* ---------- la page ---------- */
 function fhSkel(){const r=(n,w,h)=>`<div class="sk-row">${Array.from({length:n},()=>`<i class="sk" style="width:${w}px;height:${h}px"></i>`).join("")}</div>`;

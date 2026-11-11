@@ -114,6 +114,7 @@ for my $dir (@dirs) {
   # --- tendances en France (films populaires cette semaine), gardées si le film est chez ce fournisseur ---
   my @pp = map { ["$TMDB/movie/popular?language=fr-FR&region=FR&page=$_$akey", "$tmp/pop$_.json"] } 1 .. 5; fetch_many(\@pp, @auth);
   my @tr; for my $p (@pp) { my $r = eval { $J->decode(slurp($p->[1])) } || {}; for my $m (@{ $r->{results} || [] }) { push @tr, $m->{id} + 0 if $M{$m->{id}} && !grep { $_ == $m->{id} } @tr } }
+  my %POP; my $pr = 0; $POP{$_} = ++$pr for @tr;   # rang de popularité en France (sert aussi à classer les licences)
   @tr = @tr[0 .. 9] if @tr > 10;
   my $pf = "$CACHE/top-" . simp($dir) . ".json"; my $prev = eval { $J->decode(slurp($pf)) } || {};
   my $trp = $prev->{at} && $now - $prev->{at} > 5 * 86400 ? $prev->{tr} : ($prev->{trp} || []);
@@ -128,7 +129,7 @@ for my $dir (@dirs) {
     $cine ||= $m->{release_date} // ""; my $bd = $m->{backdrop_path}; my $f = "$CACHE/i/sb$m->{id}";
     if ($bd && !-s $f) { fetch_many([["$IMGB/w780$bd", $f]]); jpeg($f, 720, 55) }
     push @SOON, { id => $m->{id} + 0, t => $m->{title}, y => (($m->{release_date} // "") =~ /^(\d{4})/ ? $1 + 0 : 0), ov => $m->{overview} // "", cine => $cine, vod => $vod, va => ($m->{vote_average} || 0) + 0, bd => datauri($f) } }
-  my $out = { v => 2, at => $now, names => \%byName, sids => \%bySid, m => \%M, co => \%COUT, tr => \@tr, trp => $trp, soon => \@SOON };
+  my $out = { v => 2, at => $now, names => \%byName, sids => \%bySid, m => \%M, co => \%COUT, tr => \@tr, trp => $trp, pop => \%POP, soon => \@SOON };
   open(my $o, ">:raw", "$dir/films.json") or die "Impossible d'écrire $dir/films.json\n"; print $o $J->encode($out); close $o;
   my $np = grep { $_->{po} } values %M; my $nb = grep { $_->{bd} } values %M; my $ns = grep { @{ $_->{wp}{f} || [] } || @{ $_->{wp}{g} || [] } } values %M;
   printf "✓ films.json : %d fiches TMDB, %d affiches, %d grandes images, %d films aussi en streaming, %d studios, top 10 : %d films, au cinéma : %d, %.1f Mo\n", scalar(keys %M), $np, $nb, $ns, scalar(keys %COUT), scalar(@tr), scalar(@SOON), (-s "$dir/films.json") / 1048576;
