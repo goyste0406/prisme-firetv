@@ -62,7 +62,7 @@ function WEEK(){if(!DEMO())return (window.SXDATA&&SXDATA.week)||[];const k="wk|"
  return X.cache[k]=W}
 const MISSING=()=>{if(!DEMO())return {};const R=roles();if(!R.miss)return {};const s=Math.min(2,NS(ALL[R.miss]));return {[R.miss]:{s,e:Math.min(4,EPS(ALL[R.miss])[s-1])}}};
 const GAPS=()=>{if(!DEMO())return {};const R=roles();if(!R.prog)return {};const s=Math.min(2,NS(ALL[R.prog]));return {[R.prog]:{s,e:Math.min(EPS(ALL[R.prog])[s-1],4),from:"Nova",miss:(S.playlists[0]||{}).name||"ton fournisseur"}}};
-function nextEp(it){const p=spOf(it);if(!p)return {s:1,e:1,pos:0};let {s,e,pos}=p;const E=EPS(it);if(e>E[s-1]){s++;e=1;pos=0}if(s>E.length){s=E.length;e=E[s-1]}return {s,e,pos:pos||0}}
+function nextEp(it){const E=EPS(it),f=Math.max(1,E.findIndex(x=>x>0)+1),p=spOf(it);if(!p)return {s:f,e:1,pos:0};let {s,e,pos}=p;while(s<=E.length&&e>(E[s-1]||0)){s++;e=1;pos=0}if(s>E.length){s=E.length;e=Math.max(1,E[s-1])}return {s,e,pos:pos||0}}
 const availTo=it=>{const n=nextEp(it),f=WEEK().filter(w=>w.id===it.id&&w.j>0&&w.s===n.s&&!w.full).map(w=>w.e);return f.length?Math.min(...f)-1:EPS(it)[n.s-1]};
 const leftInSeason=it=>{const n=nextEp(it);return Math.max(1,availTo(it)-n.e+1)};
 const weekly=it=>WEEK().some(w=>w.id===it.id&&w.j>0);
@@ -90,12 +90,12 @@ const SREC={s4:["Walter s'enfonce un peu plus dans sa double vie.","Jesse veut s
 const recap=it=>SREC[it.id]||(DEMO()?["L'épisode précédent se termine sur une décision qui change tout.","Un personnage secondaire prend une place inattendue.","Tout reprend là où tu t'es arrêté."]:(()=>{const n=nextEp(it),o=EPS_(it,n.s,Math.max(1,n.e-1));return o?[o]:["Le résumé de l'épisode précédent arrivera avec les données TMDB des séries."]})());
 function epInfo(it,s,e){const n=nextEp(it),p=spOf(it),done=isDone(it),seen=done||!!(p&&(s<n.s||(s===n.s&&e<n.e)));
  const cur=!done&&!!p&&s===n.s&&e===n.e,w=WEEK().find(z=>z.id===it.id&&z.s===s&&z.e===e),fut=!seen&&s===n.s&&e>availTo(it)?(w||{h:"bientôt"}):null;
- const M=MISSING()[it.id],miss=!!(M&&M.s===s&&M.e===e),gap=gapOf(it,s,e),k=hash(it.id+"#"+s+"-"+e),d=EPD(it,s,e);
+ const M=MISSING()[it.id],RE=!DEMO()&&window.SXDATA&&SXDATA.ep&&SXDATA.ep[it.id],miss=!!(M&&M.s===s&&M.e===e)||!!(RE&&!RE[s+"-"+e]),gap=gapOf(it,s,e),k=hash(it.id+"#"+s+"-"+e),d=EPD(it,s,e);
  const ahead=!seen&&!cur&&(s>n.s||e>n.e+1);
  return {s,e,t:EPT(it,s,e),d:d&&d.d?d.d:ED(it)+(DEMO()?(k%9)-4:0),seen,cur,pos:cur?n.pos:0,fut,nw:!!(w&&w.j<=0&&!w.seen&&!seen),miss,gap,syn:EPS_(it,s,e),hue:(k%50)-25,spo:SET().spo&&ahead}}
 const epSt=I=>I.miss?["ms","MANQUANT"]:I.fut?["fu","À VENIR"]:I.nw?["nw","NOUVEAU"]:I.cur?["cu",I.pos?"EN COURS":"À SUIVRE"]:I.seen?["vu","✓ VU"]:["",""];
 const seasonSeen=(it,s)=>Array.from({length:EPS(it)[s-1]},(_,i)=>epInfo(it,s,i+1)).every(I=>I.seen);
-const spNextEp=(it,s,e)=>e+1<=EPS(it)[s-1]?{s,e:e+1}:s+1<=NS(it)?{s:s+1,e:1}:null;
+const spNextEp=(it,s,e)=>{if(e+1<=EPS(it)[s-1])return {s,e:e+1};for(let t=s+1;t<=NS(it);t++)if(EPS(it)[t-1]>0)return {s:t,e:1};return null};
 function setSp(it,s,e,pos){const x=MX();x.done=x.done.filter(z=>z!==it.id);x.sp[it.id]={s,e,pos:pos||0,t:Date.now()};prSave()}
 
 /* ---------- goûts : genres des séries finies ou bien avancées ---------- */
@@ -276,8 +276,8 @@ function ficheHtml(it){const t=X.ft||"eps",n=nextEp(it),s=fSea(it),T=topEps(it,s
  let eps=Array.from({length:EPS(it)[s-1]},(_,i)=>epInfo(it,s,i+1));const all=eps.length;if(X.ess)eps=eps.filter(I=>(epR(it,I.s,I.e)||0)>=8.2||I.cur||T.includes(I.e));
  const ss=seasonSeen(it,s),dur=eps.reduce((a,I)=>a+I.d,0),rs=Array.from({length:all},(_,i)=>epR(it,s,i+1)).filter(r=>r!=null),avg=rs.length?(rs.reduce((a,b)=>a+b,0)/rs.length).toFixed(1).replace(".",","):null;
  const rec=s>1&&seasonSeen(it,s-1)&&!ss&&s===n.s&&(n.e<=2||jOf(it)>=7)?`<div class="sf2e g4rec" data-f data-fid="sf-srec" data-act="sxsrec:${it.id}:${s-1}" data-row="sfrec"><div class="sfi g4ri"><em>⏮</em></div><div class="sf2t"><b>Rappel de la saison ${s-1}</b><small>2 min · images et points clés</small><p>Pour te remettre dans l'histoire avant ${SE(s,1)}.</p></div></div>`:"";
- const head=`<div class="g4h"><div class="g4t"><b>Saison ${s}</b><span>${all} ép. · ${D(dur)} · ${it.y+s-1}${avg?` · ★ ${avg}`:""}</span></div><div class="g4b"><div class="hchip" data-f data-fid="sfh-trl" data-act="sxtrl:${it.id}:${s}" data-row="sfh">🎬 Bande-annonce</div><div class="hchip" data-f data-fid="sfh-sea" data-act="sxsea:${it.id}:${s}" data-row="sfh">${ss?"↺ Saison non vue":"✓ Saison vue"}</div>${avg?`<div class="hchip ${X.ess?"sel":""}" data-f data-fid="sfh-ess" data-act="sxess" data-row="sfh">★ L'essentiel${X.ess?` · ${eps.length}/${all}`:""}</div>`:""}</div></div>`;
- const srows=EPS(it).map((ne,i)=>{const s2=i+1,L=Array.from({length:ne},(_,j)=>epInfo(it,s2,j+1)),vu=L.filter(I=>I.seen).length;return `<div class="g3s g4s ${s2===s?"sel":""}" data-f data-fid="sfs-${s2}" data-fs="${s2}" data-act="sxfs:${s2}" data-row="sfs${s2}"><b>Saison ${s2}</b><div><div class="g3d">${L.map(I=>`<i class="${epSt(I)[0]} ${I.gap?"gp":""}"></i>`).join("")}</div>${spark(it,s2)}</div><small>${vu===ne?"✓":vu+"/"+ne}</small></div>`}).join("");
+ const head=`<div class="g4h"><div class="g4t"><b>Saison ${s}</b><span>${all} ép. · ${D(dur)} · ${(window.SXDATA&&SXDATA.sy&&SXDATA.sy[it.id]&&SXDATA.sy[it.id][s])||it.y+s-1}${avg?` · ★ ${avg}`:""}</span></div><div class="g4b"><div class="hchip" data-f data-fid="sfh-trl" data-act="sxtrl:${it.id}:${s}" data-row="sfh">🎬 Bande-annonce</div><div class="hchip" data-f data-fid="sfh-sea" data-act="sxsea:${it.id}:${s}" data-row="sfh">${ss?"↺ Saison non vue":"✓ Saison vue"}</div>${avg?`<div class="hchip ${X.ess?"sel":""}" data-f data-fid="sfh-ess" data-act="sxess" data-row="sfh">★ L'essentiel${X.ess?` · ${eps.length}/${all}`:""}</div>`:""}</div></div>`;
+ const srows=EPS(it).map((ne,i)=>{if(!ne)return "";const s2=i+1,L=Array.from({length:ne},(_,j)=>epInfo(it,s2,j+1)),vu=L.filter(I=>I.seen).length;return `<div class="g3s g4s ${s2===s?"sel":""}" data-f data-fid="sfs-${s2}" data-fs="${s2}" data-act="sxfs:${s2}" data-row="sfs${s2}"><b>Saison ${s2}</b><div><div class="g3d">${L.map(I=>`<i class="${epSt(I)[0]} ${I.gap?"gp":""}"></i>`).join("")}</div>${spark(it,s2)}</div><small>${vu===ne?"✓":vu+"/"+ne}</small></div>`}).join("");
  const left=`<div class="sf2a ga sy"><h1 class="${fxFont(it)} t2" style="font-size:${Math.round(titleSize(it)*.55)}px">${esc(it.t)}<span class="finfo" data-f data-fid="sf-info" data-act="sxinfo:${it.id}" data-row="sfi">ⓘ</span></h1><div class="meta">${fMeta(it)}</div>${fActs(it)}<div class="sf2p glass gprog">${fSum(it)}</div><div class="g3rows">${srows}</div>${fLeg()}</div>`;
  const body=t==="eps"?`<div class="sf2l sy">${head}${rec}${eps.map(I=>gRow(it,I,T,pt,du)).join("")||'<div class="empty0">Aucun épisode</div>'}</div>`:t==="cast"?fCast(it):t==="sim"?fSim(it):fDet(it);
  return `<div class="SF F2 G3 G4" id="sxf">${fxArt(it,"sf2bg")}<div class="sf2sh"></div>${left}
@@ -518,3 +518,21 @@ async function sxImportSeries(files,say){const out=[];for(const f of files){say(
  let list=[];try{list=(await idbGet("series"))||[]}catch(e){}list=list.concat(out).slice(-4);await idbSet("series",list);return out.reduce((a,d)=>a+Object.keys(d.m).length,0)}
 if(typeof REAL!=="undefined"&&REAL)idbGet("series").then(list=>{if(!list||!list.length)return;for(const d of list){Object.assign(SXD.m,d.m);Object.assign(SXD.names,d.names||{});Object.assign(SXD.nl,d.nl||{});if(d.top&&d.top.length)SXD.top=d.top}
  const n=sxApply();const st=$("#rst");if(st)st.textContent+=` · ${n} fiches séries TMDB`;if(inApp()&&!S.loading)render(F&&F.dataset.fid)}).catch(()=>{});
+/* ---------- épisodes du fournisseur (episodes.json, créé par la commande des données) ---------- */
+const SXE={s:{},n:0};
+function sxEpApply(){let n=0;const now=Date.now(),W=[];window.SXDATA=window.SXDATA||{};SXDATA.ep=SXDATA.ep||{};SXDATA.sy=SXDATA.sy||{};
+ for(const it of SERIES){const r=it._real;if(!r)continue;let best=null;
+  for(const s of r.s||[]){const d=SXE.s[s[1]];if(d&&(!best||Object.keys(d.e).length>Object.keys(best.e).length))best=d}
+  if(!best||!best.se||!best.se.length)continue;n++;it.se=best.se.slice();const M={},sy={},dl=[];let ad=[];
+  for(const k in best.e){const [t,d,o,rt,dt,a]=best.e[k];M[k]={t,d,o,r:rt||null};if(d)dl.push(d);const s=+k.split("-")[0];if(dt){const y=+dt.slice(0,4);if(y&&(!sy[s]||y<sy[s]))sy[s]=y}if(a)ad.push([a,k])}
+  SXDATA.ep[it.id]=M;SXDATA.sy[it.id]=sy;if(dl.length){dl.sort((a,b)=>a-b);it.ep=dl[dl.length>>1]}
+  /* cette semaine : épisodes arrivés chez le fournisseur ces 7 derniers jours (saison entière d'un coup → une seule ligne) */
+  ad=ad.filter(([a])=>now-a*1000<7*864e5).sort((p,q)=>q[0]-p[0]);if(!ad.length)continue;const byS={};
+  for(const [a,k] of ad){const [s,e]=k.split("-").map(Number);(byS[s]=byS[s]||[]).push([a,e])}
+  for(const s in byS){const L=byS[s],j=-Math.floor((now-L[0][0]*1000)/864e5);
+   if(L.length>=3&&L.length>=(it.se[s-1]||0))W.push({j,id:it.id,s:+s,full:1});else L.slice(0,3).forEach(([a,e])=>W.push({j:-Math.floor((now-a*1000)/864e5),id:it.id,s:+s,e}))}}
+ SXDATA.week=W.sort((p,q)=>q.j-p.j).slice(0,40);if(window.__sx&&__sx.X)__sx.X.cache={};SXE.n=n;return n}
+async function sxImportEps(files,say){let n=0;for(const f of files){say(`Lecture de ${f.name}…`);let d=null;try{d=JSON.parse((await f.text()).replace(/^﻿/,""))}catch(e){}
+  if(!d||typeof d!=="object"||!d.s)throw new Error(`${f.name} n'est pas un fichier d'épisodes prisme`);Object.assign(SXE.s,d.s);n+=Object.keys(d.s).length}
+ await idbSet("eps",SXE.s);return n}
+if(typeof REAL!=="undefined"&&REAL)idbGet("eps").then(d=>{if(!d)return;Object.assign(SXE.s,d);const n=sxEpApply();const st=$("#rst");if(st)st.textContent+=` · épisodes pour ${n} séries`;if(inApp()&&!S.loading)render(F&&F.dataset.fid)}).catch(()=>{});

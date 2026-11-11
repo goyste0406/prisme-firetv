@@ -8,7 +8,7 @@ use strict; use warnings; use utf8; use JSON::PP; use File::Temp qw(tempdir); us
 binmode(STDOUT, ":utf8");
 my ($dir) = @ARGV; my ($U, $N, $P) = @ENV{qw(PRISME_U PRISME_N PRISME_P)};
 die "Dossier manquant\n" unless $dir && -d $dir; die "Identifiants manquants\n" unless $U && defined $N && defined $P;
-my $MAXV = $ENV{PRISME_MAXV} || 4000; my $MAXS = $ENV{PRISME_MAXS} || 800;
+my $MAXV = $ENV{PRISME_MAXV} || 4000; my $MAXS = $ENV{PRISME_MAXS} || 1500;
 my $J = JSON::PP->new->utf8->canonical; my $tmp = tempdir(CLEANUP => 1);
 (my $host = $U) =~ s{^https?://}{}; $host =~ s/[^A-Za-z0-9]+/-/g;
 my $CACHE = "$ENV{HOME}/Library/Caches/prisme-flux/$host"; make_path("$CACHE/v", "$CACHE/s");
@@ -52,10 +52,26 @@ my @Sx = sort { ($b->{last_modified} || 0) <=> ($a->{last_modified} || 0) } grep
 my @sneed = grep { !-s "$CACHE/s/$_->{series_id}-" . ($_->{last_modified} || 0) . ".json" } @Sx;
 print "Fiches techniques des séries : ", scalar(@Sx), " séries (", scalar(@Sx) - scalar(@sneed), " déjà en cache)…\n";
 fetch_api([map { ["action=get_series_info&series_id=$_->{series_id}", "$CACHE/s/$_->{series_id}-" . ($_->{last_modified} || 0) . ".json"] } @sneed]);
-my (%SER, $ns); for my $x (@Sx) { my $d = eval { $J->decode(slurp("$CACHE/s/$x->{series_id}-" . ($x->{last_modified} || 0) . ".json")) } || {};
+# titre d'épisode utile : on retire le nom de la série et « S01E01 » ; il reste le vrai titre, ou rien
+sub eptitle { my ($t, $sn) = @_; $t = "" unless defined $t; $t =~ s/^.*?\bS\d{1,2}\s*[-.]?\s*E\d{1,3}\b\s*[-–:|.]*\s*//i; $t =~ s/^\s+|\s+$//g;
+  my $b = lc $sn; $b =~ s/[^a-z0-9]+//g; my $c = lc $t; $c =~ s/[^a-z0-9]+//g; return "" if $c eq "" || $c eq $b || $t =~ /^(episode|épisode|ep\.?)\s*\d+$/i; return substr($t, 0, 90) }
+sub mins { my ($i) = @_; return 0 unless ref $i eq "HASH"; my $s = $i->{duration_secs} || 0; if (!$s && ($i->{duration} // "") =~ /^(\d+):(\d\d):(\d\d)$/) { $s = $1 * 3600 + $2 * 60 + $3 } return int($s / 60 + .5) }
+my (%SER, %EPI, $ns, $ne); for my $x (@Sx) { my $d = eval { $J->decode(slurp("$CACHE/s/$x->{series_id}-" . ($x->{last_modified} || 0) . ".json")) } || {};
   my $eps = ref $d->{episodes} eq "HASH" ? $d->{episodes} : {}; my @all = map { ref $_ eq "ARRAY" ? @$_ : () } values %$eps; next unless @all;
+  # --- tous les épisodes : nombre par saison (saisons 1, 2, 3… ; les « spéciaux » de la saison 0 sont ignorés) et fiche courte de chacun ---
+  my (%cnt, %E); my $sname = "" . ($x->{name} // "");
+  for my $sk (keys %$eps) { next unless ref $eps->{$sk} eq "ARRAY"; for my $e (@{ $eps->{$sk} }) { next unless ref $e eq "HASH";
+      my $sn = ($e->{season} // $sk); $sn = $sk unless $sn =~ /^\d+$/; next unless $sn =~ /^\d+$/ && $sn > 0 && $sn < 100; my $en = $e->{episode_num} // 0; next unless $en =~ /^\d+$/ && $en > 0 && $en < 1000;
+      my $i = ref $e->{info} eq "HASH" ? $e->{info} : {}; my $ad = $i->{air_date} // $i->{releasedate} // $i->{release_date} // ""; $ad = $ad =~ /^(\d{4}-\d\d-\d\d)/ ? $1 : "";
+      my $pl = $i->{plot} // $i->{overview} // ""; $pl =~ s/^\s+|\s+$//g; $pl = substr($pl, 0, 300);
+      my $r = $i->{rating} // ""; $r = $r =~ /^\d+(\.\d+)?$/ && $r > 0 && $r <= 10 ? $r + 0 : 0;
+      $cnt{$sn} = $en if !$cnt{$sn} || $en > $cnt{$sn};
+      $E{"$sn-$en"} = [eptitle($e->{title}, $sname), mins($i), $pl, $r, $ad, ($e->{added} && $e->{added} =~ /^\d+$/ ? $e->{added} + 0 : 0), "" . ($e->{id} // ""), $e->{container_extension} // ""] } }
+  if (%cnt) { my @ss = sort { $a <=> $b } keys %cnt; $EPI{substr($sname, 0, 70)} = { se => [map { $cnt{$_} || 0 } 1 .. $ss[-1]], e => \%E }; $ne += scalar(keys %E) }
   my ($first) = grep { probe($_->{info}) } @all; next unless $first; my $p = probe($first->{info}); push @$p, $first->{container_extension} // "", scalar(@all);
   $SER{substr("" . ($x->{name} // ""), 0, 70)} = $p; $ns++ }
 
+open(my $eo, ">:raw", "$dir/episodes.json") or die "Impossible d'écrire $dir/episodes.json\n"; print $eo $J->encode({ v => 1, at => time, s => \%EPI }); close $eo;
+printf "✓ episodes.json : %d séries, %d épisodes, %.1f Mo\n", scalar(keys %EPI), $ne || 0, (-s "$dir/episodes.json") / 1048576;
 open(my $o, ">:raw", "$dir/flux.json") or die "Impossible d'écrire $dir/flux.json\n"; print $o $J->encode({ v => 1, at => time, vod => \%VOD, ser => \%SER }); close $o;
 printf "✓ flux.json : qualité connue pour %d flux de films et %d séries, sans ouvrir aucun flux.\n", $nv || 0, $ns || 0;
