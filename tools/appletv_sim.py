@@ -249,7 +249,15 @@ rd = lambda n: open(os.path.join(D, n), encoding="utf-8").read()
 R("const FILMS = [", rd("real_boot.js") + "const FILMS = [")
 R('FILMS.forEach(f=>f.type="f"); SERIES.forEach(s=>s.type="s");', rd("real_block1.js") + 'FILMS.forEach(f=>f.type="f"); SERIES.forEach(s=>s.type="s");')
 R("const CH={}; CHS.forEach(c=>CH[c.id]=c);", rd("real_block2.js") + "const CH={}; CHS.forEach(c=>CH[c.id]=c);")
-R("render();\n</script>", rd("live_a2c.js") + "\n" + rd("real_end.js") + "\n" + rd("live_home.js") + "\n" + rd("live_plus.js") + "\nrender();if(inApp())lPreload(()=>render());\n</script>")
+import json as _json, sys as _sys
+_sys.path.insert(0, D)
+from fx_css import build as _fxbuild
+_simcss = src[src.index("<style>"):src.index("</style>")]
+_fxcss, _fxren = _fxbuild(rd("film_ab1.css"), _simcss)
+R("</style>", _fxcss + "\n" + rd("film_ab1_global.css") + "</style>")
+_pl = rd("prisme-films.pl").replace("\\", "\\\\").replace("`", "\\`").replace("${", "\\${")
+RFCMD = "const RFCMD=`cat > /tmp/prisme-films.pl <<'PRISME_FIN'\n" + _pl + "PRISME_FIN\nperl /tmp/prisme-films.pl`;\n"
+R("render();\n</script>", RFCMD + "const FXR=" + _json.dumps(_fxren) + ";\n" + rd("live_a2c.js") + "\n" + rd("real_end.js") + "\n" + rd("live_home.js") + "\n" + rd("live_plus.js") + "\n" + rd("film_ab1.js") + "\nrender();if(inApp())lPreload(()=>render());\n</script>")
 R("<kbd>M</kbd> (ou maintenir le clic) ajouter/retirer des favoris", "<kbd>M</kbd> (ou maintenir le clic) favoris, ou options d'une chaîne dans la TV en direct")
 
 R('<div class="pkick">${it.type==="s"?"Série · "+esc(it.net):"Film · "+it.y}', '<div class="pkick">${it.rp?"Replay · "+esc(CH[it.rp.c].n)+" · diffusé "+lday(it.rp.s):it.type==="s"?"Série · "+esc(it.net):"Film · "+it.y}')

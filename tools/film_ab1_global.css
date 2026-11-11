@@ -1,0 +1,10 @@
+/* Fiche film AB1 v2 : éléments hors fiche (barre d'onglets, affiches, lecteur) */
+.whotab{display:flex!important;align-items:center;justify-content:center;gap:0}
+.whotab .pav{font-style:normal;display:inline-grid;place-items:center;width:30px;height:30px;border-radius:50%;background:var(--c);color:#fff;font-weight:800;font-size:13px;box-shadow:0 0 0 2px rgba(0,0,0,.35)}
+.whotab .pav+.pav{margin-left:-10px}
+.pst.pimg{background-size:cover!important;background-position:center!important}
+.pst.pimg::before,.pst.pimg::after{display:none!important}
+.fxcutm{position:absolute;top:-6px;bottom:-6px;width:4px;margin-left:-2px;border-radius:2px;background:#ffd36b;box-shadow:0 0 0 3px rgba(255,211,107,.3);z-index:2}
+.fx{--acc:#ffd36b}
+.pthumb[hidden]{display:none!important}
+.fx{--sans:"Outfit",system-ui,sans-serif}

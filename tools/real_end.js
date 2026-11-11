@@ -76,7 +76,7 @@ async function rImport(files,provName,status){
   st.chans=n}
  if(by.get_vod_streams){status("Lecture des films…");const L=await rReadJson(by.get_vod_streams);let n=0;
   const frOnly=!Object.keys(fc).length&&L.some(x=>RI.FR.test(x.name||""));for(const x of L){const ck=fc[String(x.category_id)];if(Object.keys(fc).length&&!ck)continue;if(frOnly&&!RI.FR.test(x.name||""))continue;if(RI.ADULT.test(x.name||""))continue;const t=RI.title(x.name),y=+x.year||RI.year(x.name),key=RI.strip(t)+"#"+(y||"");if(!t)continue;n++;
-   merge(R.films,"rf",key,()=>({t,y,c:[],r:+x.rating||0,a:+x.added||0}),it=>{if(ck&&!it.c.includes(ck))it.c.push(ck);it.a=Math.max(it.a,+x.added||0);if(!it.r&&+x.rating)it.r=+x.rating;if(it.s.length<6)it.s.push([pid,String(x.name).slice(0,70),RI.q(x.name),x.container_extension||"mkv"])})}
+   merge(R.films,"rf",key,()=>({t,y,c:[],r:+x.rating||0,a:+x.added||0}),it=>{if(ck&&!it.c.includes(ck))it.c.push(ck);it.a=Math.max(it.a,+x.added||0);if(!it.r&&+x.rating)it.r=+x.rating;if(!it.tm&&/^\d+$/.test(String(x.tmdb||x.tmdb_id||""))&&+(x.tmdb||x.tmdb_id))it.tm=+(x.tmdb||x.tmdb_id);if(it.s.length<6)it.s.push([pid,String(x.name).slice(0,70),RI.q(x.name),x.container_extension||"mkv",String(x.stream_id||"")])})}
   st.films=n}
  if(by.get_series){status("Lecture des séries…");const L=await rReadJson(by.get_series);let n=0;
   const frOnly=!Object.keys(sc).length&&L.some(x=>RI.FR.test(x.name||""));for(const x of L){const ck=sc[String(x.category_id)];if(Object.keys(sc).length&&!ck)continue;if(frOnly&&!RI.FR.test(x.name||""))continue;if(RI.ADULT.test(x.name||""))continue;const t=RI.title(x.name),y=RI.year(x.releaseDate||x.release_date||"")||RI.year(x.name),key=RI.strip(t);if(!t)continue;n++;
@@ -223,12 +223,16 @@ document.querySelector(".ldemo").insertAdjacentHTML("afterend",`<section class="
  <div class="rrow"><label for="rname">Nom du fournisseur</label><input id="rname" value="${REAL?"Fournisseur "+(REAL.pls.length+1):"Mon fournisseur"}" autocomplete="off"><label class="rbtn" for="rfiles">Choisir les fichiers…</label><input type="file" id="rfiles" multiple accept=".json,.xml,.gz,.txt,application/json,text/xml" hidden>${REAL?'<button type="button" id="rdemo">Revenir aux données de démo</button>':""}</div>
  <ol start="3"><li><b>Affiches et logos</b> (après les données) : dans Terminal, colle cette 2ᵉ commande. Elle te demande ta clé API TMDB (qui ne s'affiche pas), récupère les images des programmes depuis le guide public français (comme les applis TV), complète avec les affiches TMDB, récupère les logos des chaînes et crée <b>images.json</b> dans chaque dossier prisme-… Choisis ensuite les 8 fichiers du dossier (les 7 + images.json) avec le même bouton : ⌘A dans la fenêtre de choix les sélectionne tous.</li></ol>
  <div class="rcmd"><code id="ricmd">Script de récupération des affiches · ${RICMD.split("\n").length} lignes · utilise le bouton Copier</code><button type="button" id="ricopy">Copier</button></div>
+ <ol start="4"><li><b>Fiches films complètes</b> (résumé, casting, sagas, recommandations, plateformes de streaming, affiches) : colle cette 3ᵉ commande dans Terminal. Elle te redemande ta clé TMDB et crée <b>films.json</b> dans chaque dossier prisme-… La 1ʳᵉ fois, compte 5 à 15 minutes ; ensuite seuls les nouveaux films sont téléchargés. Choisis enfin films.json avec le même bouton (seul ou avec les autres fichiers).</li></ol>
+ <div class="rcmd"><code id="rfcmd">Script des fiches films · ${RFCMD.split("\n").length} lignes · utilise le bouton Copier</code><button type="button" id="rfcopy">Copier</button></div>
  <div class="rlog" id="rlog" role="status"></div>
 </section>`);
 $("#rcopy").addEventListener("click",()=>{const done=()=>{$("#rcopy").textContent="Copié";setTimeout(()=>$("#rcopy").textContent="Copier",1600)};
  if(navigator.clipboard&&navigator.clipboard.writeText)navigator.clipboard.writeText(RCMD).then(done,()=>{const r=document.createRange();r.selectNodeContents($("#rcmd"));const s=getSelection();s.removeAllRanges();s.addRange(r)});
  else{const r=document.createRange();r.selectNodeContents($("#rcmd"));const s=getSelection();s.removeAllRanges();s.addRange(r)}});
 $("#rname").addEventListener("keydown",e=>e.stopPropagation());
+$("#rfcopy").addEventListener("click",()=>{const b=$("#rfcopy");const done=()=>{b.textContent="Copié";setTimeout(()=>b.textContent="Copier",1600)};const fb=()=>{const t=document.createElement("textarea");t.value=RFCMD;t.style.cssText="position:fixed;left:-9999px";document.body.appendChild(t);t.select();try{document.execCommand("copy");done()}catch(e){b.textContent="Copie impossible"}t.remove()};
+ if(navigator.clipboard&&navigator.clipboard.writeText)navigator.clipboard.writeText(RFCMD).then(done,fb);else fb()});
 $("#ricopy").addEventListener("click",()=>{const b=$("#ricopy");const done=()=>{b.textContent="Copié";setTimeout(()=>b.textContent="Copier",1600)};const fb=()=>{const t=document.createElement("textarea");t.value=RICMD;t.style.cssText="position:fixed;left:-9999px";document.body.appendChild(t);t.select();try{document.execCommand("copy");done()}catch(e){b.textContent="Copie impossible"}t.remove()};
  if(navigator.clipboard&&navigator.clipboard.writeText)navigator.clipboard.writeText(RICMD).then(done,fb);else fb()});
 $("#rfiles").addEventListener("change",async e=>{const files=[...e.target.files];if(!files.length)return;const log=$("#rlog");const say=m=>{log.textContent=m};log.classList.remove("err");
@@ -258,12 +262,12 @@ if(REAL)idbGet("images").then(list=>{if(!list||!list.length)return;list.forEach(
 async function rImportImages(files,status){const out=[];for(const f of files){status(`Lecture de ${f.name}…`);let d=null;try{d=JSON.parse((await f.text()).replace(/^\uFEFF/,""))}catch(e){};if(!d||typeof d!=="object"||!d.progs)throw new Error(`${f.name} n'est pas un fichier d'images prisme`);out.push(d)}
  let list=[];try{list=(await idbGet("images"))||[]}catch(e){}list=list.concat(out).slice(-4);await idbSet("images",list);
  return out.reduce((a,d)=>[a[0]+Object.keys(d.progs).length,a[1]+(d.logos||[]).length],[0,0])}
-{const inp=$("#rfiles");inp.addEventListener("change",async e=>{const all=[...e.target.files];const im=all.filter(f=>/^images.*\.json$/i.test(f.name));if(!im.length)return;
- e.stopImmediatePropagation();const rest=all.filter(f=>!im.includes(f));const log=$("#rlog");const say=m=>{log.textContent=m};log.classList.remove("err");
+{const inp=$("#rfiles");inp.addEventListener("change",async e=>{const all=[...e.target.files];const im=all.filter(f=>/^images.*\.json$/i.test(f.name)),fj=all.filter(f=>/^films.*\.json$/i.test(f.name));if(!im.length&&!fj.length)return;
+ e.stopImmediatePropagation();const rest=all.filter(f=>!im.includes(f)&&!fj.includes(f));const log=$("#rlog");const say=m=>{log.textContent=m};log.classList.remove("err");
  try{if(rest.length){RWARN.length=0;const name=($("#rname").value||"Mon fournisseur").trim().slice(0,40);await rImport(rest,name,say);const R=JSON.parse(localStorage.getItem("prisme-real"));
    S.playlists=R.pls.map((p,i)=>({id:p.id,name:p.name,url:"Importé le "+new Date(p.at).toLocaleDateString("fr-FR"),user:"données réelles",pass:"",epg:true,on:true,seed:i+1,real:true}));S.adding=false;S.stack=[{t:"home"}];S.tab="live";save()}
-  const [np,nl]=await rImportImages(im,say);
-  if(!rest.length&&!REAL){say(`Images enregistrées (${np} affiches, ${nl} logos), mais le simulateur ne trouve pas tes données fournisseur dans ce navigateur : il affiche encore les données de démo. Sélectionne en une seule fois les 7 fichiers du dossier prisme-… ET images.json (8 fichiers), avec la touche ⌘ pour en choisir plusieurs.`);return}
-  say(`Images importées : ${np} affiches de programmes, ${nl} logos de chaînes. Redémarrage du simulateur…`);setTimeout(()=>location.reload(),1400)}
+  const [np,nl]=im.length?await rImportImages(im,say):[0,0];const nf=fj.length?await fxImportFilms(fj,say):0;
+  if(!rest.length&&!REAL){say(`Fichiers enregistrés (${np} affiches, ${nl} logos, ${nf} fiches films), mais le simulateur ne trouve pas tes données fournisseur dans ce navigateur : il affiche encore les données de démo. Sélectionne en une seule fois les 7 fichiers du dossier prisme-… ET images.json (8 fichiers), avec la touche ⌘ pour en choisir plusieurs.`);return}
+  say(`${im.length?`Images importées : ${np} affiches de programmes, ${nl} logos de chaînes. `:""}${fj.length?`Fiches films importées : ${nf} films TMDB. `:""}Redémarrage du simulateur…`);setTimeout(()=>location.reload(),1400)}
  catch(err){log.classList.add("err");say("Import impossible : "+err.message)}e.target.value=""},true)}
 if($("#rdemo"))$("#rdemo").addEventListener("click",()=>{idbSet("images",[]).catch(()=>{})},true);
