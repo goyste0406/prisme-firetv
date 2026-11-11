@@ -14,7 +14,10 @@ function hGuideRows(){const ids=[...new Set([...LS.hist,...lvis().filter(c=>isFa
   <div class="hgp now" data-f data-fid="gr${i}-now" data-row="gr${i}" data-act="lp:${c.id}" data-hov="lp:${c.id}" data-lp="${c.id}"><span class="lbd">DIRECT</span><b>${esc(e.cur.t)}</b><small>${fmt(e.cur.s)} – ${fmt(e.cur.e)} · reste ${dur(Math.max(1,Math.round(e.cur.e-nowMin())))}</small><div class="lpb"><i style="width:${e.pct}%"></i></div></div>
   ${nx.map((p,j)=>`<div class="hgp" data-f data-fid="gr${i}-n${j}" data-row="gr${i}" data-act="lrem:${c.id}:${p.s}" data-hov="lp:${c.id}:${p.s}" data-lp="${c.id}"><span class="lbd soon">${fmt(p.s)}</span><b>${esc(p.t)}</b><small>${esc(pgen(p))} · ${dur(Math.round(p.e-p.s))}</small></div>`).join("")}</div>`}).join("")}
 function homeMain(){
- const D=deckOrder(),N=lNow(),Sn=lSoon(null,60).slice(0,16),Pa=lPast().slice(0,16),T=hTonight();
+ /* un même programme n'apparaît qu'une fois sur l'accueil : Pour toi > Commence bientôt > Replay récent > Ce soir */
+ const D=deckOrder(),N=lNow(),FY=hForYou(),pk=(c,s)=>c.id+"@"+Math.round(s),seen=new Set(FY.map(x=>pk(x.c,epgAt(x.c).cur.s)));
+ const take=(L,n)=>{const o=L.filter(x=>x.p&&!seen.has(pk(x.c,x.p.s))).slice(0,n);o.forEach(x=>seen.add(pk(x.c,x.p.s)));return o};
+ const Sn=take(lSoon(null,60),16),Pa=take(lPast(),16),T=take(hTonight(),99);
  const first=(deckList(D[0]||"Sport")[0])||N[0];const hero=`<div class="lhero" id="lhero">${first?lheroHtml(first.c):""}</div>`;
  const soonC=Sn.map(x=>lcard(x.c,"hs",x.p)).join(""),pastC=Pa.map(x=>lrpCard(x.c,x.p,"hr")).join(""),tonC=T.map(x=>lcard(x.c,"ht",x.p)).join("");
  if(HV==="B")return `${hero}<div class="hscroll sy">
@@ -26,7 +29,7 @@ function homeMain(){
   <section data-anchor><div class="lh3">Pour toi, maintenant<small>selon ce que tu regardes vers ${Math.floor(nowMin()/60)} h</small></div><div class="lrow sx">${F.map(x=>hBig(x,"hf")).join("")}</div></section>
   <section data-anchor><div class="lh3">Tous les genres<small>${D.length} paquets</small></div><div class="lrow sx hdecks">${D.map(d=>hdeck(d,"hd",180)).join("")}</div></section>
   ${hrow("Commence bientôt","dans l'heure",soonC)}<div style="height:30px"></div></div>`}
- if(HV==="F"){const F=hForYou();return `<div class="lhero hsmall" id="lhero">${first?lheroHtml(first.c):""}</div><div class="hscroll sy">
+ if(HV==="F"){const F=FY;return `<div class="lhero hsmall" id="lhero">${first?lheroHtml(first.c):""}</div><div class="hscroll sy">
   <section data-anchor><div class="lh3">Pour toi, maintenant<small>selon ce que tu regardes vers ${Math.floor(nowMin()/60)} h</small></div><div class="lrow sx">${F.map(x=>hBig(x,"hf")).join("")}</div></section>
   <section data-anchor><div class="lh3">Explorer par univers<small>OK pour voir toutes les chaînes · maintenir pour les options</small></div><div class="lrow sx hdecks">${(ex=>D.map(d=>hdeck(d,"hd",190,ex)).join(""))(new Set(F.map(x=>x.c.id)))}</div></section>
   ${hrow("Commence bientôt","dans l'heure · OK pour un rappel",soonC)}${hrow("Replay récent","déjà diffusé · OK pour revoir",pastC)}${hrow("Ce soir","première partie de soirée",tonC)}<div style="height:30px"></div></div>`}
