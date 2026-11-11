@@ -77,7 +77,7 @@ function fhSlides(){const n=fhNow(),eve=n>=17*60&&n<=21*60+30,L=[];
    sub:`${seen.length?`Tu as vu ${seen.slice(0,2).map(f=>esc(fxShort(f))).join(" et ")}. `:""}Le prochain à voir : <b>${esc(nx.t)}</b>.`,
    btns:[[`${FXI.play}<span class="vpill">${esc(fxShort(nx))}<small>${fxD(nx.d)} · fin ${fmt(bInfo(nx).end)}</small></span>`,"fhplay:"+nx.id,nx.id],["Tous ses films","fhcoll:dir:"+hon.who]]})}
  const so=(TMD.soon&&TMD.soon.length?TMD.soon:REAL?[]:SOON_DEMO)[0];
- if(so){const al=(S.fhAlerts||[]).includes(so.t);L.push({k:"soon",tr:null,trt:so.t,tag:"🔔 BIENTÔT CHEZ TOI",bg:so.bd?`<div class="art img" style="background-image:url(${so.bd})"></div>`:`<div class="art" style="--a:${(so.c||["#5aa0c8"])[0]};--b:${(so.c||["","#06121a"])[1]}"><i></i><i></i><i></i></div>`,title:so.t,font:"f-bebas",
+ if(so){const al=(S.fhAlerts||[]).includes(so.t);L.push({k:"soon",tr:null,trt:so.t,ytl:so.ytl||"",tag:"🔔 BIENTÔT CHEZ TOI",bg:so.bd?`<div class="art img" style="background-image:url(${so.bd})"></div>`:`<div class="art" style="--a:${(so.c||["#5aa0c8"])[0]};--b:${(so.c||["","#06121a"])[1]}"><i></i><i></i><i></i></div>`,title:so.t,font:"f-bebas",
   meta:`<span>${so.y||""}</span>${so.va?`<span class="st">★ ${(+so.va).toFixed(1)}</span>`:""}<span class="ok2">au cinéma depuis le ${fhDate(so.cine)}</span>`,
   sub:`${esc((so.ov||"").slice(0,130))}${(so.ov||"").length>130?"…":""}<br><small>Pas encore chez ton fournisseur${so.vod?` · en streaming vers ${fhMonth(so.vod)}`:""}. prisme te prévient dès qu'il arrive.</small>`,
   btns:[[al?"✓ Alerte activée":"🔔 Préviens-moi","fhalert:"+encodeURIComponent(so.t)],["▶ Bande-annonce","fhtrl"]]})}
@@ -88,7 +88,7 @@ function fhHero(){const L=fhSlides();if(!L.length)return `<section class="hero h
  <div class="tx ${FH.hdir==="right"?"inr":FH.hdir==="left"?"inl":""}"><div class="htag">${s.tag}</div><h1 class="${s.font} t2" style="font-size:${s.big?62:Math.round(titleSize({t:s.title,f:""})*.8)}px">${esc(s.title)}</h1>
   <div class="meta">${s.meta}</div><p class="hsub">${s.sub}</p><div class="acts">${fhBtn(0,m[0],m[1],m[2]?`data-hid="${m[2]}"`:"")}</div>
   ${FH.alt.length?`<div class="hmore">OK maintenu : ${FH.alt.map(a=>esc(a[0].replace(/<[^>]+>/g,""))).join(" · ")}</div>`:""}</div>
- <div class="htrl glass">▶ BANDE-ANNONCE · ${esc(s.tr?s.tr.t:s.trt||s.title)}<span>${fhSet().fhVol==="coupe"?"🔇 son coupé":fhSet().fhVol==="faible"?"🔉 son faible":"🔊 son normal"} · une touche pour revenir</span></div><div class="hcd glass">Bande-annonce dans <b>3</b></div>
+ <div class="htrl glass">▶ BANDE-ANNONCE ${trlTag(s.tr?tmOf(s.tr).ytl:s.ytl)} · ${esc(s.tr?s.tr.t:s.trt||s.title)}<span>${fhSet().fhVol==="coupe"?"🔇 son coupé":fhSet().fhVol==="faible"?"🔉 son faible":"🔊 son normal"} · une touche pour revenir</span></div><div class="hcd glass">Bande-annonce dans <b>3</b></div>
  <div class="hnav l">‹</div><div class="hnav r">›</div><div class="dots">${L.map((x,j)=>`<i class="${j===i?"on":""}"></i>`).join("")}<i class="cnt">${i+1} / ${L.length}</i></div></section>`}
 
 /* ---------- Ce soir ? ---------- */
@@ -187,7 +187,7 @@ function fhAct(k,v,w){const pf=F&&F.dataset.fid;
  case "fhdice":{const R=h2Res();if(!R.length)return toast("Aucun film avec ces choix");const o=R[Math.floor(Math.random()*Math.min(6,R.length))];toast("🎲 "+o.c.t);setTimeout(()=>act("fxopen:"+o.c.id),500);return}
  case "fhtv":{const c=CH[v];if(!c)return;if(+w<=fhNow())return act("live:"+v);return toast(`⏰ Rappel programmé : ${c.n}, ${fmt(+w%1440)}`)}
  case "fhalert":{const t=decodeURIComponent(v);S.fhAlerts=S.fhAlerts||[];if(S.fhAlerts.includes(t))S.fhAlerts=S.fhAlerts.filter(x=>x!==t);else S.fhAlerts.push(t);render("fh-b0");return toast(S.fhAlerts.includes(t)?"🔔 Tu seras prévenu dès qu'il arrive chez ton fournisseur":"Alerte retirée")}
- case "fhtrl":return toast("▶ Bande-annonce lue depuis TMDB (YouTube) dans l'appli");
+ case "fhtrl":{const so=(TMD.soon||[])[0]||{};return toast(`▶ Bande-annonce ${trlTag(so.ytl)} · ${trlTxt(so.ytl).split(":")[0]}`)}
  case "fhduo":{const ids=Object.keys(PR.list);FXS.duo=FXS.duo?null:[PR.cur,ids.find(x=>x!==PR.cur)];FXS.cache={};FH.cache={};return render("fh-b0")}
  case "fhrand":{const M=MOMS[v],L=fhFilms().filter(f=>M.f(f));if(!L.length)return;const f=L[Math.floor(Math.random()*L.length)];toast("🎲 "+f.t);setTimeout(()=>act("fxopen:"+f.id),500);return}
  case "fhdemo":return toast(`Exemple : « ${decodeURIComponent(v)} » apparaîtra avec son logo quand films.json sera importé`);

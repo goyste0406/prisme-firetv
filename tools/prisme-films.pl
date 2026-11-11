@@ -89,14 +89,18 @@ for my $dir (@dirs) {
     my $age = ""; for my $r (@{ ($d->{release_dates} || {})->{results} || [] }) { next unless ($r->{iso_3166_1} // "") eq "FR"; for my $x (@{ $r->{release_dates} || [] }) { my $c = $x->{certification} // ""; if ($c ne "") { $age = $c; last } } }
     my $wp = (($d->{"watch/providers"} || {})->{results} || {})->{FR} || {}; my %W;
     for my $t (["f", "flatrate"], ["g", "free"], ["g", "ads"], ["r", "rent"], ["b", "buy"]) { push @{ $W{$t->[0]} }, map { $_->{provider_name} } @{ $wp->{$t->[1]} || [] } }
-    my ($yt) = map { $_->{key} } sort { (($b->{iso_639_1} // "") eq "fr" ? 1 : 0) <=> (($a->{iso_639_1} // "") eq "fr" ? 1 : 0) } grep { ($_->{site} // "") eq "YouTube" && ($_->{type} // "") =~ /Trailer|Teaser/ } @{ ($d->{videos} || {})->{results} || [] };
+    # bande-annonce : la version française d'abord (VF > VOSTFR > VO), une vraie bande-annonce plutôt qu'un teaser
+    my @vid = sort { $b->[0] <=> $a->[0] } map { my $v = $_; my $n = $v->{name} // ""; my $l = $v->{iso_639_1} // "";
+      [($l eq "fr" ? 100 : $l eq "en" ? 10 : 0) + ($n =~ /vostf?r?|sous-titr/i ? -45 : 0) + ($n =~ /\bvf\b|version fran|en fran/i ? 25 : 0) + (($v->{type} // "") eq "Trailer" ? 10 : 0) + ($v->{official} ? 4 : 0), $v] }
+      grep { ($_->{site} // "") eq "YouTube" && ($_->{type} // "") =~ /Trailer|Teaser/ } @{ ($d->{videos} || {})->{results} || [] };
+    my $yt = @vid ? $vid[0][1]{key} : undef; my $ytl = !@vid ? "" : ($vid[0][1]{iso_639_1} // "") ne "fr" ? "vo" : ($vid[0][1]{name} // "") =~ /vostf?r?|sous-titr/i ? "vost" : "vf";
     my $col = $d->{belongs_to_collection}; my $cid = $d->{imdb_id} // "";
     $M{$id} = { t => $d->{title}, ot => $d->{original_title}, y => (($d->{release_date} // "") =~ /^(\d{4})/ ? $1 + 0 : ($g->{y} || 0) + 0), d => ($d->{runtime} || 0) + 0,
       g => [map { $_->{name} } @{ $d->{genres} || [] }], ov => $d->{overview} // "", tg => $d->{tagline} // "", age => $age, va => ($d->{vote_average} || 0) + 0, vc => ($d->{vote_count} || 0) + 0,
       lang => $d->{original_language} // "", pays => join(", ", map { $_->{iso_3166_1} } @{ $d->{production_countries} || [] }),
       kw => [map { $_->{name} } @{ ($d->{keywords} || {})->{keywords} || [] }], dir => join(", ", @dir), w => $w // "", mu => $mu // "", ph => $ph // "",
       cast => \@cast, rec => [map { $_->{id} + 0 } @{ ($d->{recommendations} || {})->{results} || [] }], col => $col ? [$col->{id} + 0, $col->{name}] : undef,
-      wp => \%W, yt => $yt // "", imdb => $cid, a => ($g->{a} || 0) + 0,
+      wp => \%W, yt => $yt // "", ytl => $ytl, imdb => $cid, a => ($g->{a} || 0) + 0,
       co => [map { $_->{id} + 0 } grep { $_->{id} } @{ $d->{production_companies} || [] }] };
     for my $c (@{ $d->{production_companies} || [] }) { next unless $c->{id}; my $e = $CO{$c->{id}} //= { n => $c->{name}, lp => $c->{logo_path} // "", k => 0 }; $e->{k}++ }
     my $po = $d->{poster_path}; my $bd = $d->{backdrop_path};
@@ -125,11 +129,14 @@ for my $dir (@dirs) {
   my @soon; for my $p (@np) { my $r = eval { $J->decode(slurp($p->[1])) } || {}; for my $m (@{ $r->{results} || [] }) { next if $M{$m->{id}} || $m->{adult}; push @soon, $m unless grep { $_->{id} == $m->{id} } @soon } }
   @soon = (sort { ($b->{popularity} || 0) <=> ($a->{popularity} || 0) } @soon)[0 .. 7]; @soon = grep { defined } @soon;
   fetch_many([map { ["$TMDB/movie/$_->{id}/release_dates?x=1$akey", "$tmp/rd$_->{id}.json"] } @soon], @auth);
+  fetch_many([map { ["$TMDB/movie/$_->{id}/videos?language=fr-FR&include_video_language=fr,en,null$akey", "$tmp/vd$_->{id}.json"] } @soon], @auth);
   my @SOON; for my $m (@soon) { my $r = eval { $J->decode(slurp("$tmp/rd$m->{id}.json")) } || {}; my ($cine, $vod) = ("", "");
     for my $c (@{ $r->{results} || [] }) { next unless ($c->{iso_3166_1} // "") eq "FR"; for my $x (@{ $c->{release_dates} || [] }) { my $d = substr($x->{release_date} // "", 0, 10); $cine ||= $d if ($x->{type} // 0) == 3; $vod ||= $d if ($x->{type} // 0) == 4 } }
     $cine ||= $m->{release_date} // ""; my $bd = $m->{backdrop_path}; my $f = "$CACHE/i/sb$m->{id}";
     if ($bd && !-s $f) { fetch_many([["$IMGB/w780$bd", $f]]); jpeg($f, 720, 55) }
-    push @SOON, { id => $m->{id} + 0, t => $m->{title}, y => (($m->{release_date} // "") =~ /^(\d{4})/ ? $1 + 0 : 0), ov => $m->{overview} // "", cine => $cine, vod => $vod, va => ($m->{vote_average} || 0) + 0, bd => datauri($f) } }
+    my $vj = eval { $J->decode(slurp("$tmp/vd$m->{id}.json")) } || {};
+    my ($sv) = map { $_->[1] } sort { $b->[0] <=> $a->[0] } map { my $n = $_->{name} // ""; my $l = $_->{iso_639_1} // ""; [($l eq "fr" ? 100 : 0) + ($n =~ /vostf?r?|sous-titr/i ? -45 : 0) + (($_->{type} // "") eq "Trailer" ? 10 : 0), $_] } grep { ($_->{site} // "") eq "YouTube" && ($_->{type} // "") =~ /Trailer|Teaser/ } @{ $vj->{results} || [] };
+    push @SOON, { yt => $sv ? $sv->{key} : "", ytl => !$sv ? "" : ($sv->{iso_639_1} // "") ne "fr" ? "vo" : ($sv->{name} // "") =~ /vostf?r?|sous-titr/i ? "vost" : "vf", id => $m->{id} + 0, t => $m->{title}, y => (($m->{release_date} // "") =~ /^(\d{4})/ ? $1 + 0 : 0), ov => $m->{overview} // "", cine => $cine, vod => $vod, va => ($m->{vote_average} || 0) + 0, bd => datauri($f) } }
   my $out = { v => 2, at => $now, names => \%byName, sids => \%bySid, m => \%M, co => \%COUT, tr => \@tr, trp => $trp, pop => \%POP, soon => \@SOON };
   open(my $o, ">:raw", "$dir/films.json") or die "Impossible d'écrire $dir/films.json\n"; print $o $J->encode($out); close $o;
   my $np = grep { $_->{po} } values %M; my $nb = grep { $_->{bd} } values %M; my $ns = grep { @{ $_->{wp}{f} || [] } || @{ $_->{wp}{g} || [] } } values %M;
