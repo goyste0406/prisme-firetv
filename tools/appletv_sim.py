@@ -270,6 +270,8 @@ _fxcss, _fxren = _fxbuild(rd("film_ab1.css") + "\n" + rd("film_home.css") + "\n"
 R("</style>", _fxcss + "\n" + rd("film_ab1_global.css") + rd("film_home_global.css") + "</style>")
 _pl = rd("prisme-films.pl").replace("\\", "\\\\").replace("`", "\\`").replace("${", "\\${")
 RFCMD = "const RFCMD=`cat > /tmp/prisme-films.pl <<'PRISME_FIN'\n" + _pl + "PRISME_FIN\nperl /tmp/prisme-films.pl`;\n"
+_ps = rd("prisme-series.pl").replace("\\", "\\\\").replace("`", "\\`").replace("${", "\\${")
+RFCMD += "const RSCMD=`cat > /tmp/prisme-series.pl <<'PRISME_FIN'\n" + _ps + "PRISME_FIN\nperl /tmp/prisme-series.pl`;\n"
 _fx = rd("prisme-flux.pl")
 RXFLUX = "const RXFLUX=" + _json.dumps('export PRISME_U="$U" PRISME_N="$N" PRISME_P="$P"; cat > /tmp/prisme-flux.pl <<\'PRISME_FLUX\'\n' + _fx + 'PRISME_FLUX\nperl /tmp/prisme-flux.pl "$D"; unset PRISME_P; ') + ";\n"
 R("render();\n</script>", RFCMD + RXFLUX + "const FXR=" + _json.dumps(_fxren) + ";\n" + rd("live_a2c.js") + "\n" + rd("real_end.js") + "\n" + rd("live_home.js") + "\n" + rd("live_plus.js") + "\n" + rd("film_ab1.js") + "\n" + rd("film_home.js") + "\n" + rd("serie_home.js") + "\nrender();if(inApp())lPreload(()=>render());\n</script>")

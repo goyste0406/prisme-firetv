@@ -494,3 +494,20 @@ function bubArm2(el){bubOff2();const it=ALL[el.dataset.hid];if(!it||el.closest(f
  const i=h.indexOf("<section data-anchor><h3>Lecteur</h3>");return i<0?h+sec:h.slice(0,i)+sec+h.slice(i)}}
 window.__sx={X,MX,sUp,sRes,slides,WEEK,nextEp,epInfo,sxStart,verOf,pv:e=>{PV=e}};
 })();
+/* ---------- fiches séries TMDB (series.json : affiches, grandes images, résumé, casting, chaîne, top 10) ---------- */
+const SXD={m:{},names:{},top:[],n:0};
+function sxApply(){let n=0;const byK={};
+ for(const it of SERIES){const r=it._real;if(!r)continue;let k="";for(const s of r.s||[]){if(SXD.names[s[1]]){k=SXD.names[s[1]];break}}
+  const d=k&&SXD.m[k];if(!d)continue;n++;byK[k]=byK[k]||it.id;it.sxk=k;
+  if(d.po)it.po=d.po;if(d.bd)it.bd=d.bd;if(!/^t/.test(k))continue;
+  if(d.t)it.t=d.t;if(d.y)it.y=d.y;if(d.g&&d.g.length)it.g=d.g.slice(0,2);if(d.ov)it.s=d.ov;if(d.net)it.net=d.net;if(d.cr)it.dir=d.cr;if(d.ep)it.ep=d.ep;
+  if(d.va){it.imdb=+(+d.va).toFixed(1);it.tmdb=Math.round(d.va*10)}if(d.age)it.age=fxAge(d.age);if(d.yt){it.yt=d.yt;it.ytl=d.ytl||""}
+  if(d.cast&&d.cast.length)it.cast=d.cast.map(([nm,ch])=>{const aid="ra"+(hash(nm)>>>0).toString(36);A[aid]=nm;if(typeof CRED!=="undefined")(CRED[aid]=CRED[aid]||[]).some(x=>x[0]===it.id)||CRED[aid].push([it.id,ch||""]);return [aid,ch||""]})}
+ const top=(SXD.top||[]).map(k=>byK[k]).filter(Boolean);
+ if(top.length){window.SXDATA=window.SXDATA||{};SXDATA.top=top}
+ if(window.__sx&&__sx.X)__sx.X.cache={};SXD.n=n;return n}
+async function sxImportSeries(files,say){const out=[];for(const f of files){say(`Lecture de ${f.name}…`);let d=null;try{d=JSON.parse((await f.text()).replace(/^﻿/,""))}catch(e){}
+  if(!d||typeof d!=="object"||!d.m||!d.names)throw new Error(`${f.name} n'est pas un fichier de fiches séries prisme`);out.push(d)}
+ let list=[];try{list=(await idbGet("series"))||[]}catch(e){}list=list.concat(out).slice(-4);await idbSet("series",list);return out.reduce((a,d)=>a+Object.keys(d.m).length,0)}
+if(typeof REAL!=="undefined"&&REAL)idbGet("series").then(list=>{if(!list||!list.length)return;for(const d of list){Object.assign(SXD.m,d.m);Object.assign(SXD.names,d.names||{});if(d.top&&d.top.length)SXD.top=d.top}
+ const n=sxApply();const st=$("#rst");if(st)st.textContent+=` · ${n} fiches séries TMDB`;if(inApp()&&!S.loading)render(F&&F.dataset.fid)}).catch(()=>{});

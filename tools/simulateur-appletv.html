@@ -2673,8 +2673,142 @@ print "Terminé. Ajoute films.json dans le simulateur (bouton « Choisir les fic
 system("open", $dirs[0]) if -x "/usr/bin/open";
 PRISME_FIN
 perl /tmp/prisme-films.pl`;
+const RSCMD=`cat > /tmp/prisme-series.pl <<'PRISME_FIN'
+#!/usr/bin/perl
+# prisme : fiches séries enrichies avec TMDB (affiches, grandes images, résumé, casting, chaîne, note).
+# Si TMDB ne connaît pas une série, on prend l'affiche fournie par le fournisseur (champ « cover »).
+# Écrit series.json dans chaque dossier prisme-* du Bureau. Un cache évite de tout retélécharger.
+use strict; use warnings; use utf8; use JSON::PP; use MIME::Base64; use File::Temp qw(tempdir); use File::Path qw(make_path);
+binmode(STDOUT, ":utf8");
+my $TMDB = $ENV{PRISME_TMDB} || "https://api.themoviedb.org/3";
+my $IMGB = $ENV{PRISME_TMDB_IMG} || "https://image.tmdb.org/t/p";
+my $MAXS = $ENV{PRISME_MAXS} || 1500;   # séries traitées (les plus récentes d'abord, comme le simulateur)
+my $MAXB = $ENV{PRISME_MAXB} || 200;    # grandes images de fond (les plus récentes)
+my $TTL = 7 * 86400;
+my @dirs = grep { -d $_ } glob("$ENV{HOME}/Desktop/prisme-*");
+die "Aucun dossier prisme-... sur le Bureau. Lance d'abord la commande des données.\\n" unless @dirs;
+print "Clé API TMDB (elle ne s'affiche pas quand tu tapes) : ";
+system("stty", "-echo"); my $key = <STDIN>; system("stty", "echo"); print "\\n";
+$key = "" unless defined $key; $key =~ s/\\s+//g;
+die "Aucune clé saisie.\\n" unless length $key;
+my @auth = length($key) > 40 ? ("-H", "Authorization: Bearer $key") : ();
+my $akey = length($key) > 40 ? "" : "&api_key=$key";
+my $tmp = tempdir(CLEANUP => 1);
+my $CACHE = "$ENV{HOME}/Library/Caches/prisme-series"; make_path("$CACHE/d", "$CACHE/i");
+my $J = JSON::PP->new->utf8->canonical;
+my $hasSips = (-x "/usr/bin/sips") ? 1 : 0;
+
+sub slurp { my ($f) = @_; open(my $h, "<:raw", $f) or return ""; local $/; my $d = <$h>; close $h; return defined $d ? $d : "" }
+sub enc { my ($s) = @_; utf8::encode($s) if utf8::is_utf8($s); $s =~ s/([^A-Za-z0-9\\-_.~])/sprintf("%%%02X", ord $1)/ge; return $s }
+sub fetch_many { my ($list, @h) = @_; return unless @$list;
+  my $cfg = "$tmp/cfg" . int(rand(1e9)); open(my $c, ">:utf8", $cfg) or die; for my $u (@$list) { my ($url, $f) = @$u; $url =~ s/"/%22/g; print $c "url = \\"$url\\"\\noutput = \\"$f\\"\\n" } close $c;
+  system("curl", "-sSL", "--compressed", "--max-time", "25", "--retry", "2", "-A", "Mozilla/5.0", "--parallel", "--parallel-max", "12", @h, "-K", $cfg) }
+sub jpeg { my ($f, $w, $q) = @_; return unless -s $f && $hasSips; my $o = "$f.jpg";
+  system("/usr/bin/sips -s format jpeg -s formatOptions $q -Z $w '$f' --out '$o' >/dev/null 2>&1"); rename($o, $f) if -s $o }
+sub datauri { my ($f) = @_; return undef unless -s $f; my $d = slurp($f);
+  my $m = substr($d, 0, 2) eq "\\xff\\xd8" ? "image/jpeg" : substr($d, 0, 4) eq "\\x89PNG" ? "image/png" : substr($d, 0, 4) eq "RIFF" ? "image/webp" : undef;
+  return $m ? "data:$m;base64," . encode_base64($d, "") : undef }
+# même nettoyage des titres que le simulateur (RI.base / RI.title)
+sub base { my ($s) = @_; $s = "" unless defined $s;
+  $s =~ s/^\\s*([\\[(|]?\\s*(fr|fra|france|be|ch|ca|qc)\\s*[\\])|:\\-–]+\\s*)+//i;
+  $s =~ s/[ᴴᴰᶠᵁ⁴ᴷˢ]+/ /g;
+  $s =~ s/\\b(4k|uhd|fhd|full ?hd|hd|sd|hevc|h\\.?26[45]|x26[45]|1080p?|720p?|2160p?|hdr10?|dolby ?vision|50 ?fps|raw|backup|vip|multi|vostfr|vff|vf|truefrench|french)\\b/ /gi;
+  $s =~ s/[\\[\\]()|]+/ /g; $s =~ s/\\s*[-–:]\\s*$//; $s =~ s/^\\s*[-–:]\\s*//; $s =~ s/\\s{2,}/ /g; $s =~ s/^\\s+|\\s+$//g; return $s }
+my $TRAIL = qr/(?:^|[\\s\\-–:_.,|])(?:vost(?:-?fr)?|vostfr|vo|vf2?|vff|vfq|vfi|stfr|subfrench|truefrench|french|multi|eng|subs?|hdlight|hdr10\\+?|hdr|dv|dolby ?vision|imax|3d|remux|web(?:-?dl|rip)?|blu-?ray|bdrip|brrip|dvdrip|x26[45]|h\\.?26[45]|hevc|10 ?bits?|atmos|dts|ac3|aac|5\\.1|7\\.1|extended|uncut|remastered|director'?s ?cut|version longue|4k|uhd|fhd|hd|sd|1080[pi]?|720p?|2160p?|19[2-9]\\d|20[0-3]\\d)[\\s\\-–:_.,|]*$/i;
+sub title { my ($n) = @_; my $s = base($n); while (1) { my $t = $s; $t =~ s/$TRAIL//; $t =~ s/\\s*[-–:|,]\\s*$//; $t =~ s/^\\s+|\\s+$//g; last if length($t) < 2 || $t eq $s; $s = $t } return $s }
+sub year { my ($n) = @_; return ($n || "") =~ /\\b(19[2-9]\\d|20[0-3]\\d)\\b/ ? $1 : 0 }
+sub simp { my ($s) = @_; $s = lc($s // ""); $s =~ tr/àâäáãåçéèêëíìîïñóòôöõúùûüýÿœæ/aaaaaaceeeeiiiinooooouuuuyyoa/; $s =~ s/[^a-z0-9]+//g; return $s }
+my $ADULT = qr/adult|xxx|porn|\\+ ?18|18 ?\\+|for adults|erotic|\\bsex|\\bhot\\b/i;
+my $FR = qr/(^|[^a-z])(fr|fra|france|french|vf|vff|vostfr|truefrench)([^a-z]|$)/i;
+
+# --- vérifie la clé ---
+my $chk = "$tmp/chk.json"; fetch_many([["$TMDB/configuration?x=1$akey", $chk]], @auth);
+my $cj = eval { $J->decode(slurp($chk)) } || {};
+die "TMDB refuse cette clé (" . ($cj->{status_message} || "réponse illisible") . "). Vérifie-la sur themoviedb.org > Paramètres > API.\\n" if !$cj->{images};
+print "✓ Clé TMDB acceptée\\n";
+my $now = time;
+
+for my $dir (@dirs) {
+  print "== $dir\\n";
+  my $ss = eval { $J->decode(slurp("$dir/get_series.json")) }; $ss = [] unless ref $ss eq "ARRAY";
+  unless (@$ss) { print "Pas de séries dans ce dossier (get_series.json vide ou absent).\\n"; next }
+  # --- mêmes catégories que le simulateur : françaises si le fournisseur en a, jamais adultes ---
+  my $cs = eval { $J->decode(slurp("$dir/get_series_categories.json")) }; $cs = [] unless ref $cs eq "ARRAY";
+  my @call = grep { ref $_ eq "HASH" && ($_->{category_name} // "") !~ $ADULT } @$cs; my @cfr = grep { ($_->{category_name} // "") =~ $FR } @call;
+  my %okc = map { ("" . ($_->{category_id} // "")) => 1 } (@cfr ? @cfr : @call);
+  my $frOnly = !%okc && grep { ref $_ eq "HASH" && ($_->{name} // "") =~ $FR } @$ss;
+  my (%grp, @order);
+  for my $x (@$ss) { next unless ref $x eq "HASH"; my $nm = "" . ($x->{name} // ""); next if $nm eq "" || $nm =~ $ADULT;
+    next if %okc && !$okc{"" . ($x->{category_id} // "")}; next if $frOnly && $nm !~ $FR;
+    my $t = title($nm); next if length($t) < 2; my $k = simp($t); next if $k eq "";
+    my $tm = $x->{tmdb} // $x->{tmdb_id} // ""; $tm = "" unless $tm =~ /^\\d+$/ && $tm > 0;
+    my $g = $grp{$k} //= do { push @order, $k; +{ t => $t, y => year($x->{releaseDate} // $x->{release_date} // "") || year($nm), tm => $tm, a => 0, names => [], cover => "", bdp => "" } };
+    $g->{tm} = $tm if $g->{tm} eq "" && $tm ne ""; my $a = $x->{last_modified} // 0; $g->{a} = $a if $a =~ /^\\d+$/ && $a > $g->{a};
+    my $cv = $x->{cover} // ""; $g->{cover} ||= $cv if $cv =~ m{^https?://};
+    my $bp = ref $x->{backdrop_path} eq "ARRAY" ? ($x->{backdrop_path}[0] // "") : ""; $g->{bdp} ||= $bp if $bp =~ m{^https?://};
+    push @{ $g->{names} }, substr($nm, 0, 70) }
+  my @G = sort { $b->{a} <=> $a->{a} } map { $grp{$_} } @order; @G = @G[0 .. $MAXS - 1] if @G > $MAXS;
+  printf "%d séries distinctes chez ce fournisseur, %d traitées (les plus récentes)\\n", scalar(@order), scalar(@G);
+  # --- recherche TMDB pour celles sans identifiant ---
+  my @q = grep { $_->{tm} eq "" } @G; my $i = 0;
+  if (@q) { print "Recherche TMDB par titre : ", scalar(@q), " séries…\\n";
+    fetch_many([map { $i++; $_->{qf} = "$tmp/s$i.json"; ["$TMDB/search/tv?query=" . enc($_->{t}) . ($_->{y} ? "&first_air_date_year=$_->{y}" : "") . "&language=fr-FR&include_adult=false$akey", $_->{qf}] } @q], @auth);
+    # sans résultat avec l'année, on réessaie sans l'année
+    my @q2 = grep { my $r = eval { $J->decode(slurp($_->{qf})) } || {}; $_->{y} && !@{ $r->{results} || [] } } @q;
+    fetch_many([map { ["$TMDB/search/tv?query=" . enc($_->{t}) . "&language=fr-FR&include_adult=false$akey", $_->{qf}] } @q2], @auth) if @q2;
+    for my $g (@q) { my $r = eval { $J->decode(slurp($g->{qf})) } || {}; my $w = simp($g->{t});
+      for my $m (@{ $r->{results} || [] }) { my $ok = grep { simp($_) eq $w || (length($w) >= 5 && index(simp($_), $w) == 0) } grep { defined } ($m->{name}, $m->{original_name});
+        if ($ok) { $g->{tm} = "" . $m->{id}; last } }
+      $g->{tm} = "" . $r->{results}[0]{id} if $g->{tm} eq "" && $r->{results} && @{ $r->{results} } == 1 } }
+  my @ok = grep { $_->{tm} ne "" } @G;
+  printf "Séries reconnues sur TMDB : %d / %d\\n", scalar(@ok), scalar(@G);
+  # --- fiches détaillées (cache 7 jours) ---
+  my %need; for my $g (@ok) { my $f = "$CACHE/d/$g->{tm}.json"; $need{$g->{tm}} = $f unless -s $f && $now - (stat($f))[9] < $TTL }
+  my %uid = map { $_->{tm} => 1 } @ok; print "Fiches à télécharger : ", scalar(keys %need), " (", scalar(keys %uid) - scalar(keys %need), " déjà en cache)…\\n";
+  fetch_many([map { ["$TMDB/tv/$_?language=fr-FR&append_to_response=aggregate_credits,content_ratings,videos&include_video_language=fr,en,null$akey", $need{$_}] } keys %need], @auth);
+  my (%M, @imgs, %byName); my $rank = 0;
+  for my $g (@G) { $rank++; my $k; my $d = $g->{tm} ne "" ? eval { $J->decode(slurp("$CACHE/d/$g->{tm}.json")) } : undef;
+    if (ref $d eq "HASH" && $d->{id}) { $k = "t$d->{id}";
+      unless ($M{$k}) {
+        my @cast = map { [$_->{name}, ((($_->{roles} || [])->[0] || {})->{character} // "")] } grep { $_->{name} } @{ ($d->{aggregate_credits} || {})->{cast} || [] }; @cast = @cast[0 .. 7] if @cast > 8;
+        my $age = ""; for my $r (@{ ($d->{content_ratings} || {})->{results} || [] }) { if (($r->{iso_3166_1} // "") eq "FR") { $age = $r->{rating} // ""; last } }
+        my @vid = sort { $b->[0] <=> $a->[0] } map { my $v = $_; my $n = $v->{name} // ""; my $l = $v->{iso_639_1} // "";
+          [($l eq "fr" ? 100 : $l eq "en" ? 10 : 0) + ($n =~ /vostf?r?|sous-titr/i ? -45 : 0) + ($n =~ /\\bvf\\b|version fran|en fran/i ? 25 : 0) + (($v->{type} // "") eq "Trailer" ? 10 : 0) + ($v->{official} ? 4 : 0), $v] }
+          grep { ($_->{site} // "") eq "YouTube" && ($_->{type} // "") =~ /Trailer|Teaser/ } @{ ($d->{videos} || {})->{results} || [] };
+        my $rt = $d->{episode_run_time} || []; my $ep = @$rt ? $rt->[0] + 0 : 0;
+        $M{$k} = { t => $d->{name} // $g->{t}, ot => $d->{original_name} // "", y => (($d->{first_air_date} // "") =~ /^(\\d{4})/ ? $1 + 0 : ($g->{y} || 0) + 0),
+          g => [map { $_->{name} } @{ $d->{genres} || [] }], ov => $d->{overview} // "", age => $age, va => ($d->{vote_average} || 0) + 0, vc => ($d->{vote_count} || 0) + 0,
+          net => ((($d->{networks} || [])->[0] || {})->{name} // ""), cr => join(", ", map { $_->{name} } grep { $_->{name} } @{ $d->{created_by} || [] }),
+          ns => ($d->{number_of_seasons} || 0) + 0, ne => ($d->{number_of_episodes} || 0) + 0, st => $d->{status} // "", ep => $ep, cast => \\@cast,
+          yt => @vid ? $vid[0][1]{key} : "", ytl => !@vid ? "" : ($vid[0][1]{iso_639_1} // "") ne "fr" ? "vo" : ($vid[0][1]{name} // "") =~ /vostf?r?|sous-titr/i ? "vost" : "vf" };
+        my $po = $d->{poster_path}; my $bd = $d->{backdrop_path};
+        if ($po) { push @imgs, ["$IMGB/w185$po", "$CACHE/i/p$d->{id}", 220, 60, $k, "po"] } elsif ($g->{cover}) { push @imgs, [$g->{cover}, "$CACHE/i/c" . simp($g->{t}), 220, 60, $k, "po"] }
+        if ($bd && $rank <= $MAXB) { push @imgs, ["$IMGB/w780$bd", "$CACHE/i/b$d->{id}", 720, 55, $k, "bd"] } } }
+    elsif ($g->{cover}) { # inconnue de TMDB : l'affiche du fournisseur
+      $k = "c" . simp($g->{t}); $M{$k} //= { t => $g->{t}, y => ($g->{y} || 0) + 0 };
+      push @imgs, [$g->{cover}, "$CACHE/i/c" . simp($g->{t}), 220, 60, $k, "po"];
+      push @imgs, [$g->{bdp}, "$CACHE/i/cb" . simp($g->{t}), 720, 55, $k, "bd"] if $g->{bdp} && $rank <= $MAXB }
+    next unless $k; $byName{$_} = $k for @{ $g->{names} } }
+  # --- images (cache) ---
+  my @dl = grep { !-s $_->[1] } @imgs; my %dlu; @dl = grep { !$dlu{$_->[1]}++ } @dl;
+  print "Images à télécharger : ", scalar(@dl), " (", scalar(@imgs) - scalar(@dl), " en cache)…\\n";
+  fetch_many([map { [$_->[0], $_->[1]] } @dl]); jpeg($_->[1], $_->[2], $_->[3]) for @dl;
+  for my $im (@imgs) { my $u = datauri($im->[1]); $M{$im->[4]}{$im->[5]} = $u if $u }
+  # --- tendances en France cette semaine (séries chez ce fournisseur) ---
+  my @pp = map { ["$TMDB/trending/tv/week?language=fr-FR&page=$_$akey", "$tmp/tr$_.json"] } 1 .. 3; fetch_many(\\@pp, @auth);
+  my @top; for my $p (@pp) { my $r = eval { $J->decode(slurp($p->[1])) } || {}; for my $m (@{ $r->{results} || [] }) { my $k = "t$m->{id}"; push @top, $k if $M{$k} && !grep { $_ eq $k } @top } }
+  @top = @top[0 .. 9] if @top > 10;
+  my $out = { v => 1, at => $now, names => \\%byName, m => \\%M, top => \\@top };
+  open(my $o, ">:raw", "$dir/series.json") or die "Impossible d'écrire $dir/series.json\\n"; print $o $J->encode($out); close $o;
+  my $np = grep { $_->{po} } values %M; my $nb = grep { $_->{bd} } values %M; my $nt = grep { /^t/ } keys %M;
+  printf "✓ series.json : %d séries (%d fiches TMDB), %d affiches, %d grandes images, top 10 : %d séries, %.1f Mo\\n", scalar(keys %M), $nt, $np, $nb, scalar(@top), (-s "$dir/series.json") / 1048576;
+}
+print "Terminé. Ajoute series.json dans le simulateur (bouton « Choisir les fichiers… »).\\n";
+system("open", $dirs[0]) if -x "/usr/bin/open";
+PRISME_FIN
+perl /tmp/prisme-series.pl`;
 const RXFLUX="export PRISME_U=\"$U\" PRISME_N=\"$N\" PRISME_P=\"$P\"; cat > /tmp/prisme-flux.pl <<'PRISME_FLUX'\n#!/usr/bin/perl\n# prisme : qualit\u00e9 de chaque flux SANS l'ouvrir. On demande au serveur la fiche technique qu'il a d\u00e9j\u00e0\n# (player_api.php ?action=get_vod_info / get_series_info : vid\u00e9o, audio, d\u00e9bit, dur\u00e9e, conteneur).\n# Ce sont des requ\u00eates d'information, comme la liste des films : aucune lecture de flux, donc aucune\n# connexion de lecture utilis\u00e9e. Les requ\u00eates sont envoy\u00e9es doucement (4 \u00e0 la fois, avec des pauses)\n# et gard\u00e9es en cache : la fois suivante, seuls les nouveaux films sont demand\u00e9s.\nuse strict; use warnings; use utf8; use JSON::PP; use File::Temp qw(tempdir); use File::Path qw(make_path);\nbinmode(STDOUT, \":utf8\");\nmy ($dir) = @ARGV; my ($U, $N, $P) = @ENV{qw(PRISME_U PRISME_N PRISME_P)};\ndie \"Dossier manquant\\n\" unless $dir && -d $dir; die \"Identifiants manquants\\n\" unless $U && defined $N && defined $P;\nmy $MAXV = $ENV{PRISME_MAXV} || 4000; my $MAXS = $ENV{PRISME_MAXS} || 800;\nmy $J = JSON::PP->new->utf8->canonical; my $tmp = tempdir(CLEANUP => 1);\n(my $host = $U) =~ s{^https?://}{}; $host =~ s/[^A-Za-z0-9]+/-/g;\nmy $CACHE = \"$ENV{HOME}/Library/Caches/prisme-flux/$host\"; make_path(\"$CACHE/v\", \"$CACHE/s\");\nsub slurp { my ($f) = @_; open(my $h, \"<:raw\", $f) or return \"\"; local $/; my $d = <$h>; close $h; return defined $d ? $d : \"\" }\nsub enc { my ($s) = @_; utf8::encode($s) if utf8::is_utf8($s); $s =~ s/([^A-Za-z0-9\\-_.~])/sprintf(\"%%%02X\", ord $1)/ge; return $s }\nmy $auth = \"username=\" . enc($N) . \"&password=\" . enc($P);\n# 4 requ\u00eates \u00e0 la fois, 150 par vague, une pause entre les vagues : le serveur n'est jamais bouscul\u00e9\nsub fetch_api { my ($list) = @_; my $i = 0;\n  while ($i < @$list) { my @b = @$list[$i .. ($i + 149 < $#$list ? $i + 149 : $#$list)]; $i += 150;\n    my $cfg = \"$tmp/c\" . int(rand(1e9)); open(my $c, \">\", $cfg) or die; for (@b) { print $c \"url = \\\"$U/player_api.php?$auth&$_->[0]\\\"\\noutput = \\\"$_->[1]\\\"\\n\" } close $c;\n    system(\"curl\", \"-sSL\", \"--compressed\", \"--max-time\", \"20\", \"--retry\", \"1\", \"-A\", \"Mozilla/5.0\", \"--parallel\", \"--parallel-max\", \"4\", \"-K\", $cfg); unlink $cfg;\n    printf \"\\r  %d / %d\", ($i < @$list ? $i : scalar @$list), scalar @$list; sleep 1 if $i < @$list }\n  print \"\\n\" if @$list }\n# fiche technique ffprobe du serveur \u2192 r\u00e9sum\u00e9 compact\nsub probe { my ($inf) = @_; return undef unless ref $inf eq \"HASH\"; my $v = ref $inf->{video} eq \"HASH\" ? $inf->{video} : {}; my $a = ref $inf->{audio} eq \"HASH\" ? $inf->{audio} : {};\n  return undef unless $v->{codec_name} || $v->{height} || $a->{codec_name};\n  my $fr = $v->{avg_frame_rate} || $v->{r_frame_rate} || \"\"; my $fps = $fr =~ m{^(\\d+)/(\\d+)$} && $2 ? sprintf(\"%.3g\", $1 / $2) + 0 : 0;\n  my $tr = $v->{color_transfer} // \"\"; my $tag = lc($v->{codec_tag_string} // \"\") . \" \" . ($v->{profile} // \"\");\n  my $hdr = $tag =~ /dvh[e1]|dolby ?vision/i ? \"DV\" : $tr eq \"smpte2084\" ? \"HDR10\" : $tr eq \"arib-std-b67\" ? \"HLG\" : \"\";\n  my ($lang, $ttl) = (\"\", \"\"); for my $t ($a->{tags}, $v->{tags}) { next unless ref $t eq \"HASH\"; $lang ||= $t->{language} // $t->{LANGUAGE} // \"\"; $ttl ||= $t->{title} // $t->{handler_name} // \"\" }\n  # doublage : qu\u00e9b\u00e9cois (VFQ) ou de France (VFF) quand la piste le dit (langue fr-CA ou titre de piste)\n  $lang = \"frq\" if $lang =~ /^fr.?ca$/i || $ttl =~ /\\bvfq\\b|qu[\u00e9e]b|canad/i; $lang = \"frf\" if $lang !~ /^frq$/ && ($lang =~ /^fr.?fr$/i || $ttl =~ /\\bvff\\b|truefrench|france/i);\n  my $ap = $a->{profile} // \"\"; my $dur = $inf->{duration_secs} || 0;\n  return [($v->{width} || 0) + 0, ($v->{height} || 0) + 0, lc($v->{codec_name} // \"\"), $hdr, $fps, ($inf->{bitrate} || 0) + 0,\n          lc($a->{codec_name} // \"\"), ($a->{channels} || 0) + 0, lc($lang), $dur + 0, ($ap =~ /atmos|joc/i ? 1 : 0)] }\n\n# --- films : une fiche par flux (stream_id), en cache tant que le flux ne change pas ---\nmy $vs = eval { $J->decode(slurp(\"$dir/get_vod_streams.json\")) }; $vs = [] unless ref $vs eq \"ARRAY\";\nmy @V = sort { ($b->{added} || 0) <=> ($a->{added} || 0) } grep { ref $_ eq \"HASH\" && $_->{stream_id} && ($_->{name} // \"\") !~ /adult|xxx|porn|\\+ ?18|18 ?\\+|erotic/i } @$vs;\n@V = @V[0 .. $MAXV - 1] if @V > $MAXV;\nmy @need = grep { my $f = \"$CACHE/v/$_->{stream_id}-\" . ($_->{added} || 0) . \".json\"; !-s $f } @V;\nprint \"Fiches techniques des films : \", scalar(@V), \" flux (\", scalar(@V) - scalar(@need), \" d\u00e9j\u00e0 en cache)\u2026\\n\";\nfetch_api([map { [\"action=get_vod_info&vod_id=$_->{stream_id}\", \"$CACHE/v/$_->{stream_id}-\" . ($_->{added} || 0) . \".json\"] } @need]);\nmy (%VOD, $nv); for my $x (@V) { my $d = eval { $J->decode(slurp(\"$CACHE/v/$x->{stream_id}-\" . ($x->{added} || 0) . \".json\")) } || {};\n  my $p = probe($d->{info}); next unless $p; push @$p, $x->{container_extension} // \"\"; $VOD{$x->{stream_id}} = $p; $nv++ }\n\n# --- s\u00e9ries : la fiche du 1er \u00e9pisode de chaque s\u00e9rie (m\u00eame format), et le nombre d'\u00e9pisodes ---\nmy $ss = eval { $J->decode(slurp(\"$dir/get_series.json\")) }; $ss = [] unless ref $ss eq \"ARRAY\";\nmy @Sx = sort { ($b->{last_modified} || 0) <=> ($a->{last_modified} || 0) } grep { ref $_ eq \"HASH\" && $_->{series_id} && ($_->{name} // \"\") !~ /adult|xxx|porn/i } @$ss;\n@Sx = @Sx[0 .. $MAXS - 1] if @Sx > $MAXS;\nmy @sneed = grep { !-s \"$CACHE/s/$_->{series_id}-\" . ($_->{last_modified} || 0) . \".json\" } @Sx;\nprint \"Fiches techniques des s\u00e9ries : \", scalar(@Sx), \" s\u00e9ries (\", scalar(@Sx) - scalar(@sneed), \" d\u00e9j\u00e0 en cache)\u2026\\n\";\nfetch_api([map { [\"action=get_series_info&series_id=$_->{series_id}\", \"$CACHE/s/$_->{series_id}-\" . ($_->{last_modified} || 0) . \".json\"] } @sneed]);\nmy (%SER, $ns); for my $x (@Sx) { my $d = eval { $J->decode(slurp(\"$CACHE/s/$x->{series_id}-\" . ($x->{last_modified} || 0) . \".json\")) } || {};\n  my $eps = ref $d->{episodes} eq \"HASH\" ? $d->{episodes} : {}; my @all = map { ref $_ eq \"ARRAY\" ? @$_ : () } values %$eps; next unless @all;\n  my ($first) = grep { probe($_->{info}) } @all; next unless $first; my $p = probe($first->{info}); push @$p, $first->{container_extension} // \"\", scalar(@all);\n  $SER{substr(\"\" . ($x->{name} // \"\"), 0, 70)} = $p; $ns++ }\n\nopen(my $o, \">:raw\", \"$dir/flux.json\") or die \"Impossible d'\u00e9crire $dir/flux.json\\n\"; print $o $J->encode({ v => 1, at => time, vod => \\%VOD, ser => \\%SER }); close $o;\nprintf \"\u2713 flux.json : qualit\u00e9 connue pour %d flux de films et %d s\u00e9ries, sans ouvrir aucun flux.\\n\", $nv || 0, $ns || 0;\nPRISME_FLUX\nperl /tmp/prisme-flux.pl \"$D\"; unset PRISME_P; ";
-const FXR={"tx": "fx-tx", "ph": "fx-ph", "lab": "fx-lab", "round": "fx-round", "zap": "fx-zap", "dot": "fx-dot", "f-serif": "fx-f-serif", "lv": "fx-lv", "n": "fx-n", "grp": "fx-grp", "l1": "fx-l1", "syn": "fx-syn", "logo": "fx-logo", "d": "fx-d", "prow": "fx-prow", "meta": "fx-meta", "r": "fx-r", "k": "fx-k", "t": "fx-t", "chip": "fx-chip", "player": "fx-player", "w2": "fx-w2", "pst": "fx-pst", "sh": "fx-sh", "sub": "fx-sub", "pv": "fx-pv", "inp": "fx-inp", "av": "fx-av", "gsec": "fx-gsec", "kick": "fx-kick", "mfoot": "fx-mfoot", "l": "fx-l", "open": "fx-open", "brand": "fx-brand", "prev": "fx-prev", "st": "fx-st", "trk": "fx-trk", "sh2": "fx-sh2", "fg": "fx-fg", "tab": "fx-tab", "lbl": "fx-lbl", "rt": "fx-rt", "f-bebas": "fx-f-bebas", "tl": "fx-tl", "bg": "fx-bg", "hd": "fx-hd", "pc": "fx-pc", "ring": "fx-ring", "ic": "fx-ic", "ok": "fx-ok", "mbox": "fx-mbox", "row": "fx-row", "caret": "fx-caret", "ck": "fx-ck", "rk": "fx-rk", "more": "fx-more", "badge": "fx-badge", "opt": "fx-opt", "sw": "fx-sw", "tabs": "fx-tabs", "hint": "fx-hint", "siri": "fx-siri", "top": "fx-top", "f-black": "fx-f-black", "shade": "fx-shade", "hero": "fx-hero", "bar": "fx-bar", "tm": "fx-tm", "vol": "fx-vol", "chips": "fx-chips", "two": "fx-two", "btn": "fx-btn", "det": "fx-det", "f-sans": "fx-f-sans"};
+const FXR={"ph": "fx-ph", "ic": "fx-ic", "kick": "fx-kick", "pv": "fx-pv", "n": "fx-n", "lbl": "fx-lbl", "hd": "fx-hd", "fg": "fx-fg", "lab": "fx-lab", "round": "fx-round", "st": "fx-st", "r": "fx-r", "row": "fx-row", "prev": "fx-prev", "zap": "fx-zap", "shade": "fx-shade", "opt": "fx-opt", "badge": "fx-badge", "hint": "fx-hint", "siri": "fx-siri", "pc": "fx-pc", "tl": "fx-tl", "meta": "fx-meta", "hero": "fx-hero", "bg": "fx-bg", "w2": "fx-w2", "btn": "fx-btn", "open": "fx-open", "logo": "fx-logo", "syn": "fx-syn", "sw": "fx-sw", "brand": "fx-brand", "ring": "fx-ring", "tm": "fx-tm", "trk": "fx-trk", "pst": "fx-pst", "dot": "fx-dot", "tx": "fx-tx", "chip": "fx-chip", "vol": "fx-vol", "sh": "fx-sh", "f-bebas": "fx-f-bebas", "prow": "fx-prow", "av": "fx-av", "lv": "fx-lv", "sh2": "fx-sh2", "sub": "fx-sub", "k": "fx-k", "more": "fx-more", "mfoot": "fx-mfoot", "rt": "fx-rt", "ok": "fx-ok", "player": "fx-player", "top": "fx-top", "f-black": "fx-f-black", "gsec": "fx-gsec", "caret": "fx-caret", "tab": "fx-tab", "l": "fx-l", "inp": "fx-inp", "grp": "fx-grp", "d": "fx-d", "t": "fx-t", "chips": "fx-chips", "rk": "fx-rk", "det": "fx-det", "f-serif": "fx-f-serif", "l1": "fx-l1", "two": "fx-two", "mbox": "fx-mbox", "tabs": "fx-tabs", "bar": "fx-bar", "ck": "fx-ck", "f-sans": "fx-f-sans"};
 /* ===================== TV en direct : version A2C ===================== */
 const LGEN=["Cinéma","Séries","Sport","Info","Divertissement","Jeunesse","Découverte"];
 const LGC={"Cinéma":"#f59e0b","Séries":"#ec4899","Sport":"#22c55e","Info":"#3b82f6","Divertissement":"#a855f7","Jeunesse":"#facc15","Découverte":"#14b8a6","Reprendre":"#e5e7eb","Favoris":"#ff375f"};
@@ -3108,12 +3242,16 @@ document.querySelector(".ldemo").insertAdjacentHTML("afterend",`<section class="
  <div class="rcmd"><code id="ricmd">Script de récupération des affiches · ${RICMD.split("\n").length} lignes · utilise le bouton Copier</code><button type="button" id="ricopy">Copier</button></div>
  <ol start="4"><li><b>Fiches films complètes</b> (résumé, casting, sagas, recommandations, plateformes de streaming, affiches) : colle cette 3ᵉ commande dans Terminal. Elle te redemande ta clé TMDB et crée <b>films.json</b> dans chaque dossier prisme-… La 1ʳᵉ fois, compte 5 à 15 minutes ; ensuite seuls les nouveaux films sont téléchargés. Choisis enfin films.json avec le même bouton (seul ou avec les autres fichiers).</li></ol>
  <div class="rcmd"><code id="rfcmd">Script des fiches films · ${RFCMD.split("\n").length} lignes · utilise le bouton Copier</code><button type="button" id="rfcopy">Copier</button></div>
+ <ol start="5"><li><b>Fiches séries</b> (affiches, grandes images, résumé, casting, chaîne, note, top 10 de la semaine) : colle cette 4ᵉ commande dans Terminal. Elle te redemande ta clé TMDB et crée <b>series.json</b> dans chaque dossier prisme-… Quand TMDB ne connaît pas une série, elle prend l'affiche donnée par ton fournisseur. La 1ʳᵉ fois, compte 5 à 15 minutes. Choisis ensuite series.json avec le même bouton.</li></ol>
+ <div class="rcmd"><code id="rscmd">Script des fiches séries · ${RSCMD.split("\n").length} lignes · utilise le bouton Copier</code><button type="button" id="rscopy">Copier</button></div>
  <div class="rlog" id="rlog" role="status"></div>
 </section>`);
 $("#rcopy").addEventListener("click",()=>{const done=()=>{$("#rcopy").textContent="Copié";setTimeout(()=>$("#rcopy").textContent="Copier",1600)};
  if(navigator.clipboard&&navigator.clipboard.writeText)navigator.clipboard.writeText(RCMD).then(done,()=>{const r=document.createRange();r.selectNodeContents($("#rcmd"));const s=getSelection();s.removeAllRanges();s.addRange(r)});
  else{const r=document.createRange();r.selectNodeContents($("#rcmd"));const s=getSelection();s.removeAllRanges();s.addRange(r)}});
 $("#rname").addEventListener("keydown",e=>e.stopPropagation());
+$("#rscopy").addEventListener("click",()=>{const b=$("#rscopy");const done=()=>{b.textContent="Copié";setTimeout(()=>b.textContent="Copier",1600)};const fb=()=>{const t=document.createElement("textarea");t.value=RSCMD;t.style.cssText="position:fixed;left:-9999px";document.body.appendChild(t);t.select();try{document.execCommand("copy");done()}catch(e){b.textContent="Copie impossible"}t.remove()};
+ if(navigator.clipboard&&navigator.clipboard.writeText)navigator.clipboard.writeText(RSCMD).then(done,fb);else fb()});
 $("#rfcopy").addEventListener("click",()=>{const b=$("#rfcopy");const done=()=>{b.textContent="Copié";setTimeout(()=>b.textContent="Copier",1600)};const fb=()=>{const t=document.createElement("textarea");t.value=RFCMD;t.style.cssText="position:fixed;left:-9999px";document.body.appendChild(t);t.select();try{document.execCommand("copy");done()}catch(e){b.textContent="Copie impossible"}t.remove()};
  if(navigator.clipboard&&navigator.clipboard.writeText)navigator.clipboard.writeText(RFCMD).then(done,fb);else fb()});
 $("#ricopy").addEventListener("click",()=>{const b=$("#ricopy");const done=()=>{b.textContent="Copié";setTimeout(()=>b.textContent="Copier",1600)};const fb=()=>{const t=document.createElement("textarea");t.value=RICMD;t.style.cssText="position:fixed;left:-9999px";document.body.appendChild(t);t.select();try{document.execCommand("copy");done()}catch(e){b.textContent="Copie impossible"}t.remove()};
@@ -3145,15 +3283,15 @@ if(REAL)idbGet("images").then(list=>{if(!list||!list.length)return;list.forEach(
 async function rImportImages(files,status){const out=[];for(const f of files){status(`Lecture de ${f.name}…`);let d=null;try{d=JSON.parse((await f.text()).replace(/^\uFEFF/,""))}catch(e){};if(!d||typeof d!=="object"||!d.progs)throw new Error(`${f.name} n'est pas un fichier d'images prisme`);out.push(d)}
  let list=[];try{list=(await idbGet("images"))||[]}catch(e){}list=list.concat(out).slice(-4);await idbSet("images",list);
  return out.reduce((a,d)=>[a[0]+Object.keys(d.progs).length,a[1]+(d.logos||[]).length],[0,0])}
-{const inp=$("#rfiles");inp.addEventListener("change",async e=>{const all=[...e.target.files];const im=all.filter(f=>/^images.*\.json$/i.test(f.name)),fj=all.filter(f=>/^films.*\.json$/i.test(f.name)),fl=all.filter(f=>/^flux.*\.json$/i.test(f.name));if(!im.length&&!fj.length&&!fl.length)return;
- e.stopImmediatePropagation();const rest=all.filter(f=>!im.includes(f)&&!fj.includes(f)&&!fl.includes(f));const log=$("#rlog");const say=m=>{log.textContent=m};log.classList.remove("err");
+{const inp=$("#rfiles");inp.addEventListener("change",async e=>{const all=[...e.target.files];const im=all.filter(f=>/^images.*\.json$/i.test(f.name)),fj=all.filter(f=>/^films.*\.json$/i.test(f.name)),fl=all.filter(f=>/^flux.*\.json$/i.test(f.name)),sj=all.filter(f=>/^series.*\.json$/i.test(f.name));if(!im.length&&!fj.length&&!fl.length&&!sj.length)return;
+ e.stopImmediatePropagation();const rest=all.filter(f=>!im.includes(f)&&!fj.includes(f)&&!fl.includes(f)&&!sj.includes(f));const log=$("#rlog");const say=m=>{log.textContent=m};log.classList.remove("err");
  try{if(rest.length){RWARN.length=0;const name=($("#rname").value||"Mon fournisseur").trim().slice(0,40);await rImport(rest,name,say);const R=JSON.parse(localStorage.getItem("prisme-real"));
    S.playlists=R.pls.map((p,i)=>({id:p.id,name:p.name,url:"Importé le "+new Date(p.at).toLocaleDateString("fr-FR"),user:"données réelles",pass:"",epg:true,on:true,seed:i+1,real:true}));S.adding=false;S.stack=[{t:"home"}];S.tab="live";save()}
-  const [np,nl]=im.length?await rImportImages(im,say):[0,0];const nf=fj.length?await fxImportFilms(fj,say):0;const nx=fl.length?await fluxImport(fl,say):0;
-  if(!rest.length&&!REAL){say(`Fichiers enregistrés (${np} affiches, ${nl} logos, ${nf} fiches films), mais le simulateur ne trouve pas tes données fournisseur dans ce navigateur : il affiche encore les données de démo. Sélectionne en une seule fois les 7 fichiers du dossier prisme-… ET images.json (8 fichiers), avec la touche ⌘ pour en choisir plusieurs.`);return}
-  say(`${im.length?`Images importées : ${np} affiches de programmes, ${nl} logos de chaînes. `:""}${fj.length?`Fiches films importées : ${nf} films TMDB. `:""}Redémarrage du simulateur…`);setTimeout(()=>location.reload(),1400)}
+  const [np,nl]=im.length?await rImportImages(im,say):[0,0];const nf=fj.length?await fxImportFilms(fj,say):0;const nx=fl.length?await fluxImport(fl,say):0;const nsx=sj.length?await sxImportSeries(sj,say):0;
+  if(!rest.length&&!REAL){say(`Fichiers enregistrés (${np} affiches, ${nl} logos, ${nf} fiches films, ${nsx} fiches séries), mais le simulateur ne trouve pas tes données fournisseur dans ce navigateur : il affiche encore les données de démo. Sélectionne en une seule fois les 7 fichiers du dossier prisme-… ET images.json (8 fichiers), avec la touche ⌘ pour en choisir plusieurs.`);return}
+  say(`${im.length?`Images importées : ${np} affiches de programmes, ${nl} logos de chaînes. `:""}${fj.length?`Fiches films importées : ${nf} films TMDB. `:""}${sj.length?`Fiches séries importées : ${nsx} séries. `:""}Redémarrage du simulateur…`);setTimeout(()=>location.reload(),1400)}
  catch(err){log.classList.add("err");say("Import impossible : "+err.message)}e.target.value=""},true)}
-if($("#rdemo"))$("#rdemo").addEventListener("click",()=>{idbSet("images",[]).catch(()=>{})},true);
+if($("#rdemo"))$("#rdemo").addEventListener("click",()=>{idbSet("images",[]).catch(()=>{});idbSet("series",[]).catch(()=>{})},true);
 /* titres déjà importés : on les nettoie aussi (sans réimport) */
 if(typeof REAL!=="undefined"&&REAL){for(const f of FILMS)if(f._real&&!f.tmd)f.t=RI.title(f.t)}
 /* ---------- fiche technique des flux (flux.json) : connue avant d'ouvrir le flux ---------- */
@@ -4530,6 +4668,23 @@ function bubArm2(el){bubOff2();const it=ALL[el.dataset.hid];if(!it||el.closest(f
  const i=h.indexOf("<section data-anchor><h3>Lecteur</h3>");return i<0?h+sec:h.slice(0,i)+sec+h.slice(i)}}
 window.__sx={X,MX,sUp,sRes,slides,WEEK,nextEp,epInfo,sxStart,verOf,pv:e=>{PV=e}};
 })();
+/* ---------- fiches séries TMDB (series.json : affiches, grandes images, résumé, casting, chaîne, top 10) ---------- */
+const SXD={m:{},names:{},top:[],n:0};
+function sxApply(){let n=0;const byK={};
+ for(const it of SERIES){const r=it._real;if(!r)continue;let k="";for(const s of r.s||[]){if(SXD.names[s[1]]){k=SXD.names[s[1]];break}}
+  const d=k&&SXD.m[k];if(!d)continue;n++;byK[k]=byK[k]||it.id;it.sxk=k;
+  if(d.po)it.po=d.po;if(d.bd)it.bd=d.bd;if(!/^t/.test(k))continue;
+  if(d.t)it.t=d.t;if(d.y)it.y=d.y;if(d.g&&d.g.length)it.g=d.g.slice(0,2);if(d.ov)it.s=d.ov;if(d.net)it.net=d.net;if(d.cr)it.dir=d.cr;if(d.ep)it.ep=d.ep;
+  if(d.va){it.imdb=+(+d.va).toFixed(1);it.tmdb=Math.round(d.va*10)}if(d.age)it.age=fxAge(d.age);if(d.yt){it.yt=d.yt;it.ytl=d.ytl||""}
+  if(d.cast&&d.cast.length)it.cast=d.cast.map(([nm,ch])=>{const aid="ra"+(hash(nm)>>>0).toString(36);A[aid]=nm;if(typeof CRED!=="undefined")(CRED[aid]=CRED[aid]||[]).some(x=>x[0]===it.id)||CRED[aid].push([it.id,ch||""]);return [aid,ch||""]})}
+ const top=(SXD.top||[]).map(k=>byK[k]).filter(Boolean);
+ if(top.length){window.SXDATA=window.SXDATA||{};SXDATA.top=top}
+ if(window.__sx&&__sx.X)__sx.X.cache={};SXD.n=n;return n}
+async function sxImportSeries(files,say){const out=[];for(const f of files){say(`Lecture de ${f.name}…`);let d=null;try{d=JSON.parse((await f.text()).replace(/^﻿/,""))}catch(e){}
+  if(!d||typeof d!=="object"||!d.m||!d.names)throw new Error(`${f.name} n'est pas un fichier de fiches séries prisme`);out.push(d)}
+ let list=[];try{list=(await idbGet("series"))||[]}catch(e){}list=list.concat(out).slice(-4);await idbSet("series",list);return out.reduce((a,d)=>a+Object.keys(d.m).length,0)}
+if(typeof REAL!=="undefined"&&REAL)idbGet("series").then(list=>{if(!list||!list.length)return;for(const d of list){Object.assign(SXD.m,d.m);Object.assign(SXD.names,d.names||{});if(d.top&&d.top.length)SXD.top=d.top}
+ const n=sxApply();const st=$("#rst");if(st)st.textContent+=` · ${n} fiches séries TMDB`;if(inApp()&&!S.loading)render(F&&F.dataset.fid)}).catch(()=>{});
 
 render();if(inApp())lPreload(()=>render());
 </script>
