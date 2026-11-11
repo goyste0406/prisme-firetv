@@ -234,7 +234,12 @@ function fhHoriz(k){const ln=F.closest(fxQ("row")+",.hline,.acts");if(!ln||!ln.c
 function fhCarousel(k){const hb=F.closest(".acts");if(!hb||!hb.closest(fxQ("hero")))return false;const nd=view.querySelectorAll(".dots i:not(.cnt)").length;if(nd<2)return false;
  FH.h1i=((FH.h1i+(k==="right"?1:-1))%nd+nd)%nd;FH.hdir=k;FXS.ready=null;FH.prep=null;render("fh-b0");FH.hdir=null;return true}
 let FHT=0;function fhTick(){clearInterval(FHT);FHT=setInterval(()=>{if(!fhOn()||S.modal||FH.skel)return;if(F&&(F.closest(fxQ("hero"))||F.closest(".hline")))return;const sc=$("#hscr");if(!sc||sc.scrollTop>200)return;if(view.querySelector(".hpeek"))return;FH.h1i++;render(F&&F.dataset.fid)},8000)}
-{const _k=key;key=function(k){bubOff();const pk=view.querySelector(".hpeek");if(pk){hPeekOff();if(F)hPeekArm(F);return}
+/* grilles (Tout voir, genres) : ▲ ▼ restent dans la même colonne, ▲ depuis la 1re ligne remonte aux tris */
+function gridNav(k){const g=F&&F.closest("#ggrid");if(!g||S.modal||!["up","down","left","right"].includes(k))return false;const r=+(F.dataset.row||"g0").slice(1),row=n=>[...g.querySelectorAll(`[data-row="g${n}"]`)],cur=row(r),i=cur.indexOf(F);
+ if(k==="left"||k==="right"){const j=i+(k==="right"?1:-1);if(cur[j])setFocus(cur[j]);else if(k==="right"&&row(r+1)[0])setFocus(row(r+1)[0]);else if(k==="left"&&r>0){const p=row(r-1);setFocus(p[p.length-1])}return true}
+ const t=row(r+(k==="down"?1:-1));if(t.length){setFocus(t[Math.min(i,t.length-1)]);return true}
+ if(k==="up"){const c=view.querySelector(".chips .sel[data-f]")||view.querySelector(".chips [data-f]");if(c){setFocus(c);g.scrollTo({top:0,behavior:"smooth"})}}return true}
+{const _k=key;key=function(k){bubOff();if(gridNav(k))return;const pk=view.querySelector(".hpeek");if(pk){hPeekOff();if(F)hPeekArm(F);return}
  if(fhOn()&&!S.modal&&F){
   if(k==="menu"){if(F.closest(fxQ("hero"))&&FH.alt.length){S.modal={type:"fxhopt",ret:F.dataset.fid};return render("ho-0")}const s=F.closest("[data-rk]");if(s){S.modal={type:"fxhctx",id:F.dataset.hid||null,rk:s.dataset.rk,ret:F.dataset.fid};return render()}}
   if(k==="play"&&F.dataset.hid)return fhAct("fhplay",F.dataset.hid);
