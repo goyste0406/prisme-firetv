@@ -127,7 +127,7 @@ function streams(f){const t=tmOf(f),out=[];if(t.wp){for(const [k,ty] of [["f","a
 const TYP={abo:"Inclus dans l'abonnement",gratuit:"Gratuit",loc:"Location",achat:"Achat"};
 const svIni=n=>n.replace(/[^A-Za-z0-9+ .]/g,"").split(/[ .]/).filter(Boolean).map(w=>w[0]).join("").slice(0,2).toUpperCase();
 const svTile=(x,cls="")=>`<i class="svt ${cls}" style="--h:${hash(x.n)%360}">${esc(svIni(x.n))}</i>`;
-function fxQual(f){const v=pickSrc(f.id);if(!v)return "";return [v.q==="4K"?"4K HDR":v.q,(v.audio||[])[0]&&/atmos/i.test(v.audio[0])?"Atmos":(v.audio||[])[0]&&/5\.1/.test(v.audio[0])?"5.1":""].filter(Boolean).join(" · ")}
+function fxQual(f){const v=pickSrc(f.id);if(!v)return "";return [v.fx?(v.q==="4K"?"4K"+(v.hdr?" "+(v.hdr==="DV"?"Dolby Vision":v.hdr):""):v.q+(v.hdr?" "+v.hdr:"")):v.q==="4K"?"4K HDR":v.q,(v.audio||[])[0]&&/atmos/i.test(v.audio[0])?"Atmos":(v.audio||[])[0]&&/5\.1/.test(v.audio[0])?"5.1":""].filter(Boolean).join(" · ")}
 
 /* ---------- fiche ---------- */
 const fxArt=(f,cls="")=>f.bd?`<div class="art img ${cls}" style="background-image:url(${f.bd})"></div>`:f.po?`<div class="art img blur ${cls}" style="background-image:url(${f.po})"></div>`:`<div class="art ${cls}" style="--a:${f.c[0]};--b:${f.c[1]}"><i></i><i></i><i></i></div>`;

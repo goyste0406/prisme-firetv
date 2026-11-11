@@ -1,3 +1,4 @@
+const FLUX={vod:{},ser:{},at:0};
 /* ===================== Données réelles du fournisseur ===================== */
 const RCODEC={"4K":"HEVC · 3840×2160","1080p":"H.264 · 1920×1080","720p":"H.264 · 1280×720","SD":"H.264 · 720×576"};
 if(REAL){
@@ -8,7 +9,8 @@ if(REAL){
  base=function(pl,key){const r=itemOf(key);return r?plsOf(r).has(pl.id):false};
  variants=function(pl,key){const r=itemOf(key);if(!r)return [];const L=r.s.filter(x=>x[0]===pl.id);
   if(key.startsWith("ch:"))return L.map((x,i)=>({id:pl.id+"|"+i,i,p:pl,q:x[2],name:x[1],codec:RCODEC[x[2]],audio:["Français"],subs:["Télétexte si diffusé"],ext:"ts",ar:x[3]||0}));
-  return L.map((x,i)=>{const tag=/vostfr/i.test(x[1])?"VOSTFR":/multi/i.test(x[1])?"MULTI":"VF";return {id:pl.id+"|"+i,i,p:pl,q:x[2],tag,name:x[1],codec:RCODEC[x[2]],audio:tag==="VOSTFR"?["Anglais (VO)"]:tag==="MULTI"?["Français (VF)","Anglais (VO)"]:["Français (VF)"],subs:tag==="VOSTFR"?["Français"]:["Aucun"],size:"—",ext:x[3]||"mkv"}})};
+  return L.map((x,i)=>{const tag=/vostf?r?\b/i.test(x[1])?"VOSTFR":/multi/i.test(x[1])?"MULTI":"VF";const v={id:pl.id+"|"+i,i,p:pl,q:x[2],tag,name:x[1],codec:RCODEC[x[2]],audio:tag==="VOSTFR"?["Anglais (VO)"]:tag==="MULTI"?["Français (VF)","Anglais (VO)"]:["Français (VF)"],subs:tag==="VOSTFR"?["Français"]:["Aucun"],size:"—",ext:x[3]||"mkv"};
+   const fx=(ALL[key]||{}).type==="s"?FLUX.ser[x[1]]:FLUX.vod[x[4]];return fx?fluxApply(v,fx,tag):v})};
  addDays=function(pl,it){const a=it._real&&it._real.a;return a?Math.max(0,Math.floor((Date.now()/1000-a)/86400)):400};
  const M0=new Date().setHours(0,0,0,0)/60000;
  const TPLG={sport:"Sport",info:"Information",cine:"Film",kids:"Dessin animé",doc:"Documentaire",series:"Divertissement"};
@@ -215,11 +217,11 @@ system("open", $dirs[0]) if -x "/usr/bin/open";
 PRISME_FIN
 perl /tmp/prisme-images.pl`;
 /* ---------- panneau sous la télécommande ---------- */
-const RCMD=`c(){ curl -sSLG --compressed -A "Mozilla/5.0" "$@"; }; printf "Nom de ce fournisseur (ex. IPTV1) : "; read -r F; printf "Adresse du serveur (ex. http://monserveur.com:8080) : "; read -r U; printf "Nom d'utilisateur : "; read -r N; printf "Mot de passe : "; read -rs P; echo; case "$U" in http*) ;; *) U="http://$U";; esac; U="\${U%%/get.php*}"; U="\${U%%/player_api.php*}"; U="\${U%/}"; R=$(c "$U/player_api.php" --data-urlencode "username=$N" --data-urlencode "password=$P"); case "$R" in *'"auth":1'*|*'"auth": 1'*|*'"auth":"1"'*) echo "✓ Connexion acceptée";; *) echo "⚠ Le serveur refuse la connexion ou répond autre chose. Début de la réponse :"; echo "\${R:0:200}";; esac; D=~/Desktop/prisme-"\${F// /-}"; mkdir -p "$D" && cd "$D" && for a in get_live_categories get_live_streams get_vod_categories get_vod_streams get_series_categories get_series; do c "$U/player_api.php" --data-urlencode "username=$N" --data-urlencode "password=$P" --data-urlencode "action=$a" -o "$a.json"; echo "✓ $a : $(wc -c < "$a.json" | tr -d ' ') octets, début : $(head -c 60 "$a.json")"; done; c "$U/xmltv.php" --data-urlencode "username=$N" --data-urlencode "password=$P" -o xmltv.xml; echo "✓ guide : $(wc -c < xmltv.xml | tr -d ' ') octets"; unset P R; open "$D"`;
+const RCMD=`c(){ curl -sSLG --compressed -A "Mozilla/5.0" "$@"; }; printf "Nom de ce fournisseur (ex. IPTV1) : "; read -r F; printf "Adresse du serveur (ex. http://monserveur.com:8080) : "; read -r U; printf "Nom d'utilisateur : "; read -r N; printf "Mot de passe : "; read -rs P; echo; case "$U" in http*) ;; *) U="http://$U";; esac; U="\${U%%/get.php*}"; U="\${U%%/player_api.php*}"; U="\${U%/}"; R=$(c "$U/player_api.php" --data-urlencode "username=$N" --data-urlencode "password=$P"); case "$R" in *'"auth":1'*|*'"auth": 1'*|*'"auth":"1"'*) echo "✓ Connexion acceptée";; *) echo "⚠ Le serveur refuse la connexion ou répond autre chose. Début de la réponse :"; echo "\${R:0:200}";; esac; D=~/Desktop/prisme-"\${F// /-}"; mkdir -p "$D" && cd "$D" && for a in get_live_categories get_live_streams get_vod_categories get_vod_streams get_series_categories get_series; do c "$U/player_api.php" --data-urlencode "username=$N" --data-urlencode "password=$P" --data-urlencode "action=$a" -o "$a.json"; echo "✓ $a : $(wc -c < "$a.json" | tr -d ' ') octets, début : $(head -c 60 "$a.json")"; done; c "$U/xmltv.php" --data-urlencode "username=$N" --data-urlencode "password=$P" -o xmltv.xml; echo "✓ guide : $(wc -c < xmltv.xml | tr -d ' ') octets"; ${typeof RXFLUX!=="undefined"?RXFLUX:""}unset P R; open "$D"`;
 document.querySelector(".ldemo").insertAdjacentHTML("afterend",`<section class="rimp">
  <h2>Mes données fournisseur <span class="rst" id="rst">${REAL?`Données réelles : ${REAL.pls.map(p=>esc(p.name)).join(" + ")} · ${REAL.chans.length} chaînes · ${REAL.films.length} films · ${REAL.series.length} séries`:"Données de démonstration"}</span></h2>
  <p>Tes chaînes, films, séries et ton guide des programmes, sans aucune lecture vidéo. Tes identifiants restent sur ton Mac : seules les listes sont lues ici, et elles restent dans ce navigateur.</p>
- <ol><li>Sur ton Mac, ouvre <b>Terminal</b>, colle cette commande et appuie sur Entrée. Elle te demande le nom du fournisseur, l'adresse du serveur, l'utilisateur et le mot de passe (qui ne s'affiche pas quand tu tapes), puis crée un dossier sur ton Bureau et l'ouvre.</li></ol>
+ <ol><li>Sur ton Mac, ouvre <b>Terminal</b>, colle cette commande et appuie sur Entrée. Elle te demande le nom du fournisseur, l'adresse du serveur, l'utilisateur et le mot de passe (qui ne s'affiche pas quand tu tapes), puis crée un dossier sur ton Bureau et l'ouvre. Elle demande aussi au serveur la <b>fiche technique de chaque flux</b> (qualité, HDR, codec, son, débit, taille) sans ouvrir aucun flux, et l'écrit dans <b>flux.json</b> : la 1ʳᵉ fois, compte quelques minutes, ensuite seuls les nouveaux films sont demandés.</li></ol>
  <div class="rcmd"><code id="rcmd">${esc(RCMD)}</code><button type="button" id="rcopy">Copier</button></div>
  <ol start="2"><li>Choisis ici <b>tous les fichiers</b> de ce dossier (7 fichiers). Pour un 2ᵉ fournisseur, refais les deux étapes : les catalogues sont fusionnés.</li></ol>
  <div class="rrow"><label for="rname">Nom du fournisseur</label><input id="rname" value="${REAL?"Fournisseur "+(REAL.pls.length+1):"Mon fournisseur"}" autocomplete="off"><label class="rbtn" for="rfiles">Choisir les fichiers…</label><input type="file" id="rfiles" multiple accept=".json,.xml,.gz,.txt,application/json,text/xml" hidden>${REAL?'<button type="button" id="rdemo">Revenir aux données de démo</button>':""}</div>
@@ -264,14 +266,30 @@ if(REAL)idbGet("images").then(list=>{if(!list||!list.length)return;list.forEach(
 async function rImportImages(files,status){const out=[];for(const f of files){status(`Lecture de ${f.name}…`);let d=null;try{d=JSON.parse((await f.text()).replace(/^\uFEFF/,""))}catch(e){};if(!d||typeof d!=="object"||!d.progs)throw new Error(`${f.name} n'est pas un fichier d'images prisme`);out.push(d)}
  let list=[];try{list=(await idbGet("images"))||[]}catch(e){}list=list.concat(out).slice(-4);await idbSet("images",list);
  return out.reduce((a,d)=>[a[0]+Object.keys(d.progs).length,a[1]+(d.logos||[]).length],[0,0])}
-{const inp=$("#rfiles");inp.addEventListener("change",async e=>{const all=[...e.target.files];const im=all.filter(f=>/^images.*\.json$/i.test(f.name)),fj=all.filter(f=>/^films.*\.json$/i.test(f.name));if(!im.length&&!fj.length)return;
- e.stopImmediatePropagation();const rest=all.filter(f=>!im.includes(f)&&!fj.includes(f));const log=$("#rlog");const say=m=>{log.textContent=m};log.classList.remove("err");
+{const inp=$("#rfiles");inp.addEventListener("change",async e=>{const all=[...e.target.files];const im=all.filter(f=>/^images.*\.json$/i.test(f.name)),fj=all.filter(f=>/^films.*\.json$/i.test(f.name)),fl=all.filter(f=>/^flux.*\.json$/i.test(f.name));if(!im.length&&!fj.length&&!fl.length)return;
+ e.stopImmediatePropagation();const rest=all.filter(f=>!im.includes(f)&&!fj.includes(f)&&!fl.includes(f));const log=$("#rlog");const say=m=>{log.textContent=m};log.classList.remove("err");
  try{if(rest.length){RWARN.length=0;const name=($("#rname").value||"Mon fournisseur").trim().slice(0,40);await rImport(rest,name,say);const R=JSON.parse(localStorage.getItem("prisme-real"));
    S.playlists=R.pls.map((p,i)=>({id:p.id,name:p.name,url:"Importé le "+new Date(p.at).toLocaleDateString("fr-FR"),user:"données réelles",pass:"",epg:true,on:true,seed:i+1,real:true}));S.adding=false;S.stack=[{t:"home"}];S.tab="live";save()}
-  const [np,nl]=im.length?await rImportImages(im,say):[0,0];const nf=fj.length?await fxImportFilms(fj,say):0;
+  const [np,nl]=im.length?await rImportImages(im,say):[0,0];const nf=fj.length?await fxImportFilms(fj,say):0;const nx=fl.length?await fluxImport(fl,say):0;
   if(!rest.length&&!REAL){say(`Fichiers enregistrés (${np} affiches, ${nl} logos, ${nf} fiches films), mais le simulateur ne trouve pas tes données fournisseur dans ce navigateur : il affiche encore les données de démo. Sélectionne en une seule fois les 7 fichiers du dossier prisme-… ET images.json (8 fichiers), avec la touche ⌘ pour en choisir plusieurs.`);return}
   say(`${im.length?`Images importées : ${np} affiches de programmes, ${nl} logos de chaînes. `:""}${fj.length?`Fiches films importées : ${nf} films TMDB. `:""}Redémarrage du simulateur…`);setTimeout(()=>location.reload(),1400)}
  catch(err){log.classList.add("err");say("Import impossible : "+err.message)}e.target.value=""},true)}
 if($("#rdemo"))$("#rdemo").addEventListener("click",()=>{idbSet("images",[]).catch(()=>{})},true);
 /* titres déjà importés : on les nettoie aussi (sans réimport) */
 if(typeof REAL!=="undefined"&&REAL){for(const f of FILMS)if(f._real&&!f.tmd)f.t=RI.title(f.t)}
+/* ---------- fiche technique des flux (flux.json) : connue avant d'ouvrir le flux ---------- */
+const fluxQ=(w,h)=>h>=1600||w>=3200?"4K":h>=900||w>=1700?"1080p":h>=650||w>=1200?"720p":"SD";
+const VCOD={hevc:"HEVC",h265:"HEVC",h264:"H.264",avc:"H.264",av1:"AV1",mpeg2video:"MPEG-2",vp9:"VP9"},ACOD={eac3:"E-AC3",ac3:"AC3",aac:"AAC",truehd:"TrueHD",dts:"DTS",mp3:"MP3",opus:"Opus",flac:"FLAC",mp2:"MP2"};
+const LANG={fre:"Français",fra:"Français",fr:"Français",eng:"Anglais",en:"Anglais",spa:"Espagnol",ger:"Allemand",deu:"Allemand",ita:"Italien",jpn:"Japonais"};
+const chLbl=c=>c>=8?"7.1":c>=6?"5.1":c===2?"stéréo":c===1?"mono":c?c+" canaux":"";
+function fluxApply(v,f,tag){const [w,h,vc,hdr,fps,kb,ac,ch,lg,dur,atm,ext,neps]=f;const o={...v,fx:1};
+ if(h||w)o.q=fluxQ(w,h);
+ o.hdr=hdr||"";o.codec=[VCOD[vc]||(vc||"").toUpperCase(),hdr,w&&h?`${w}×${h}`:"",fps?`${String(fps).replace(".",",")} i/s`:"",kb?`${(kb/1000).toFixed(kb>=10000?0:1).replace(".",",")} Mb/s`:""].filter(Boolean).join(" · ");
+ const al=LANG[lg]||(tag==="VOSTFR"?"Anglais (VO)":"Français"),an=[ACOD[ac]||(ac||"").toUpperCase(),chLbl(ch),atm?"Atmos":""].filter(Boolean).join(" ");
+ o.audio=[an?`${al} · ${an}`:al,...(tag==="MULTI"&&lg&&LANG[lg]?[LANG[lg]==="Français"?"Anglais (VO)":"Français (VF)"]:[])];
+ if(kb&&dur){const go=kb*dur/8/1e6;o.size=(go>=1?go.toFixed(1).replace(".",",")+" Go":Math.round(go*1000)+" Mo")+(neps?" / épisode":"")}
+ if(ext)o.ext=ext;if(neps)o.neps=neps;o.codec+=` · ${o.size&&o.size!=="—"?o.size+" · ":""}${(o.ext||"").toUpperCase()} · ✓ fiche du serveur`;return o}
+async function fluxImport(files,say){let n=0;for(const f of files){say(`Lecture de ${f.name}…`);let d=null;try{d=JSON.parse((await f.text()).replace(/^﻿/,""))}catch(e){}
+  if(!d||!d.vod)throw new Error(`${f.name} n'est pas un fichier flux prisme`);Object.assign(FLUX.vod,d.vod);Object.assign(FLUX.ser,d.ser||{});FLUX.at=d.at;n+=Object.keys(d.vod).length+Object.keys(d.ser||{}).length}
+ await idbSet("flux",{vod:FLUX.vod,ser:FLUX.ser,at:FLUX.at});return n}
+if(typeof REAL!=="undefined"&&REAL)idbGet("flux").then(d=>{if(!d)return;Object.assign(FLUX.vod,d.vod||{});Object.assign(FLUX.ser,d.ser||{});FLUX.at=d.at||0;const st=$("#rst");if(st)st.textContent+=` · qualité connue pour ${Object.keys(FLUX.vod).length} flux`;if(inApp()&&!S.loading)render(F&&F.dataset.fid)}).catch(()=>{});

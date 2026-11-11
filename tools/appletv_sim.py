@@ -238,6 +238,9 @@ R("/* Clic sur la barre de progression : saut direct */",
  window.addEventListener("keyup",e=>{if(e.key!=="Enter"||!kt)return;e.preventDefault();clearTimeout(kt);kt=null;key("ok")},true)}
 /* Clic sur la barre de progression : saut direct */''')
 
+# versions : la fiche technique du serveur (flux.json) en clair, sur 2 lignes, à la place du nom brut
+R('<div class="md">${esc(v.name)} · ${esc(v.codec)}</div>', '<div class="md ${v.fx?"fxd":""}">${esc(v.fx?v.codec:v.name+" · "+v.codec)}</div>')
+R("</style>", ".msrc .md.fxd{white-space:normal;line-height:1.35}</style>")
 # stockage séparé du simulateur Fire TV
 src = src.replace('localStorage.getItem("iptvsim")', 'localStorage.getItem("prisme-atv")')
 src = src.replace('localStorage.setItem("iptvsim",', 'localStorage.setItem("prisme-atv",')
@@ -264,7 +267,9 @@ _fxcss, _fxren = _fxbuild(rd("film_ab1.css") + "\n" + rd("film_home.css"), _simc
 R("</style>", _fxcss + "\n" + rd("film_ab1_global.css") + rd("film_home_global.css") + "</style>")
 _pl = rd("prisme-films.pl").replace("\\", "\\\\").replace("`", "\\`").replace("${", "\\${")
 RFCMD = "const RFCMD=`cat > /tmp/prisme-films.pl <<'PRISME_FIN'\n" + _pl + "PRISME_FIN\nperl /tmp/prisme-films.pl`;\n"
-R("render();\n</script>", RFCMD + "const FXR=" + _json.dumps(_fxren) + ";\n" + rd("live_a2c.js") + "\n" + rd("real_end.js") + "\n" + rd("live_home.js") + "\n" + rd("live_plus.js") + "\n" + rd("film_ab1.js") + "\n" + rd("film_home.js") + "\nrender();if(inApp())lPreload(()=>render());\n</script>")
+_fx = rd("prisme-flux.pl")
+RXFLUX = "const RXFLUX=" + _json.dumps('export PRISME_U="$U" PRISME_N="$N" PRISME_P="$P"; cat > /tmp/prisme-flux.pl <<\'PRISME_FLUX\'\n' + _fx + 'PRISME_FLUX\nperl /tmp/prisme-flux.pl "$D"; unset PRISME_P; ') + ";\n"
+R("render();\n</script>", RFCMD + RXFLUX + "const FXR=" + _json.dumps(_fxren) + ";\n" + rd("live_a2c.js") + "\n" + rd("real_end.js") + "\n" + rd("live_home.js") + "\n" + rd("live_plus.js") + "\n" + rd("film_ab1.js") + "\n" + rd("film_home.js") + "\nrender();if(inApp())lPreload(()=>render());\n</script>")
 R("<kbd>M</kbd> (ou maintenir le clic) ajouter/retirer des favoris", "<kbd>M</kbd> (ou maintenir le clic) favoris, ou options d'une chaîne dans la TV en direct")
 
 R('<div class="pkick">${it.type==="s"?"Série · "+esc(it.net):"Film · "+it.y}', '<div class="pkick">${it.rp?"Replay · "+esc(CH[it.rp.c].n)+" · diffusé "+lday(it.rp.s):it.type==="s"?"Série · "+esc(it.net):"Film · "+it.y}')
