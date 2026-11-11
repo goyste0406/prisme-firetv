@@ -39,7 +39,8 @@ sub base { my ($s) = @_; $s = "" unless defined $s;
   $s =~ s/[ᴴᴰᶠᵁ⁴ᴷˢ]+/ /g;
   $s =~ s/\b(4k|uhd|fhd|full ?hd|hd|sd|hevc|h\.?26[45]|x26[45]|1080p?|720p?|2160p?|hdr10?|dolby ?vision|50 ?fps|raw|backup|vip|multi|vostfr|vff|vf|truefrench|french)\b/ /gi;
   $s =~ s/[\[\]()|]+/ /g; $s =~ s/\s*[-–:]\s*$//; $s =~ s/^\s*[-–:]\s*//; $s =~ s/\s{2,}/ /g; $s =~ s/^\s+|\s+$//g; return $s }
-sub title { my ($n) = @_; my $s = base($n); $s =~ s/\(?\b(19[2-9]\d|20[0-3]\d)\b\)?\s*$//; $s =~ s/\s*[-–:]\s*$//; $s =~ s/^\s+|\s+$//g; return $s }
+my $TRAIL = qr/(?:^|[\s\-–:_.,|])(?:vost(?:-?fr)?|vostfr|vo|vf2?|vff|vfq|vfi|stfr|subfrench|truefrench|french|multi|eng|subs?|hdlight|hdr10\+?|hdr|dv|dolby ?vision|imax|3d|remux|web(?:-?dl|rip)?|blu-?ray|bdrip|brrip|dvdrip|x26[45]|h\.?26[45]|hevc|10 ?bits?|atmos|dts|ac3|aac|5\.1|7\.1|extended|uncut|remastered|director'?s ?cut|version longue|4k|uhd|fhd|hd|sd|1080[pi]?|720p?|2160p?|19[2-9]\d|20[0-3]\d)[\s\-–:_.,|]*$/i;
+sub title { my ($n) = @_; my $s = base($n); while (1) { my $t = $s; $t =~ s/$TRAIL//; $t =~ s/\s*[-–:|,]\s*$//; $t =~ s/^\s+|\s+$//g; last if length($t) < 2 || $t eq $s; $s = $t } return $s }
 sub year { my ($n) = @_; return ($n || "") =~ /\b(19[2-9]\d|20[0-3]\d)\b/ ? $1 : 0 }
 sub simp { my ($s) = @_; $s = lc($s // ""); $s =~ tr/àâäáãåçéèêëíìîïñóòôöõúùûüýÿœæ/aaaaaaceeeeiiiinooooouuuuyyoa/; $s =~ s/[^a-z0-9]+//g; return $s }
 
