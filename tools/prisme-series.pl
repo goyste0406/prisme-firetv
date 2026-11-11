@@ -8,6 +8,7 @@ my $TMDB = $ENV{PRISME_TMDB} || "https://api.themoviedb.org/3";
 my $IMGB = $ENV{PRISME_TMDB_IMG} || "https://image.tmdb.org/t/p";
 my $MAXS = $ENV{PRISME_MAXS} || 1500;   # séries traitées (les plus récentes d'abord, comme le simulateur)
 my $MAXB = $ENV{PRISME_MAXB} || 200;    # grandes images de fond (les plus récentes)
+my $MAXE = $ENV{PRISME_MAXE} || 800;    # séries dont on récupère les titres et résumés d'épisodes (les plus récentes)
 my $TTL = 7 * 86400;
 my @dirs = grep { -d $_ } glob("$ENV{HOME}/Desktop/prisme-*");
 die "Aucun dossier prisme-... sur le Bureau. Lance d'abord la commande des données.\n" unless @dirs;
@@ -114,6 +115,18 @@ for my $dir (@dirs) {
       push @imgs, [$g->{cover}, "$CACHE/i/c" . simp($g->{t}), 220, 60, $k, "po"];
       push @imgs, [$g->{bdp}, "$CACHE/i/cb" . simp($g->{t}), 720, 55, $k, "bd"] if $g->{bdp} && $rank <= $MAXB }
     next unless $k; $byName{$_} = $k for @{ $g->{names} } }
+  # --- épisodes en français (titre, résumé, note, date de diffusion) : une requête par saison, cache 7 jours ---
+  my (@sq, %seen2); my $er = 0;
+  for my $g (@G) { next if $g->{tm} eq "" || $seen2{$g->{tm}}++; last if ++$er > $MAXE; my $d = eval { $J->decode(slurp("$CACHE/d/$g->{tm}.json")) }; next unless ref $d eq "HASH" && $d->{id};
+    for my $sn (map { $_->{season_number} } grep { ($_->{season_number} // 0) > 0 } @{ $d->{seasons} || [] }) { my $f = "$CACHE/d/$d->{id}-s$sn.json";
+      push @sq, [$d->{id}, $sn, $f, (-s $f && $now - (stat($f))[9] < $TTL) ? 0 : 1] } }
+  my @sdl = grep { $_->[3] } @sq; print "Saisons (titres et résumés des épisodes) : ", scalar(@sq), " (", scalar(@sq) - scalar(@sdl), " déjà en cache)…\n";
+  fetch_many([map { ["$TMDB/tv/$_->[0]/season/$_->[1]?language=fr-FR$akey", $_->[2]] } @sdl], @auth);
+  my $nep = 0; for my $q (@sq) { my $k = "t$q->[0]"; next unless $M{$k}; my $sd = eval { $J->decode(slurp($q->[2])) }; next unless ref $sd eq "HASH";
+    for my $e (@{ $sd->{episodes} || [] }) { my $en = $e->{episode_number} // 0; next unless $en > 0; my $nm = $e->{name} // ""; $nm = "" if $nm =~ /^([ée]pisode|ep\.?)\s*\d+$/i;
+      my $ov = $e->{overview} // ""; $ov = substr($ov, 0, 300); next if $nm eq "" && $ov eq "" && !$e->{air_date};
+      $M{$k}{eps}{"$q->[1]-$en"} = [$nm, $ov, ($e->{vote_count} || 0) >= 3 ? sprintf("%.1f", $e->{vote_average} || 0) + 0 : 0, $e->{air_date} // ""]; $nep++ } }
+  print "Épisodes décrits par TMDB : $nep\n";
   # --- images (cache) ---
   my @dl = grep { !-s $_->[1] } @imgs; my %dlu; @dl = grep { !$dlu{$_->[1]}++ } @dl;
   print "Images à télécharger : ", scalar(@dl), " (", scalar(@imgs) - scalar(@dl), " en cache)…\n";

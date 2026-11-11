@@ -87,7 +87,7 @@ function verOf(it,s,e){const g=gapOf(it,s,e);let v;if(!DEMO()){const sv=pickSrc(
  else{const L=[{lang:"VFF",q:"4K HDR",prov:"Nova"},{lang:"VFF",q:"1080p",prov:(S.playlists[0]||{}).name||"Lune"},{lang:"VF",q:"4K",prov:"Atlas"}];v={...L[hash(it.id+s+"/"+e)%3]}}
  if(g){v.prov=g.from;v.gap=g.miss}const A=avail(it,s,e),w=MX().lang[it.id];if(w==="VOSTFR"&&A.vost)v.lang="VOSTFR";else if(w==="VF"&&A.vf)v.lang="VF";else if(w==="VFF"&&A.vff)v.lang="VFF";else if(DEMO()&&!A.vff)v.lang=A.vf?"VF":"VOSTFR";return v}
 const SREC={s4:["Walter s'enfonce un peu plus dans sa double vie.","Jesse veut sortir du trafic, mais rien n'est simple.","Skyler commence à poser les bonnes questions."],s10:["Logan reprend la main sur Waystar Royco.","Kendall cherche sa place après sa trahison.","Shiv hésite sur l'offre qu'on lui a faite."],s1:["Assane a un coup d'avance, mais la police aussi.","Sa famille est de nouveau en danger.","Un nouveau casse se prépare."],s6:["Le groupe est séparé entre plusieurs villes.","Un nouveau danger plane sur Hawkins.","Chacun cache quelque chose aux autres."],s2:["Malotru a été exfiltré, mais à quel prix.","La DGSE fait le ménage dans ses rangs.","Une nouvelle mission commence pour le Bureau."],s9:["Laure Berthaud reprend une enquête difficile.","Les juges et la police se méfient les uns des autres.","Un témoin clé disparaît."],s3:["L'agence perd un client majeur.","Andréa cache une nouvelle importante à ses associés.","Un tournage tourne mal."],s11:["Morgane s'installe à la brigade, à sa façon.","Karadec finit par lui faire confiance.","Une affaire de famille complique tout."]};
-const recap=it=>SREC[it.id]||(DEMO()?["L'épisode précédent se termine sur une décision qui change tout.","Un personnage secondaire prend une place inattendue.","Tout reprend là où tu t'es arrêté."]:(()=>{const n=nextEp(it),o=EPS_(it,n.s,Math.max(1,n.e-1));return o?[o]:["Le résumé de l'épisode précédent arrivera avec les données TMDB des séries."]})());
+const recap=it=>SREC[it.id]||(DEMO()?["L'épisode précédent se termine sur une décision qui change tout.","Un personnage secondaire prend une place inattendue.","Tout reprend là où tu t'es arrêté."]:(()=>{const n=nextEp(it),o=EPS_(it,n.s,Math.max(1,n.e-1));return o?[o]:[`Dernier épisode vu : ${SE(n.s,Math.max(1,n.e-1))}${EPD(it,n.s,Math.max(1,n.e-1))&&EPD(it,n.s,Math.max(1,n.e-1)).t?" · "+EPD(it,n.s,Math.max(1,n.e-1)).t:""}`,"Pas de résumé pour cet épisode, ni chez ton fournisseur ni sur TMDB."]})());
 function epInfo(it,s,e){const n=nextEp(it),p=spOf(it),done=isDone(it),seen=done||!!(p&&(s<n.s||(s===n.s&&e<n.e)));
  const cur=!done&&!!p&&s===n.s&&e===n.e,w=WEEK().find(z=>z.id===it.id&&z.s===s&&z.e===e),fut=!seen&&s===n.s&&e>availTo(it)?(w||{h:"bientôt"}):null;
  const M=MISSING()[it.id],RE=!DEMO()&&window.SXDATA&&SXDATA.ep&&SXDATA.ep[it.id],miss=!!(M&&M.s===s&&M.e===e)||!!(RE&&!RE[s+"-"+e]),gap=gapOf(it,s,e),k=hash(it.id+"#"+s+"-"+e),d=EPD(it,s,e);
@@ -194,7 +194,12 @@ function slides(){const ck="sl|"+PR.cur+"|"+JSON.stringify(MX().sp).length+MX().
  if(so){const al=(S.sxAlerts||[]).includes(so.id);L.push({k:"soon",ids:[],tr:so,trs:NS(so)+1,tag:"🔔 BIENTÔT CHEZ TOI",bg:fxArt(so),title:so.t,font:fxFont(so),
   meta:`<span class="chp" style="--cc:#5ee0c8">Saison ${NS(so)+1}</span>${NET(so)?`<span>${esc(NET(so))}</span>`:""}<span class="ok2">diffusion annoncée</span>`,
   sub:"Tu as tout vu. prisme te prévient dès que le premier épisode arrive chez ton fournisseur",btns:[[al?"✓ Alerte activée":"🔔 Préviens-moi","sxalert:"+so.id],["▶ Bande-annonce","sxtrl:"+so.id+":"+(NS(so)+1)]]})}
- const ord=eve?["tv","arr","mom","hon","soon"]:["arr","mom","hon","tv","soon"];return X.cache[ck]=ord.map(k=>L.find(s=>s.k===k)).filter(Boolean)}
+ const ord=eve?["tv","arr","mom","hon","soon"]:["arr","mom","hon","tv","soon"],out=ord.map(k=>L.find(s=>s.k===k)).filter(Boolean);
+ /* petit catalogue où rien d'autre ne s'applique : la série à reprendre, sinon la mieux notée */
+ if(!out.length){const fr=SL().filter(z=>!spOf(z)&&!isDone(z)&&!blk(z)&&!WEEK().some(w=>w.id===z.id)).sort((p,q)=>q.imdb-p.imdb)[0],up=fr?null:sUp()[0],it=fr||up;if(it){const n=nextEp(it);
+  out.push({k:"rep",ids:[it.id],tr:it,tag:up?"↺ ON REPREND ?":"★ LA MIEUX NOTÉE CHEZ TOI",bg:fxArt(it),title:it.t,font:fxFont(it),meta:`<span>${NS(it)} saison${NS(it)>1?"s":""} · ${NE(it)} ép.</span>${NET(it)?`<span>${esc(NET(it))}</span>`:""}<span class="st">★ ${it.imdb}</span>`,
+   sub:esc((it.s||"").slice(0,160)),btns:[[`${FXI.play}<span class="vpill">${up?"Reprendre":"Commencer"} ${SE(n.s,n.e)}<small>${D(ED(it))}</small></span>`,"sxplay:"+it.id,it.id],["Voir la fiche","sxopen:"+it.id]]})}}
+ return X.cache[ck]=out}
 function hero(){const L=slides();if(!L.length)return `<section class="hero h1h mchero c3h" data-anchor><div class="shade"></div><div class="tx"><h1 class="t2">Séries</h1><p class="hsub">Ajoute une playlist dans Réglages pour voir tes séries ici.</p></div></section>`;
  const i=(X.h1i%L.length+L.length)%L.length,s=L[i];X.alt=s.btns.slice(1);X.slide=s;const m=s.btns[0],trS=s.trs||(s.tr&&spOf(s.tr)?nextEp(s.tr).s:1);
  return `<section class="hero h1h mchero c3h hs-${s.k}" data-anchor>${s.bg}<div class="shade"></div>
@@ -213,7 +218,7 @@ function askChips(){const op=X.ask,ids=Object.keys(PR.list);
  return ["d","m","w"].map(d=>`<div class="hchip dd" data-f data-fid="sx-q-${d}" data-act="sxask:${d}" data-row="sxq">${askLbl2(d)}<i>▾</i></div>`).join("")+`<div class="hchip" data-f data-fid="sx-q-dice" data-act="sxdice" data-row="sxq">🎲 Surprends-moi</div>`}
 function band(){const t=sdTab(),U=sUp(),stale=sStale(),R=sRes(),nNew=WEEK().filter(w=>w.j<=0&&!w.seen&&ALL[w.id]&&!blk(ALL[w.id])).length,pm=pmap();
  const tabs=[["suivre","↺ À suivre",U.length+stale.length],["soir","🌙 Ce soir ?",""],["cal","📅 Cette semaine",nNew?`<i class="nb">${nNew}</i>`:""]].map(([k,n,c])=>`<div class="btab ${k===t?"sel":""}" data-f data-fid="sxt-${k}" data-sdt="${k}" data-act="sxtab:${k}" data-row="sxq">${n}${c!==""?`<small>${c}</small>`:""}</div>${k==="soir"&&t==="soir"?`<span class="sdsep"></span>${askChips()}<span class="sdsep"></span>`:""}`).join("");
- const row=t==="suivre"?(U.length+stale.length?U.map(it=>supn(it,"sxr-"+it.id,"sxr")).join("")+stale.map(it=>supn(it,"sxr-"+it.id,"sxr",1)).join(""):`<div class="empty0">Aucune série en cours · choisis-en une dans « Ce soir ? »</div>`)
+ const row=t==="suivre"?(U.length+stale.length?U.map(it=>supn(it,"sxr-"+it.id,"sxr")).join("")+stale.map(it=>supn(it,"sxr-"+it.id,"sxr",1)).join(""):(DEMO()?`<div class="empty0">Aucune série en cours · choisis-en une dans « Ce soir ? »</div>`:`<div class="empty0 sxex" data-f data-fid="sxr-ex" data-act="sxex" data-row="sxr">Tes séries en cours apparaîtront ici, avec le résumé de là où tu t'es arrêté · <b>OK = voir un exemple avec tes séries</b></div>`))
   :t==="cal"?(WEEK().length?calTiles("sx"):`<div class="empty0">Les dates de sortie arriveront avec les données TMDB des séries</div>`)
   :R.length?R.slice(0,SNT).map(o=>spst(o.c,"sxn-"+o.c.id,"sxnt",o,1)).join("")+(R.length>SNT?allTile("sxnt","soir",R.length):""):`<div class="empty0">Aucune série avec ces choix</div>`;
  return `<div data-anchor class="anc"><section data-rk="soir" class="hsec tonight glassband sbband"><div class="btabs hline sdtabs">${tabs}</div><div class="row sx ${t==="cal"?"calrow sbcal":""} ${t==="suivre"?"sdsup":""}">${row}</div></section></div>`}
@@ -371,6 +376,10 @@ function ctxDo(v){const m=S.modal,x=MX(),i=x.ord.indexOf(m.rk),it=m.id&&ALL[m.id
 function sxAct(k,v,w,x){const pf=F&&F.dataset.fid,it=v&&ALL[v];
  switch(k){
  case "sxopen":return push({t:"detail",id:v});
+ case "sxex":{/* exemple de reprise avec les vraies séries : quelques épisodes « en cours », dont un vu il y a plus d'une semaine (résumé auto) */
+  const x=MX(),now=Date.now(),L=SL().filter(z=>EPS(z).some(c=>c>=2)).sort((p,q)=>NE(q)-NE(p)).slice(0,4);if(!L.length)return toast("Importe d'abord episodes.json (commande des données)");
+  L.forEach((z,i)=>{const E=EPS(z),s=Math.max(1,E.findIndex(c=>c>=2)+1);x.sp[z.id]={s,e:Math.min(i+2,E[s-1]),pos:[.4,0,.25,0][i],t:now-[1,3,9,2][i]*DAY}});
+  prSave();X.cache={};S.sxtab="suivre";render("sxr-"+L[0].id);return toast("Exemple créé : lance ou marque « non vue » une série pour la retirer")}
  case "sxplay":return sxStart(v);
  case "sxep":{const [s,e]=w.split("-").map(Number);return sxStart(v,{s,e})}
  case "sxrecap":return sxStart(v,{recap:1});
@@ -465,7 +474,9 @@ function peekOff(){clearTimeout(HPT);clearInterval(HPC);const h=qs(".hpeek");if(
 function peekArm(el){peekOff();const Dl=(fhSet().fhTrl||0)*1000;if(!Dl||!sxOn()||S.modal||!el||!el.closest(".acts")||!el.closest(fxQ("hero")))return;const t0=Date.now();
  HPC=setInterval(()=>{const c=qs(".hcd");if(!c)return clearInterval(HPC);const left=Math.ceil((Dl-(Date.now()-t0))/1000);if(left<=3&&left>0){c.classList.add("on");c.querySelector("b").textContent=left}},250);
  HPT=setTimeout(()=>{clearInterval(HPC);if(F!==el||!el.isConnected)return;const h=qs(".sxhome .H");if(!h)return;h.classList.add("hpeek");const c=qs(".hcd");if(c)c.classList.remove("on");qa(".hero .art").forEach(a=>a.classList.add("play"))},Dl)}
-function zap(el,id,ep){clearTimeout(PRT);PRT=setTimeout(()=>{if(F!==el||S.modal||!el.isConnected)return;if(ep)X.prepEp=id+":"+ep;else X.prep=id;view.querySelectorAll(".fhzap").forEach(z=>z.remove());const z=document.createElement("span");z.className="fhzap";z.textContent="⚡ prêt";(el.querySelector(fxQ("sfi"))||el).appendChild(z)},1000)}
+function zap(el,id,ep){clearTimeout(PRT);PRT=setTimeout(()=>{if(F!==el||S.modal||!el.isConnected)return;if(ep)X.prepEp=id+":"+ep;else X.prep=id;view.querySelectorAll(".fhzap").forEach(z=>z.remove());const z=document.createElement("span");z.className="fhzap";z.textContent="⚡ prêt";(el.querySelector(fxQ("sfi"))||el).appendChild(z);
+  /* carte À suivre : l'étiquette se met à gauche de « VFF · 1080p », jamais sur le titre */
+  const vq=el.matches(Q(".sup"))&&el.querySelector(Q(".vq"));if(vq){z.style.cssText="position:static;display:inline-block;margin:0 6px 0 0;padding:1px 7px;font-size:10px;vertical-align:1px;animation:none";vq.prepend(z)}},1000)}
 function bubOff2(){clearTimeout(BUT);const b=view.querySelector(".fhbub");if(b)b.remove()}
 function bubArm2(el){bubOff2();const it=ALL[el.dataset.hid];if(!it||el.closest(fxQ("hero"))||el.classList.contains(FXR.sup||"sup")||S.modal)return;
  BUT=setTimeout(()=>{if(F!==el||!el.isConnected||S.modal)return;const o=sFor().find(z=>z.c.id===it.id),n=nextEp(it),r=el.getBoundingClientRect(),v=view.getBoundingClientRect(),x=(r.right-v.left)/SCALE,y=(r.top-v.top)/SCALE,w=340,left=x+16+w<1270?x+16:(r.left-v.left)/SCALE-w-16;
@@ -534,6 +545,11 @@ function sxEpApply(){let n=0;const now=Date.now(),W=[];window.SXDATA=window.SXDA
   if(best)for(let i=0;i<best.se.length;i++)best.se[i]=best.se[i]||0;
   if(!best||!best.se||!best.se.length)continue;n++;it.se=best.se.slice();const M={},sy={},dl=[];let ad=[];
   for(const k in best.e){const [t,d,o,rt,dt,a]=best.e[k];M[k]={t,d,o,r:rt||null};if(d)dl.push(d);const s=+k.split("-")[0];if(dt){const y=+dt.slice(0,4);if(y&&(!sy[s]||y<sy[s]))sy[s]=y}if(a)ad.push([a,k])}
+  /* titres, résumés et notes en français de TMDB (series.json) quand le fournisseur n'en donne pas */
+  const T=it.sxk&&SXD.m[it.sxk]&&SXD.m[it.sxk].eps;
+  if(T){for(const k in M){const x=T[k];if(!x)continue;if(!M[k].t&&x[0])M[k].t=x[0];if(!M[k].o&&x[1])M[k].o=x[1];if(!M[k].r&&x[2])M[k].r=x[2]}
+   /* épisodes annoncés dans les 7 prochains jours (dates TMDB) */
+   const t0=new Date();t0.setHours(0,0,0,0);for(const k in T){const ad=T[k][3];if(!ad||M[k])continue;const j=Math.round((new Date(ad+"T00:00:00")-t0)/864e5);if(j>=1&&j<=7){const [s,e]=k.split("-").map(Number);W.push({j,id:it.id,s,e})}}}
   SXDATA.ep[it.id]=M;SXDATA.sy[it.id]=sy;if(dl.length){dl.sort((a,b)=>a-b);it.ep=dl[dl.length>>1]}
   /* cette semaine : épisodes arrivés chez le fournisseur ces 7 derniers jours (saison entière d'un coup → une seule ligne) */
   ad=ad.filter(([a])=>now-a*1000<7*864e5).sort((p,q)=>q[0]-p[0]);if(!ad.length)continue;const byS={};
