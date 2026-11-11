@@ -26,7 +26,10 @@ def split_rules(css):
         i = k
     return out
 
-def build(src_css, sim_css):
+DYN = re.compile(r"^(c-|f-|hs-|q|r-|sh\d|v\d|cp|l\d|card)")
+
+def build(src_css, sim_css, used=None):
+    """used : mots présents dans le JavaScript ; une règle dont aucun sélecteur ne peut s'appliquer est retirée."""
     sim = classes_in(sim_css)
     mine = classes_in(src_css)
     ren = {c: "fx-" + c for c in mine if c in sim and c not in KEEP}
@@ -45,6 +48,11 @@ def build(src_css, sim_css):
             continue
         if pre.startswith("@media"):
             continue
+        if used is not None and not pre.startswith("@"):
+            alive = [x for x in pre.split(",") if all(c in used or DYN.match(c) or c == "fx" for c in re.findall(r"\.([A-Za-z_][\w-]*)", x))]
+            if not alive:
+                continue
+            pre = ",".join(alive)
         sels = []
         for sel in pre.split(","):
             sel = sel.strip()

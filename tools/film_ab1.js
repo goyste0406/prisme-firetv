@@ -329,7 +329,7 @@ function fxAct(k,v,w,x){const t=topS(),f=t.t==="detail"?ALL[t.id]:P?ALL[P.id]:nu
  case "fxpcjump":{m.postDone=true;P.pos=P.dur-50;S.modal=null;render("p-pp");return toast("🎬 La scène post-générique arrive")}
  case "fxpcno":{m.postDone=true;if(m.next){m.cd=15;render("e-go");fxNextCount()}else render("e-stay");return}
  case "fxnextstay":{clearInterval(fxNT);S.modal=null;render("p-pp");return}
- case "fxnextgo":{clearInterval(fxNT);const n=m&&m.next;if(!n)return;S.modal=null;P.noAsk=true;P.pos=P.dur;stopPlayer();S.stack.pop();S.stack.push({t:"detail",id:n.c.id,last:"w-play"});FXS.ready=n.c.id;render("w-play");fxStart(n.c.id);return toast("▶ "+n.c.t)}
+ case "fxnextgo":{clearInterval(fxNT);const n=m&&m.next;if(!n)return;S.modal=null;P.noAsk=true;P.pos=P.dur;stopPlayer();S.stack.pop();if(topS().t==="detail")S.stack.pop();S.stack.push({t:"detail",id:n.c.id,last:"w-play"});FXS.ready=n.c.id;render("w-play");fxStart(n.c.id);return toast("▶ "+n.c.t)}
  case "fxwho":S.modal={type:"fxwho",ret:F&&F.dataset.fid};return render();
  case "fxprof":{const r=m&&m.ret;prSwitch(v);FXS.duo=null;FXS.ready=null;S.modal=null;if(m&&m.type==="fxwhofull"){S.stack=[{t:"home"}];return render()}return render(r)}
  case "fxduo":{const r=m&&m.ret;prSwitch(v);FXS.duo=[v,w];FXS.ready=null;FXS.cache={};S.modal=null;if(m&&m.type==="fxwhofull"){S.stack=[{t:"home"}];return render()}return render(r)}

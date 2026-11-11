@@ -184,12 +184,12 @@ function fhAct(k,v,w){const pf=F&&F.dataset.fid;
  case "fhax":{const d=FH.ask;FH.ask=null;return render("fh-q-"+d)}
  case "fhaset":{const d=FH.ask;if(d==="d")S.fhd=w;else if(d==="m")S.fhm=w==="all"?"":w;else{const ids=Object.keys(PR.list);if(w==="duo"&&ids.length>1){FXS.duo=[PR.cur,ids.find(x=>x!==PR.cur)];FXS.cache={}}else{FXS.duo=null;FXS.cache={}}FH.cache={}}
   FH.ask=null;render("fh-q-"+d);const n=h2Res().length;return toast(n?`${n} films pour ce soir`:"Aucun film avec ces choix")}
- case "fhdice":{const R=h2Res();if(!R.length)return toast("Aucun film avec ces choix");const o=R[Math.floor(Math.random()*Math.min(6,R.length))];toast("🎲 "+o.c.t);setTimeout(()=>act("fxopen:"+o.c.id),500);return}
+ case "fhdice":{const R=h2Res();if(!R.length)return toast("Aucun film avec ces choix");const o=R[Math.floor(Math.random()*Math.min(6,R.length))];toast("🎲 "+o.c.t);const g=F;setTimeout(()=>{if(F===g&&fhOn()&&!S.modal)act("fxopen:"+o.c.id)},500);return}
  case "fhtv":{const c=CH[v];if(!c)return;if(+w<=fhNow())return act("live:"+v);return toast(`⏰ Rappel programmé : ${c.n}, ${fmt(+w%1440)}`)}
  case "fhalert":{const t=decodeURIComponent(v);S.fhAlerts=S.fhAlerts||[];if(S.fhAlerts.includes(t))S.fhAlerts=S.fhAlerts.filter(x=>x!==t);else S.fhAlerts.push(t);render("fh-b0");return toast(S.fhAlerts.includes(t)?"🔔 Tu seras prévenu dès qu'il arrive chez ton fournisseur":"Alerte retirée")}
  case "fhtrl":{const so=(TMD.soon||[])[0]||{};return toast(`▶ Bande-annonce ${trlTag(so.ytl)} · ${trlTxt(so.ytl).split(":")[0]}`)}
  case "fhduo":{const ids=Object.keys(PR.list);FXS.duo=FXS.duo?null:[PR.cur,ids.find(x=>x!==PR.cur)];FXS.cache={};FH.cache={};return render("fh-b0")}
- case "fhrand":{const M=MOMS[v],L=fhFilms().filter(f=>M.f(f));if(!L.length)return;const f=L[Math.floor(Math.random()*L.length)];toast("🎲 "+f.t);setTimeout(()=>act("fxopen:"+f.id),500);return}
+ case "fhrand":{const M=MOMS[v],L=fhFilms().filter(f=>M.f(f));if(!L.length)return;const f=L[Math.floor(Math.random()*L.length)];toast("🎲 "+f.t);const g=F;setTimeout(()=>{if(F===g&&fhOn()&&!S.modal)act("fxopen:"+f.id)},500);return}
  case "fhdemo":return toast(`Exemple : « ${decodeURIComponent(v)} » apparaîtra avec son logo quand films.json sera importé`);
  case "fhbt":{const r=view.querySelector(".browse "+fxQ("row")+" [data-f]");if(r)setFocus(r);return}
  case "fhalt":{const a=FH.alt[+v];S.modal=null;render("fh-b0");if(a)setTimeout(()=>act(a[1]),30);return}
@@ -247,6 +247,7 @@ function gridNav(k){const g=F&&F.closest("#ggrid");if(!g||S.modal||!["up","down"
  const t=row(r+(k==="down"?1:-1));if(t.length){setFocus(t[Math.min(i,t.length-1)]);return true}
  if(k==="up"){const c=view.querySelector(".chips .sel[data-f]")||view.querySelector(".chips [data-f]");if(c){setFocus(c);g.scrollTo({top:0,behavior:"smooth"})}}return true}
 {const _k=key;key=function(k){bubOff();if(gridNav(k))return;
+ if(k==="menu"&&!S.modal&&F&&!F.dataset.xid&&topS().t==="detail"&&ALL[topS().id]&&ALL[topS().id].type==="f"&&!P){S.modal={type:"fxhctx",id:topS().id,rk:null,ret:F.dataset.fid};return render()}
  if(k==="menu"&&!S.modal&&F&&F.closest("#ggrid")&&ALL[F.dataset.hov]&&ALL[F.dataset.hov].type==="f"){S.modal={type:"fxhctx",id:F.dataset.hov,rk:null,ret:F.dataset.fid};return render()}const pk=view.querySelector(".hpeek");if(pk){hPeekOff();if(F)hPeekArm(F);return}
  if(fhOn()&&!S.modal&&F){
   if(k==="menu"&&F.dataset.row==="tabs")return toast("Maintiens le clic sur un film pour ses options");
@@ -257,6 +258,7 @@ function gridNav(k){const g=F&&F.closest("#ggrid");if(!g||S.modal||!["up","down"
   if(k==="down"&&F.dataset.row==="tabs"){const d=view.querySelector(fxQ("hero")+" [data-default]");if(d){setFocus(d);return}}
   if((k==="up"||k==="down")&&fhNav(k))return;
   if((k==="left"||k==="right")&&fhHoriz(k))return;
+  if(k==="back"&&FH.ask){const d=FH.ask;FH.ask=null;return render("fh-q-"+d)}
   if(k==="back"&&F.dataset.row!=="tabs"){const sc=$("#hscr");if(sc)sc.scrollTo({top:0,behavior:"smooth"})}}
  return _k(k)}}
 
@@ -298,3 +300,18 @@ const fmtD=t=>{const d=new Date(t);return d.toLocaleDateString("fr-FR",{day:"2-d
 /* ---------- démo : doublages VFF / VFQ / VF (les vraies données viennent du nom du flux et de flux.json) ---------- */
 if(!REAL){const _s=srcs;srcs=function(key){const L=_s(key);const it=ALL[key];if(key.startsWith("ch:")||!it||(it.cat||[]).includes("fr"))return L;const h0=hash(key+"#fr")%3;return L.map((v,i)=>{if(v.tag!=="VF"&&v.tag!=="MULTI")return v;const fr=["VFQ","VFF","VF"][(h0+i)%3];
   if(fr==="VF")return v;const name=v.name.replace(/\b(VF|MULTI)\b/,m=>m==="MULTI"?"MULTI "+fr:fr),au=v.audio.map(a=>a.startsWith("Français")?a.replace(/^Français( \(VF\))?/,FRL[fr]+" · "+fr):a);return {...v,name,tag:v.tag==="MULTI"?"MULTI":fr,fr,audio:au}})}}
+
+/* ---------- mémoire des sources : srcs() est appelée des dizaines de milliers de fois par affichage (films() la rappelle
+   pour chaque film). On garde le résultat le temps d'un affichage ou d'une action, puis on l'oublie. */
+const SRCM=new Map();const srcmClear=()=>SRCM.clear();
+{const _s=srcs;srcs=function(key){let v=SRCM.get(key);if(v===undefined){v=_s(key);SRCM.set(key,v)}return v}}
+{const _r=render;render=function(fid){srcmClear();
+ /* l'accueil et la fiche se redessinent sans sauter : on garde la position verticale et celle de chaque rangée */
+ const t0=topS(),sc0=view.querySelector("#hscr,#fxscr,#hscroll"),keep=sc0?{y:sc0.scrollTop,x:[...sc0.querySelectorAll(".sx,.lrow")].map(r=>r.scrollLeft),id:sc0.id}:null;
+ const out=_r(fid);
+ if(keep&&topS()===t0){const sc=view.querySelector("#"+keep.id);if(sc){const rows=[...sc.querySelectorAll(".sx,.lrow")],all=[sc,...rows];
+  all.forEach(e=>e.style.scrollBehavior="auto");sc.scrollTop=keep.y;sc._ty=keep.y;sc._tt2=0;if(rows.length===keep.x.length)rows.forEach((r,i)=>{r.scrollLeft=keep.x[i];r._tx=keep.x[i];r._tt=0});
+  const f=S.modal?null:F;if(f&&sc.contains(f))ensureVisible(f,true);requestAnimationFrame(()=>all.forEach(e=>e.style.scrollBehavior=""))}}
+ return out}}
+{const _a=act;act=function(a){srcmClear();return _a(a)}}
+{const _k=key;key=function(k){srcmClear();return _k(k)}}

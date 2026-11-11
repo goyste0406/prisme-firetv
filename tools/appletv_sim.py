@@ -263,7 +263,10 @@ import json as _json, sys as _sys
 _sys.path.insert(0, D)
 from fx_css import build as _fxbuild
 _simcss = src[src.index("<style>"):src.index("</style>")]
-_fxcss, _fxren = _fxbuild(rd("film_ab1.css") + "\n" + rd("film_home.css"), _simcss)
+import re as _re
+_jsall = src[src.index("</style>"):] + "".join(rd(n) for n in ["live_a2c.js", "real_end.js", "live_home.js", "live_plus.js", "film_ab1.js", "film_home.js"])
+_used = set(_re.findall(r"[A-Za-z_][\w-]*", _jsall))
+_fxcss, _fxren = _fxbuild(rd("film_ab1.css") + "\n" + rd("film_home.css"), _simcss, _used)
 R("</style>", _fxcss + "\n" + rd("film_ab1_global.css") + rd("film_home_global.css") + "</style>")
 _pl = rd("prisme-films.pl").replace("\\", "\\\\").replace("`", "\\`").replace("${", "\\${")
 RFCMD = "const RFCMD=`cat > /tmp/prisme-films.pl <<'PRISME_FIN'\n" + _pl + "PRISME_FIN\nperl /tmp/prisme-films.pl`;\n"
