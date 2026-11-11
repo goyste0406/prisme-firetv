@@ -509,7 +509,13 @@ function sxApply(){let n=0;const byK={};
   if(d.t)it.t=d.t;if(d.y)it.y=d.y;if(d.g&&d.g.length)it.g=d.g.slice(0,2);if(d.ov)it.s=d.ov;if(d.net)it.net=d.net;if(d.cr)it.dir=d.cr;if(d.ep)it.ep=d.ep;
   if(d.va){it.imdb=+(+d.va).toFixed(1);it.tmdb=Math.round(d.va*10)}if(d.age)it.age=fxAge(d.age);if(d.yt){it.yt=d.yt;it.ytl=d.ytl||""}
   if(d.cast&&d.cast.length)it.cast=d.cast.map(([nm,ch])=>{const aid="ra"+(hash(nm)>>>0).toString(36);A[aid]=nm;if(typeof CRED!=="undefined")(CRED[aid]=CRED[aid]||[]).some(x=>x[0]===it.id)||CRED[aid].push([it.id,ch||""]);return [aid,ch||""]})}
- const top=(SXD.top||[]).map(k=>byK[k]).filter(Boolean);
+ /* même série TMDB proposée sous plusieurs noms (« Lupin », « Lupin - Partie 2 », « Lupin VOSTFR »…) : une seule fiche avec toutes ses versions */
+ const keep={};for(const it of SERIES.slice()){const k=it.sxk;if(!k||!/^t/.test(k))continue;const K=keep[k];if(!K){keep[k]=it;continue}
+  for(const s2 of it._real.s||[])if(!K._real.s.some(x=>x[0]===s2[0]&&x[1]===s2[1]))K._real.s.push(s2);(it._real.c||[]).forEach(c=>{if(!K._real.c.includes(c))K._real.c.push(c)});
+  for(const pid in PR.list){const x=PR.list[pid].sx;if(!x)continue;if(x.sp&&x.sp[it.id]&&!x.sp[K.id])x.sp[K.id]=x.sp[it.id];if(x.sp)delete x.sp[it.id];["done","mal","no","nseen"].forEach(f=>{if(Array.isArray(x[f])&&x[f].includes(it.id)){x[f]=x[f].filter(z=>z!==it.id);if(!x[f].includes(K.id))x[f].push(K.id)}})}
+  if(S.favs.includes(it.id)){S.favs=S.favs.filter(z=>z!==it.id);if(!S.favs.includes(K.id))S.favs.push(K.id)}
+  SERIES.splice(SERIES.indexOf(it),1);ALL[it.id]=K}
+ const top=(SXD.top||[]).map(k=>byK[k]&&ALL[byK[k]]&&ALL[byK[k]].id).filter((v,i,A)=>v&&A.indexOf(v)===i);
  if(top.length){window.SXDATA=window.SXDATA||{};SXDATA.top=top}
  for(const nm in SXD.nl||{}){const c=SVCN(nm);if(!SXLG[c]||nm===c)SXLG[c]=SXD.nl[nm]}
  if(window.__sx&&__sx.X)__sx.X.cache={};SXD.n=n;return n}
@@ -517,12 +523,15 @@ async function sxImportSeries(files,say){const out=[];for(const f of files){say(
   if(!d||typeof d!=="object"||!d.m||!d.names)throw new Error(`${f.name} n'est pas un fichier de fiches séries prisme`);out.push(d)}
  let list=[];try{list=(await idbGet("series"))||[]}catch(e){}list=list.concat(out).slice(-4);await idbSet("series",list);return out.reduce((a,d)=>a+Object.keys(d.m).length,0)}
 if(typeof REAL!=="undefined"&&REAL)idbGet("series").then(list=>{if(!list||!list.length)return;for(const d of list){Object.assign(SXD.m,d.m);Object.assign(SXD.names,d.names||{});Object.assign(SXD.nl,d.nl||{});if(d.top&&d.top.length)SXD.top=d.top}
- const n=sxApply();const st=$("#rst");if(st)st.textContent+=` · ${n} fiches séries TMDB`;if(inApp()&&!S.loading)render(F&&F.dataset.fid)}).catch(()=>{});
+ const n=sxApply();if(SXE.n)sxEpApply();const st=$("#rst");if(st)st.textContent+=` · ${n} fiches séries TMDB`;if(inApp()&&!S.loading)render(F&&F.dataset.fid)}).catch(()=>{});
 /* ---------- épisodes du fournisseur (episodes.json, créé par la commande des données) ---------- */
 const SXE={s:{},n:0};
 function sxEpApply(){let n=0;const now=Date.now(),W=[];window.SXDATA=window.SXDATA||{};SXDATA.ep=SXDATA.ep||{};SXDATA.sy=SXDATA.sy||{};
  for(const it of SERIES){const r=it._real;if(!r)continue;let best=null;
-  for(const s of r.s||[]){const d=SXE.s[s[1]];if(d&&(!best||Object.keys(d.e).length>Object.keys(best.e).length))best=d}
+  /* plusieurs noms chez le fournisseur (ex. une entrée par saison) : on réunit leurs épisodes */
+  for(const s of r.s||[]){const d=SXE.s[s[1]];if(!d||!d.se)continue;if(!best){best={se:d.se.slice(),e:{...d.e}};continue}
+   d.se.forEach((c,i)=>{best.se[i]=Math.max(best.se[i]||0,c)});for(const k in d.e)if(!best.e[k]||(!best.e[k][0]&&d.e[k][0]))best.e[k]=d.e[k]}
+  if(best)for(let i=0;i<best.se.length;i++)best.se[i]=best.se[i]||0;
   if(!best||!best.se||!best.se.length)continue;n++;it.se=best.se.slice();const M={},sy={},dl=[];let ad=[];
   for(const k in best.e){const [t,d,o,rt,dt,a]=best.e[k];M[k]={t,d,o,r:rt||null};if(d)dl.push(d);const s=+k.split("-")[0];if(dt){const y=+dt.slice(0,4);if(y&&(!sy[s]||y<sy[s]))sy[s]=y}if(a)ad.push([a,k])}
   SXDATA.ep[it.id]=M;SXDATA.sy[it.id]=sy;if(dl.length){dl.sort((a,b)=>a-b);it.ep=dl[dl.length>>1]}
