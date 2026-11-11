@@ -264,17 +264,17 @@ _sys.path.insert(0, D)
 from fx_css import build as _fxbuild
 _simcss = src[src.index("<style>"):src.index("</style>")]
 import re as _re
-_jsall = src[src.index("</style>"):] + "".join(rd(n) for n in ["live_a2c.js", "real_end.js", "live_home.js", "live_plus.js", "film_ab1.js", "film_home.js", "serie_home.js"])
+_jsall = src[src.index("</style>"):] + "".join(rd(n) for n in ["live_a2c.js", "real_end.js", "live_home.js", "live_plus.js", "film_ab1.js", "film_home.js", "serie_home.js", "player_b.js"])
 _used = set(_re.findall(r"[A-Za-z_][\w-]*", _jsall))
 _fxcss, _fxren = _fxbuild(rd("film_ab1.css") + "\n" + rd("film_home.css") + "\n" + rd("serie_home.css"), _simcss, _used)
-R("</style>", _fxcss + "\n" + rd("film_ab1_global.css") + rd("film_home_global.css") + "</style>")
+R("</style>", _fxcss + "\n" + rd("film_ab1_global.css") + rd("film_home_global.css") + rd("player_b.css") + "</style>")
 _pl = rd("prisme-films.pl").replace("\\", "\\\\").replace("`", "\\`").replace("${", "\\${")
 RFCMD = "const RFCMD=`cat > /tmp/prisme-films.pl <<'PRISME_FIN'\n" + _pl + "PRISME_FIN\nperl /tmp/prisme-films.pl`;\n"
 _ps = rd("prisme-series.pl").replace("\\", "\\\\").replace("`", "\\`").replace("${", "\\${")
 RFCMD += "const RSCMD=`cat > /tmp/prisme-series.pl <<'PRISME_FIN'\n" + _ps + "PRISME_FIN\nperl /tmp/prisme-series.pl`;\n"
 _fx = rd("prisme-flux.pl")
 RXFLUX = "const RXFLUX=" + _json.dumps('export PRISME_U="$U" PRISME_N="$N" PRISME_P="$P"; cat > /tmp/prisme-flux.pl <<\'PRISME_FLUX\'\n' + _fx + 'PRISME_FLUX\nperl /tmp/prisme-flux.pl "$D"; unset PRISME_P; ') + ";\n"
-R("render();\n</script>", RFCMD + RXFLUX + "const FXR=" + _json.dumps(_fxren) + ";\n" + rd("live_a2c.js") + "\n" + rd("real_end.js") + "\n" + rd("live_home.js") + "\n" + rd("live_plus.js") + "\n" + rd("film_ab1.js") + "\n" + rd("film_home.js") + "\n" + rd("serie_home.js") + "\nrender();if(inApp())lPreload(()=>render());\n</script>")
+R("render();\n</script>", RFCMD + RXFLUX + "const FXR=" + _json.dumps(_fxren) + ";\n" + rd("live_a2c.js") + "\n" + rd("real_end.js") + "\n" + rd("live_home.js") + "\n" + rd("live_plus.js") + "\n" + rd("film_ab1.js") + "\n" + rd("film_home.js") + "\n" + rd("serie_home.js") + "\n" + rd("player_b.js") + "\nrender();if(inApp())lPreload(()=>render());\n</script>")
 R('setBg([CH[S.lch].col,"#08080c"])', 'setBg([(CH[S.lch]||{col:"#1a1a22"}).col,"#08080c"])')
 R("<kbd>M</kbd> (ou maintenir le clic) ajouter/retirer des favoris", "<kbd>M</kbd> (ou maintenir le clic) favoris, ou options d'une chaîne dans la TV en direct")
 

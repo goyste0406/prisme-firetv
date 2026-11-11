@@ -332,9 +332,10 @@ function sxNext(){if(!P||!P.sx)return;const it=ALL[P.id],nx=spNextEp(it,P.ss,P.e
  X.cache={};P.sx.binge++;
  const stop=msg=>{back();toast(msg)};
  if(P.sx.last)return stop("🌙 Bonne nuit · prisme a arrêté après cet épisode");
- if(!nx)return stop(`✓ ${it.t} : tu as tout vu`);
+ if(!nx){if(window.pbSeasonEnd&&pbSeasonEnd(it,null))return;return stop(`✓ ${it.t} : tu as tout vu`)}
  if(P.sx.send&&nx.s!==P.sx.send)return stop(`✓ Saison ${P.sx.send} finie !`);
- const M=MISSING()[it.id];if(M&&M.s===nx.s&&M.e===nx.e)return stop(`É${nx.e} pas encore chez ton fournisseur · 🔔 on te prévient dès qu'il arrive`);
+const M=MISSING()[it.id];if(M&&M.s===nx.s&&M.e===nx.e){if(window.pbSeasonEnd&&pbSeasonEnd(it,nx))return;return stop(`É${nx.e} pas encore chez ton fournisseur · 🔔 on te prévient dès qu'il arrive`)}
+ {const I=epInfo(it,nx.s,nx.e);if(I.miss&&!P.sx.last&&window.pbSeasonEnd&&pbSeasonEnd(it,nx))return}
  if(SET().binge&&P.sx.binge>=SET().binge&&!P.sx.more){P.sx.phase="wait";P.playing=false;S.modal={type:"sxmara",ret:"p-pp"};return render()}
  sxGoNext()}
 function sxGoNext(){const it=ALL[P.id],n=nextEp(it),v=verOf(it,n.s,n.e);Object.assign(P,{ss:n.s,ep:n.e,pos:0,playing:true});Object.assign(P.sx,{phase:"play",intro:false,cd:0});
@@ -509,7 +510,7 @@ function bubArm2(el){bubOff2();const it=ALL[el.dataset.hid];if(!it||el.closest(f
  <div class="it" data-f data-fid="set-sxbinge" data-act="sxset:binge"><span>« Encore un ? » après plusieurs épisodes</span><span>${s.binge?"après "+s.binge+" épisodes":"jamais"}</span></div>
  <div class="it" data-f data-fid="set-sxrst" data-act="sxrst"><span>Rangées masquées (${esc(ME().n)})</span><span>${x.hid.length?x.hid.map(k=>NAMES[k]).join(", ")+" · OK pour rétablir":"aucune"}</span></div></div></section>`;
  const i=h.indexOf("<section data-anchor><h3>Lecteur</h3>");return i<0?h+sec:h.slice(0,i)+sec+h.slice(i)}}
-window.__sx={X,MX,sUp,sRes,slides,WEEK,nextEp,epInfo,sxStart,verOf,pv:e=>{PV=e}};
+window.__sx={X,MX,sUp,sRes,slides,WEEK,nextEp,epInfo,sxStart,verOf,EPS,NS,EPT,EPS_,ED,setSp,spNextEp,SET,isDone,spOf,pv:e=>{PV=e}};
 })();
 /* ---------- fiches séries TMDB (series.json : affiches, grandes images, résumé, casting, chaîne, top 10) ---------- */
 const SXD={m:{},names:{},nl:{},top:[],n:0};
