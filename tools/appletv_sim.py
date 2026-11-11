@@ -227,8 +227,15 @@ R("function act(a){\n if(!a)return;const [k,v,w,x]=a.split(\":\");",
 # Clic maintenu sur le pavé = menu contextuel (favoris), comme sur tvOS
 R("/* Clic sur la barre de progression : saut direct */",
   '''/* Siri Remote : maintenir le clic central ouvre le menu (favoris) */
-{const ok=document.querySelector('.ring [data-k="ok"]');let lp;ok.addEventListener("pointerdown",()=>{lp=setTimeout(()=>{lp=null;key("menu")},550)},true);
- ["pointerup","pointerleave","pointercancel"].forEach(ev=>ok.addEventListener(ev,()=>{clearTimeout(lp)}));}
+/* OK part au relâchement : un appui court = OK, un appui long (0,55 s) = menu, jamais les deux */
+{const ok=document.querySelector('.ring [data-k="ok"]');let lp=null;
+ ok.addEventListener("pointerdown",e=>{e.stopImmediatePropagation();e.preventDefault();clearTimeout(lp);lp=setTimeout(()=>{lp=null;key("menu")},550)},true);
+ ok.addEventListener("pointerup",()=>{if(lp){clearTimeout(lp);lp=null;key("ok")}},true);
+ ["pointerleave","pointercancel"].forEach(ev=>ok.addEventListener(ev,()=>{clearTimeout(lp);lp=null}));
+ ok.addEventListener("click",e=>{if(e.detail)e.stopImmediatePropagation()},true);}
+/* Clavier : Entrée maintenue = menu, Entrée relâchée vite = OK */
+{let kt=null;window.addEventListener("keydown",e=>{if(e.key!=="Enter")return;const a=document.activeElement;if(a&&(a.tagName==="INPUT"||a.tagName==="TEXTAREA"||(a.closest&&a.closest(".remote,button"))))return;e.preventDefault();e.stopImmediatePropagation();if(e.repeat||kt)return;kt=setTimeout(()=>{kt=null;key("menu")},550)},true);
+ window.addEventListener("keyup",e=>{if(e.key!=="Enter"||!kt)return;e.preventDefault();clearTimeout(kt);kt=null;key("ok")},true)}
 /* Clic sur la barre de progression : saut direct */''')
 
 # stockage séparé du simulateur Fire TV

@@ -207,10 +207,10 @@ function fhModal(m){const opt=(fid,a,b,s,d)=>`<div class="opt" data-f data-fid="
  if(m.type==="fxhopt")return `<div class="modal"><div class="mbox glass" style="width:560px"><div class="k">PLUS D'OPTIONS</div><h2>${esc(FH.slide?FH.slide.title:"")}</h2>${FH.alt.map((a,i)=>opt("ho-"+i,"fhalt:"+i,a[0].replace(/<[^>]+>/g,""),"",i===0)).join("")}${opt("ho-x","fxclose","Fermer","")}</div></div>`;
  if(m.type==="fxhctx"){const f=m.id&&ALL[m.id],h=fhP(),i=h.ord.indexOf(m.rk),fixed=m.rk==="soir",p=ME();
   const fo=f?[["no","👎 Pas pour moi","Il ne te sera plus proposé"],["seen",p.seen.includes(f.id)?"↺ Marquer comme non vu":"✓ Déjà vu","Ça affine tes suggestions"],["list",isFav(f.id)?"− Retirer de ma liste":"＋ Ajouter à ma liste",""]]:[];
-  const ro=fixed?[]:[i>0&&["up","▲ Monter la rangée",""],i<h.ord.length-1&&["down","▼ Descendre la rangée",""],["hide","Masquer la rangée","Réglages › Accueil Films pour la rétablir"]].filter(Boolean);
+  const ro=fixed||!m.rk?[]:[i>0&&["up","▲ Monter la rangée",""],i<h.ord.length-1&&["down","▼ Descendre la rangée",""],["hide","Masquer la rangée","Réglages › Accueil Films pour la rétablir"]].filter(Boolean);
   return `<div class="modal"><div class="mbox glass" style="width:600px;max-height:690px">${f?`<div class="k">CE FILM</div><h2>${esc(f.t)}</h2>${fo.map((a,j)=>opt("hc-"+a[0],"fhc:"+a[0],a[1],a[2],j===0)).join("")}`:""}
-  <div class="k" style="margin-top:${f?14:0}px">CETTE RANGÉE · ${esc(fixed?"Ce soir ?":FHNAMES[m.rk]||"")}</div>${fixed?`<div class="mfoot" style="text-align:left">« Ce soir ? » reste toujours sous la bannière.</div>`:ro.map((a,j)=>opt("hc-"+a[0],"fhc:"+a[0],a[1],a[2],!f&&j===0)).join("")}
-  <div class="mfoot">Gardé pour le profil ${esc(p.n)}</div></div></div>`}
+  ${m.rk?`<div class="k" style="margin-top:${f?14:0}px">CETTE RANGÉE · ${esc(fixed?"Ce soir ?":FHNAMES[m.rk]||"")}</div>${fixed?`<div class="mfoot" style="text-align:left">« Ce soir ? » reste toujours sous la bannière.</div>`:ro.map((a,j)=>opt("hc-"+a[0],"fhc:"+a[0],a[1],a[2],!f&&j===0)).join("")}`:""}
+  ${opt("hc-x","fxclose","Fermer","")}<div class="mfoot">Gardé pour le profil ${esc(p.n)}</div></div></div>`}
  return ""}
 {const _fm=fxModal;fxModal=function(){const m=S.modal;if(m&&/^fxh(opt|ctx)$/.test(m.type))return fhModal(m);return _fm()}}
 
@@ -239,9 +239,12 @@ function gridNav(k){const g=F&&F.closest("#ggrid");if(!g||S.modal||!["up","down"
  if(k==="left"||k==="right"){const j=i+(k==="right"?1:-1);if(cur[j])setFocus(cur[j]);else if(k==="right"&&row(r+1)[0])setFocus(row(r+1)[0]);else if(k==="left"&&r>0){const p=row(r-1);setFocus(p[p.length-1])}return true}
  const t=row(r+(k==="down"?1:-1));if(t.length){setFocus(t[Math.min(i,t.length-1)]);return true}
  if(k==="up"){const c=view.querySelector(".chips .sel[data-f]")||view.querySelector(".chips [data-f]");if(c){setFocus(c);g.scrollTo({top:0,behavior:"smooth"})}}return true}
-{const _k=key;key=function(k){bubOff();if(gridNav(k))return;const pk=view.querySelector(".hpeek");if(pk){hPeekOff();if(F)hPeekArm(F);return}
+{const _k=key;key=function(k){bubOff();if(gridNav(k))return;
+ if(k==="menu"&&!S.modal&&F&&F.closest("#ggrid")&&ALL[F.dataset.hov]&&ALL[F.dataset.hov].type==="f"){S.modal={type:"fxhctx",id:F.dataset.hov,rk:null,ret:F.dataset.fid};return render()}const pk=view.querySelector(".hpeek");if(pk){hPeekOff();if(F)hPeekArm(F);return}
  if(fhOn()&&!S.modal&&F){
-  if(k==="menu"){if(F.closest(fxQ("hero"))&&FH.alt.length){S.modal={type:"fxhopt",ret:F.dataset.fid};return render("ho-0")}const s=F.closest("[data-rk]");if(s){S.modal={type:"fxhctx",id:F.dataset.hid||null,rk:s.dataset.rk,ret:F.dataset.fid};return render()}}
+  if(k==="menu"&&F.dataset.row==="tabs")return toast("Maintiens le clic sur un film pour ses options");
+  if(k==="menu"){if(F.closest(fxQ("hero"))){if(FH.alt.length){S.modal={type:"fxhopt",ret:F.dataset.fid};return render("ho-0")}return toast("Pas d'autre option pour cette page")}const s=F.closest("[data-rk]");
+   if(s){if(s.dataset.rk==="soir"&&!F.dataset.hid)return toast("Maintiens le clic sur un film pour ses options");S.modal={type:"fxhctx",id:F.dataset.hid||null,rk:s.dataset.rk,ret:F.dataset.fid};return render()}}
   if(k==="play"&&F.dataset.hid)return fhAct("fhplay",F.dataset.hid);
   if((k==="left"||k==="right")&&fhCarousel(k))return;
   if(k==="down"&&F.dataset.row==="tabs"){const d=view.querySelector(fxQ("hero")+" [data-default]");if(d){setFocus(d);return}}
