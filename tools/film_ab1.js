@@ -348,7 +348,7 @@ function fxAct(k,v,w,x){const t=topS(),f=t.t==="detail"?ALL[t.id]:P?ALL[P.id]:nu
  case "fxpconfno":S.modal=m.prev;return render();
  case "fxpconfyes":{const p=PR.list[m.id];if(m.what==="clr"){Object.assign(p,{hist:[],fb:{},seen:[],no:[],split:{},pref:{}});if(m.id===PR.cur){S.prog={};save()}else if(p.d)p.d.prog={};FXS.cache={};prSave();S.modal=m.prev;render("pe-ok");return toast(`Historique de ${p.n} effacé`)}
   const n=p.n;if(m.id===PR.cur){const other=Object.keys(PR.list).find(k=>k!==m.id);prSwitch(other)}delete PR.list[m.id];if(FXS.duo&&FXS.duo.includes(m.id))FXS.duo=null;prSave();S.modal={type:"fxpman",ret:m.prev&&m.prev.ret};render();return toast(`Profil ${n} supprimé`)}
- case "fxpdone":{const mm=m;S.modal=mm.back==="fxwho"||mm.back==="fxwhofull"?{type:mm.back,ret:mm.ret}:mm.back==="fxpman"?{type:"fxpman",ret:mm.ret,from:mm.from}:null;render(mm.ret);if(mm.isNew)toast(`Profil ${PR.list[mm.id].n} créé`);return}
+ case "fxpdone":{const mm=m;S.modal=mm.back==="fxwho"||mm.back==="fxwhofull"?{type:mm.back,ret:mm.ret}:mm.back==="fxpman"?{type:"fxpman",ret:mm.ret,from:mm.from}:null;render(mm.ret);if(mm.isNew)toast(`${/^profil/i.test(PR.list[mm.id].n)?"":"Profil "}${PR.list[mm.id].n} créé`);return}
  case "fxpask":PR.ask=!PR.ask;prSave();return render("m-ask");
  case "fxhapp":{if(v!=="prisme")return toast("Ouvre une autre app (simulé)");S.modal=PR.ask&&Object.keys(PR.list).length>1?{type:"fxwhofull"}:null;return render()}
  case "fxhplay":{S.modal=null;S.stack=[{t:"home"},{t:"detail",id:v,last:"w-play"}];FXS.ready=v;render("w-play");return fxStart(v)}
@@ -365,7 +365,7 @@ let fxStarting=false;
 
 /* ---------- touches ---------- */
 function fxBack(){const m=S.modal,mt=m.type;
- if(mt==="fxpname"){S.modal=m.prev;return render("pe-name")}if(mt==="fxpconf"){S.modal=m.prev;return render()}if(mt==="fxpedit")return fxAct("fxpdone");
+ if(mt==="fxpname"){S.modal=m.prev;return render("pe-name")}if(mt==="fxpconf"){S.modal=m.prev;return render()}if(mt==="fxpedit"){if(m.isNew){const n=PR.list[m.id]&&PR.list[m.id].n;delete PR.list[m.id];prSave();S.modal=m.back==="fxwho"||m.back==="fxwhofull"?{type:m.back,ret:m.ret}:m.back==="fxpman"?{type:"fxpman",ret:m.ret}:null;render(m.ret);return toast(`${n||"Profil"} non créé`)}return fxAct("fxpdone")}
  if(mt==="fxpman"&&(m.from==="fxwho"||m.from==="fxwhofull")){S.modal={type:m.from,ret:m.ret};return render("m-p-man")}
  if(mt==="fxwhofull"||mt==="fxshelf")return;if(mt==="fxcut")return fxAct("fxcutstop");if(mt==="fxrecap")return fxAct("fxrecapskip");if(mt==="fxend")return fxAct("fxnextstay");
  clearInterval(fxRT);return fxClose()}
