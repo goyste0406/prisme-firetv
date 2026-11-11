@@ -278,3 +278,19 @@ function newSeen(el){if(!el.dataset.hid||!fhOn())return;const id=el.dataset.hid;
  view.classList.toggle("fhdown",fhOn()&&!el.closest(fxQ("hero"))&&el.dataset.row!=="tabs");
  if(fhOn()){if(el.dataset.bt&&FH.catT!==el.dataset.bt){FH.catT=el.dataset.bt;render(el.dataset.fid);return}hPeekArm(el);prepArm(el);bubArm(el);newSeen(el)}else{hPeekOff();clearTimeout(PRT)}}}
 {const _r=render;render=function(fid){bubOff();view.classList.remove("fhdown");_r(fid);if(fhOn())fhTick();else clearInterval(FHT)}}
+
+/* ---------- TV en direct : qualité mesurée à la 1re lecture, retenue ensuite (aucune connexion en plus) ----------
+   Dans l'appli, le lecteur lit ces valeurs sur le flux déjà ouvert : taille de l'image et images/s (AVPlayer / VLC),
+   débit (journal d'accès du lecteur), codecs, HDR, canaux audio. Le simulateur reprend les valeurs de la source. */
+let MEAS={};try{MEAS=JSON.parse(localStorage.getItem("prisme-meas")||"{}")}catch(e){}
+const measKey=v=>v&&v.p?v.p.id+"|"+v.name:"";
+const MQB={"4K":[3840,2160,"HEVC",50,16000],"1080p":[1920,1080,"H.264",50,7800],"720p":[1280,720,"H.264",50,4200],"SD":[720,576,"H.264",25,2200]};
+function measNow(v){const b=MQB[v.q]||MQB["1080p"],h=hash(v.name||"")%9;return {q:v.q,w:b[0],h:b[1],vc:(/hevc|h\.?265/i.test(v.codec||"")?"HEVC":b[2]),fps:b[3],kb:b[4]+h*180,a:/e-?ac3|5\.1/i.test((v.audio||[]).join(" "))?"E-AC3 5.1":"AAC stéréo",at:Date.now()}}
+let MST=0;
+{const _sp=startPlayer;startPlayer=function(o){const r=_sp(o);clearTimeout(MST);if(o&&o.kind==="live"){const key="ch:"+o.id;MST=setTimeout(()=>{if(!P||P.kind!=="live"||P.id!==o.id||!P.playing)return;
+  const v=srcs(key).find(x=>x.id===(P.src||o.src))||pickSrc(key);const k=measKey(v);if(!k)return;const first=!MEAS[k];MEAS[k]=measNow(v);try{localStorage.setItem("prisme-meas",JSON.stringify(MEAS))}catch(e){}
+  if(first)toast(`✓ Qualité de ${CH[o.id]?CH[o.id].n:"la chaîne"} mesurée : ${MEAS[k].q} · ${MEAS[k].fps} i/s · retenue pour la prochaine fois`)},4000)}return r}}
+const fmtD=t=>{const d=new Date(t);return d.toLocaleDateString("fr-FR",{day:"2-digit",month:"2-digit"})+" à "+d.toLocaleTimeString("fr-FR",{hour:"2-digit",minute:"2-digit"})};
+{const _s=srcs;srcs=function(key){const L=_s(key);if(!key.startsWith("ch:"))return L;return L.map(v=>{const m=MEAS[measKey(v)];
+  if(!m)return {...v,fx:1,codec:`${v.codec} · d'après le nom · mesurée à ta 1re lecture`};
+  return {...v,fx:1,ms:1,q:m.q,codec:[m.vc,`${m.w}×${m.h}`,`${m.fps} i/s`,`${(m.kb/1000).toFixed(1).replace(".",",")} Mb/s`,m.a,`✓ mesurée le ${fmtD(m.at)}`].join(" · ")}})}}
