@@ -275,6 +275,7 @@ RFCMD += "const RSCMD=`cat > /tmp/prisme-series.pl <<'PRISME_FIN'\n" + _ps + "PR
 _fx = rd("prisme-flux.pl")
 RXFLUX = "const RXFLUX=" + _json.dumps('export PRISME_U="$U" PRISME_N="$N" PRISME_P="$P"; cat > /tmp/prisme-flux.pl <<\'PRISME_FLUX\'\n' + _fx + 'PRISME_FLUX\nperl /tmp/prisme-flux.pl "$D"; unset PRISME_P; ') + ";\n"
 R("render();\n</script>", RFCMD + RXFLUX + "const FXR=" + _json.dumps(_fxren) + ";\n" + rd("live_a2c.js") + "\n" + rd("real_end.js") + "\n" + rd("live_home.js") + "\n" + rd("live_plus.js") + "\n" + rd("film_ab1.js") + "\n" + rd("film_home.js") + "\n" + rd("serie_home.js") + "\nrender();if(inApp())lPreload(()=>render());\n</script>")
+R('setBg([CH[S.lch].col,"#08080c"])', 'setBg([(CH[S.lch]||{col:"#1a1a22"}).col,"#08080c"])')
 R("<kbd>M</kbd> (ou maintenir le clic) ajouter/retirer des favoris", "<kbd>M</kbd> (ou maintenir le clic) favoris, ou options d'une chaîne dans la TV en direct")
 
 R('<div class="pkick">${it.type==="s"?"Série · "+esc(it.net):"Film · "+it.y}', '<div class="pkick">${it.rp?"Replay · "+esc(CH[it.rp.c].n)+" · diffusé "+lday(it.rp.s):it.type==="s"?"Série · "+esc(it.net):"Film · "+it.y}')

@@ -90,7 +90,7 @@ for my $dir (@dirs) {
   my %need; for my $g (@ok) { my $f = "$CACHE/d/$g->{tm}.json"; $need{$g->{tm}} = $f unless -s $f && $now - (stat($f))[9] < $TTL }
   my %uid = map { $_->{tm} => 1 } @ok; print "Fiches à télécharger : ", scalar(keys %need), " (", scalar(keys %uid) - scalar(keys %need), " déjà en cache)…\n";
   fetch_many([map { ["$TMDB/tv/$_?language=fr-FR&append_to_response=aggregate_credits,content_ratings,videos&include_video_language=fr,en,null$akey", $need{$_}] } keys %need], @auth);
-  my (%M, @imgs, %byName); my $rank = 0;
+  my (%M, @imgs, %byName, %NL); my $rank = 0;
   for my $g (@G) { $rank++; my $k; my $d = $g->{tm} ne "" ? eval { $J->decode(slurp("$CACHE/d/$g->{tm}.json")) } : undef;
     if (ref $d eq "HASH" && $d->{id}) { $k = "t$d->{id}";
       unless ($M{$k}) {
@@ -105,6 +105,7 @@ for my $dir (@dirs) {
           net => ((($d->{networks} || [])->[0] || {})->{name} // ""), cr => join(", ", map { $_->{name} } grep { $_->{name} } @{ $d->{created_by} || [] }),
           ns => ($d->{number_of_seasons} || 0) + 0, ne => ($d->{number_of_episodes} || 0) + 0, st => $d->{status} // "", ep => $ep, cast => \@cast,
           yt => @vid ? $vid[0][1]{key} : "", ytl => !@vid ? "" : ($vid[0][1]{iso_639_1} // "") ne "fr" ? "vo" : ($vid[0][1]{name} // "") =~ /vostf?r?|sous-titr/i ? "vost" : "vf" };
+        my $nw = ($d->{networks} || [])->[0]; if ($nw && $nw->{name} && $nw->{logo_path} && !$NL{$nw->{name}}) { (my $lp = $nw->{logo_path}) =~ s/\.svg$/.png/i; $NL{$nw->{name}} = ["$IMGB/w185$lp", "$CACHE/i/n$nw->{id}.png"] }
         my $po = $d->{poster_path}; my $bd = $d->{backdrop_path};
         if ($po) { push @imgs, ["$IMGB/w185$po", "$CACHE/i/p$d->{id}", 220, 60, $k, "po"] } elsif ($g->{cover}) { push @imgs, [$g->{cover}, "$CACHE/i/c" . simp($g->{t}), 220, 60, $k, "po"] }
         if ($bd && $rank <= $MAXB) { push @imgs, ["$IMGB/w780$bd", "$CACHE/i/b$d->{id}", 720, 55, $k, "bd"] } } }
@@ -118,14 +119,17 @@ for my $dir (@dirs) {
   print "Images à télécharger : ", scalar(@dl), " (", scalar(@imgs) - scalar(@dl), " en cache)…\n";
   fetch_many([map { [$_->[0], $_->[1]] } @dl]); jpeg($_->[1], $_->[2], $_->[3]) for @dl;
   for my $im (@imgs) { my $u = datauri($im->[1]); $M{$im->[4]}{$im->[5]} = $u if $u }
+  # --- logos des chaînes et plateformes (PNG transparents, gardés tels quels) ---
+  fetch_many([map { [$_->[0], $_->[1]] } grep { !-s $_->[1] } values %NL]);
+  my %NLO; for my $n (keys %NL) { my $u = datauri($NL{$n}[1]); $NLO{$n} = $u if $u }
   # --- tendances en France cette semaine (séries chez ce fournisseur) ---
   my @pp = map { ["$TMDB/trending/tv/week?language=fr-FR&page=$_$akey", "$tmp/tr$_.json"] } 1 .. 3; fetch_many(\@pp, @auth);
   my @top; for my $p (@pp) { my $r = eval { $J->decode(slurp($p->[1])) } || {}; for my $m (@{ $r->{results} || [] }) { my $k = "t$m->{id}"; push @top, $k if $M{$k} && !grep { $_ eq $k } @top } }
   @top = @top[0 .. 9] if @top > 10;
-  my $out = { v => 1, at => $now, names => \%byName, m => \%M, top => \@top };
+  my $out = { v => 1, at => $now, names => \%byName, m => \%M, top => \@top, nl => \%NLO };
   open(my $o, ">:raw", "$dir/series.json") or die "Impossible d'écrire $dir/series.json\n"; print $o $J->encode($out); close $o;
   my $np = grep { $_->{po} } values %M; my $nb = grep { $_->{bd} } values %M; my $nt = grep { /^t/ } keys %M;
-  printf "✓ series.json : %d séries (%d fiches TMDB), %d affiches, %d grandes images, top 10 : %d séries, %.1f Mo\n", scalar(keys %M), $nt, $np, $nb, scalar(@top), (-s "$dir/series.json") / 1048576;
+  printf "✓ series.json : %d séries (%d fiches TMDB), %d affiches, %d grandes images, %d logos de chaînes, top 10 : %d séries, %.1f Mo\n", scalar(keys %M), $nt, $np, $nb, scalar(keys %NLO), scalar(@top), (-s "$dir/series.json") / 1048576;
 }
 print "Terminé. Ajoute series.json dans le simulateur (bouton « Choisir les fichiers… »).\n";
 system("open", $dirs[0]) if -x "/usr/bin/open";

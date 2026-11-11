@@ -4,6 +4,12 @@
    fiche : progression, saisons (courbe des notes), liste d'épisodes, versions et langue par série, à deux, rappel de saison
    lecteur : résumé automatique, saut d'intro appris, épisode suivant préparé pendant le générique, « Encore un ? »
    Les données des épisodes (titres, notes, dates, versions) viendront du script séries ; sans lui, démonstration. */
+/* services de streaming / chaînes : nom unique et rang (les plus utilisés en premier) ; les autres suivent, par nombre de séries */
+const SVCS=[["Netflix",/netflix/i],["Apple TV+",/apple ?tv/i],["Prime Video",/prime ?video|amazon/i],["Disney+",/disney ?(\+|plus)/i],["Canal+",/canal ?(\+|plus)/i],["Max",/^(hbo|max)\b/i],["Paramount+",/paramount/i],
+ ["France TV",/^france ?([2-5]|tv|\.tv|t[ée]l[ée]visions?|o)$/i],["TF1",/^tf1/i],["M6",/^(m6|6play)/i],["Arte",/^arte/i],["OCS",/^ocs/i],["Crunchyroll",/crunchyroll/i],["BBC",/^bbc/i],["AMC",/^amc/i]];
+const SVCN=n=>{if(!n)return "";const x=SVCS.find(([,r])=>r.test(n));return x?x[0]:n};
+const SVCR=n=>{const i=SVCS.findIndex(([k])=>k===n);return i<0?99:i};
+window.SXLG=window.SXLG||{};
 (()=>{
 const DEMO=()=>!REAL;
 const Q=s=>s.replace(/\.([A-Za-z_][\w-]*)/g,(m,c)=>"."+(FXR[c]||c));
@@ -151,7 +157,7 @@ function colls(){const ck="co|"+PR.cur+"|"+SERIES.length+"|"+MX().no.length+"|"+
  C.push({k:"court",n:"Épisodes courts",ic:"⏱",why:"Des épisodes de 35 minutes ou moins",items:()=>av.filter(it=>ED(it)<=35)});
  C.push({k:"fr",n:"Séries françaises",ic:"🇫🇷",why:"Produites en France",items:()=>av.filter(FR)});
  C.push({k:"top",n:"★ 8,5 et plus",ic:"🏆",why:"Les mieux notées de ton fournisseur",items:()=>av.filter(it=>it.imdb>=8.5).sort((a,b)=>b.imdb-a.imdb)});
- const nets={};av.forEach(it=>{if(NET(it))(nets[NET(it)]=nets[NET(it)]||[]).push(it)});Object.entries(nets).forEach(([n,L])=>C.push({k:"net:"+n,n,ic:"📡",why:"Chaîne ou plateforme d'origine (TMDB)",items:()=>L,hide:1,net:1}));
+ const nets={};av.forEach(it=>{const n=SVCN(NET(it));if(n)(nets[n]=nets[n]||[]).push(it)});Object.entries(nets).sort((p,q)=>SVCR(p[0])-SVCR(q[0])||q[1].length-p[1].length).forEach(([n,L])=>C.push({k:"net:"+n,n,ic:"📡",why:"Chaîne ou plateforme d'origine (TMDB)",items:()=>L,hide:1,net:1}));
  return X.cache[ck]=C}
 const coll=k=>colls().find(c=>c.k===k);
 const SORT=[["pert","Pertinence"],["note","Note"],["duree","Plus courtes"],["recent","Récentes"]];
@@ -179,7 +185,7 @@ function slides(){const ck="sl|"+PR.cur+"|"+JSON.stringify(MX().sp).length+MX().
  const wd=new Date().getDay();let we=wd===5||wd===6||wd===0;if(!we&&SL().filter(it=>ED(it)<=35).length<3)we=true;const mi=we?SL().filter(it=>!isDone(it)&&(NS(it)===1||ST(it)==="terminée")):SL().filter(it=>ED(it)<=35);
  if(mi.length>=3)L.push({k:"mom",ids:[],tr:mi[0],tag:we?"🍿 LE WEEK-END · À DÉVORER":"⏱ EN SEMAINE · ÉPISODES COURTS",bg:mosaic(mi),title:we?"🍿 Séries à finir ce week-end":"⏱ Un épisode, pas plus",font:"",big:1,
   meta:`<span>${mi.length} séries</span><span>${mi.slice(0,3).map(it=>esc(it.t)).join(" · ")}</span>`,sub:we?"Des séries terminées : tout est disponible, avec une vraie fin":"Des épisodes courts pour une soirée de semaine",btns:[["Voir la collection","sxcoll:"+(we?"fini":"court")],["🎲 Une au hasard","sxrand:"+(we?"fini":"court")]]});
- const used=new Set(L.flatMap(s=>s.ids)),nets={};SL().forEach(it=>{if(NET(it))(nets[NET(it)]=nets[NET(it)]||[]).push(it)});
+ const used=new Set(L.flatMap(s=>s.ids)),nets={};SL().forEach(it=>{const n=SVCN(NET(it));if(n)(nets[n]=nets[n]||[]).push(it)});
  const hn=Object.entries(nets).filter(([n,G])=>G.length>=2).sort((p,q)=>q[1].filter(it=>isDone(it)||spOf(it)).length-p[1].filter(it=>isDone(it)||spOf(it)).length||q[1].length-p[1].length)[0];
  if(hn){const [n,G]=hn,seen=G.filter(it=>isDone(it)||spOf(it)),pm=pmap(),nx=G.filter(it=>fresh(it)&&!used.has(it.id)).sort((p,q)=>(pm[q.id]?.pct||0)-(pm[p.id]?.pct||0))[0];
   if(nx)L.push({k:"hon",ids:[nx.id],tr:nx,tag:"📡 À L'HONNEUR CETTE SEMAINE",bg:mosaic(G),title:"Les séries "+n,font:"",big:1,meta:`<span>${G.length} séries chez ton fournisseur</span><span>tu en as vu ${seen.length}</span>`,
@@ -221,7 +227,7 @@ function rows(){const pm=pmap(),HI=heroIds(),R=sRes(),shown=new Set([...HI,...R.
  const nN=NWL.filter(x=>isNew(x.it.id)).length,b=["col","cat","lic"].includes(S.sxbt)?S.sxbt:"col",G=genreList("s"),C=colls().filter(c=>["mini","fini","court","fr","top"].includes(c.k)).map(c=>({c,L:c.items()})).filter(x=>x.L.length>=2),N=colls().filter(c=>c.net);
  const items=b==="col"?C.map(({c,L})=>`<div class="ctile" data-f data-fid="sxe-${c.k}" data-act="sxcoll:${c.k}" data-row="sxx">${stack3(L)}<div class="ct"><em>${c.ic}</em><b>${esc(c.n)}</b><span>${L.length} séries</span></div></div>`).join("")
   :b==="cat"?G.map(({g,items})=>`<div class="gword" style="--cc:${g[2]}" data-f data-fid="sxg-${g[0]}" data-act="genre:s:${g[0]}" data-row="sxx"><b>${esc(g[1])}</b><small>${items.length} séries</small></div>`).join("")
-  :N.map(c=>`<div class="lic2" style="--cc:#${((hash(c.n)&0xffffff)|0x404040).toString(16).slice(-6)}" data-f data-fid="sxn-${hash(c.n)}" data-act="sxcoll:${c.k}" data-row="sxx"><span class="ph">LOGO</span><b>${esc(c.n)}</b><small>${c.items().length} séries</small></div>`).join("");
+  :N.map(c=>`<div class="lic2" style="--cc:#${((hash(c.n)&0xffffff)|0x404040).toString(16).slice(-6)}" data-f data-fid="sxn-${hash(c.n)}" data-act="sxcoll:${c.k}" data-row="sxx">${SXLG[c.n]?`<img class="lgo" src="${SXLG[c.n]}" alt="">`:`<span class="ph">LOGO</span>`}<b>${esc(c.n)}</b><small>${c.items().length} série${c.items().length>1?"s":""}</small></div>`).join("");
  const browse=`<section data-anchor data-rk="browse" class="hsec browse"><div class="lh">Parcourir</div><div class="btabs hline">${[["col","Collections"],["cat","Catégories"],["lic","Chaînes"]].map(([k,n])=>`<div class="btab ${k===b?"sel":""}" data-f data-fid="sxbt-${k}" data-bt2="${k}" data-act="sxbt:${k}" data-row="sxbt">${n}</div>`).join("")}</div><div class="row sx">${items||'<div class="empty0">Rien pour le moment</div>'}</div></section>`;
  return {top:sec("top","🔥 Top 10 séries","",tp,"topsec"),new:sec("new","✦ Nouveau sur prisme",nN?`<span class="nwc0">● ${nN} nouveau${nN>1?"x":""}</span>`:"",nw?nw+(NWL.length>=12?allTile("sxw","nouveau",NWL.length,"l"):""):""),
   bec:bec.length>=4?sec("bec",`Parce que tu as aimé ${esc(base.t)}`,"",bec.slice(0,10).map(o=>spst(o.c,"sxb-"+o.c.id,"sxb",o)).join("")):"",
@@ -495,7 +501,7 @@ function bubArm2(el){bubOff2();const it=ALL[el.dataset.hid];if(!it||el.closest(f
 window.__sx={X,MX,sUp,sRes,slides,WEEK,nextEp,epInfo,sxStart,verOf,pv:e=>{PV=e}};
 })();
 /* ---------- fiches séries TMDB (series.json : affiches, grandes images, résumé, casting, chaîne, top 10) ---------- */
-const SXD={m:{},names:{},top:[],n:0};
+const SXD={m:{},names:{},nl:{},top:[],n:0};
 function sxApply(){let n=0;const byK={};
  for(const it of SERIES){const r=it._real;if(!r)continue;let k="";for(const s of r.s||[]){if(SXD.names[s[1]]){k=SXD.names[s[1]];break}}
   const d=k&&SXD.m[k];if(!d)continue;n++;byK[k]=byK[k]||it.id;it.sxk=k;
@@ -505,9 +511,10 @@ function sxApply(){let n=0;const byK={};
   if(d.cast&&d.cast.length)it.cast=d.cast.map(([nm,ch])=>{const aid="ra"+(hash(nm)>>>0).toString(36);A[aid]=nm;if(typeof CRED!=="undefined")(CRED[aid]=CRED[aid]||[]).some(x=>x[0]===it.id)||CRED[aid].push([it.id,ch||""]);return [aid,ch||""]})}
  const top=(SXD.top||[]).map(k=>byK[k]).filter(Boolean);
  if(top.length){window.SXDATA=window.SXDATA||{};SXDATA.top=top}
+ for(const nm in SXD.nl||{}){const c=SVCN(nm);if(!SXLG[c]||nm===c)SXLG[c]=SXD.nl[nm]}
  if(window.__sx&&__sx.X)__sx.X.cache={};SXD.n=n;return n}
 async function sxImportSeries(files,say){const out=[];for(const f of files){say(`Lecture de ${f.name}…`);let d=null;try{d=JSON.parse((await f.text()).replace(/^﻿/,""))}catch(e){}
   if(!d||typeof d!=="object"||!d.m||!d.names)throw new Error(`${f.name} n'est pas un fichier de fiches séries prisme`);out.push(d)}
  let list=[];try{list=(await idbGet("series"))||[]}catch(e){}list=list.concat(out).slice(-4);await idbSet("series",list);return out.reduce((a,d)=>a+Object.keys(d.m).length,0)}
-if(typeof REAL!=="undefined"&&REAL)idbGet("series").then(list=>{if(!list||!list.length)return;for(const d of list){Object.assign(SXD.m,d.m);Object.assign(SXD.names,d.names||{});if(d.top&&d.top.length)SXD.top=d.top}
+if(typeof REAL!=="undefined"&&REAL)idbGet("series").then(list=>{if(!list||!list.length)return;for(const d of list){Object.assign(SXD.m,d.m);Object.assign(SXD.names,d.names||{});Object.assign(SXD.nl,d.nl||{});if(d.top&&d.top.length)SXD.top=d.top}
  const n=sxApply();const st=$("#rst");if(st)st.textContent+=` · ${n} fiches séries TMDB`;if(inApp()&&!S.loading)render(F&&F.dataset.fid)}).catch(()=>{});
