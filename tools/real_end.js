@@ -9,7 +9,7 @@ if(REAL){
  base=function(pl,key){const r=itemOf(key);return r?plsOf(r).has(pl.id):false};
  variants=function(pl,key){const r=itemOf(key);if(!r)return [];const L=r.s.filter(x=>x[0]===pl.id);
   if(key.startsWith("ch:"))return L.map((x,i)=>({id:pl.id+"|"+i,i,p:pl,q:x[2],name:x[1],codec:RCODEC[x[2]],audio:["Français"],subs:["Télétexte si diffusé"],ext:"ts",ar:x[3]||0}));
-  return L.map((x,i)=>{const tag=/vostf?r?\b/i.test(x[1])?"VOSTFR":/multi/i.test(x[1])?"MULTI":"VF";const v={id:pl.id+"|"+i,i,p:pl,q:x[2],tag,name:x[1],codec:RCODEC[x[2]],audio:tag==="VOSTFR"?["Anglais (VO)"]:tag==="MULTI"?["Français (VF)","Anglais (VO)"]:["Français (VF)"],subs:tag==="VOSTFR"?["Français"]:["Aucun"],size:"—",ext:x[3]||"mkv"};
+  return L.map((x,i)=>{const tag=tagOf(x[1]),fr=tag==="VOSTFR"?null:frOf(x[1]),frl=fr&&fr!=="VF"?`${FRL[fr]} · ${fr}`:"Français (VF)";const v={id:pl.id+"|"+i,i,p:pl,q:x[2],tag,fr,name:x[1],codec:RCODEC[x[2]],audio:tag==="VOSTFR"?["Anglais (VO)"]:tag==="MULTI"?[frl,"Anglais (VO)"]:[frl],subs:tag==="VOSTFR"?["Français"]:["Aucun"],size:"—",ext:x[3]||"mkv"};
    const fx=(ALL[key]||{}).type==="s"?FLUX.ser[x[1]]:FLUX.vod[x[4]];return fx?fluxApply(v,fx,tag):v})};
  addDays=function(pl,it){const a=it._real&&it._real.a;return a?Math.max(0,Math.floor((Date.now()/1000-a)/86400)):400};
  const M0=new Date().setHours(0,0,0,0)/60000;
@@ -280,13 +280,14 @@ if(typeof REAL!=="undefined"&&REAL){for(const f of FILMS)if(f._real&&!f.tmd)f.t=
 /* ---------- fiche technique des flux (flux.json) : connue avant d'ouvrir le flux ---------- */
 const fluxQ=(w,h)=>h>=1600||w>=3200?"4K":h>=900||w>=1700?"1080p":h>=650||w>=1200?"720p":"SD";
 const VCOD={hevc:"HEVC",h265:"HEVC",h264:"H.264",avc:"H.264",av1:"AV1",mpeg2video:"MPEG-2",vp9:"VP9"},ACOD={eac3:"E-AC3",ac3:"AC3",aac:"AAC",truehd:"TrueHD",dts:"DTS",mp3:"MP3",opus:"Opus",flac:"FLAC",mp2:"MP2"};
-const LANG={fre:"Français",fra:"Français",fr:"Français",eng:"Anglais",en:"Anglais",spa:"Espagnol",ger:"Allemand",deu:"Allemand",ita:"Italien",jpn:"Japonais"};
+const LANG={frq:"Français (Québec)",frf:"Français (France)",fre:"Français",fra:"Français",fr:"Français",eng:"Anglais",en:"Anglais",spa:"Espagnol",ger:"Allemand",deu:"Allemand",ita:"Italien",jpn:"Japonais"};
 const chLbl=c=>c>=8?"7.1":c>=6?"5.1":c===2?"stéréo":c===1?"mono":c?c+" canaux":"";
 function fluxApply(v,f,tag){const [w,h,vc,hdr,fps,kb,ac,ch,lg,dur,atm,ext,neps]=f;const o={...v,fx:1};
  if(h||w)o.q=fluxQ(w,h);
  o.hdr=hdr||"";o.codec=[VCOD[vc]||(vc||"").toUpperCase(),hdr,w&&h?`${w}×${h}`:"",fps?`${String(fps).replace(".",",")} i/s`:"",kb?`${(kb/1000).toFixed(kb>=10000?0:1).replace(".",",")} Mb/s`:""].filter(Boolean).join(" · ");
- const al=LANG[lg]||(tag==="VOSTFR"?"Anglais (VO)":"Français"),an=[ACOD[ac]||(ac||"").toUpperCase(),chLbl(ch),atm?"Atmos":""].filter(Boolean).join(" ");
- o.audio=[an?`${al} · ${an}`:al,...(tag==="MULTI"&&lg&&LANG[lg]?[LANG[lg]==="Français"?"Anglais (VO)":"Français (VF)"]:[])];
+ if(lg==="frq"&&tag!=="VOSTFR"){if(tag==="MULTI")o.fr="VFQ";else o.tag=o.fr="VFQ"}else if(lg==="frf"&&tag!=="VOSTFR"){if(tag==="MULTI")o.fr="VFF";else if(o.tag==="VF")o.tag=o.fr="VFF"}
+ const frn=o.fr&&o.fr!=="VF"?FRL[o.fr]:"Français",al=(LANG[lg]&&!/^fr/.test(lg)?LANG[lg]:null)||(tag==="VOSTFR"?"Anglais (VO)":frn)+(o.fr&&o.fr!=="VF"&&tag!=="VOSTFR"?" · "+o.fr:""),an=[ACOD[ac]||(ac||"").toUpperCase(),chLbl(ch),atm?"Atmos":""].filter(Boolean).join(" ");
+ o.audio=[an?`${al} · ${an}`:al,...(tag==="MULTI"?[/^(fr|fre|fra|frq|frf)$/.test(lg)||!lg?"Anglais (VO)":(o.fr&&o.fr!=="VF"?FRL[o.fr]+" · "+o.fr:"Français (VF)")]:[])];
  if(kb&&dur){const go=kb*dur/8/1e6;o.size=(go>=1?go.toFixed(1).replace(".",",")+" Go":Math.round(go*1000)+" Mo")+(neps?" / épisode":"")}
  if(ext)o.ext=ext;if(neps)o.neps=neps;o.codec+=` · ${o.size&&o.size!=="—"?o.size+" · ":""}${(o.ext||"").toUpperCase()} · ✓ fiche du serveur`;return o}
 async function fluxImport(files,say){let n=0;for(const f of files){say(`Lecture de ${f.name}…`);let d=null;try{d=JSON.parse((await f.text()).replace(/^﻿/,""))}catch(e){}

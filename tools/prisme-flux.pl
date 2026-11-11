@@ -28,7 +28,9 @@ sub probe { my ($inf) = @_; return undef unless ref $inf eq "HASH"; my $v = ref 
   my $fr = $v->{avg_frame_rate} || $v->{r_frame_rate} || ""; my $fps = $fr =~ m{^(\d+)/(\d+)$} && $2 ? sprintf("%.3g", $1 / $2) + 0 : 0;
   my $tr = $v->{color_transfer} // ""; my $tag = lc($v->{codec_tag_string} // "") . " " . ($v->{profile} // "");
   my $hdr = $tag =~ /dvh[e1]|dolby ?vision/i ? "DV" : $tr eq "smpte2084" ? "HDR10" : $tr eq "arib-std-b67" ? "HLG" : "";
-  my $lang = ""; for my $t ($a->{tags}, $v->{tags}) { next unless ref $t eq "HASH"; $lang ||= $t->{language} // $t->{LANGUAGE} // "" }
+  my ($lang, $ttl) = ("", ""); for my $t ($a->{tags}, $v->{tags}) { next unless ref $t eq "HASH"; $lang ||= $t->{language} // $t->{LANGUAGE} // ""; $ttl ||= $t->{title} // $t->{handler_name} // "" }
+  # doublage : québécois (VFQ) ou de France (VFF) quand la piste le dit (langue fr-CA ou titre de piste)
+  $lang = "frq" if $lang =~ /^fr.?ca$/i || $ttl =~ /\bvfq\b|qu[ée]b|canad/i; $lang = "frf" if $lang !~ /^frq$/ && ($lang =~ /^fr.?fr$/i || $ttl =~ /\bvff\b|truefrench|france/i);
   my $ap = $a->{profile} // ""; my $dur = $inf->{duration_secs} || 0;
   return [($v->{width} || 0) + 0, ($v->{height} || 0) + 0, lc($v->{codec_name} // ""), $hdr, $fps, ($inf->{bitrate} || 0) + 0,
           lc($a->{codec_name} // ""), ($a->{channels} || 0) + 0, lc($lang), $dur + 0, ($ap =~ /atmos|joc/i ? 1 : 0)] }

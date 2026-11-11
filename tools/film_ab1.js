@@ -46,9 +46,19 @@ const fxMax=()=>{const L=(FXS.duo||[PR.cur]).map(id=>PR.list[id]&&PR.list[id].ma
 const fxBlocked=f=>{const m=fxMax();return !!f&&f.type==="f"&&m!=null&&fxAgeOf(f)>m};
 {const _s=srcs;srcs=function(key){const L=_s(key);if(L.length&&!key.startsWith("ch:")&&fxBlocked(ALL[key]))return [];return L}}
 /* langue préférée (apprise ou réglée) */
-const fxTag=v=>v.tag||(/vostfr/i.test(v.name||"")?"VOSTFR":/multi/i.test(v.name||"")?"MULTI":"VF");
+/* langue d'une version : VFF (doublage France), VFQ (doublage Québec), VFI (international), VF (français sans précision), VOSTFR, MULTI */
+const frOf=n=>/\bvfq\b|\bvq\b|qu[eé]b[eé]c|\bfr-?ca\b|canadien/i.test(n)?"VFQ":/\bvff\b|truefrench|\bfr-?fr\b/i.test(n)?"VFF":/\bvfi\b/i.test(n)?"VFI":"VF";
+const tagOf=n=>/vostf?r?\b|\bvost\b|sous-?titr/i.test(n)?"VOSTFR":/multi/i.test(n)?"MULTI":frOf(n);
+const fxTag=v=>v.tag||tagOf(v.name||"");
+const fxFr=v=>v.fr||(fxTag(v)==="MULTI"?frOf(v.name||""):["VFF","VFQ","VFI","VF"].includes(fxTag(v))?fxTag(v):null);
+const tagLbl=v=>{const t=fxTag(v),fr=fxFr(v);return t==="MULTI"&&fr&&fr!=="VF"?"MULTI · "+fr:t};
+const FRL={VFF:"Français (France)",VFQ:"Français (Québec)",VFI:"Français (international)",VF:"Français"};
 function fxPrefLang(pid){const p=PR.list[pid||PR.cur];if(p.lang&&p.lang!=="auto")return p.lang;const e=Object.entries(p.pref||{}).sort((a,b)=>b[1]-a[1]);return e.length&&e[0][1]>=2?e[0][0]:null}
-function fxPrefSrc(key){const pl=fxPrefLang();if(!pl)return null;const L=srcs(key).filter(compat);return L.find(x=>fxTag(x)===pl)||L.find(x=>fxTag(x)==="MULTI")||null}
+/* préférence VF = n'importe quel doublage français, dans cet ordre : VFF, VF, VFI, VFQ ; VFF ou VFQ demandés = celui-là d'abord */
+const FRORD={VF:["VFF","VF","VFI","VFQ"],VFF:["VFF","VF","VFI","VFQ"],VFQ:["VFQ","VF","VFF","VFI"]};
+function fxPrefSrc(key){const pl=fxPrefLang();if(!pl)return null;const L=srcs(key).filter(compat);
+ if(FRORD[pl]){for(const t of FRORD[pl]){const v=L.find(x=>fxFr(x)===t&&fxTag(x)!=="MULTI")||L.find(x=>fxFr(x)===t);if(v)return v}return L.find(x=>fxTag(x)==="MULTI")||null}
+ return L.find(x=>fxTag(x)===pl)||L.find(x=>fxTag(x)==="MULTI")||null}
 {const _p=pickSrc;pickSrc=function(key){if(!key.startsWith("ch:")&&!S.srcSel[key]){const v=fxPrefSrc(key);if(v)return v}return _p(key)}}
 const fxAuto=f=>!S.srcSel[f.id]&&new Set(srcs(f.id).map(fxTag)).size>1&&!!fxPrefSrc(f.id);
 function fxLearn(key,vid){const L=srcs(key);if(new Set(L.map(fxTag)).size<2)return;const v=L.find(x=>x.id===vid);if(!v)return;const p=ME(),before=fxPrefLang();p.pref=p.pref||{};const t=fxTag(v);
@@ -147,7 +157,7 @@ function actsHtml(f){const v=pickSrc(f.id),L=srcs(f.id),rd=FXS.ready===f.id;
  ${S.prog[f.id]?`<div class="btn" data-f data-fid="w-rs" data-act="fxrs" data-row="w2" data-col="0">${FXI.back}Début</div>`:""}
  ${needSplit(f)&&!S.prog[f.id]?`<div class="btn" data-f data-fid="w-split" data-act="fxsplit" data-row="w2" data-col="0">${FXI.moon}En 2 soirées</div>`:""}
  <div class="btn round" data-f data-fid="w-list" data-act="fxlist" data-row="w2" data-col="0" aria-label="Ma liste">${isFav(f.id)?FXI.check:FXI.plus}</div>
- ${v?`<div class="btn" data-f data-fid="w-ver" data-act="fxver" data-row="w2" data-col="0"><span class="vpill">${fxTag(v)} · ${v.q==="4K"?"4K":v.q}<small>${fxAuto(f)?"✨ auto":L.length+" version"+(L.length>1?"s":"")} ▾</small></span></div>`:""}
+ ${v?`<div class="btn" data-f data-fid="w-ver" data-act="fxver" data-row="w2" data-col="0"><span class="vpill">${tagLbl(v)} · ${v.q==="4K"?"4K":v.q}<small>${fxAuto(f)?"✨ auto":L.length+" version"+(L.length>1?"s":"")} ▾</small></span></div>`:""}
  <div class="btn round trb" data-f data-fid="w-tr" data-act="fxtr" data-row="w2" data-col="0" aria-label="Bande-annonce">${FXI.film}</div></div>`}
 function fxSaga(f){const t=tmOf(f);if(!t.col)return [];return films().filter(x=>x.tmd&&x.tmd.col&&x.tmd.col[0]===t.col[0]).sort((a,b)=>a.y-b.y)}
 /* langue de la bande-annonce : VF d'abord (choisie par le script), sinon VOSTFR, sinon VO */
@@ -162,7 +172,7 @@ function xSimHtml(f){const mode=FXS.xmode||"mix",L=crossPick(f,mode);if(!L.lengt
 function whereHtml(f){const L=streams(f),tv=fxTV(f),v=srcs(f.id),g=t=>L.filter(x=>t.includes(x.t));if(!L.length&&!tv.length)return "";
  const card=x=>`<div class="wc" data-f data-fid="w-wh${x.i}" data-act="fxsvc:${x.i}">${svTile(x)}<div><b>${esc(x.n)}</b><span>${esc(TYP[x.t])}</span></div><em>${x.t==="abo"?"Inclus":x.t==="gratuit"?"Gratuit":"›"}</em></div>`;
  const grp=(t,items)=>items?`<div class="grp"><div class="kk">${t}</div>${items}</div>`:"";
- return `<section data-anchor id="where"><div class="lh">Où le regarder<small>ailleurs que dans prisme</small></div><div class="inp">▶ <b>Déjà dans prisme</b> · ${v.length} version${v.length>1?"s":""} (${[...new Set(v.map(fxTag))].join(", ")}) · sans frais en plus</div><div class="wh">
+ return `<section data-anchor id="where"><div class="lh">Où le regarder<small>ailleurs que dans prisme</small></div><div class="inp">▶ <b>Déjà dans prisme</b> · ${v.length} version${v.length>1?"s":""} (${[...new Set(v.map(tagLbl))].join(", ")}) · sans frais en plus</div><div class="wh">
   ${grp("À LA TV",tv.map((x,i)=>`<div class="wc" data-f data-fid="w-wt${i}" data-act="fxtv:${i}"><span class="ico">📺</span><div><b>${esc(x.c.n)}</b><span>${esc(x.t)}</span></div><em>${x.live?"Direct":x.past?"Replay":"Rappel"}</em></div>`).join(""))}
   ${grp("INCLUS OU GRATUIT",g(["abo","gratuit"]).map(card).join(""))}${grp("LOCATION",g(["loc"]).map(card).join(""))}${grp("ACHAT",g(["achat"]).map(card).join(""))}</div>
   <div class="src">${f.tmd?"Disponibilités en France (données TMDB, source JustWatch)":REAL?"Disponibilités : importe films.json pour les voir":"Disponibilités en France · données d'exemple"}</div></section>`}
@@ -238,7 +248,7 @@ function fxProfModal(m){const ids=Object.keys(PR.list),mt=m.type;
    ${row("pe-name","fxpname:"+id,"Nom",esc(p.n)+" ✎")}
    <div class="opt prow"><div class="tx"><b>Couleur</b></div><div class="sw8">${PCOL.map((c,i)=>`<i class="${p.c===c?"on":""}" style="--c:${c}" data-f data-fid="pe-c${i}" data-act="fxpcol:${id}:${i}" data-row="pec"></i>`).join("")}</div></div>
    <div class="opt prow"><div class="tx"><b>Avatar</b></div><div class="sw8">${PEMO.map((e,i)=>`<i class="emo ${p.emo===e?"on":""}" data-f data-fid="pe-e${i}" data-act="fxpemo:${id}:${i}" data-row="pee">${e||esc((p.n||"?")[0])}</i>`).join("")}</div></div>
-   ${row("pe-lang","fxplang:"+id,"Langue préférée",p.lang==="auto"?"✨ Automatique":p.lang,p.lang==="auto"?"prisme apprend de tes choix":"toujours cette version si elle existe")}
+   ${row("pe-lang","fxplang:"+id,"Langue préférée",p.lang==="auto"?"✨ Automatique":p.lang,p.lang==="auto"?"prisme apprend de tes choix":p.lang==="VF"?"tout doublage français : VFF d'abord, puis VF, VFI, VFQ":p.lang==="VFF"?"doublage de France en priorité":p.lang==="VFQ"?"doublage québécois en priorité":"toujours cette version si elle existe")}
    ${row("pe-bed","fxpbed:"+id,"Heure de coucher habituelle",fmt(p.bed),"pour « Ta soirée » et « En 2 soirées »")}
    ${row("pe-age","fxpage:"+id,"Limite d'âge",ageLbl(p.max),"les films au-dessus sont masqués partout")}
    ${row("pe-clr","fxpclr:"+id,"Effacer l'historique","",`${p.seen.length} films vus · ${Object.keys(p.fb).length} avis · repartir de zéro`)}
@@ -330,7 +340,7 @@ function fxAct(k,v,w,x){const t=topS(),f=t.t==="detail"?ALL[t.id]:P?ALL[P.id]:nu
  case "fxnk":{if(v==="ok"){const nm=m.v.trim()||PR.list[m.id].n;PR.list[m.id].n=nm.charAt(0).toUpperCase()+nm.slice(1).toLowerCase();prSave();S.modal=m.prev;return render("pe-name")}if(v==="del")m.v=m.v.slice(0,-1);else if(v==="sp")m.v+=" ";else if(m.v.length<14)m.v+=v;return render(F&&F.dataset.fid)}
  case "fxpcol":PR.list[v].c=PCOL[+w];prSave();return render(F.dataset.fid);
  case "fxpemo":PR.list[v].emo=PEMO[+w];prSave();return render(F.dataset.fid);
- case "fxplang":{const L=["auto","VF","VOSTFR"];PR.list[v].lang=L[(L.indexOf(PR.list[v].lang)+1)%3];prSave();return render("pe-lang")}
+ case "fxplang":{const L=["auto","VF","VFF","VFQ","VOSTFR"];PR.list[v].lang=L[(L.indexOf(PR.list[v].lang)+1)%L.length];prSave();return render("pe-lang")}
  case "fxpbed":{const L=[22*60,22*60+30,23*60,23*60+30,24*60,24*60+30,25*60];PR.list[v].bed=L[(L.indexOf(PR.list[v].bed)+1)%L.length];prSave();return render("pe-bed")}
  case "fxpage":{PR.list[v].max=AGES[(AGES.indexOf(PR.list[v].max)+1)%AGES.length];FXS.cache={};prSave();return render("pe-age")}
  case "fxpclr":S.modal={type:"fxpconf",what:"clr",id:v,prev:m};return render();

@@ -294,3 +294,7 @@ const fmtD=t=>{const d=new Date(t);return d.toLocaleDateString("fr-FR",{day:"2-d
 {const _s=srcs;srcs=function(key){const L=_s(key);if(!key.startsWith("ch:"))return L;return L.map(v=>{const m=MEAS[measKey(v)];
   if(!m)return {...v,fx:1,codec:`${v.codec} · d'après le nom · mesurée à ta 1re lecture`};
   return {...v,fx:1,ms:1,q:m.q,codec:[m.vc,`${m.w}×${m.h}`,`${m.fps} i/s`,`${(m.kb/1000).toFixed(1).replace(".",",")} Mb/s`,m.a,`✓ mesurée le ${fmtD(m.at)}`].join(" · ")}})}}
+
+/* ---------- démo : doublages VFF / VFQ / VF (les vraies données viennent du nom du flux et de flux.json) ---------- */
+if(!REAL){const _s=srcs;srcs=function(key){const L=_s(key);const it=ALL[key];if(key.startsWith("ch:")||!it||(it.cat||[]).includes("fr"))return L;const h0=hash(key+"#fr")%3;return L.map((v,i)=>{if(v.tag!=="VF"&&v.tag!=="MULTI")return v;const fr=["VFQ","VFF","VF"][(h0+i)%3];
+  if(fr==="VF")return v;const name=v.name.replace(/\b(VF|MULTI)\b/,m=>m==="MULTI"?"MULTI "+fr:fr),au=v.audio.map(a=>a.startsWith("Français")?a.replace(/^Français( \(VF\))?/,FRL[fr]+" · "+fr):a);return {...v,name,tag:v.tag==="MULTI"?"MULTI":fr,fr,audio:au}})}}
