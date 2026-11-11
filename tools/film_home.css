@@ -187,10 +187,14 @@
 .C3 .tp .pct,.C3 .hsec:not(.tonight) .pst .pct,.C3 .hsec:not(.tonight) .fitb,.C3 .nwc .pct2{opacity:0;transition:opacity .2s}
 .C3 .tp.foc .pct,.C3 .hsec:not(.tonight) .pst.foc .pct,.C3 .hsec:not(.tonight) .pst.foc .fitb,.C3 .nwc.foc .pct2{opacity:1}
 .tagp.sg{background:#5ee0c8}
-.ctile{position:relative;flex:none;width:260px;height:146px;border-radius:16px;overflow:hidden;background:#11131a;transition:transform .18s,box-shadow .18s}
+.ctile{position:relative;flex:none;width:300px;height:146px;border-radius:16px;overflow:hidden;background:#11131a;transition:transform .18s,box-shadow .18s}
 .mosa.mini{width:70%;opacity:.55;transform:rotate(-6deg) scale(1.2) translate(10%,-4%)}.mosa.mini b{display:none}
 .ctile .ct{position:absolute;left:16px;bottom:14px;right:14px;z-index:2}.ctile em{font-style:normal;font-size:22px;display:block}.ctile b{display:block;font-size:18px}.ctile span{font-size:13px;opacity:.65}
-.ctile::after{content:"";position:absolute;inset:0;background:linear-gradient(90deg,rgba(10,11,16,.95) 35%,transparent)}
+.ctile{background:linear-gradient(135deg,#171a23,#0e1016)!important;border:1px solid rgba(255,255,255,.08)}
+.cstk{position:absolute;right:14px;top:16px;bottom:16px;width:100px}
+.cstk .cp{position:absolute;top:0;bottom:0;width:64px;border-radius:8px;background:radial-gradient(80% 60% at 70% 25%,var(--a),transparent 70%),linear-gradient(170deg,var(--b),#050608);background-size:cover;background-position:center;box-shadow:0 6px 16px rgba(0,0,0,.55);border:1px solid rgba(255,255,255,.1)}
+.cstk .cp:nth-child(1){right:36px;transform:scale(.84);opacity:.55;z-index:1}.cstk .cp:nth-child(2){right:18px;transform:scale(.92);opacity:.8;z-index:2}.cstk .cp:nth-child(3){right:0;z-index:3}
+.ctile .ct{right:120px!important}.ctile b{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .ctile.foc{transform:scale(1.06);box-shadow:0 0 0 3px #fff,0 20px 40px rgba(0,0,0,.6);z-index:2}
 .optl{display:flex;flex-direction:column;gap:10px;margin-top:10px}.optl .btn{justify-content:flex-start}.optl .btn.ghost2{opacity:.7}
 

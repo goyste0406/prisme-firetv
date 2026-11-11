@@ -53,6 +53,7 @@ const SOON_DEMO=[{t:"Le Dernier Phare",y:2026,ov:"Une gardienne de phare isolée
 const fhDate=s=>{if(!s)return "";const d=new Date(s+"T12:00:00");return isNaN(d)?s:d.toLocaleDateString("fr-FR",{day:"numeric",month:"long"})};
 const fhMonth=s=>{if(!s)return "";const d=new Date(s+"T12:00:00");return isNaN(d)?s:d.toLocaleDateString("fr-FR",{month:"long",year:"numeric"})};
 const fhMosaic=L=>`<div class="mosa">${L.slice(0,6).map(f=>`<div class="mo">${fxArt(f)}<b class="${fxFont(f)}">${esc(f.t)}</b></div>`).join("")}</div>`;
+const fhStack=L=>`<div class="cstk">${L.slice(0,3).map((f,i)=>`<i class="cp${f.po?" img":""}" style="--a:${f.c[0]};--b:${f.c[1]};${f.po?`background-image:url(${f.po})`:""}"></i>`).join("")}</div>`;
 const fhBtn=(i,lbl,a,extra="")=>`<div class="btn ${i===0?"prim":""}" data-f data-fid="fh-b${i}" ${i===0?"data-default":""} data-act="${a}" data-row="fhh" ${extra}>${lbl}</div>`;
 
 /* ---------- bannière : 5 types de pages ---------- */
@@ -151,7 +152,7 @@ function fhView(){if(FH.skel)return fhSkel();fhLast();
  let bf=null,bec=[],bs=-1;for(const id of liked().slice(-6)){const b=ALL[id];if(!b)continue;const L=crossPick(b,"film").filter(o=>!shown.has(o.c.id)&&!fxBlocked(o.c)&&!fhNo(o.c.id)).slice(0,12),sc=L.slice(0,5).reduce((t,o)=>t+o.raw,0)/5;if(sc>bs&&L.length>=3){bs=sc;bf=b;bec=L}}
  const ml=S.favs.map(id=>ALL[id]).filter(f=>f&&f.type==="f"&&srcs(f.id).length&&!fxBlocked(f));
  const C=fhColls().filter(c=>!c.hide&&!["soir","nouveau","pourtoi","liste"].includes(c.k)).map(c=>({c,L:c.items()})).filter(x=>x.L.length>=2).slice(0,6);
- const tiles=C.map(({c,L})=>`<div class="ctile" data-f data-fid="fhe-${hash(c.k)}" data-act="fhcoll:${c.k}" data-row="fhe">${fhMosaic(L.slice(0,3)).replace('class="mosa"','class="mosa mini"')}<div class="ct"><em>${c.ic}</em><b>${esc(c.n)}</b><span>${L.length} films</span></div></div>`).join("");
+ const tiles=C.map(({c,L})=>`<div class="ctile" data-f data-fid="fhe-${hash(c.k)}" data-act="fhcoll:${c.k}" data-row="fhe">${fhStack(L)}<div class="ct"><em>${c.ic}</em><b>${esc(c.n)}</b><span>${L.length} films</span></div></div>`).join("");
  const nNew=[...new Set([...nwL.map(x=>x.f.id),...fhTop().map(x=>x.f.id)])].filter(fhIsNew).length;
  const SEC={reprendre:fhSec("reprendre","Reprendre",rs.length||sn.length?`${rs.length} en cours${sn.length?` · ${sn.length} suite${sn.length>1?"s":""} de saga`:""}`:"",rI),
   top:fhSec("top","🔥 Top 10 du moment",TMD.tr&&TMD.tr.length?"films populaires en France cette semaine · chez ton fournisseur":"les plus regardés cette semaine",top,"topsec"),
