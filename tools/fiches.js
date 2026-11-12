@@ -160,9 +160,12 @@ if(box){box.insertAdjacentHTML("beforeend",`<div class="fckey"><b>Fiches en arri
  const msg=t=>{const m=$("#fckmsg");if(m)m.textContent=t};
  $("#fckey").addEventListener("keydown",e=>{e.stopPropagation();if(e.key==="Enter")$("#fckok").click()});
  $("#fckok").addEventListener("click",async()=>{const v=$("#fckey").value.trim();if(!v)return msg("Colle d'abord ta clé.");msg("Vérification auprès de TMDB…");
-  try{const v4=v.length>60;const r=await fetch(API+"/configuration"+(v4?"":"?api_key="+encodeURIComponent(v)),v4?{headers:{Authorization:"Bearer "+v}}:{});if(!r.ok)throw 0;
+  let r=null;const v4=v.length>60;try{r=await fetch(API+"/configuration"+(v4?"":"?api_key="+encodeURIComponent(v)),v4?{headers:{Authorization:"Bearer "+v}}:{})}
+  catch(e){return msg(/^https?:/.test(location.protocol)?"Cette page publiée n'a pas le droit de contacter TMDB (protection des pages Claude). Télécharge le simulateur et ouvre le fichier sur ton Mac : la clé y fonctionnera.":"Impossible de joindre TMDB : vérifie la connexion Internet du Mac.")}
+  if(r.status===401)return msg("TMDB refuse cette clé. Vérifie-la sur themoviedb.org › Paramètres › API (la « clé d'API », ou le « jeton d'accès en lecture »).");
+  try{if(!r.ok)throw 0;
    localStorage.setItem(KEYK,v);$("#fckey").value="";msg(E.demo?"✓ Clé acceptée. Elle servira dès que tes données réelles seront importées.":"✓ Clé acceptée : les fiches se téléchargent sur la TV.");E.paused=false;start();if(inApp()&&!S.loading)render(F&&F.dataset.fid)}
-  catch(e){msg("TMDB refuse cette clé, ou la connexion a échoué. Vérifie-la sur themoviedb.org › Paramètres › API.")}});
+  catch(e){msg("TMDB a répondu une erreur ("+r.status+"). Réessaie dans un instant.")}});
  const del=$("#fckdel");if(del)del.addEventListener("click",()=>{try{localStorage.removeItem(KEYK)}catch(e){}msg("Clé oubliée.");paint()})}
 
 /* démarrage : après l'écran de chargement */
