@@ -63,7 +63,7 @@ const CNB={};function countStep(pl,ms){const k="cnt:"+pl.id;if(RMEMO[k]){CNB[k]=
  if(b.sig===DV.s)RMEMO[k]=b.r;CNB[k]=null;return true}
 const WS=[];{const W=[()=>{if(!availStep("f",10))wi--},()=>{if(!availStep("s",10))wi--},()=>{if(!availStep("c",10))wi--},()=>{if(!S.playlists.every(p=>countStep(p,10)))wi--},()=>{if(!epgStep(10))wi--},()=>{const f0=films()[0];if(f0){bInfo(f0);fxIDF()}},
   ...[FILMS,SERIES].flatMap(L=>Array.from({length:Math.ceil(L.length/4000)},(_,i)=>()=>{for(const it of L.slice(i*4000,(i+1)*4000))genreKeys(it)})),()=>{if(typeof forYou==="function")forYou()},...[0,1,2].map(j=>()=>{const L=j===0?films():j===1?series():chans();const st=(WS[j]=WS[j]||0),end=performance.now()+10;let i=st;for(;i<L.length&&performance.now()<end;i++)nzw(L[i].t||L[i].n||"");WS[j]=i;if(i<L.length)wi--}),()=>genreList("f"),()=>genreList("s")];let wi=0;
- setTimeout(function warm(){if(wi>=W.length)return;if(Date.now()-(window.__lastKey||0)<1500||S.loading||(typeof P!=="undefined"&&P))return setTimeout(warm,1000);try{W[wi]()}catch(e){}wi++;setTimeout(warm,60)},1500)}
+ setTimeout(function warm(){if(wi>=W.length||window.SAFE)return;if(Date.now()-(window.__lastKey||0)<1500||S.loading||(typeof P!=="undefined"&&P))return setTimeout(warm,1000);DG("préparation au repos n°"+wi);try{W[wi]()}catch(e){}DGend();wi++;setTimeout(warm,60)},1500)}
 /* genres d'un titre : les mêmes listes sont partagées (des dizaines de milliers de titres ont les mêmes genres) → moins de mémoire */
 {const _g=genreKeys,IN=new Map();genreKeys=function(it){const r=GK[it.id];if(r)return r;const v=_g(it),k=v.join("|");let s=IN.get(k);if(!s){IN.set(k,v);s=v}GK[it.id]=s;return s}}
 /* « bientôt » et « replay récent » : le guide de chaque chaîne est trié par heure, on va directement au bon moment

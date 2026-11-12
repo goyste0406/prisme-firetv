@@ -176,7 +176,7 @@ function cleanTitles(){if(E.demo||E.cleaned)return;E.cleaned=true;let n=0;
 try{cleanTitles()}catch(e){}
 /* casting donné par le fournisseur : chaque acteur retrouve aussi ses films et séries (fiche acteur) */
 try{if(typeof CRED!=="undefined"){const H=new Map();for(const it of [...FILMS,...SERIES]){if(!it._real||!it.cast)continue;for(const [aid,r] of it.cast){const L=CRED[aid]=CRED[aid]||[];let h=H.get(aid);if(!h){h=new Set(L.map(x=>x[0]));H.set(aid,h)}if(!h.has(it.id)){h.add(it.id);L.push([it.id,r||""])}}}}}catch(e){}
-function start(){try{cleanTitles()}catch(e){}if(!inApp()||C.mode===2)return paint();if(!E.demo&&!getKey())return paint();build();if(left()){E.wasRunning=true;loop()}paint()}
+function start(){if(window.SAFE)return paint();DG("fiches : nettoyage des titres");try{cleanTitles()}catch(e){}DGend();if(!inApp()||C.mode===2)return paint();if(!E.demo&&!getKey())return paint();DG("fiches : liste à télécharger");build();DGend();if(left()){E.wasRunning=true;loop()}paint()}
 
 /* ---------- anneau dans la barre d'onglets + panneau ---------- */
 const CIRC=2*Math.PI*15;

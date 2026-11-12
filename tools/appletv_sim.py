@@ -292,7 +292,7 @@ RFCMD += "const RSCMD=`cat > /tmp/prisme-series.pl <<'PRISME_FIN'\n" + _ps + "PR
 _fx = rd("prisme-flux.pl")
 RXFLUX = "const RCMDSH=" + _json.dumps(rd("prisme-cmd.sh").strip() + " ") + ";\n"
 RXFLUX += "const RXFLUX=" + _json.dumps('export PRISME_U="$U" PRISME_N="$N" PRISME_P="$P"; cat > /tmp/prisme-flux.pl <<\'PRISME_FLUX\'\n' + _fx + 'PRISME_FLUX\nperl /tmp/prisme-flux.pl "$D"; unset PRISME_P; ') + ";\n"
-R("render();\n</script>", RFCMD + RXFLUX + "const FXR=" + _json.dumps(_fxren) + ";\n" + rd("perf_a.js") + "\n" + rd("live_a2c.js") + "\n" + rd("real_end.js") + "\n" + rd("live_home.js") + "\n" + rd("live_plus.js") + "\n" + rd("film_ab1.js") + "\n" + rd("film_home.js") + "\n" + rd("serie_home.js") + "\n" + rd("player_b.js") + "\n" + rd("prov.js") + "\n" + rd("settings_a.js") + "\n" + rd("search_b.js") + "\n" + rd("guide_a.js") + "\n" + rd("who_a.js") + "\n" + rd("gouts.js") + "\n" + rd("fiches.js") + "\n" + rd("erreurs.js") + "\n" + rd("liste.js") + "\n" + rd("apps.js") + "\n" + rd("perf_z.js") + "\n" + rd("icones.js") + "\nrender();if(inApp())lPreload(()=>render());\n</script>")
+R("render();\n</script>", RFCMD + RXFLUX + "const FXR=" + _json.dumps(_fxren) + ";\n" + rd("perf_a.js") + "\n" + rd("live_a2c.js") + "\n" + rd("real_end.js") + "\n" + rd("live_home.js") + "\n" + rd("live_plus.js") + "\n" + rd("film_ab1.js") + "\n" + rd("film_home.js") + "\n" + rd("serie_home.js") + "\n" + rd("player_b.js") + "\n" + rd("prov.js") + "\n" + rd("settings_a.js") + "\n" + rd("search_b.js") + "\n" + rd("guide_a.js") + "\n" + rd("who_a.js") + "\n" + rd("gouts.js") + "\n" + rd("fiches.js") + "\n" + rd("erreurs.js") + "\n" + rd("liste.js") + "\n" + rd("apps.js") + "\n" + rd("perf_z.js") + "\n" + rd("diag_z.js") + "\n" + rd("icones.js") + "\nrender();if(inApp())lPreload(()=>render());\n</script>")
 R("const n=SC.streak,st=n<3?10:", 'const n=SC.streak,st=n<3?(window.SAval?[10,15,30][SAval("skip")]:10):')
 R('setBg([CH[S.lch].col,"#08080c"])', 'setBg([(CH[S.lch]||{col:"#1a1a22"}).col,"#08080c"])')
 R("<kbd>M</kbd> (ou maintenir le clic) ajouter/retirer des favoris", "<kbd>M</kbd> (ou maintenir le clic) favoris, ou options d'une chaîne dans la TV en direct")
@@ -311,8 +311,8 @@ R(' const dup=[...FILMS,...SERIES].filter(i=>srcs(i.id).length>1).length+CHS.fil
 # logo officiel de prisme (icône de l'écran d'accueil Apple TV)
 import base64 as _b64
 R("function ensureVisible(el,instant){", 'const PRLOGO="data:image/png;base64,' + _b64.b64encode(open(os.path.join(os.path.dirname(os.path.abspath(__file__)),"assets","logo-prisme-192.png"),"rb").read()).decode() + '";\nfunction ensureVisible(el,instant){')
-_k = src.index("<script>", src.index("</style>")); src = src[:_k] + "<script>\n" + rd("errh.js") + src[_k+len("<script>"):]
-src = src.replace("\nrender();if(inApp())lPreload(()=>render());\n</script>", "\nrender();if(inApp())lPreload(()=>render());window.__prReady=true;\n</script>")
+_k = src.index("<script>", src.index("</style>")); src = src[:_k] + "<script>\n" + rd("diag.js") + rd("errh.js") + src[_k+len("<script>"):]
+src = src.replace("\nrender();if(inApp())lPreload(()=>render());\n</script>", "\nrender();if(inApp())lPreload(()=>render());window.__prReady=true;DGend();\n</script>")
 assert "window.__prReady=true" in src
 assert "fire tv" not in src.lower().replace("prisme-firetv", ""), [m.start() for m in re.finditer("(?i)fire ?tv", src)]
 open(OUT, "w", encoding="utf-8").write(src)
