@@ -583,3 +583,5 @@
 .f-sans{font-family:"Outfit",system-ui,sans-serif;font-weight:700;letter-spacing:-.02em}
 .inst{top:96px}
 .W2 .hero{overflow:hidden}
+.A .sg.miss{filter:grayscale(.85);opacity:.55}.A .sg.miss .n{background:rgba(0,0,0,.7)}
+.A .sg.miss.foc{opacity:.9;filter:grayscale(.4)}

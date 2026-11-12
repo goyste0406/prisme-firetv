@@ -85,6 +85,15 @@ function studios(){const L=Object.entries(COK).filter(([,x])=>x.k>=3).sort((a,b)
 /* logo d'une saga : celui de la collection TMDB, sinon le logo du premier film de la saga */
 async function sagaLogos(){const want=new Set();for(const f of FILMS){const c=f.tmd&&f.tmd.col;if(c)want.add(c[0])}TMD.cl=TMD.cl||{};
  for(const id of want){if(TMD.cl[id])continue;try{const j=await tm(`/collection/${id}/images?include_image_language=fr,en,null`);const L=(j.logos||[]).sort((a,b)=>(a.iso_639_1==="fr"?0:1)-(b.iso_639_1==="fr"?0:1));TMD.cl[id]=L[0]?img(L[0].file_path,"w300"):(CLG[id]||"")}catch(e){TMD.cl[id]=CLG[id]||""}}}
+/* films d'une saga (collection TMDB) : la liste complète, même ceux absents chez tes fournisseurs */
+const CPQ=new Set();
+async function collParts(id){TMD.cp=TMD.cp||{};if(TMD.cp[id]||CPQ.has(id)||!getKey())return;CPQ.add(id);
+ try{const j=await tm(`/collection/${id}?append_to_response=images&include_image_language=fr,en,null`);
+  TMD.cp[id]={n:j.name||"",L:(j.parts||[]).filter(p=>!p.adult).map(p=>({tm:p.id,t:p.title||p.original_title||"",y:+(String(p.release_date||"").slice(0,4))||0,po:img(p.poster_path,"w342"),bd:img(p.backdrop_path,"w780")}))};
+  if(!TMD.cl||!TMD.cl[id]){const L=((j.images||{}).logos||[]).sort((a,b)=>(a.iso_639_1==="fr"?0:1)-(b.iso_639_1==="fr"?0:1));(TMD.cl=TMD.cl||{})[id]=L[0]?img(L[0].file_path,"w300"):(CLG[id]||"")}
+  dirty=1}catch(e){}finally{CPQ.delete(id)}}
+/* appelé par la fiche film : charge la saga puis met la fiche à jour si elle est toujours affichée */
+window.fcColl=id=>{if(E.demo||CPQ.has(id)||(TMD.cp&&TMD.cp[id]))return;collParts(id).then(()=>{const t=topS();if(TMD.cp&&TMD.cp[id]&&t&&t.t==="detail"&&!S.modal&&ALL[t.id]&&ALL[t.id].tmd&&ALL[t.id].tmd.col&&ALL[t.id].tmd.col[0]===id)render(F&&F.dataset.fid)})};
 /* plateformes de France (logos) et tendances de la semaine en France */
 async function extras(){if(!isReal())return;try{
  for(const t of ["movie","tv"]){const j=await tm(`/watch/providers/${t}?watch_region=FR`);for(const x of j.results||[])if(x.logo_path)SVLG[x.provider_name]=SVLG[x.provider_name]||img(x.logo_path,"w92")}
@@ -92,7 +101,7 @@ async function extras(){if(!isReal())return;try{
  }catch(e){console.warn("fiches plateformes",e)}
  try{const ids=[];for(let pg=1;pg<=5;pg++){const j=await tm(`/movie/popular?region=FR&page=${pg}`);for(const m of j.results||[])if(TMD.m[m.id]&&!ids.includes(m.id))ids.push(m.id)}
  if(ids.length){TMD.pop={};ids.forEach((id,i)=>TMD.pop[id]=i+1);TMD.tr=ids.slice(0,10)}}catch(e){console.warn("fiches tendances",e)}
- try{studios();await sagaLogos();dirty=1;if(typeof FH!=="undefined")FH.cache={};if(window.__sx&&__sx.X)__sx.X.cache={};E.lastRender=0;refresh()}catch(e){console.warn("fiches extras",e)}}
+ try{studios();await sagaLogos();{const want=new Set();for(const f of FILMS){const c=f.tmd&&f.tmd.col;if(c)want.add(c[0])}for(const id of want)await collParts(id)}dirty=1;if(typeof FH!=="undefined")FH.cache={};if(window.__sx&&__sx.X)__sx.X.cache={};E.lastRender=0;refresh()}catch(e){console.warn("fiches extras",e)}}
 async function fetchFilm(it){const r=it._real||{};let id=+r.tm||0;
  if(!id){const f=await findId("movie",it);if(f.unk)return f;id=f.id}
  let d;try{d=await tm(`/movie/${id}?append_to_response=credits,release_dates,watch/providers,keywords,recommendations,videos,images&include_image_language=fr,en,null&include_video_language=fr,en,null`)}catch(e){if(/http 404/.test(e.message)&&r.tm&&!r.tmRetry){r.tmRetry=1;delete r.tm;return fetchFilm(it)}throw e}let age="";
@@ -121,9 +130,9 @@ async function applySerie(it,id){const r=it._real||{};const d=await tm(`/tv/${id
 
 /* ---------- sauvegarde des fiches téléchargées (reprise après coupure) ---------- */
 let dirty=0;
-async function persist(force){if(!dirty||E.demo)return;if(!force&&!idleFor(4000))return;dirty=0;try{await idbSet("fcfilms",{m:TMD.m,names:TMD.names,sids:TMD.sids});await idbSet("fcseries",{m:SXD.m,names:SXD.names});await idbSet("fcprog",PRG);await idbSet("fcext",{svlg:SVLG,co:TMD.co||null,cl:TMD.cl||null,pop:TMD.pop||null,tr:TMD.tr||null,nl:SXD.nl||null,cok:COK,aph:APH})}catch(e){}}
+async function persist(force){if(!dirty||E.demo)return;if(!force&&!idleFor(4000))return;dirty=0;try{await idbSet("fcfilms",{m:TMD.m,names:TMD.names,sids:TMD.sids});await idbSet("fcseries",{m:SXD.m,names:SXD.names});await idbSet("fcprog",PRG);await idbSet("fcext",{svlg:SVLG,co:TMD.co||null,cl:TMD.cl||null,cp:TMD.cp||null,pop:TMD.pop||null,tr:TMD.tr||null,nl:SXD.nl||null,cok:COK,aph:APH})}catch(e){}}
 setInterval(persist,20000);
-if(!E.demo)Promise.all([idbGet("fcfilms").catch(()=>null),idbGet("fcseries").catch(()=>null),idbGet("fcprog").catch(()=>null),idbGet("fcext").catch(()=>null)]).then(([f,s,pg,xt])=>{if(xt){Object.assign(APH,xt.aph||{});Object.assign(SVLG,xt.svlg||{});Object.assign(COK,xt.cok||{});if(xt.co)TMD.co=xt.co;if(xt.cl)TMD.cl=xt.cl;if(xt.pop)TMD.pop=xt.pop;if(xt.tr)TMD.tr=xt.tr;if(xt.nl)SXD.nl=Object.assign(SXD.nl||{},xt.nl);for(const n in SVLG){const c=typeof SVCN==="function"?SVCN(n):n;if(window.SXLG&&!SXLG[c])SXLG[c]=SVLG[n]}}if(pg){Object.assign(PRG,pg);Object.assign(IMG.p,pg)}
+if(!E.demo)Promise.all([idbGet("fcfilms").catch(()=>null),idbGet("fcseries").catch(()=>null),idbGet("fcprog").catch(()=>null),idbGet("fcext").catch(()=>null)]).then(([f,s,pg,xt])=>{if(xt){Object.assign(APH,xt.aph||{});Object.assign(SVLG,xt.svlg||{});Object.assign(COK,xt.cok||{});if(xt.co)TMD.co=xt.co;if(xt.cl)TMD.cl=xt.cl;if(xt.cp)TMD.cp=xt.cp;if(xt.pop)TMD.pop=xt.pop;if(xt.tr)TMD.tr=xt.tr;if(xt.nl)SXD.nl=Object.assign(SXD.nl||{},xt.nl);for(const n in SVLG){const c=typeof SVCN==="function"?SVCN(n):n;if(window.SXLG&&!SXLG[c])SXLG[c]=SVLG[n]}}if(pg){Object.assign(PRG,pg);Object.assign(IMG.p,pg)}
  if(f){Object.assign(TMD.m,f.m||{});Object.assign(TMD.names,f.names||{});Object.assign(TMD.sids,f.sids||{});tmApply()}
  if(s){Object.assign(SXD.m,s.m||{});Object.assign(SXD.names,s.names||{});sxApply()}
  if((f||s)&&inApp()&&!S.loading)render(F&&F.dataset.fid);start()}).catch(()=>start());

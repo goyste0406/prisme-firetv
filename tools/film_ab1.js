@@ -162,6 +162,30 @@ function actsHtml(f){const v=pickSrc(f.id),L=srcs(f.id),rd=FXS.ready===f.id;
  ${v?`<div class="btn" data-f data-fid="w-ver" data-act="fxver" data-row="w2" data-col="0"><span class="vpill">${tagLbl(v)} · ${v.q==="4K"?"4K":v.q}<small>${fxAuto(f)?"✨ auto":L.length+" version"+(L.length>1?"s":"")} ▾</small></span></div>`:""}
  <div class="btn round trb" data-f data-fid="w-tr" data-act="fxtr" data-row="w2" data-col="0" aria-label="Bande-annonce">${FXI.film}</div></div>`}
 function fxSaga(f){const t=tmOf(f);if(!t.col)return [];return films().filter(x=>x.tmd&&x.tmd.col&&x.tmd.col[0]===t.col[0]).sort((a,b)=>a.y-b.y)}
+/* saga complète : tous les films de la collection TMDB (ceux absents chez tes fournisseurs sont grisés)
+   + « même univers » : autres sagas et films de la franchise (ex. Spider-Man, The Amazing Spider-Man, Spider-Verse) */
+const frN=t=>String(t||"").normalize("NFD").replace(/[̀-ͯ]/g,"").toLowerCase().replace(/[’']/g," ").replace(/\s+/g," ").trim();
+const frCore=t=>frN(t).split(/\s*[:–—(]\s*|\s+-\s+/)[0].replace(/\s+(\d+|ii|iii|iv|v|vi|vii)$/,"").replace(/^(the|le|la|les|l|un|une|a|an)\s+/,"").trim();
+const colCore=n=>frCore(String(n||"").replace(/\s*[-–]\s*(saga|collection|la saga|trilogie).*$/i,"").replace(/^(saga|collection|la saga)\s+/i,"").replace(/\s+(saga|collection)$/i,""));
+function frTerms(f){const t=tmOf(f),cs=[frCore(f.t)];if(t.col)cs.push(colCore(t.col[1]));const hy=new Set();for(const c of cs)for(const w of c.split(" "))if(/^[a-z0-9]+-[a-z0-9-]+$/.test(w)&&w.length>=5)hy.add(w);return {core:[...new Set(cs)].filter(c=>c.length>=4),hy:[...hy]}}
+const FRC={},FRN=new WeakMap();
+function fxUniverse(f,skip){const T=frTerms(f),k=f.id+"|"+films().length+"|"+skip.size;if(FRC.k===k)return FRC.v;const out=[];
+ if(T.core.length||T.hy.length)for(const x of films()){if(skip.has(x.id)||x.id===f.id)continue;let z=FRN.get(x);if(!z||z[0]!==x.t){z=[x.t,frCore(x.t)," "+frN(x.t).replace(/[^a-z0-9- ]/g," ")+" "];FRN.set(x,z)}const c=z[1],n=z[2];if(!(T.core.includes(c)||T.hy.some(h=>n.includes(" "+h+" "))))continue;if(fxBlocked(x))continue;
+  out.push(x)}
+ out.sort((a,b)=>(a.y||0)-(b.y||0));FRC.k=k;FRC.v=out.slice(0,24);return FRC.v}
+function fxSagaAll(f){const t=tmOf(f);if(!t.col)return null;const cid=t.col[0],P=(TMD.cp||{})[cid],av=fxSaga(f);
+ if(!P){if(typeof fcColl==="function")fcColl(cid);return {n:t.col[1],L:av.map(x=>({f:x})),full:false}}
+ const used=new Set(),L=(P.L||[]).map(p=>{const x=TMIDX[p.tm]&&srcs(TMIDX[p.tm].id).length?TMIDX[p.tm]:null;if(x)used.add(x.id);return x?{f:x}:{p}});
+ for(const x of av)if(!used.has(x.id))L.push({f:x});
+ L.sort((a,b)=>((a.f?a.f.y:a.p.y)||9999)-((b.f?b.f.y:b.p.y)||9999));return {n:P.n||t.col[1],L,full:true}}
+function sagaHtml(f){const S1=fxSagaAll(f),seen=ME().seen,skip=new Set([f.id]);let h="";
+ if(S1&&S1.L.length>1){S1.L.forEach(o=>o.f&&skip.add(o.f.id));const nIn=S1.L.filter(o=>o.f).length,nOut=S1.L.length-nIn;
+  h+=`<section data-anchor><div class="lh">${esc(S1.n)}<small>${S1.L.length} films · dans l'ordre${nOut?` · ${nIn} chez tes fournisseurs, ${nOut} grisé${nOut>1?"s":""}`:""}</small></div><div class="saga sx">${S1.L.map((o,i)=>o.f?
+   `<div class="sg" data-f data-fid="w-sg-${o.f.id}" data-act="fxopen:${o.f.id}" data-row="sg">${fxArt(o.f)}<span class="n">${i+1}${o.f.id===f.id?" · cette page":seen.includes(o.f.id)?" · ✓ Vu":""}</span><div class="t"><b>${esc(o.f.t)}</b><span>${o.f.y} · ${fxD(o.f.d)}</span></div></div>`:
+   `<div class="sg miss" data-f data-fid="w-sgm-${o.p.tm}" data-act="fxmiss:${o.p.tm}" data-row="sg"><div class="art img" style="background-image:${o.p.bd?`url(${o.p.bd}),`:""}${o.p.po?`url(${o.p.po}),`:""}linear-gradient(160deg,#2a2f3d,#11131a)"></div><span class="n">${i+1} · pas chez tes fournisseurs</span><div class="t"><b>${esc(o.p.t)}</b><span>${o.p.y||"à venir"}</span></div></div>`).join("")}</div></section>`}
+ const U=fxUniverse(f,skip);
+ if(U.length)h+=`<section data-anchor><div class="lh">${S1?"Dans le même univers":"De la même saga"}<small>${U.length} film${U.length>1?"s":""} chez tes fournisseurs${S1?" · autres sagas de la franchise":" · reconnus par le titre"}</small></div><div class="saga sx">${U.map(x=>`<div class="sg" data-f data-fid="w-su-${x.id}" data-act="fxopen:${x.id}" data-row="su">${fxArt(x)}<span class="n">${x.y||""}${seen.includes(x.id)?" · ✓ Vu":""}</span><div class="t"><b>${esc(x.t)}</b><span>${x.y} · ${fxD(x.d)}</span></div></div>`).join("")}</div></section>`;
+ return h}
 /* langue de la bande-annonce : VF d'abord (choisie par le script), sinon VOSTFR, sinon VO */
 const trlTag=l=>l==="vo"?"VO":l==="vost"?"VOSTFR":"VF";
 const trlTxt=l=>l==="vo"?"Pas de version française sur TMDB : bande-annonce en version originale":l==="vost"?"Pas de version doublée : bande-annonce en VO sous-titrée français":"Bande-annonce en version française (choisie automatiquement quand elle existe)";
@@ -178,7 +202,7 @@ function whereHtml(f){const L=streams(f),tv=fxTV(f),v=srcs(f.id),g=t=>L.filter(x
   ${grp("À LA TV",tv.map((x,i)=>`<div class="wc" data-f data-fid="w-wt${i}" data-act="fxtv:${i}"><span class="ico">📺</span><div><b>${esc(x.c.n)}</b><span>${esc(x.t)}</span></div><em>${x.live?"Direct":x.past?"Replay":"Rappel"}</em></div>`).join(""))}
   ${grp("INCLUS OU GRATUIT",g(["abo","gratuit"]).map(card).join(""))}${grp("LOCATION",g(["loc"]).map(card).join(""))}${grp("ACHAT",g(["achat"]).map(card).join(""))}</div>
   <div class="src">${f.tmd?"Disponibilités en France (données TMDB, source JustWatch)":REAL?"Disponibilités : importe films.json pour les voir":"Disponibilités en France · données d'exemple"}</div></section>`}
-function fxFiche(f){const b=bInfo(f),w1=b.why[0],sg=fxSaga(f);
+function fxFiche(f){const b=bInfo(f),w1=b.why[0],sg=fxSaga(f).length>1||fxUniverse(f,new Set(fxSaga(f).map(x=>x.id))).length?[0,0]:[];
  return `<div class="fx"><div class="A W W2 sy" id="fxscr"><div class="hero" data-anchor>${fxArt(f)}<div class="shade"></div>${whoChip()}
   <div class="tx"><div class="kick">FILM${f.tmd&&f.tmd.pays?" · "+esc(fxPays(f.tmd.pays)):""}${fxBlocked(f)?` <span class="lock">🔒 bloqué pour ce profil (${ageLbl(fxMax())})</span>`:""}</div><h1 class="${fxFont(f)} t2" style="font-size:${titleSize(f)}px">${esc(f.t)}</h1>
    <div class="meta"><span>${f.y}</span><span>${fxD(f.d)}</span><span>${esc(f.g.slice(0,2).join(", "))}</span><span>${esc(f.age||"")}</span><span class="st">★ ${f.imdb}</span>${fxQual(f)?`<span class="qpill">${fxQual(f)}</span>`:""}</div>
@@ -187,7 +211,7 @@ function fxFiche(f){const b=bInfo(f),w1=b.why[0],sg=fxSaga(f);
   <div class="side glass" data-col="1">${scoreHtml(f)}${planHtml(f)}${alsoLine(f)}</div>
   <div class="tchip glass" id="tchip">${tchipIn(1)}</div><div class="more">▼ ${sg.length>1?"Saga, ":""}distribution, films proches et où le regarder</div></div>
   <div class="below">
-  ${sg.length>1?`<section data-anchor><div class="lh">${esc(tmOf(f).col[1])}<small>${sg.length} films · dans l'ordre</small></div><div class="saga sx">${sg.map((x,i)=>`<div class="sg" data-f data-fid="w-sg-${x.id}" data-act="fxopen:${x.id}" data-row="sg">${fxArt(x)}<span class="n">${i+1}${x.id===f.id?" · cette page":ME().seen.includes(x.id)?" · ✓ Vu":""}</span><div class="t"><b>${esc(x.t)}</b><span>${x.y} · ${fxD(x.d)}</span></div></div>`).join("")}</div></section>`:""}
+  ${sagaHtml(f)}
   ${f.cast.length?`<section data-anchor><div class="lh">Distribution<small>OK pour ses autres films dans ton abonnement</small></div><div class="row sx">${f.cast.map(([a,r])=>`<div class="av" data-f data-fid="w-c-${a}" data-act="fxactor:${a}" data-row="cast">${(ph=>`<div class="ph${ph?" aph":""}" style="--h:${hash(a)%360}${ph?`;background-image:url(${ph})`:""}">${ph?"":esc(initials(A[a]||"?")||"?")}</div>`)(window.actorPh?actorPh(a):"")}<b>${esc(A[a]||"")}</b><span>${esc(r||"")}</span></div>`).join("")}</div>
    <div class="detl">${f.dir?`Réalisé par <b>${esc(f.dir)}</b> · `:""}${f.y} · Note <b>${f.imdb}</b> · TMDB <b>${f.tmdb} %</b>${f._real&&f._real.r&&f.tmd?` · fournisseur <b>${(+f._real.r).toFixed(1)}</b>`:""}${f._real?` · <span style="opacity:.65">infos ${f.tmd?"TMDB + fournisseur":"fournisseur"}</span>`:""}</div></section>`:`<section data-anchor><div class="detl" style="margin-top:20px">${f.dir?`Réalisé par <b>${esc(f.dir)}</b> · `:""}${f.y} · Note <b>${f.imdb}</b>${REAL&&!f.tmd?" · fiche complète avec films.json":""}</div></section>`}
   ${xSimHtml(f)}${whereHtml(f)}<div style="height:40px"></div></div></div><div class="clock">${fmt(nowMin())}</div></div>`}
@@ -312,6 +336,7 @@ function fxAct(k,v,w,x){const t=topS(),f=t.t==="detail"?ALL[t.id]:P?ALL[P.id]:nu
  case "fxsyn":S.modal={type:"fxsyn",ret:"w-syn"};return render();
  case "fxactor":S.modal={type:"fxactor",a:v,ret:F.dataset.fid};return render();
  case "fxopen":{S.modal=null;if(t.t==="detail"&&t.id===v){render();return}push({t:"detail",id:v});const sc=$("#fxscr");if(sc)sc.scrollTop=0;return}
+ case "fxmiss":{const cp=Object.values(TMD.cp||{}).flatMap(c=>c.L||[]).find(p=>String(p.tm)===v);return toast(`« ${cp?cp.t:"Ce film"} » n'est chez aucun de tes fournisseurs pour le moment`)}
  case "fxsvc":S.modal={type:"fxsvc",i:+v,ret:F.dataset.fid};return render();
  case "fxsvopen":{const s=streams(f)[+v];fxClose();return toast(`Ouverture de ${s.n}… (simulé)`)}
  case "fxwhere":{const e=view.querySelector("#where [data-f]");if(e)setFocus(e);return}
@@ -394,3 +419,5 @@ let fxPT=0,fxTT=0;
 {const _po=poster;poster=function(it,nw){if(!it||!it.po)return _po(it,nw);return `<div class="pst pimg" style="background-image:url(${it.po}),linear-gradient(160deg,${it.c[0]},${it.c[1]})"><div class="pst-in">${nw?'<span class="newb">Ajouté récemment</span>':""}</div></div>`}}
 /* ---------- ouverture : « Qui regarde ? » ---------- */
 if(inApp()&&PR.ask&&Object.keys(PR.list).length>1)S.modal={type:"fxwhofull"};
+/* préparation des titres pour « même univers », par petits morceaux quand rien ne se passe (première fiche aussi rapide que les suivantes) */
+setTimeout(function warm(){try{const L=films();let i=0;(function step(){if(Date.now()-(window.__lastKey||0)<1500)return setTimeout(step,1000);const e=Math.min(L.length,i+2500);for(;i<e;i++){const x=L[i];if(!FRN.has(x))FRN.set(x,[x.t,frCore(x.t)," "+frN(x.t).replace(/[^a-z0-9- ]/g," ")+" "])}if(i<L.length)setTimeout(step,30)})()}catch(e){}},6000);
