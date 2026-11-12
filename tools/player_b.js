@@ -196,7 +196,9 @@ window.pbSeasonEnd=function(it,nx){if(!P||!P.sx)return false;P.playing=false;S.m
  if(k==="home"||k==="mic")return _k(k);
  if(!P.ui&&!B.panel){
   if(live&&(k==="up"||k==="down")){P.last=Date.now();pbStep(k==="up"?-1:1);return}
-  if(k==="back"){if(live){if(Date.now()-B.lastBack<650&&P.prev&&CH[P.prev]){B.lastBack=0;pbZap(P.prev,"prev");return}B.lastBack=Date.now();return}back();return}
+  /* direct : Retour quitte le lecteur ; deux appuis rapides reviennent à la chaîne précédente */
+  if(k==="back"){if(live){clearTimeout(B.backT);if(Date.now()-B.lastBack<650&&P.prev&&CH[P.prev]){B.lastBack=0;pbZap(P.prev,"prev");return}
+    B.lastBack=Date.now();if(!(P.prev&&CH[P.prev]))return back();B.backT=setTimeout(()=>{if(PB_ON()&&!S.modal)back()},650);return}back();return}
   if(k==="play"){pbPlay();return}
   if((k==="rw"||k==="ff")&&!live){uiPing();scrubStep(k==="ff"?1:-1);return}
   uiPing();pbRender(F&&view.contains(F)?fidNow():"p-seek");return}
