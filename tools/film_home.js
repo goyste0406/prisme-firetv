@@ -53,7 +53,7 @@ const SOON_DEMO=[{t:"Le Dernier Phare",y:2026,ov:"Une gardienne de phare isolée
 const fhDate=s=>{if(!s)return "";const d=new Date(s+"T12:00:00");return isNaN(d)?s:d.toLocaleDateString("fr-FR",{day:"numeric",month:"long"})};
 const fhMonth=s=>{if(!s)return "";const d=new Date(s+"T12:00:00");return isNaN(d)?s:d.toLocaleDateString("fr-FR",{month:"long",year:"numeric"})};
 const fhMosaic=L=>`<div class="mosa">${L.slice(0,6).map(f=>`<div class="mo">${fxArt(f)}<b class="${fxFont(f)}">${esc(f.t)}</b></div>`).join("")}</div>`;
-const fhStack=L=>`<div class="cstk">${L.slice(0,3).map((f,i)=>`<i class="cp${f.po?" img":""}" style="--a:${f.c[0]};--b:${f.c[1]};${f.po?`background-image:url(${f.po})`:""}"></i>`).join("")}</div>`;
+const fhStack=L=>`<div class="cstk">${L.slice(0,3).map((f,i)=>`<i class="cp${f.po?" img":""}" style="--a:${f.c[0]};--b:${f.c[1]};${f.po?`background-image:url(${f.po}),linear-gradient(160deg,${f.c[0]},${f.c[1]})`:""}"></i>`).join("")}</div>`;
 const fhBtn=(i,lbl,a,extra="")=>`<div class="btn ${i===0?"prim":""}" data-f data-fid="fh-b${i}" ${i===0?"data-default":""} data-act="${a}" data-row="fhh" ${extra}>${lbl}</div>`;
 
 /* ---------- bannière : 5 types de pages ---------- */

@@ -145,7 +145,7 @@ function calTiles(p){return [-3,-2,-1,0,1,2,3].map(j=>{const L=WEEK().filter(z=>
 const allTile=(row,ck,n,kind="p")=>`<div class="allt ${kind}" data-f data-fid="${row}-all" data-act="sxcoll:${ck}" data-row="${row}"><i>›</i><b>Tout voir</b><small>${n} séries</small></div>`;
 const sec=(k,title,sub,inner,cls="")=>inner?`<section data-anchor data-rk="${k}" class="hsec ${cls}"><div class="lh">${title}${sub?`<small>${sub}</small>`:""}</div><div class="row sx">${inner}</div></section>`:"";
 const mosaic=L=>`<div class="mosa">${L.slice(0,6).map(it=>`<div class="mo">${fxArt(it)}<b class="${fxFont(it)}">${esc(it.t)}</b></div>`).join("")}</div>`;
-const stack3=L=>`<div class="cstk">${L.slice(0,3).map(it=>`<i class="cp${it.po?" img":""}" style="--a:${it.c[0]};--b:${it.c[1]};${it.po?`background-image:url(${it.po})`:""}"></i>`).join("")}</div>`;
+const stack3=L=>`<div class="cstk">${L.slice(0,3).map(it=>`<i class="cp${it.po?" img":""}" style="--a:${it.c[0]};--b:${it.c[1]};${it.po?`background-image:url(${it.po}),linear-gradient(160deg,${it.c[0]},${it.c[1]})`:""}"></i>`).join("")}</div>`;
 
 /* ---------- collections ---------- */
 function colls(){const ck="co|"+PR.cur+"|"+SERIES.length+"|"+MX().no.length+"|"+MX().done.length;if(X.cache[ck])return X.cache[ck];const av=SL().filter(it=>!MX().no.includes(it.id)),C=[];

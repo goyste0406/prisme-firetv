@@ -16,7 +16,7 @@ function tmApply(){let n=0;for(const f of FILMS){const r=f._real;if(!r)continue;
   if(!id||!TMD.m[id])for(const s of r.s){if(s[4]&&TMD.sids[s[4]]){id=TMD.sids[s[4]];break}if(TMD.names[s[1]]){id=TMD.names[s[1]];break}}
   const d=id&&TMD.m[id];if(!d)continue;n++;f.tm=+id;f.tmd=d;TMIDX[id]=f;if(d.t)f.t=d.t;if(d.d)f.d=d.d;if(d.g&&d.g.length)f.g=d.g.slice(0,3);if(d.ov)f.s=d.ov;if(d.dir)f.dir=d.dir;if(d.y)f.y=d.y;
   if(d.va){f.imdb=+(+d.va).toFixed(1);f.tmdb=Math.round(d.va*10)}if(d.age)f.age=fxAge(d.age);if(d.po)f.po=d.po;if(d.bd)f.bd=d.bd;
-  f.cast=(d.cast||[]).map(([nm,ch])=>{const aid="ra"+(hash(nm)>>>0).toString(36);A[aid]=nm;(CRED[aid]=CRED[aid]||[]).some(x=>x[0]===f.id)||CRED[aid].push([f.id,ch||""]);return [aid,ch||""]})}
+  if(d.cast&&d.cast.length)f.cast=(d.cast||[]).map(([nm,ch])=>{const aid="ra"+(hash(nm)>>>0).toString(36);A[aid]=nm;(CRED[aid]=CRED[aid]||[]).some(x=>x[0]===f.id)||CRED[aid].push([f.id,ch||""]);return [aid,ch||""]})}
  /* même film TMDB proposé sous plusieurs noms : une seule fiche avec toutes ses versions */
  const by={};for(const f of FILMS.slice()){if(!f.tm)continue;const k=by[f.tm];if(!k){by[f.tm]=f;continue}
   for(const s2 of f._real.s)if(!k._real.s.some(x=>x[0]===s2[0]&&x[1]===s2[1]))k._real.s.push(s2);(f._real.c||[]).forEach(c=>{if(!k._real.c.includes(c))k._real.c.push(c)});
@@ -140,8 +140,8 @@ const svTile=(x,cls="")=>`<i class="svt ${cls}" style="--h:${hash(x.n)%360}">${e
 function fxQual(f){const v=pickSrc(f.id);if(!v)return "";return [v.fx?(v.q==="4K"?"4K"+(v.hdr?" "+(v.hdr==="DV"?"Dolby Vision":v.hdr):""):v.q+(v.hdr?" "+v.hdr:"")):v.q==="4K"?"4K HDR":v.q,(v.audio||[])[0]&&/atmos/i.test(v.audio[0])?"Atmos":(v.audio||[])[0]&&/5\.1/.test(v.audio[0])?"5.1":""].filter(Boolean).join(" · ")}
 
 /* ---------- fiche ---------- */
-const fxArt=(f,cls="")=>f.bd?`<div class="art img ${cls}" style="background-image:url(${f.bd})"></div>`:f.po?`<div class="art img blur ${cls}" style="background-image:url(${f.po})"></div>`:`<div class="art ${cls}" style="--a:${f.c[0]};--b:${f.c[1]}"><i></i><i></i><i></i></div>`;
-const fxPst=(f,fid,act,row,extra="")=>`<div class="pst ${fxFont(f)} ${f.po?"img":""}" style="--a:${f.c[0]};--b:${f.c[1]};${f.po?`background-image:url(${f.po})`:""}" data-f data-fid="${fid}" data-act="${act}" ${row?`data-row="${row}"`:""} ${extra}>${ME().seen.includes(f.id)?'<span class="seen">✓ Vu</span>':""}<div class="pt">${esc(f.t)}</div><div class="py">${f.y}</div>${S.prog[f.id]?`<div class="bar"><b style="width:${S.prog[f.id]*100}%"></b></div>`:""}</div>`;
+const fxArt=(f,cls="")=>f.bd?`<div class="art img ${cls}" style="background-image:url(${f.bd}),linear-gradient(160deg,${f.c[0]},${f.c[1]})"></div>`:f.po?`<div class="art img blur ${cls}" style="background-image:url(${f.po}),linear-gradient(160deg,${f.c[0]},${f.c[1]})"></div>`:`<div class="art ${cls}" style="--a:${f.c[0]};--b:${f.c[1]}"><i></i><i></i><i></i></div>`;
+const fxPst=(f,fid,act,row,extra="")=>`<div class="pst ${fxFont(f)} ${f.po?"img":""}" style="--a:${f.c[0]};--b:${f.c[1]};${f.po?`background-image:url(${f.po}),linear-gradient(160deg,${f.c[0]},${f.c[1]})`:""}" data-f data-fid="${fid}" data-act="${act}" ${row?`data-row="${row}"`:""} ${extra}>${ME().seen.includes(f.id)?'<span class="seen">✓ Vu</span>':""}<div class="pt">${esc(f.t)}</div><div class="py">${f.y}</div>${S.prog[f.id]?`<div class="bar"><b style="width:${S.prog[f.id]*100}%"></b></div>`:""}</div>`;
 function titleSize(f){const n=f.t.length,k=f.f==="bebas"?1:f.f==="serif"?.78:.72;return Math.round((n<=10?104:n<=16?92:n<=24?76:n<=34?62:52)*k)}
 function whoChip(){return `<div class="who glass" data-f data-fid="w-who" data-act="fxwho" data-row="who" data-col="0">${FXS.duo?FXS.duo.map(id=>pav(id)).join(""):pav(PR.cur)}<span>${FXS.duo?FXS.duo.map(id=>esc(PR.list[id].n)).join(" + "):esc(ME().n)}</span><small>▾</small></div>`}
 function scoreHtml(f){const b=bInfo(f);
@@ -187,7 +187,7 @@ function fxFiche(f){const b=bInfo(f),w1=b.why[0],sg=fxSaga(f);
   <div class="below">
   ${sg.length>1?`<section data-anchor><div class="lh">${esc(tmOf(f).col[1])}<small>${sg.length} films · dans l'ordre</small></div><div class="saga sx">${sg.map((x,i)=>`<div class="sg" data-f data-fid="w-sg-${x.id}" data-act="fxopen:${x.id}" data-row="sg">${fxArt(x)}<span class="n">${i+1}${x.id===f.id?" · cette page":ME().seen.includes(x.id)?" · ✓ Vu":""}</span><div class="t"><b>${esc(x.t)}</b><span>${x.y} · ${fxD(x.d)}</span></div></div>`).join("")}</div></section>`:""}
   ${f.cast.length?`<section data-anchor><div class="lh">Distribution<small>OK pour ses autres films dans ton abonnement</small></div><div class="row sx">${f.cast.map(([a,r])=>`<div class="av" data-f data-fid="w-c-${a}" data-act="fxactor:${a}" data-row="cast"><div class="ph" style="--h:${hash(a)%360}">${esc(initials(A[a]||"?")||"?")}</div><b>${esc(A[a]||"")}</b><span>${esc(r||"")}</span></div>`).join("")}</div>
-   <div class="detl">${f.dir?`Réalisé par <b>${esc(f.dir)}</b> · `:""}${f.y} · Note <b>${f.imdb}</b> · TMDB <b>${f.tmdb} %</b></div></section>`:`<section data-anchor><div class="detl" style="margin-top:20px">${f.dir?`Réalisé par <b>${esc(f.dir)}</b> · `:""}${f.y} · Note <b>${f.imdb}</b>${REAL&&!f.tmd?" · fiche complète avec films.json":""}</div></section>`}
+   <div class="detl">${f.dir?`Réalisé par <b>${esc(f.dir)}</b> · `:""}${f.y} · Note <b>${f.imdb}</b> · TMDB <b>${f.tmdb} %</b>${f._real&&f._real.r&&f.tmd?` · fournisseur <b>${(+f._real.r).toFixed(1)}</b>`:""}${f._real?` · <span style="opacity:.65">infos ${f.tmd?"TMDB + fournisseur":"fournisseur"}</span>`:""}</div></section>`:`<section data-anchor><div class="detl" style="margin-top:20px">${f.dir?`Réalisé par <b>${esc(f.dir)}</b> · `:""}${f.y} · Note <b>${f.imdb}</b>${REAL&&!f.tmd?" · fiche complète avec films.json":""}</div></section>`}
   ${xSimHtml(f)}${whereHtml(f)}<div style="height:40px"></div></div></div><div class="clock">${fmt(nowMin())}</div></div>`}
 {const _d=detailHtml;detailHtml=function(it){return it&&it.type==="f"?fxC(fxFiche(it)):_d(it)}}
 
@@ -389,6 +389,6 @@ let fxPT=0,fxTT=0;
 /* ---------- avatar du profil dans la barre d'onglets ---------- */
 {const _tb=tabbar;tabbar=function(){const h=_tb();const i=h.lastIndexOf("</div></div>");return h.slice(0,i)+`<div class="tab ic whotab" data-f data-fid="tab-who" data-row="tabs" data-act="fxwho" aria-label="Profil">${fxC(FXS.duo?FXS.duo.map(id=>pav(id,"tb")).join(""):pav(PR.cur,"tb"))}</div>`+h.slice(i)}}
 /* ---------- affiches TMDB partout dans l'appli ---------- */
-{const _po=poster;poster=function(it,nw){if(!it||!it.po)return _po(it,nw);return `<div class="pst pimg" style="background-image:url(${it.po})"><div class="pst-in">${nw?'<span class="newb">Ajouté récemment</span>':""}</div></div>`}}
+{const _po=poster;poster=function(it,nw){if(!it||!it.po)return _po(it,nw);return `<div class="pst pimg" style="background-image:url(${it.po}),linear-gradient(160deg,${it.c[0]},${it.c[1]})"><div class="pst-in">${nw?'<span class="newb">Ajouté récemment</span>':""}</div></div>`}}
 /* ---------- ouverture : « Qui regarde ? » ---------- */
 if(inApp()&&PR.ask&&Object.keys(PR.list).length>1)S.modal={type:"fxwhofull"};
