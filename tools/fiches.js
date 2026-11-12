@@ -92,6 +92,8 @@ async function collParts(id){TMD.cp=TMD.cp||{};if(TMD.cp[id]||CPQ.has(id)||!getK
   TMD.cp[id]={n:j.name||"",L:(j.parts||[]).filter(p=>!p.adult).map(p=>({tm:p.id,t:p.title||p.original_title||"",y:+(String(p.release_date||"").slice(0,4))||0,po:img(p.poster_path,"w342"),bd:img(p.backdrop_path,"w780")}))};
   if(!TMD.cl||!TMD.cl[id]){const L=((j.images||{}).logos||[]).sort((a,b)=>(a.iso_639_1==="fr"?0:1)-(b.iso_639_1==="fr"?0:1));(TMD.cl=TMD.cl||{})[id]=L[0]?img(L[0].file_path,"w300"):(CLG[id]||"")}
   dirty=1}catch(e){}finally{CPQ.delete(id)}}
+/* affiche d'un titre connu (test des goûts) : recherche TMDB par titre et année */
+window.fcPoster=async(ty,t,y)=>{if(!getKey())return "";const s=ty==="s";const j=await tm(`/search/${s?"tv":"movie"}?query=${encodeURIComponent(t)}${y?`&${s?"first_air_date_year":"year"}=${y}`:""}`);const r=(j.results||[]).filter(x=>!x.adult)[0];return r&&r.poster_path?img(r.poster_path,"w342"):""};
 /* appelé par la fiche film : charge la saga puis met la fiche à jour si elle est toujours affichée */
 window.fcColl=id=>{if(E.demo||CPQ.has(id)||(TMD.cp&&TMD.cp[id]))return;collParts(id).then(()=>{const t=topS();if(TMD.cp&&TMD.cp[id]&&t&&t.t==="detail"&&!S.modal&&ALL[t.id]&&ALL[t.id].tmd&&ALL[t.id].tmd.col&&ALL[t.id].tmd.col[0]===id)render(F&&F.dataset.fid)})};
 /* plateformes de France (logos) et tendances de la semaine en France */
