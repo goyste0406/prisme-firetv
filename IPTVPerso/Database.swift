@@ -58,7 +58,7 @@ final class Database: @unchecked Sendable {
 
     func intValue(_ sql: String, _ args: [Any?] = []) -> Int? {
         var out: Int?
-        query(sql, args) { st in out = Int(sqlite3_column_int64(st, 0)) }
+        query(sql, args) { r in out = r.int(0) }
         return out
     }
 
