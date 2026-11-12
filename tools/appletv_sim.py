@@ -264,6 +264,8 @@ _sys.path.insert(0, D)
 from fx_css import build as _fxbuild
 _simcss = src[src.index("<style>"):src.index("</style>")]
 import re as _re
+# défilement : une section plus haute que l'écran (ex. 100 catégories d'un fournisseur) suit l'élément, pas le haut de la section
+R('const a=el.closest("[data-anchor]");const tg=a&&p.contains(a)&&a!==p?a:el;', 'const a=el.closest("[data-anchor]");const tg=a&&p.contains(a)&&a!==p&&a.offsetHeight<=p.clientHeight-20?a:el;')
 _jsall = src[src.index("</style>"):] + "".join(rd(n) for n in ["live_a2c.js", "real_end.js", "live_home.js", "live_plus.js", "film_ab1.js", "film_home.js", "serie_home.js", "player_b.js", "prov.js", "settings_a.js", "search_b.js", "guide_a.js", "who_a.js", "gouts.js", "fiches.js"])
 _used = set(_re.findall(r"[A-Za-z_][\w-]*", _jsall))
 _fxcss, _fxren = _fxbuild(rd("film_ab1.css") + "\n" + rd("film_home.css") + "\n" + rd("serie_home.css"), _simcss, _used)

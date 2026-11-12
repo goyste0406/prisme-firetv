@@ -29,7 +29,7 @@ function build(){const F=FILMS.slice(),Sx=SERIES.slice(),week=7*864e5,now=Date.n
  E.ok={f:F.filter(it=>!need(it)).length,s:Sx.filter(it=>!need(it)).length}}
 const left=()=>E.q.length+E.prio.length;
 const total=()=>E.tot.f+E.tot.s,doneN=()=>E.ok.f+E.ok.s;
-const pct=()=>total()?Math.min(100,Math.floor(doneN()/total()*100)):100;
+const pct=()=>{const t=doneN()+left();return t&&left()?Math.min(99,Math.floor(doneN()/t*100)):100};
 function itemOfK(k){const id=k.slice(2);return ALL[id]||null}
 
 /* ---------- TMDB ---------- */
@@ -44,7 +44,7 @@ async function fetchFilm(it){const r=it._real||{};let id=+r.tm||0,cands=[];
   for(const m of j.results||[]){if([m.title,m.original_title].some(x=>x&&(simp(x)===w||(w.length>=5&&simp(x).indexOf(w)===0)))){id=m.id;break}}
   if(!id&&(j.results||[]).length===1)id=j.results[0].id}
  if(!id)return {unk:cands};
- const d=await tm(`/movie/${id}?append_to_response=credits,release_dates`);let age="";
+ let d;try{d=await tm(`/movie/${id}?append_to_response=credits,release_dates`)}catch(e){if(/http 404/.test(e.message)&&r.tm&&!r.tmRetry){r.tmRetry=1;delete r.tm;return fetchFilm(it)}throw e}let age="";
  for(const x of ((d.release_dates||{}).results||[]))if(x.iso_3166_1==="FR")for(const y of x.release_dates||[])if(y.certification){age=y.certification;break}
  const dir=((d.credits||{}).crew||[]).filter(c=>c.job==="Director").map(c=>c.name).join(", ");
  const m={t:d.title,ot:d.original_title,y:+(d.release_date||"").slice(0,4)||it.y,d:d.runtime||0,g:(d.genres||[]).map(g=>g.name),ov:d.overview||"",tg:d.tagline||"",age,va:d.vote_average||0,vc:d.vote_count||0,dir,
@@ -72,7 +72,7 @@ if(!E.demo)Promise.all([idbGet("fcfilms").catch(()=>null),idbGet("fcseries").cat
 /* ---------- le moteur ---------- */
 async function one(k){const it=itemOfK(k);if(!it){C.done[k]=Date.now();return}
  const ser=k[0]==="s";
- if(isReal()){let res;try{res=ser?await fetchSerie(it):await fetchFilm(it)}catch(e){if(e.message==="cle"){E.paused=true;toast("TMDB refuse la clé : vérifie-la sous la télécommande");return}E.q.push(k);return}
+ if(isReal()){let res;try{res=ser?await fetchSerie(it):await fetchFilm(it)}catch(e){if(e.message==="cle"){E.paused=true;toast("TMDB refuse la clé : vérifie-la sous la télécommande");return}E.tries=E.tries||{};E.tries[k]=(E.tries[k]||0)+1;if(E.tries[k]<3&&!/http 4/.test(e.message)){E.q.push(k);await new Promise(z=>setTimeout(z,800));return}res={unk:[]}}
   if(res.unk){C.unk[k]={raw:((it._real||{}).s||[[0,it.t]])[0][1]||it.t,t:it.t,c:res.unk,i:0}}else{delete C.unk[k];dirty=1;applySoon(it.id)}}
  else{await new Promise(z=>setTimeout(z,E.demo?380:10));applySoon(it.id)}
  C.done[k]=Date.now();E.ok[ser?"s":"f"]++;E.rate.push(Date.now());if(E.rate.length>40)E.rate.shift()}
