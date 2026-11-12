@@ -153,7 +153,7 @@ function alsoLine(f){const tv=fxTV(f),L=streams(f),inc=L.filter(x=>x.t==="abo"||
 function playLbl(f){return ME().split[f.id]!=null&&S.prog[f.id]?"Partie 2":S.prog[f.id]?"Reprendre":"Lecture"}
 function playSub(f){const sp=ME().split[f.id]!=null&&S.prog[f.id];return sp?`${fxD(f.d*(1-S.prog[f.id]))} · avec résumé`:S.prog[f.id]?`reste ${fxD(f.d*(1-S.prog[f.id]))}`:`finit à ${fmt(bInfo(f).end)}`}
 function actsHtml(f){const v=pickSrc(f.id),L=srcs(f.id),rd=FXS.ready===f.id;
- return `<div class="acts"><div class="btn prim ${rd?"ready":""}" data-f data-fid="w-play" data-act="fxplay" data-row="w2" data-col="0" data-default>${rd?'<span class="zap">⚡</span>':FXI.play}<span class="vpill">${playLbl(f)}<small>${playSub(f)}</small></span></div>
+ return `<div class="acts"><div class="btn prim ${rd?"ready":""}" data-f data-fid="w-play" data-act="fxplay" data-row="w2" data-col="0" data-default>${rd?'<span class="pzap">⚡</span>':FXI.play}<span class="vpill">${playLbl(f)}<small>${playSub(f)}</small></span></div>
  ${S.prog[f.id]?`<div class="btn" data-f data-fid="w-rs" data-act="fxrs" data-row="w2" data-col="0">${FXI.back}Début</div>`:""}
  ${needSplit(f)&&!S.prog[f.id]?`<div class="btn" data-f data-fid="w-split" data-act="fxsplit" data-row="w2" data-col="0">${FXI.moon}En 2 soirées</div>`:""}
  <div class="btn round" data-f data-fid="w-list" data-act="fxlist" data-row="w2" data-col="0" aria-label="Ma liste">${isFav(f.id)?FXI.check:FXI.plus}</div>
@@ -382,7 +382,7 @@ let fxPT=0,fxTT=0;
 {const _sf=setFocus;setFocus=function(el,instant){_sf(el,instant);if(!el)return;
  if(S.modal&&S.modal.type==="fxshelf"&&el.dataset.app&&FXS.hsel!==el.dataset.app){FXS.hsel=el.dataset.app;render(el.dataset.fid);return}
  const w=view.querySelector(fxQ("W"));if(!w)return;const on=el.dataset.fid==="w-tr";w.classList.toggle("peek",on);const c=$("#tchip");if(c&&!S.modal){if(on){c.classList.add("on");c.innerHTML=fxC(tchipIn(3));const a=w.querySelector(fxQ("hero")+" "+fxQ("art"));if(a)a.classList.add("play")}else if(c.querySelector(".v3"))c.innerHTML=fxC(tchipIn(1))}
- clearTimeout(fxPT);const t=topS();if(el.dataset.fid==="w-play"&&t.t==="detail"&&FXS.ready!==t.id&&!S.modal){fxPT=setTimeout(()=>{if(F!==el||S.modal||topS()!==t)return;FXS.ready=t.id;el.classList.add("ready");const sv=el.querySelector("svg");if(sv)sv.outerHTML='<span class="'+(FXR.zap||"zap")+'">⚡</span>'},2000)}}}
+ clearTimeout(fxPT);const t=topS();if(el.dataset.fid==="w-play"&&t.t==="detail"&&FXS.ready!==t.id&&!S.modal){fxPT=setTimeout(()=>{if(F!==el||S.modal||topS()!==t)return;FXS.ready=t.id;el.classList.add("ready");const sv=el.querySelector("svg");if(sv)sv.outerHTML='<span class="pzap">⚡</span>'},2000)}}}
 {const _r=render;render=function(fid){_r(fid);const sc=view.querySelector("#fxscr");if(!sc)return;const go=()=>sc.style.setProperty("--p",Math.min(1,sc.scrollTop/560).toFixed(3));sc.addEventListener("scroll",go,{passive:true});go();
  clearTimeout(fxTT);fxTT=setTimeout(()=>{const a=sc.querySelector(fxQ("hero")+" "+fxQ("art")),c=$("#tchip");if(a&&!S.modal&&topS().t==="detail"){a.classList.add("play");if(c)c.classList.add("on")}},2500)}}
 

@@ -29,3 +29,5 @@
 .fx .svt.img{background:#fff;padding:0;overflow:hidden;display:inline-grid;place-items:center}
 .fx .svt.img img{width:100%;height:100%;object-fit:contain;border-radius:inherit}
 .rimp details.rold{margin:10px 0;opacity:.85}.rimp details.rold summary{cursor:pointer;font-weight:600}
+/* ⚡ du bouton Lecture de la fiche : dans le bouton (et non flottant au milieu de l'écran) */
+.fx .btn .pzap{position:static;width:22px;height:22px;flex:none;display:grid;place-items:center;font-size:18px;line-height:1;color:#111}
