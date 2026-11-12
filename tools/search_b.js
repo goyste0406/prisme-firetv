@@ -7,17 +7,20 @@ const IC={clock:`<svg ${SV}><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"
  phone:`<svg ${SV}><rect x="7" y="2" width="10" height="20" rx="2.5"/><path d="M11 18h2"/></svg>`,mic:`<svg ${SV}><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>`,
  trend:`<svg ${SV}><path d="M3 17l6-6 4 4 8-8"/><path d="M14 7h7v7"/></svg>`};
 const SR=window.SR={filt:"all",sel:null,siri:false};
-const nz=t=>norm(String(t||"")).replace(/[^a-z0-9 ]+/g," ").replace(/\s+/g," ").trim();
+const NZM=new Map();const nz=t=>{t=String(t||"");let r=NZM.get(t);if(r===undefined){r=norm(t).replace(/[^a-z0-9 ]+/g," ").replace(/\s+/g," ").trim();if(NZM.size>150000)NZM.clear();NZM.set(t,r)}return r};
+const NWM=new Map();const nzw=t=>{t=String(t||"");let r=NWM.get(t);if(r===undefined){r=nz(t).split(" ");if(NWM.size>150000)NWM.clear();NWM.set(t,r)}return r};
 const KEYS2="abcdefghijklmnopqrstuvwxyz1234567890".split("");
 const FILT=[["all","Tout"],["f","Films"],["s","Séries"],["tv","TV en direct"],["actor","Acteurs"]];
 /* ---------- index : titres, chaînes, programmes en cours, acteurs ---------- */
 function lev(a,b){if(Math.abs(a.length-b.length)>1)return 9;const n=b.length,d=[...Array(n+1).keys()];for(let i=1;i<=a.length;i++){let p=d[0];d[0]=i;for(let j=1;j<=n;j++){const t=d[j];d[j]=Math.min(d[j]+1,d[j-1]+1,p+(a[i-1]===b[j-1]?0:1));p=t}}return d[n]}
+/* distance d'édition ≤ 1 (même résultat que lev(a,b)<=1, sans tableau) */
+function ed1(a,b){const la=a.length,lb=b.length;if(Math.abs(la-lb)>1)return false;let i=0;while(i<la&&i<lb&&a[i]===b[i])i++;if(la===lb)return a.slice(i+1)===b.slice(i+1);if(la>lb)return a.slice(i+1)===b.slice(i);return a.slice(i)===b.slice(i+1)}
 /* chaque mot cherché doit commencer un mot du texte, ou en être à une faute près (mots de 4 lettres et plus) */
-function wscore(q,text){const Q=nz(q).split(" ").filter(Boolean);if(!Q.length)return null;const W=nz(text).split(" ");let s=0,fuz=false;
- for(const w of Q){let b=0;for(const x of W){if(x===w){b=3;break}if(x.startsWith(w))b=Math.max(b,2);else if((w.length>=4||(Q.length>1&&w.length>=2&&x.length<=w.length+1))&&(lev(w,x)<=1||(w.length>=4&&lev(w,x.slice(0,w.length))<=1)))b=Math.max(b,1.4)}if(!b)return null;if(b===1.4)fuz=true;s+=b}
+function wscore(q,text){const Q=nzw(q).filter(Boolean);if(!Q.length)return null;const W=nzw(text);let s=0,fuz=false;
+ for(const w of Q){let b=0;for(const x of W){if(x===w){b=3;break}if(x.startsWith(w))b=Math.max(b,2);else if((w.length>=4||(Q.length>1&&w.length>=2&&x.length<=w.length+1))&&(ed1(w,x)||(w.length>=4&&ed1(w,x.slice(0,w.length)))))b=Math.max(b,1.4)}if(!b)return null;if(b===1.4)fuz=true;s+=b}
  return {s:s/Q.length,fuz}}
 const actName=a=>(typeof A!=="undefined"&&A[a])||a;
-function actorIndex(){const M={};for(const it of [...films(),...series()])for(const c of it.cast||[]){const a=Array.isArray(c)?c[0]:c;if(!a)continue;(M[a]=M[a]||[]).push(it)}return M}
+function actorIndex(){const k="ai|"+films().length+"|"+series().length+"|"+(typeof TMD!=="undefined"?TMD.n:"")+"|"+(typeof SXD!=="undefined"?SXD.n:"");if(RMEMO[k])return RMEMO[k];const M={};RMEMO[k]=M;for(const it of [...films(),...series()])for(const c of it.cast||[]){const a=Array.isArray(c)?c[0]:c;if(!a)continue;(M[a]=M[a]||[]).push(it)}return M}
 const nowList=()=>chans().map(c=>({c,p:epgAt(c).cur})).filter(x=>x.p&&x.p.t!=="Programme non communiqué");
 const genOf=it=>(it.g||[]).map(nz).join(" ");
 const verOf=it=>{const L=srcs(it.id),T=[...new Set(L.map(v=>v.fr&&v.fr!=="VF"?v.fr:v.tag||"VF"))],Q=L.some(v=>v.q==="4K")?" 4K":"";return T.slice(0,3).join(" · ")+Q};
@@ -70,7 +73,7 @@ function rowTv(x,grp){const {c,p}=x,pct=Math.max(0,Math.min(100,Math.round((nowM
  return `<div class="sr-lst" data-f data-fid="sr-${grp}-ch${c.id}" data-act="live:${c.id}" data-hov="ch:${c.id}" data-srsel="ch:${c.id}">${th([c.col||"#334","#111"],"sr-w",logo?`<img src="${logo}" alt="">`:esc(c.n))}<div class="tx"><b>${esc(p.t)}</b><small>${esc(c.n)} · ${fmt(p.s)} – ${fmt(p.e)}</small><div class="sr-pg"><i style="width:${pct}%"></i></div></div><span class="sr-tg sr-live">DIRECT</span></div>`}
 function rowActor(a,AI){const n=actName(a),L=AI[a]||[];return `<div class="sr-lst" data-f data-fid="sr-a-${a}" data-act="${typeof A!=="undefined"&&A[a]?"actor:"+a:"srq:"+n}" data-srsel="a:${a}">${(ph=>ph?`<div class="sr-th sr-av aph" style="background-image:url(${ph})"></div>`:th(["#5b6f99","#1a1d26"],"sr-av",esc(n.split(" ").map(w=>w[0]).join("").slice(0,2))))(window.actorPh&&typeof A!=="undefined"&&A[a]?actorPh(a):"")}<div class="tx"><b>${esc(n)}</b><small>${esc(L.slice(0,3).map(x=>x.t).join(" · "))}</small></div></div>`}
 function listH(r){const g=(t,ic)=>`<div class="sr-gh">${ic||""}${esc(t)}</div>`;
- if(!S.q.trim()){const rec=(ME().recent||[]).slice(0,5),trend=[...films(),...series()].sort((a,b)=>trendScore(b)-trendScore(a)).slice(0,6),live=nowList().slice(0,6);
+ if(!S.q.trim()){const rec=(ME().recent||[]).slice(0,5),trend=(RMEMO.srtr||(RMEMO.srtr=[...films(),...series()].map(i=>[i,trendScore(i)]).sort((a,b)=>b[1]-a[1]).slice(0,6).map(x=>x[0]))),live=nowList().slice(0,6);
   return (rec.length?g("Recherches récentes",IC.clock)+rec.map((q,i)=>`<div class="sr-lst" data-f data-fid="sr-rc-${i}" data-act="srq:${esc(q)}">${th(["#33384a","#1a1d26"],"sr-w",IC.clock)}<div class="tx"><b>${esc(q)}</b><small>recherché récemment</small></div></div>`).join(""):"")
    +g("Tendances cette semaine",IC.trend)+trend.map(it=>rowIt(it,"tr")).join("")+g("En ce moment à la TV")+live.map(x=>rowTv(x,"lv")).join("")}
  let h=r.fuz?`<div class="sr-why">${IC.spark}Résultats pour une orthographe proche de « ${esc(S.q)} »</div>`:"";const F=SR.filt;

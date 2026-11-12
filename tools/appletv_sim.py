@@ -268,7 +268,7 @@ R('const D=GDEF[it.type],cl={};(it.type==="f"?FCATS:SCATS).forEach(([k,n])=>cl[k
 # fenêtre des sources : la liste suit la sélection (beaucoup de versions d'un film, d'une série ou d'une chaîne)
 R('<h2>${esc(title)}</h2><div class="mlist">', '<h2>${esc(title)}</h2><div class="mlist sy">')
 # disponibilité : un simple « au moins un fournisseur actif l'a » (sans calculer toutes les sources), gardée le temps d'un affichage
-R('const films=()=>FILMS.filter(i=>srcs(i.id).length),series=()=>SERIES.filter(i=>srcs(i.id).length),chans=()=>CHS.filter(c=>srcs("ch:"+c.id).length);', 'const AVM={};const avail=key=>S.playlists.some(p=>p.on&&has(p,key));const films=()=>(AVM.f||(AVM.f=FILMS.filter(i=>avail(i.id)))).slice(),series=()=>(AVM.s||(AVM.s=SERIES.filter(i=>avail(i.id)))).slice(),chans=()=>(AVM.c||(AVM.c=CHS.filter(c=>avail("ch:"+c.id)))).slice();')
+R('const films=()=>FILMS.filter(i=>srcs(i.id).length),series=()=>SERIES.filter(i=>srcs(i.id).length),chans=()=>CHS.filter(c=>srcs("ch:"+c.id).length);', 'const AVM={};const avail=key=>S.playlists.some(p=>p.on&&has(p,key));const films=()=>AVM.f||(AVM.f=Object.freeze(FILMS.filter(i=>avail(i.id)))),series=()=>AVM.s||(AVM.s=Object.freeze(SERIES.filter(i=>avail(i.id)))),chans=()=>AVM.c||(AVM.c=Object.freeze(CHS.filter(c=>avail("ch:"+c.id))));')
 R(":C.filter(c=>c.cat===k).length;", ":C.filter(c=>inCatL(c,k)).length;")
 R(' ${sec("l","Catégories TV en direct",LCATS.filter(([k])=>k!=="all"&&k!=="fav"))}\n ${sec("f","Catégories films",FCATS.filter(([k])=>k!=="nolan"))}\n ${sec("s","Catégories séries",SCATS)}', ' ${sec("l","Catégories TV en direct",LCATS.filter(([k])=>k!=="all"&&k!=="fav"&&(!REAL||catCount(p,"l",k)>0)))}\n ${sec("f","Catégories films",FCATS.filter(([k])=>k!=="nolan"&&(!REAL||catCount(p,"f",k)>0)))}\n ${sec("s","Catégories séries",SCATS.filter(([k])=>!REAL||catCount(p,"s",k)>0))}')
 R('function catCount(pl,type,k){if(type==="l")return CHS.filter(c=>c.cat===k&&base(pl,"ch:"+c.id)).length;return (type==="f"?FILMS:SERIES).filter(i=>base(pl,i.id)&&provCat(pl,i)===k).length}', 'function catCount(pl,type,k){if(type==="l")return CHS.filter(c=>inCatL(c,k)&&base(pl,"ch:"+c.id)).length;return (type==="f"?FILMS:SERIES).filter(i=>base(pl,i.id)&&(i._real&&i._real.c?i._real.c.includes(k):provCat(pl,i)===k)).length}')
@@ -281,7 +281,7 @@ _simcss = src[src.index("<style>"):src.index("</style>")]
 import re as _re
 # défilement : une section plus haute que l'écran (ex. 100 catégories d'un fournisseur) suit l'élément, pas le haut de la section
 R('const a=el.closest("[data-anchor]");const tg=a&&p.contains(a)&&a!==p?a:el;', 'const a=el.closest("[data-anchor]");const tg=a&&p.contains(a)&&a!==p&&a.offsetHeight<=p.clientHeight-20?a:el;')
-_jsall = src[src.index("</style>"):] + "".join(rd(n) for n in ["live_a2c.js", "real_end.js", "live_home.js", "live_plus.js", "film_ab1.js", "film_home.js", "serie_home.js", "player_b.js", "prov.js", "settings_a.js", "search_b.js", "guide_a.js", "who_a.js", "gouts.js", "fiches.js", "erreurs.js", "liste.js", "apps.js"])
+_jsall = src[src.index("</style>"):] + "".join(rd(n) for n in ["perf_a.js", "live_a2c.js", "real_end.js", "live_home.js", "live_plus.js", "film_ab1.js", "film_home.js", "serie_home.js", "player_b.js", "prov.js", "settings_a.js", "search_b.js", "guide_a.js", "who_a.js", "gouts.js", "fiches.js", "erreurs.js", "liste.js", "apps.js", "perf_z.js"])
 _used = set(_re.findall(r"[A-Za-z_][\w-]*", _jsall))
 _fxcss, _fxren = _fxbuild(rd("film_ab1.css") + "\n" + rd("film_home.css") + "\n" + rd("serie_home.css"), _simcss, _used)
 R("</style>", _fxcss + "\n" + rd("film_ab1_global.css") + rd("film_home_global.css") + rd("player_b.css") + rd("prov.css") + rd("settings_a.css") + rd("search_b.css") + rd("guide_a.css") + rd("who_a.css") + rd("gouts.css") + rd("fiches.css") + rd("erreurs.css") + rd("liste.css") + rd("icones.css") + "</style>")
@@ -292,7 +292,7 @@ RFCMD += "const RSCMD=`cat > /tmp/prisme-series.pl <<'PRISME_FIN'\n" + _ps + "PR
 _fx = rd("prisme-flux.pl")
 RXFLUX = "const RCMDSH=" + _json.dumps(rd("prisme-cmd.sh").strip() + " ") + ";\n"
 RXFLUX += "const RXFLUX=" + _json.dumps('export PRISME_U="$U" PRISME_N="$N" PRISME_P="$P"; cat > /tmp/prisme-flux.pl <<\'PRISME_FLUX\'\n' + _fx + 'PRISME_FLUX\nperl /tmp/prisme-flux.pl "$D"; unset PRISME_P; ') + ";\n"
-R("render();\n</script>", RFCMD + RXFLUX + "const FXR=" + _json.dumps(_fxren) + ";\n" + rd("live_a2c.js") + "\n" + rd("real_end.js") + "\n" + rd("live_home.js") + "\n" + rd("live_plus.js") + "\n" + rd("film_ab1.js") + "\n" + rd("film_home.js") + "\n" + rd("serie_home.js") + "\n" + rd("player_b.js") + "\n" + rd("prov.js") + "\n" + rd("settings_a.js") + "\n" + rd("search_b.js") + "\n" + rd("guide_a.js") + "\n" + rd("who_a.js") + "\n" + rd("gouts.js") + "\n" + rd("fiches.js") + "\n" + rd("erreurs.js") + "\n" + rd("liste.js") + "\n" + rd("apps.js") + "\n" + rd("icones.js") + "\nrender();if(inApp())lPreload(()=>render());\n</script>")
+R("render();\n</script>", RFCMD + RXFLUX + "const FXR=" + _json.dumps(_fxren) + ";\n" + rd("perf_a.js") + "\n" + rd("live_a2c.js") + "\n" + rd("real_end.js") + "\n" + rd("live_home.js") + "\n" + rd("live_plus.js") + "\n" + rd("film_ab1.js") + "\n" + rd("film_home.js") + "\n" + rd("serie_home.js") + "\n" + rd("player_b.js") + "\n" + rd("prov.js") + "\n" + rd("settings_a.js") + "\n" + rd("search_b.js") + "\n" + rd("guide_a.js") + "\n" + rd("who_a.js") + "\n" + rd("gouts.js") + "\n" + rd("fiches.js") + "\n" + rd("erreurs.js") + "\n" + rd("liste.js") + "\n" + rd("apps.js") + "\n" + rd("perf_z.js") + "\n" + rd("icones.js") + "\nrender();if(inApp())lPreload(()=>render());\n</script>")
 R("const n=SC.streak,st=n<3?10:", 'const n=SC.streak,st=n<3?(window.SAval?[10,15,30][SAval("skip")]:10):')
 R('setBg([CH[S.lch].col,"#08080c"])', 'setBg([(CH[S.lch]||{col:"#1a1a22"}).col,"#08080c"])')
 R("<kbd>M</kbd> (ou maintenir le clic) ajouter/retirer des favoris", "<kbd>M</kbd> (ou maintenir le clic) favoris, ou options d'une chaîne dans la TV en direct")
@@ -304,6 +304,8 @@ R('}).join("")}</div><div class="mfoot">OK pour lire cette source', '}).join("")
 R('  if(cs.contains("sy")){const a=el.closest("[data-anchor]")', '  if(cs.contains("ty")){tyFollow(p,el,instant)}else if(cs.contains("sy")){const a=el.closest("[data-anchor]")')
 R("</style>", rd("defil.css") + "</style>")
 R("function ensureVisible(el,instant){", rd("defil.js") + "function ensureVisible(el,instant){")
+R('const norm=s=>s.normalize("NFD")', 'let norm=s=>s.normalize("NFD")')
+R(' const dup=[...FILMS,...SERIES].filter(i=>srcs(i.id).length>1).length+CHS.filter(c=>srcs("ch:"+c.id).length>1).length;', ' const dup=RMEMO.dup!=null?RMEMO.dup:(RMEMO.dup=[...FILMS,...SERIES].filter(i=>nsrc(i.id)>1).length+CHS.filter(c=>nsrc("ch:"+c.id)>1).length);')
 _k = src.index("<script>", src.index("</style>")); src = src[:_k] + "<script>\n" + rd("errh.js") + src[_k+len("<script>"):]
 src = src.replace("\nrender();if(inApp())lPreload(()=>render());\n</script>", "\nrender();if(inApp())lPreload(()=>render());window.__prReady=true;\n</script>")
 assert "window.__prReady=true" in src

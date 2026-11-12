@@ -16,7 +16,7 @@ function hGuideRows(){const ids=[...new Set([...LS.hist,...lvis().filter(c=>isFa
 function homeMain(){
  /* un même programme n'apparaît qu'une fois sur l'accueil : Pour toi > Commence bientôt > Replay récent > Ce soir */
  const D=deckOrder(),N=lNow(),FY=hForYou(),pk=(c,s)=>c.id+"@"+Math.round(s),seen=new Set(FY.map(x=>pk(x.c,epgAt(x.c).cur.s)));
- const take=(L,n)=>{const o=L.filter(x=>x.p&&!seen.has(pk(x.c,x.p.s))).slice(0,n);o.forEach(x=>seen.add(pk(x.c,x.p.s)));return o};
+ const take=(L,n)=>{const o=[];for(const x of L){if(o.length>=n)break;if(x.p&&!seen.has(pk(x.c,x.p.s)))o.push(x)}o.forEach(x=>seen.add(pk(x.c,x.p.s)));return o};
  const Sn=take(lSoon(null,60),16),Pa=take(lPast(),16),T=take(hTonight(),99);
  const first=(deckList(D[0]||"Sport")[0])||N[0];const hero=`<div class="lhero" id="lhero">${first?lheroHtml(first.c):""}</div>`;
  const soonC=Sn.map(x=>lcard(x.c,"hs",x.p)).join(""),pastC=Pa.map(x=>lrpCard(x.c,x.p,"hr")).join(""),tonC=T.map(x=>lcard(x.c,"ht",x.p)).join("");

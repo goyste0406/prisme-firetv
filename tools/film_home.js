@@ -13,7 +13,7 @@ const FHNAMES={reprendre:"Reprendre",top:"Top 10 du moment",new:"Nouveau sur pri
 let FHLAST=null;function fhLast(){if(FHLAST==null){const h=fhP();FHLAST=h.last||Date.now()-3*864e5;h.last=Date.now();prSave()}return FHLAST}
 
 /* ---------- données ---------- */
-const fhFilms=()=>films().filter(f=>!fxBlocked(f));
+const fhFilms=()=>(RMEMO.fhf||(RMEMO.fhf=films().filter(f=>!fxBlocked(f)))).slice();
 const fhNo=id=>ME().no.includes(id),fhSeen=id=>ME().seen.includes(id);
 function fhAddDays(f){const r=f._real;if(r&&r.a)return Math.max(0,Math.floor((Date.now()/1000-r.a)/86400));const a=added(f.id);return a?a.d:999}
 function fhProv(f){const a=added(f.id);return a&&a.p?a.p.name:(S.playlists[0]||{}).name||"ton fournisseur"}
@@ -244,7 +244,10 @@ function fhHoriz(k){const ln=F.closest(fxQ("row")+",.hline,.acts");if(!ln||!ln.c
  const C=L.filter(e=>e!==F&&(k==="right"?e.getBoundingClientRect().left>x+2:e.getBoundingClientRect().left<x-2)).sort((a,b)=>Math.abs(a.getBoundingClientRect().left-x)-Math.abs(b.getBoundingClientRect().left-x));if(C[0])setFocus(C[0]);return true}
 function fhCarousel(k){const hb=F.closest(".acts");if(!hb||!hb.closest(fxQ("hero")))return false;const nd=view.querySelectorAll(".dots i:not(.cnt)").length;if(nd<2)return false;
  FH.h1i=((FH.h1i+(k==="right"?1:-1))%nd+nd)%nd;FH.hdir=k;FXS.ready=null;FH.prep=null;render("fh-b0");FH.hdir=null;return true}
-let FHT=0;function fhTick(){clearInterval(FHT);FHT=setInterval(()=>{if(!fhOn()||S.modal||FH.skel)return;if(F&&(F.closest(fxQ("hero"))||F.closest(".hline")))return;const sc=$("#hscr");if(!sc||sc.scrollTop>200)return;if(view.querySelector(".hpeek"))return;FH.h1i++;render(F&&F.dataset.fid)},8000)}
+let FHT=0;function fhTick(){clearInterval(FHT);FHT=setInterval(()=>{if(!fhOn()||S.modal||FH.skel)return;if(F&&(F.closest(fxQ("hero"))||F.closest(".hline")))return;const sc=$("#hscr");if(!sc||sc.scrollTop>200)return;if(view.querySelector(".hpeek"))return;FH.h1i++;
+ /* seule la grande affiche change toutes les 8 s : on ne redessine qu'elle (avant : tout l'accueil) */
+ const old=sc.querySelector(fxQ("hero"));if(old&&old.parentElement===sc){const d=document.createElement("div");d.innerHTML=fxC(fhHero());const nw=d.firstElementChild;if(nw&&nw.matches(fxQ("hero"))){old.replaceWith(nw);return}}
+ render(F&&F.dataset.fid)},8000)}
 /* grilles (Tout voir, genres) : ▲ ▼ restent dans la même colonne, ▲ depuis la 1re ligne remonte aux tris */
 function gridNav(k){const g=F&&F.closest("#ggrid");if(!g||S.modal||!["up","down","left","right"].includes(k))return false;const r=+(F.dataset.row||"g0").slice(1),row=n=>[...g.querySelectorAll(`[data-row="g${n}"]`)],cur=row(r),i=cur.indexOf(F);
  if(k==="left"||k==="right"){const j=i+(k==="right"?1:-1);if(cur[j])setFocus(cur[j]);else if(k==="right"&&row(r+1)[0])setFocus(row(r+1)[0]);else if(k==="left"&&r>0){const p=row(r-1);setFocus(p[p.length-1])}return true}
@@ -294,7 +297,7 @@ const MQB={"4K":[3840,2160,"HEVC",50,16000],"1080p":[1920,1080,"H.264",50,7800],
 function measNow(v){const b=MQB[v.q]||MQB["1080p"],h=hash(v.name||"")%9;return {q:v.q,w:b[0],h:b[1],vc:(/hevc|h\.?265/i.test(v.codec||"")?"HEVC":b[2]),fps:b[3],kb:b[4]+h*180,a:/e-?ac3|5\.1/i.test((v.audio||[]).join(" "))?"E-AC3 5.1":"AAC stéréo",at:Date.now()}}
 let MST=0;
 {const _sp=startPlayer;startPlayer=function(o){const r=_sp(o);clearTimeout(MST);if(o&&o.kind==="live"){const key="ch:"+o.id;MST=setTimeout(()=>{if(!P||P.kind!=="live"||P.id!==o.id||!P.playing)return;
-  const v=srcs(key).find(x=>x.id===(P.src||o.src))||pickSrc(key);const k=measKey(v);if(!k)return;const first=!MEAS[k];MEAS[k]=measNow(v);try{localStorage.setItem("prisme-meas",JSON.stringify(MEAS))}catch(e){}
+  const v=srcs(key).find(x=>x.id===(P.src||o.src))||pickSrc(key);const k=measKey(v);if(!k)return;const first=!MEAS[k];MEAS[k]=measNow(v);window.__dv=(window.__dv||0)+1;try{localStorage.setItem("prisme-meas",JSON.stringify(MEAS))}catch(e){}
   if(first)toast(`✓ Qualité de ${CH[o.id]?CH[o.id].n:"la chaîne"} mesurée : ${MEAS[k].q} · ${MEAS[k].fps} i/s · retenue pour la prochaine fois`)},4000)}return r}}
 const fmtD=t=>{const d=new Date(t);return d.toLocaleDateString("fr-FR",{day:"2-digit",month:"2-digit"})+" à "+d.toLocaleTimeString("fr-FR",{hour:"2-digit",minute:"2-digit"})};
 {const _s=srcs;srcs=function(key){const L=_s(key);if(!key.startsWith("ch:"))return L;return L.map(v=>{const m=MEAS[measKey(v)];
@@ -307,7 +310,15 @@ if(!REAL){const _s=srcs;srcs=function(key){const L=_s(key);const it=ALL[key];if(
 
 /* ---------- mémoire des sources : srcs() est appelée des dizaines de milliers de fois par affichage (films() la rappelle
    pour chaque film). On garde le résultat le temps d'un affichage ou d'une action, puis on l'oublie. */
-const SRCM=new Map();const RMEMO={};const srcmClear=()=>{SRCM.clear();for(const k in RMEMO)delete RMEMO[k];if(typeof AVM!=="undefined"){AVM.f=AVM.s=AVM.c=null}};
+const SRCM=new Map();const RMEMO=window.__RM;
+/* on ne vide ces mémoires que si quelque chose a pu changer : une action (OK), une donnée rechargée, un fournisseur
+   activé ou masqué, un autre profil… Se déplacer avec les flèches ne change rien : la mémoire reste (fluidité). */
+const DV={s:"",dirty:true};
+const dsig=()=>{let h="";for(const p of S.playlists){const hd=p.hidden||[];h+=p.id+(p.on?"1":"0")+hd.length+"."+(hd.length?hd[0]+hd[hd.length-1]:"")+"|"}
+ return h+PR.cur+"|"+(typeof FXS!=="undefined"&&FXS.duo?FXS.duo.join("+"):"")+"|"+(typeof fxMax0==="function"?fxMax0():"")+"|"+CHS.length+"/"+FILMS.length+"/"+SERIES.length+"|"+(typeof TMD!=="undefined"?TMD.n:"")+"|"+(typeof SXD!=="undefined"?SXD.n:"")+"|"+(window.__dv||0)+"|"+(typeof REAL!=="undefined"&&REAL?REAL.pls.length:0)};
+const srcmClear=()=>{const s=dsig();if(!DV.dirty&&s===DV.s)return;DV.s=s;DV.dirty=false;SRCM.clear();for(const k in RMEMO)delete RMEMO[k];if(typeof AVM!=="undefined"){AVM.f=AVM.s=AVM.c=null}};
+window.dataChanged=()=>{DV.dirty=true};
+const NAVACT=/^(open|tab|fxopen|key|srq|srf|srsay|sxft|sxfs|mn:sub|mn:mood|fxxmode|ap:svc|fxwhere|fxsyn|fxclose|fxactor|actor|live|genre|fhg|pf|col)[:]?/;
 /* calculs lourds avec un gros catalogue : faits une fois par affichage (le Top 10 était recalculé pour chaque film) */
 {const _t=fhTop;fhTop=function(){return (RMEMO.top||(RMEMO.top=_t())).slice()}}
 genreList=function(ty){const k="g"+ty;if(!RMEMO[k]){const L=ty==="f"?films():series(),by={};for(const i of L)for(const g of new Set(genreKeys(i)))(by[g]=by[g]||[]).push(i);RMEMO[k]=GDEF[ty].map(g=>({g,items:by[g[0]]||[]})).filter(x=>x.items.length)}return RMEMO[k].slice()};
@@ -320,5 +331,5 @@ genreList=function(ty){const k="g"+ty;if(!RMEMO[k]){const L=ty==="f"?films():ser
   all.forEach(e=>e.style.scrollBehavior="auto");sc.scrollTop=keep.y;sc._ty=keep.y;sc._tt2=0;if(rows.length===keep.x.length)rows.forEach((r,i)=>{r.scrollLeft=keep.x[i];r._tx=keep.x[i];r._tt=0});
   const f=S.modal?null:F;if(f&&sc.contains(f))ensureVisible(f,true);requestAnimationFrame(()=>all.forEach(e=>e.style.scrollBehavior=""))}}
  return out}}
-{const _a=act;act=function(a){srcmClear();return _a(a)}}
+{const _a=act;act=function(a){if(!(typeof a==="string"&&NAVACT.test(a)))DV.dirty=true;srcmClear();return _a(a)}}
 {const _k=key;key=function(k){srcmClear();return _k(k)}}

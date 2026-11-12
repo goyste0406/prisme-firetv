@@ -2231,7 +2231,7 @@ if(REAL){
  const FONTS=["serif","bebas","black","thin"];
  const col=k=>{const h=hash(k)%360;return ["#"+hsl(h,45,38),"#"+hsl((h+40)%360,45,10)]};
  const NOTE="Pas encore de résumé : la fiche TMDB arrive en arrière-plan.";
- const gOf=cats=>{const m=(REAL.fcats||[]).concat(REAL.scats||[]);const n=cats.map(k=>(m.find(c=>c[0]===k)||[])[1]).filter(Boolean)[0]||"Divers";return n};
+ const GOM=new Map();for(const c of (REAL.fcats||[]).concat(REAL.scats||[]))if(!GOM.has(c[0]))GOM.set(c[0],c[1]);const gOf=cats=>{const n=cats.map(k=>GOM.get(k)).filter(Boolean)[0]||"Divers";return n};
  const castOf=r=>(r.cast||"").split(/\s*,\s*/).filter(Boolean).slice(0,6).map(n=>{const id="ra"+(hash(n)>>>0).toString(36);A[id]=n;return [id,""]});
  FILMS.splice(0,FILMS.length,...REAL.films.map(r=>({id:r.id,t:r.t,y:r.y||new Date((r.a||0)*1000).getFullYear()||2024,d:r.d||100,g:(r.g?r.g.split(/\s*[,/]\s*/).filter(Boolean):[gOf(r.c)]).slice(0,3),cat:r.c,bd:r.bd||undefined,imdb:r.r?Math.min(10,+r.r):6.8,tmdb:Math.round((r.r?Math.min(10,+r.r):6.8)*10),age:"Tous publics",dir:r.dir||"",f:FONTS[hash(r.id)%4],c:col(r.id),s:r.p||NOTE,cast:castOf(r),po:r.po||undefined,_real:r})));
  SERIES.splice(0,SERIES.length,...REAL.series.map(r=>{const cast=(r.cast||"").split(/\s*,\s*/).filter(Boolean).slice(0,6).map(n=>{const id="ra"+(hash(n)>>>0).toString(36);A[id]=n;return [id,""]});
@@ -2257,8 +2257,9 @@ const CHS=[
 if(REAL){
  FCATS.splice(0,FCATS.length,...REAL.fcats);SCATS.splice(0,SCATS.length,...REAL.scats);
  const tplOf=n=>/sport|foot|bein|rmc sport|eurosport|equipe|canal\+ sport/i.test(n)?"sport":/info|news|bfm|cnews|lci|franceinfo|euronews|france 24/i.test(n)?"info":/cin|film|movie|tcm|paramount|frisson/i.test(n)?"cine":/kid|jeunesse|gulli|disney|nick|boomerang|tiji|piwi|canal j|cartoon|okoo/i.test(n)?"kids":/docu|discovery|nat ?geo|planete|histoire|ushuaia|rmc decouverte|animaux|science/i.test(n)?"doc":"series";
+ const LCM=new Map();for(const c of REAL.lcats||[])if(!LCM.has(c[0]))LCM.set(c[0],c);
  CHS.splice(0,CHS.length,...REAL.chans.map((r,i)=>{const h=hash(r.id)%360;const qs=r.s.map(x=>x[2]);const q=qs.includes("4K")?"4K":qs.includes("1080p")?"FHD":qs.includes("720p")?"HD":"SD";
-  return {id:r.id,n:r.n,cat:r.c[0]||"lother",col:"#"+hsl(h,55,34),tpl:tplOf(r.n+" "+((REAL.lcats.find(c=>c[0]===r.c[0])||[])[1]||"")),q,num:r.num||i+1,_real:r}}));
+  return {id:r.id,n:r.n,cat:r.c[0]||"lother",col:"#"+hsl(h,55,34),tpl:tplOf(r.n+" "+((LCM.get(r.c[0])||[])[1]||"")),q,num:r.num||i+1,_real:r}}));
 }
 const CH={}; CHS.forEach(c=>CH[c.id]=c);
 const LCATS=[["all","Toutes les chaînes"],["fav","Favoris"],["tnt","Généralistes"],["info","Info"],["sport","Sport"],["cine","Cinéma"],["jeunesse","Jeunesse"]];
@@ -2304,7 +2305,7 @@ function epgCount(){return chans().reduce((a,c)=>a+epg(c).length,0)}
 /* ========================= ÉTAT ========================= */
 function hash(s){let h=7;for(const c of s)h=(h*31+c.charCodeAt(0))|0;return Math.abs(h)}
 const esc=s=>String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
-const norm=s=>s.normalize("NFD").replace(/[̀-ͯ]/g,"").toLowerCase();
+let norm=s=>s.normalize("NFD").replace(/[̀-ͯ]/g,"").toLowerCase();
 const dur=m=>m>=60?`${Math.floor(m/60)} h ${String(m%60).padStart(2,"0")}`:`${m} min`;
 const initials=n=>n.split(/[\s-]+/).filter(w=>/^[A-ZÀ-Ý]/.test(w)).slice(0,2).map(w=>w[0]).join("");
 
@@ -2349,7 +2350,7 @@ const compat=v=>qr(v.q)<=qr(DEVICE.maxQ);
 function srcs(key){return S.playlists.filter(p=>p.on&&has(p,key)).flatMap(p=>variants(p,key)).sort((a,b)=>(compat(b)-compat(a))||(qr(b.q)-qr(a.q)))}
 function pickSrc(key){const L=srcs(key);return L.find(x=>x.id===S.srcSel[key]&&compat(x))||L.find(compat)||L[0]}
 const srcId=key=>(pickSrc(key)||{}).id;
-const AVM={};const avail=key=>S.playlists.some(p=>p.on&&has(p,key));const films=()=>(AVM.f||(AVM.f=FILMS.filter(i=>avail(i.id)))).slice(),series=()=>(AVM.s||(AVM.s=SERIES.filter(i=>avail(i.id)))).slice(),chans=()=>(AVM.c||(AVM.c=CHS.filter(c=>avail("ch:"+c.id)))).slice();
+const AVM={};const avail=key=>S.playlists.some(p=>p.on&&has(p,key));const films=()=>AVM.f||(AVM.f=Object.freeze(FILMS.filter(i=>avail(i.id)))),series=()=>AVM.s||(AVM.s=Object.freeze(SERIES.filter(i=>avail(i.id)))),chans=()=>AVM.c||(AVM.c=Object.freeze(CHS.filter(c=>avail("ch:"+c.id))));
 const acred=a=>{const seen=new Set();return (CRED[a]||[]).filter(([id])=>{const o=ALL[id];if(!o||seen.has(o))return false;seen.add(o);return srcs(id).length}).map(([id,r])=>[ALL[id].id,r])};
 function counts(pl){return {c:CHS.filter(c=>has(pl,"ch:"+c.id)).length,f:FILMS.filter(i=>has(pl,i.id)).length,s:SERIES.filter(i=>has(pl,i.id)).length}}
 const isFav=k=>S.favs.includes(k);
@@ -2493,7 +2494,7 @@ function searchHtml(){
 function sw(on){return `<span class="sw ${on?"on":""}"></span>`}
 function settingsHtml(){
  const st=S.set,on=S.playlists.filter(p=>p.on);
- const dup=[...FILMS,...SERIES].filter(i=>srcs(i.id).length>1).length+CHS.filter(c=>srcs("ch:"+c.id).length>1).length;
+ const dup=RMEMO.dup!=null?RMEMO.dup:(RMEMO.dup=[...FILMS,...SERIES].filter(i=>nsrc(i.id)>1).length+CHS.filter(c=>nsrc("ch:"+c.id)>1).length);
  const pls=S.playlists.map(p=>{const c=counts(p),exp=new Date(p.exp||Date.now()+86400000*214).toLocaleDateString("fr-FR",{day:"numeric",month:"short",year:"numeric"});
   return `<div class="it tall" data-f data-fid="pl-${p.id}" data-act="plm:${p.id}"><span style="min-width:0">${esc(p.name)}<small>${esc(p.url)} · ${esc(p.user)} · expire le ${exp}${(p.hidden||[]).length?` · ${p.hidden.length} catégorie${p.hidden.length>1?"s":""} masquée${p.hidden.length>1?"s":""}`:""}</small></span><span style="display:flex;align-items:center;gap:16px;max-width:none;flex:0 0 auto;overflow:visible">${c.c} chaînes · ${c.f} films · ${c.s} séries ${sw(p.on)}</span></div>`}).join("");
  return `<div class="set sy" id="set">
@@ -3363,7 +3364,14 @@ PRISME_FIN
 perl /tmp/prisme-series.pl`;
 const RCMDSH="c(){ curl -sSLG --compressed -A \"Mozilla/5.0\" \"$@\"; }; [ -n \"$F\" ] || { printf \"Nom de ce fournisseur : \"; read -r F; }; [ -n \"$U\" ] || { printf \"Adresse du serveur (ex. http://monserveur.com:8080) : \"; read -r U; }; [ -n \"$N\" ] || { printf \"Nom d'utilisateur : \"; read -r N; }; printf \"Mot de passe de %s chez %s (il ne s'affiche pas quand tu tapes) : \" \"$N\" \"$F\"; read -rs P; echo; case \"$U\" in http*) ;; *) U=\"http://$U\";; esac; U=\"${U%%/get.php*}\"; U=\"${U%%/player_api.php*}\"; U=\"${U%/}\"; MS=$(c \"$U/player_api.php\" --data-urlencode \"username=$N\" --data-urlencode \"password=$P\" -o /dev/null -w \"%{time_total}\"); R=$(c \"$U/player_api.php\" --data-urlencode \"username=$N\" --data-urlencode \"password=$P\"); case \"$R\" in *'\"auth\":1'*|*'\"auth\": 1'*|*'\"auth\":\"1\"'*) echo \"\u2713 Connexion accept\u00e9e\";; *) echo \"\u26a0 Le serveur refuse la connexion ou r\u00e9pond autre chose. D\u00e9but de la r\u00e9ponse :\"; echo \"${R:0:200}\";; esac; D=~/Desktop/prisme-\"${F// /-}\"; mkdir -p \"$D\" && cd \"$D\" && printf '%s' \"$R\" | MS=\"$MS\" HOSTU=\"$U\" perl -MJSON::PP -0777 -e 'my $j = eval { JSON::PP->new->utf8->decode(<STDIN>) } || {}; delete $j->{user_info}{password} if ref $j->{user_info} eq \"HASH\"; $j->{ms} = int(($ENV{MS} || 0) * 1000); $j->{at} = time; $j->{host} = $ENV{HOSTU}; print JSON::PP->new->utf8->canonical->encode($j)' > compte.json; echo \"\u2713 compte : $(head -c 120 compte.json)\"; for a in get_live_categories get_live_streams get_vod_categories get_vod_streams get_series_categories get_series; do c \"$U/player_api.php\" --data-urlencode \"username=$N\" --data-urlencode \"password=$P\" --data-urlencode \"action=$a\" -o \"$a.json\"; echo \"\u2713 $a : $(wc -c < \"$a.json\" | tr -d ' ') octets, d\u00e9but : $(head -c 60 \"$a.json\")\"; done; c \"$U/xmltv.php\" --data-urlencode \"username=$N\" --data-urlencode \"password=$P\" -o xmltv.xml; echo \"\u2713 guide : $(wc -c < xmltv.xml | tr -d ' ') octets\"; echo \"\u2026 fiches des 400 films les plus r\u00e9cents chez ton fournisseur (r\u00e9sum\u00e9, casting, dur\u00e9e)\"; mkdir -p vi; perl -MJSON::PP -0777 -e 'my $l = eval { JSON::PP->new->utf8->decode(<STDIN>) } || []; my @v = grep { ref $_ eq \"HASH\" && ($_->{name} // \"\") !~ /adult|xxx|porn|\\+ ?18|18 ?\\+/i } @$l; @v = sort { ($b->{added} || 0) <=> ($a->{added} || 0) } @v; print \"$_->{stream_id}\\n\" for grep { $_->{stream_id} } @v[0 .. ($#v < 399 ? $#v : 399)]' < get_vod_streams.json > vi/ids.txt; export U N P; xargs -P 6 -I{} sh -c 'curl -sSLG --compressed -A \"Mozilla/5.0\" -m 20 \"$U/player_api.php\" --data-urlencode \"username=$N\" --data-urlencode \"password=$P\" --data-urlencode \"action=get_vod_info\" --data-urlencode \"vod_id={}\" -o \"vi/{}.json\" 2>/dev/null' < vi/ids.txt; perl -MJSON::PP -e 'my $J = JSON::PP->new->utf8; my %o; for my $f (glob \"vi/*.json\") { my ($id) = $f =~ m{vi/(\\d+)\\.json$} or next; open my $h, \"<:raw\", $f or next; local $/; my $d = eval { $J->decode(<$h>) } or next; my $i = $d->{info}; next unless ref $i eq \"HASH\"; my $bd = $i->{backdrop_path}; $bd = $bd->[0] if ref $bd eq \"ARRAY\"; $o{$id} = { p => substr($i->{plot} // $i->{description} // \"\", 0, 500), cast => substr($i->{cast} // $i->{actors} // \"\", 0, 200), dir => substr($i->{director} // \"\", 0, 80), g => substr($i->{genre} // \"\", 0, 60), d => int(($i->{duration_secs} // 0) / 60), bd => ($bd // \"\") =~ m{^https?://} ? $bd : \"\", tm => (($i->{tmdb_id} // $i->{tmdb} // \"\") =~ /^\\d+$/ ? $i->{tmdb_id} // $i->{tmdb} : \"\"), yt => $i->{youtube_trailer} // \"\" } } open my $w, \">:raw\", \"vod_info.json\" or die; print $w $J->canonical->encode(\\%o); print STDERR \"\u2713 fiches du fournisseur : \" . scalar(keys %o) . \" films\\n\"'; rm -rf vi; ";
 const RXFLUX="export PRISME_U=\"$U\" PRISME_N=\"$N\" PRISME_P=\"$P\"; cat > /tmp/prisme-flux.pl <<'PRISME_FLUX'\n#!/usr/bin/perl\n# prisme : qualit\u00e9 de chaque flux SANS l'ouvrir. On demande au serveur la fiche technique qu'il a d\u00e9j\u00e0\n# (player_api.php ?action=get_vod_info / get_series_info : vid\u00e9o, audio, d\u00e9bit, dur\u00e9e, conteneur).\n# Ce sont des requ\u00eates d'information, comme la liste des films : aucune lecture de flux, donc aucune\n# connexion de lecture utilis\u00e9e. Les requ\u00eates sont envoy\u00e9es doucement (4 \u00e0 la fois, avec des pauses)\n# et gard\u00e9es en cache : la fois suivante, seuls les nouveaux films sont demand\u00e9s.\nuse strict; use warnings; use utf8; use JSON::PP; use File::Temp qw(tempdir); use File::Path qw(make_path);\nbinmode(STDOUT, \":utf8\");\nmy ($dir) = @ARGV; my ($U, $N, $P) = @ENV{qw(PRISME_U PRISME_N PRISME_P)};\ndie \"Dossier manquant\\n\" unless $dir && -d $dir; die \"Identifiants manquants\\n\" unless $U && defined $N && defined $P;\nmy $MAXV = $ENV{PRISME_MAXV} || 4000; my $MAXS = $ENV{PRISME_MAXS} || 1500;\nmy $J = JSON::PP->new->utf8->canonical; my $tmp = tempdir(CLEANUP => 1);\n(my $host = $U) =~ s{^https?://}{}; $host =~ s/[^A-Za-z0-9]+/-/g;\nmy $CACHE = \"$ENV{HOME}/Library/Caches/prisme-flux/$host\"; make_path(\"$CACHE/v\", \"$CACHE/s\");\nsub slurp { my ($f) = @_; open(my $h, \"<:raw\", $f) or return \"\"; local $/; my $d = <$h>; close $h; return defined $d ? $d : \"\" }\n# --- cat\u00e9gories : m\u00eame r\u00e8gle que prisme sur l'Apple TV (rep\u00e8re fran\u00e7ais, pays francophone ; langue \u00e9trang\u00e8re ignor\u00e9e) ---\n# On traite tout sauf les adultes et les cat\u00e9gories marqu\u00e9es d'une autre langue : celles que tu coches sur la TV en font partie.\nmy $CADULT = qr/adult|xxx|porn|\\+ ?18|18 ?\\+|for adults|erotic|\\bsex|\\bhot\\b/i;\nmy $CFR = qr/(^|[^a-z0-9])(fr|fra|fre|france|french|truefrench|vf|vff|vfq|vfi|vf2|vostfr|vost|stfr|subfrench|francais|francaises?)(?=$|[^a-z0-9])/;\nmy $CFO = qr/(^|[^a-z0-9])(be|bel|belgique|belgium|ca|qc|quebec|ch|suisse|swiss|lu|luxembourg|afrique|africain|francophones?|maghreb|dom-?tom|antilles|reunion)(?=$|[^a-z0-9])/;\nmy $CXX = qr/(^|[^a-z0-9])(en|eng|english|uk|gb|us|usa|american|de|ger|german|deutsch|deutschland|at|it|ita|italia|italian|italy|es|esp|spa|espana|spanish|latino|latam|mx|mexico|pt|por|portugal|portuguese|br|brasil|brazil|ar|arab|arabic|arabe|tr|tur|turk|turkish|turkiye|turkey|nl|dutch|nederland|pl|polska|polish|ru|rus|russia|russian|hindi|india|indian|pk|pakistan|urdu|punjabi|tamil|bangla|ex-?yu|yu|balkan|albania|greek|gr|ro|romania|swe|sweden|nordic|scandinavian|dk|denmark|norway|finland|kr|korea|korean|jp|japan|japanese|cn|china|chinese|filipino|pinoy|persian|iran|kurd|kurdish|hebrew|israel|afghan|somali|filme|serien|peliculas)(?=$|[^a-z0-9])/;\nsub cnrm { my ($s) = @_; $s = lc($s // \"\"); $s =~ tr/\u00e0\u00e2\u00e4\u00e1\u00e3\u00e5\u00e7\u00e9\u00e8\u00ea\u00eb\u00ed\u00ec\u00ee\u00ef\u00f1\u00f3\u00f2\u00f4\u00f6\u00f5\u00fa\u00f9\u00fb\u00fc\u00fd\u00ff\u0153\u00e6/aaaaaaceeeeiiiinooooouuuuyyoa/; return $s }\nsub catok { my ($f) = @_; my $c = eval { JSON::PP->new->utf8->decode(slurp($f)) }; return undef unless ref $c eq \"ARRAY\" && @$c; my %ok;\n  for my $x (@$c) { next unless ref $x eq \"HASH\"; my $raw = \"\" . ($x->{category_name} // \"\"); next if $raw =~ $CADULT; my $n = cnrm($raw);\n    next if $n !~ $CFR && $n !~ $CFO && $n =~ $CXX; $ok{\"\" . ($x->{category_id} // \"\")} = 1 } return \\%ok }\nsub enc { my ($s) = @_; utf8::encode($s) if utf8::is_utf8($s); $s =~ s/([^A-Za-z0-9\\-_.~])/sprintf(\"%%%02X\", ord $1)/ge; return $s }\nmy $auth = \"username=\" . enc($N) . \"&password=\" . enc($P);\n# 4 requ\u00eates \u00e0 la fois, 150 par vague, une pause entre les vagues : le serveur n'est jamais bouscul\u00e9\nsub fetch_api { my ($list) = @_; my $i = 0;\n  while ($i < @$list) { my @b = @$list[$i .. ($i + 149 < $#$list ? $i + 149 : $#$list)]; $i += 150;\n    my $cfg = \"$tmp/c\" . int(rand(1e9)); open(my $c, \">\", $cfg) or die; for (@b) { print $c \"url = \\\"$U/player_api.php?$auth&$_->[0]\\\"\\noutput = \\\"$_->[1]\\\"\\n\" } close $c;\n    system(\"curl\", \"-sSL\", \"--compressed\", \"--max-time\", \"20\", \"--retry\", \"1\", \"-A\", \"Mozilla/5.0\", \"--parallel\", \"--parallel-max\", \"4\", \"-K\", $cfg); unlink $cfg;\n    printf \"\\r  %d / %d\", ($i < @$list ? $i : scalar @$list), scalar @$list; sleep 1 if $i < @$list }\n  print \"\\n\" if @$list }\n# fiche technique ffprobe du serveur \u2192 r\u00e9sum\u00e9 compact\nsub probe { my ($inf) = @_; return undef unless ref $inf eq \"HASH\"; my $v = ref $inf->{video} eq \"HASH\" ? $inf->{video} : {}; my $a = ref $inf->{audio} eq \"HASH\" ? $inf->{audio} : {};\n  return undef unless $v->{codec_name} || $v->{height} || $a->{codec_name};\n  my $fr = $v->{avg_frame_rate} || $v->{r_frame_rate} || \"\"; my $fps = $fr =~ m{^(\\d+)/(\\d+)$} && $2 ? sprintf(\"%.3g\", $1 / $2) + 0 : 0;\n  my $tr = $v->{color_transfer} // \"\"; my $tag = lc($v->{codec_tag_string} // \"\") . \" \" . ($v->{profile} // \"\");\n  my $hdr = $tag =~ /dvh[e1]|dolby ?vision/i ? \"DV\" : $tr eq \"smpte2084\" ? \"HDR10\" : $tr eq \"arib-std-b67\" ? \"HLG\" : \"\";\n  my ($lang, $ttl) = (\"\", \"\"); for my $t ($a->{tags}, $v->{tags}) { next unless ref $t eq \"HASH\"; $lang ||= $t->{language} // $t->{LANGUAGE} // \"\"; $ttl ||= $t->{title} // $t->{handler_name} // \"\" }\n  # doublage : qu\u00e9b\u00e9cois (VFQ) ou de France (VFF) quand la piste le dit (langue fr-CA ou titre de piste)\n  $lang = \"frq\" if $lang =~ /^fr.?ca$/i || $ttl =~ /\\bvfq\\b|qu[\u00e9e]b|canad/i; $lang = \"frf\" if $lang !~ /^frq$/ && ($lang =~ /^fr.?fr$/i || $ttl =~ /\\bvff\\b|truefrench|france/i);\n  my $ap = $a->{profile} // \"\"; my $dur = $inf->{duration_secs} || 0;\n  return [($v->{width} || 0) + 0, ($v->{height} || 0) + 0, lc($v->{codec_name} // \"\"), $hdr, $fps, ($inf->{bitrate} || 0) + 0,\n          lc($a->{codec_name} // \"\"), ($a->{channels} || 0) + 0, lc($lang), $dur + 0, ($ap =~ /atmos|joc/i ? 1 : 0)] }\n\n# --- films : une fiche par flux (stream_id), en cache tant que le flux ne change pas ---\nmy $vs = eval { $J->decode(slurp(\"$dir/get_vod_streams.json\")) }; $vs = [] unless ref $vs eq \"ARRAY\";\nmy $okv = catok(\"$dir/get_vod_categories.json\"); my $oks = catok(\"$dir/get_series_categories.json\");\nmy @V = sort { ($b->{added} || 0) <=> ($a->{added} || 0) } grep { ref $_ eq \"HASH\" && $_->{stream_id} && ($_->{name} // \"\") !~ /adult|xxx|porn|\\+ ?18|18 ?\\+|erotic/i && (!$okv || $okv->{\"\" . ($_->{category_id} // \"\")}) } @$vs;\n@V = @V[0 .. $MAXV - 1] if @V > $MAXV;\nmy @need = grep { my $f = \"$CACHE/v/$_->{stream_id}-\" . ($_->{added} || 0) . \".json\"; !-s $f } @V;\nprint \"Fiches techniques des films : \", scalar(@V), \" flux (\", scalar(@V) - scalar(@need), \" d\u00e9j\u00e0 en cache)\u2026\\n\";\nfetch_api([map { [\"action=get_vod_info&vod_id=$_->{stream_id}\", \"$CACHE/v/$_->{stream_id}-\" . ($_->{added} || 0) . \".json\"] } @need]);\nmy (%VOD, $nv); for my $x (@V) { my $d = eval { $J->decode(slurp(\"$CACHE/v/$x->{stream_id}-\" . ($x->{added} || 0) . \".json\")) } || {};\n  my $p = probe($d->{info}); next unless $p; push @$p, $x->{container_extension} // \"\"; $VOD{$x->{stream_id}} = $p; $nv++ }\n\n# --- s\u00e9ries : la fiche du 1er \u00e9pisode de chaque s\u00e9rie (m\u00eame format), et le nombre d'\u00e9pisodes ---\nmy $ss = eval { $J->decode(slurp(\"$dir/get_series.json\")) }; $ss = [] unless ref $ss eq \"ARRAY\";\nmy @Sx = sort { ($b->{last_modified} || 0) <=> ($a->{last_modified} || 0) } grep { ref $_ eq \"HASH\" && $_->{series_id} && ($_->{name} // \"\") !~ /adult|xxx|porn/i && (!$oks || $oks->{\"\" . ($_->{category_id} // \"\")}) } @$ss;\n@Sx = @Sx[0 .. $MAXS - 1] if @Sx > $MAXS;\nmy @sneed = grep { !-s \"$CACHE/s/$_->{series_id}-\" . ($_->{last_modified} || 0) . \".json\" } @Sx;\nprint \"Fiches techniques des s\u00e9ries : \", scalar(@Sx), \" s\u00e9ries (\", scalar(@Sx) - scalar(@sneed), \" d\u00e9j\u00e0 en cache)\u2026\\n\";\nfetch_api([map { [\"action=get_series_info&series_id=$_->{series_id}\", \"$CACHE/s/$_->{series_id}-\" . ($_->{last_modified} || 0) . \".json\"] } @sneed]);\n# titre d'\u00e9pisode utile : on retire le nom de la s\u00e9rie et \u00ab S01E01 \u00bb ; il reste le vrai titre, ou rien\nsub eptitle { my ($t, $sn) = @_; $t = \"\" unless defined $t; $t =~ s/^.*?\\bS\\d{1,2}\\s*[-.]?\\s*E\\d{1,3}\\b\\s*[-\u2013:|.]*\\s*//i; $t =~ s/^\\s+|\\s+$//g;\n  my $b = lc $sn; $b =~ s/[^a-z0-9]+//g; my $c = lc $t; $c =~ s/[^a-z0-9]+//g; return \"\" if $c eq \"\" || $c eq $b || $t =~ /^(episode|\u00e9pisode|ep\\.?)\\s*\\d+$/i; return substr($t, 0, 90) }\nsub mins { my ($i) = @_; return 0 unless ref $i eq \"HASH\"; my $s = $i->{duration_secs} || 0; if (!$s && ($i->{duration} // \"\") =~ /^(\\d+):(\\d\\d):(\\d\\d)$/) { $s = $1 * 3600 + $2 * 60 + $3 } return int($s / 60 + .5) }\nmy (%SER, %EPI, $ns, $ne); for my $x (@Sx) { my $d = eval { $J->decode(slurp(\"$CACHE/s/$x->{series_id}-\" . ($x->{last_modified} || 0) . \".json\")) } || {};\n  my $eps = ref $d->{episodes} eq \"HASH\" ? $d->{episodes} : {}; my @all = map { ref $_ eq \"ARRAY\" ? @$_ : () } values %$eps; next unless @all;\n  # --- tous les \u00e9pisodes : nombre par saison (saisons 1, 2, 3\u2026 ; les \u00ab sp\u00e9ciaux \u00bb de la saison 0 sont ignor\u00e9s) et fiche courte de chacun ---\n  my (%cnt, %E); my $sname = \"\" . ($x->{name} // \"\");\n  for my $sk (keys %$eps) { next unless ref $eps->{$sk} eq \"ARRAY\"; for my $e (@{ $eps->{$sk} }) { next unless ref $e eq \"HASH\";\n      my $sn = ($e->{season} // $sk); $sn = $sk unless $sn =~ /^\\d+$/; next unless $sn =~ /^\\d+$/ && $sn > 0 && $sn < 100; my $en = $e->{episode_num} // 0; next unless $en =~ /^\\d+$/ && $en > 0 && $en < 1000;\n      my $i = ref $e->{info} eq \"HASH\" ? $e->{info} : {}; my $ad = $i->{air_date} // $i->{releasedate} // $i->{release_date} // \"\"; $ad = $ad =~ /^(\\d{4}-\\d\\d-\\d\\d)/ ? $1 : \"\";\n      my $pl = $i->{plot} // $i->{overview} // \"\"; $pl =~ s/^\\s+|\\s+$//g; $pl = substr($pl, 0, 300);\n      my $r = $i->{rating} // \"\"; $r = $r =~ /^\\d+(\\.\\d+)?$/ && $r > 0 && $r <= 10 ? $r + 0 : 0;\n      $cnt{$sn} = $en if !$cnt{$sn} || $en > $cnt{$sn};\n      $E{\"$sn-$en\"} = [eptitle($e->{title}, $sname), mins($i), $pl, $r, $ad, ($e->{added} && $e->{added} =~ /^\\d+$/ ? $e->{added} + 0 : 0), \"\" . ($e->{id} // \"\"), $e->{container_extension} // \"\"] } }\n  if (%cnt) { my @ss = sort { $a <=> $b } keys %cnt; $EPI{substr($sname, 0, 70)} = { se => [map { $cnt{$_} || 0 } 1 .. $ss[-1]], e => \\%E }; $ne += scalar(keys %E) }\n  my ($first) = grep { probe($_->{info}) } @all; next unless $first; my $p = probe($first->{info}); push @$p, $first->{container_extension} // \"\", scalar(@all);\n  $SER{substr(\"\" . ($x->{name} // \"\"), 0, 70)} = $p; $ns++ }\n\nopen(my $eo, \">:raw\", \"$dir/episodes.json\") or die \"Impossible d'\u00e9crire $dir/episodes.json\\n\"; print $eo $J->encode({ v => 1, at => time, s => \\%EPI }); close $eo;\nprintf \"\u2713 episodes.json : %d s\u00e9ries, %d \u00e9pisodes, %.1f Mo\\n\", scalar(keys %EPI), $ne || 0, (-s \"$dir/episodes.json\") / 1048576;\nopen(my $o, \">:raw\", \"$dir/flux.json\") or die \"Impossible d'\u00e9crire $dir/flux.json\\n\"; print $o $J->encode({ v => 1, at => time, vod => \\%VOD, ser => \\%SER }); close $o;\nprintf \"\u2713 flux.json : qualit\u00e9 connue pour %d flux de films et %d s\u00e9ries, sans ouvrir aucun flux.\\n\", $nv || 0, $ns || 0;\nPRISME_FLUX\nperl /tmp/prisme-flux.pl \"$D\"; unset PRISME_P; ";
-const FXR={"open": "fx-open", "l1": "fx-l1", "rk": "fx-rk", "k": "fx-k", "brand": "fx-brand", "dot": "fx-dot", "sub": "fx-sub", "ok": "fx-ok", "tm": "fx-tm", "f-black": "fx-f-black", "ic": "fx-ic", "t": "fx-t", "logo": "fx-logo", "lv": "fx-lv", "pst": "fx-pst", "pc": "fx-pc", "pv": "fx-pv", "opt": "fx-opt", "mbox": "fx-mbox", "tx": "fx-tx", "r": "fx-r", "two": "fx-two", "chips": "fx-chips", "sh": "fx-sh", "prow": "fx-prow", "lbl": "fx-lbl", "top": "fx-top", "tab": "fx-tab", "gsec": "fx-gsec", "hd": "fx-hd", "shade": "fx-shade", "w2": "fx-w2", "l": "fx-l", "vol": "fx-vol", "st": "fx-st", "btn": "fx-btn", "bar": "fx-bar", "syn": "fx-syn", "caret": "fx-caret", "fg": "fx-fg", "rt": "fx-rt", "player": "fx-player", "badge": "fx-badge", "av": "fx-av", "hero": "fx-hero", "f-serif": "fx-f-serif", "prev": "fx-prev", "trk": "fx-trk", "more": "fx-more", "inp": "fx-inp", "lab": "fx-lab", "n": "fx-n", "hint": "fx-hint", "zap": "fx-zap", "siri": "fx-siri", "ph": "fx-ph", "tl": "fx-tl", "row": "fx-row", "tabs": "fx-tabs", "round": "fx-round", "ck": "fx-ck", "bg": "fx-bg", "sw": "fx-sw", "d": "fx-d", "f-bebas": "fx-f-bebas", "sh2": "fx-sh2", "ring": "fx-ring", "meta": "fx-meta", "chip": "fx-chip", "det": "fx-det", "grp": "fx-grp", "mfoot": "fx-mfoot", "kick": "fx-kick", "f-sans": "fx-f-sans"};
+const FXR={"ring": "fx-ring", "round": "fx-round", "vol": "fx-vol", "mfoot": "fx-mfoot", "f-bebas": "fx-f-bebas", "two": "fx-two", "d": "fx-d", "dot": "fx-dot", "tm": "fx-tm", "brand": "fx-brand", "pc": "fx-pc", "ic": "fx-ic", "top": "fx-top", "sw": "fx-sw", "lab": "fx-lab", "player": "fx-player", "k": "fx-k", "n": "fx-n", "rk": "fx-rk", "grp": "fx-grp", "inp": "fx-inp", "hero": "fx-hero", "prev": "fx-prev", "gsec": "fx-gsec", "l": "fx-l", "tl": "fx-tl", "kick": "fx-kick", "open": "fx-open", "st": "fx-st", "hint": "fx-hint", "pst": "fx-pst", "rt": "fx-rt", "siri": "fx-siri", "hd": "fx-hd", "pv": "fx-pv", "more": "fx-more", "syn": "fx-syn", "tabs": "fx-tabs", "row": "fx-row", "t": "fx-t", "mbox": "fx-mbox", "w2": "fx-w2", "tx": "fx-tx", "bg": "fx-bg", "caret": "fx-caret", "fg": "fx-fg", "prow": "fx-prow", "logo": "fx-logo", "chips": "fx-chips", "sh": "fx-sh", "tab": "fx-tab", "f-black": "fx-f-black", "zap": "fx-zap", "shade": "fx-shade", "badge": "fx-badge", "btn": "fx-btn", "chip": "fx-chip", "trk": "fx-trk", "av": "fx-av", "opt": "fx-opt", "meta": "fx-meta", "sub": "fx-sub", "ph": "fx-ph", "sh2": "fx-sh2", "det": "fx-det", "bar": "fx-bar", "ok": "fx-ok", "l1": "fx-l1", "lv": "fx-lv", "r": "fx-r", "ck": "fx-ck", "f-serif": "fx-f-serif", "lbl": "fx-lbl", "f-sans": "fx-f-sans"};
+/* ===== Fluidité (1/2) : petites mémoires sur les fonctions appelées des milliers de fois par affichage ===== */
+/* l'heure : une lecture de l'horloge par seconde suffit (elle était relue pour chaque programme de chaque chaîne) */
+{let t0=0,v=0;nowMin=function(){const t=Date.now();if(t>=t0&&t-t0<1000)return v;t0=t;const d=new Date(t);v=d.getHours()*60+d.getMinutes()+d.getSeconds()/60;return v}}
+/* texte sans accents : même résultat pour le même texte, gardé en mémoire (limité) */
+{const _n=norm,M=new Map();norm=function(s){let r=M.get(s);if(r===undefined){r=_n(s);if(M.size>60000)M.clear();M.set(s,r)}return r}}
+window.__RM={};
+
 /* ===================== TV en direct : version A2C ===================== */
 const LGEN=["Cinéma","Séries","Sport","Info","Divertissement","Jeunesse","Découverte"];
 const LGC={"Cinéma":"#f59e0b","Séries":"#ec4899","Sport":"#22c55e","Info":"#3b82f6","Divertissement":"#a855f7","Jeunesse":"#facc15","Découverte":"#14b8a6","Reprendre":"#e5e7eb","Favoris":"#ff375f"};
@@ -3379,12 +3387,14 @@ const L0={view:"Accueil",deck:null,hist:["bein1","tf1","f2"],gw:{"Sport":7,"Cin�
 let LS=L0;try{const v=JSON.parse(localStorage.getItem("prisme-atv-live")||"null");if(v)LS={...L0,...v,deck:null,view:"Accueil"}}catch(e){}
 function lsave(){try{localStorage.setItem("prisme-atv-live",JSON.stringify(LS))}catch(e){}}
 /* Genre d'un programme, déduit du guide */
-function pgen(p){const g=norm(p.g||"");return /film|cinema|telefilm|movie/.test(g)?"Cinéma":/serie|feuilleton|fiction|drama|soap|sitcom/.test(g)?"Séries":/sport|foot|rugby|tennis|cyclisme|match|basket|golf|moteur|f1/.test(g)?"Sport":/info|journal|politique|debat|actualite|news|meteo/.test(g)?"Info":/dessin|anim|jeunesse|enfant|kids|children|cartoon/.test(g)?"Jeunesse":/docu|decouverte|nature|histoire|science|voyage|animaux/.test(g)?"Découverte":"Divertissement"}
-const lvis=()=>chans().filter(c=>!LS.hidden.includes(c.id));
-function chanGenre(c){if(c._cg!==undefined)return c._cg;const lab=((typeof LCATS!=="undefined"&&LCATS.find(x=>x[0]===c.cat))||[])[1]||"";let g=lab?pgen({g:lab}):"Divertissement";
+const PGM=new Map();function pgen(p){const g0=p.g||"";let r=PGM.get(g0);if(r===undefined){r=pgen0(g0);PGM.set(g0,r)}return r}
+function pgen0(g0){const g=norm(g0);return /film|cinema|telefilm|movie/.test(g)?"Cinéma":/serie|feuilleton|fiction|drama|soap|sitcom/.test(g)?"Séries":/sport|foot|rugby|tennis|cyclisme|match|basket|golf|moteur|f1/.test(g)?"Sport":/info|journal|politique|debat|actualite|news|meteo/.test(g)?"Info":/dessin|anim|jeunesse|enfant|kids|children|cartoon/.test(g)?"Jeunesse":/docu|decouverte|nature|histoire|science|voyage|animaux/.test(g)?"Découverte":"Divertissement"}
+const lvis=()=>{const k="lvis|"+LS.hidden.length;return (__RM[k]||(__RM[k]=(h=>chans().filter(c=>!h.has(c.id)))(new Set(LS.hidden)))).slice()};
+const LCXM={n:-1,m:null};const lcatOf=k=>{if(LCXM.n!==LCATS.length){LCXM.m=new Map();for(const x of LCATS)if(!LCXM.m.has(x[0]))LCXM.m.set(x[0],x);LCXM.n=LCATS.length}return LCXM.m.get(k)};
+function chanGenre(c){if(c._cg!==undefined)return c._cg;const lab=((typeof LCATS!=="undefined"&&lcatOf(c.cat))||[])[1]||"";let g=lab?pgen({g:lab}):"Divertissement";
  if(g==="Divertissement"){const t={sport:"Sport",info:"Info",cine:"Cinéma",kids:"Jeunesse",doc:"Découverte"}[c.tpl];g=t||null}return c._cg=g}
 /* gros fournisseurs (des milliers de chaînes) : « en direct » et « bientôt » sont calculés une fois par minute, et les rangées affichent les premières */
-const LNM={};const lmemo=(k,f)=>{const m=nowMin()+"|"+CHS.length+"|"+S.playlists.filter(p=>p.on).length;if(LNM.m!==m){for(const x in LNM)delete LNM[x];LNM.m=m}return LNM[k]||(LNM[k]=f())};
+const LNM={};const lmemo=(k,f)=>{const m=Math.floor(nowMin())+"|"+CHS.length+"|"+S.playlists.filter(p=>p.on).length;if(LNM.m!==m){for(const x in LNM)delete LNM[x];LNM.m=m}return LNM[k]||(LNM[k]=f())};
 function lNow(g){return lmemo("n"+(g||""),()=>lNow0(g)).slice()}
 function lSoon(g,win=90){return lmemo("s"+(g||"")+win,()=>lSoon0(g,win)).slice()}
 function lNow0(g){return lvis().map(c=>({c,e:epgAt(c)})).filter(x=>!g||pgen(x.e.cur)===g||chanGenre(x.c)===g).sort((a,b)=>((g&&pgen(b.e.cur)===g)-(g&&pgen(a.e.cur)===g))||(b.e.cur.s-a.e.cur.s))}
@@ -3717,7 +3727,7 @@ async function rImport(files,provName,status,opt){
  ph("save");status("Enregistrement dans ce navigateur…");
  return rSave(R,st)}
 /* enregistrement compressé : tout le catalogue tient dans la mémoire du navigateur ; s'il est vraiment trop gros, on garde les plus récents */
-function rSave(R,st){st=st||{};
+function rSave(R,st){st=st||{};if(window.dataChanged)dataChanged();
  let nf=R.films.length,ns=R.series.length,nc=R.chans.length;
  for(let tries=0;tries<14;tries++){const o2={...R,chans:R.chans.slice(0,nc),films:R.films.slice(0,nf),series:R.series.slice(0,ns),at:Date.now()};let z;try{z=RZ.enc(JSON.stringify(o2))}catch(e){z=null}
   if(z){try{localStorage.removeItem("prisme-real");localStorage.setItem("prisme-realz",z);window.__RLAST=o2;return {...st,keptF:nf,keptS:ns,keptC:nc,totF:R.films.length,totS:R.series.length,totC:R.chans.length,pls:R.pls.length}}catch(e){}}
@@ -3954,7 +3964,7 @@ function hGuideRows(){const ids=[...new Set([...LS.hist,...lvis().filter(c=>isFa
 function homeMain(){
  /* un même programme n'apparaît qu'une fois sur l'accueil : Pour toi > Commence bientôt > Replay récent > Ce soir */
  const D=deckOrder(),N=lNow(),FY=hForYou(),pk=(c,s)=>c.id+"@"+Math.round(s),seen=new Set(FY.map(x=>pk(x.c,epgAt(x.c).cur.s)));
- const take=(L,n)=>{const o=L.filter(x=>x.p&&!seen.has(pk(x.c,x.p.s))).slice(0,n);o.forEach(x=>seen.add(pk(x.c,x.p.s)));return o};
+ const take=(L,n)=>{const o=[];for(const x of L){if(o.length>=n)break;if(x.p&&!seen.has(pk(x.c,x.p.s)))o.push(x)}o.forEach(x=>seen.add(pk(x.c,x.p.s)));return o};
  const Sn=take(lSoon(null,60),16),Pa=take(lPast(),16),T=take(hTonight(),99);
  const first=(deckList(D[0]||"Sport")[0])||N[0];const hero=`<div class="lhero" id="lhero">${first?lheroHtml(first.c):""}</div>`;
  const soonC=Sn.map(x=>lcard(x.c,"hs",x.p)).join(""),pastC=Pa.map(x=>lrpCard(x.c,x.p,"hr")).join(""),tonC=T.map(x=>lcard(x.c,"ht",x.p)).join("");
@@ -4132,7 +4142,9 @@ function prSwitch(id){if(!PR.list[id])return;prSnap();PR.cur=id;const d=ME().d||
  S.favs=d.favs||[];S.prog=d.prog||{};S.seasons=d.seasons||{};S.srcSel=d.srcSel||{};LS.hist=d.lh||[];LS.gw=d.lg||{};LS.hidden=d.lx||[];FXS.cache={};save();lsave();prSave()}
 const pav=(id,cls="")=>{const p=PR.list[id];return `<i class="pav ${cls}" style="--c:${p.c}">${p.emo||esc((p.n||"?")[0])}</i>`};
 const fxAgeOf=f=>{const m=String(f.age||"").match(/\d+/);return m?+m[0]:0};
-const fxMax=()=>{const L=(FXS.duo||[PR.cur]).map(id=>PR.list[id]&&PR.list[id].max).filter(x=>x!=null);return L.length?Math.min(...L):null};
+const fxMax0=()=>{const L=(FXS.duo||[PR.cur]).map(id=>PR.list[id]&&PR.list[id].max).filter(x=>x!=null);return L.length?Math.min(...L):null};
+/* limite d'âge du profil : relue une fois par affichage (appelée pour chacun des dizaines de milliers de titres) */
+const fxMax=()=>{const R=window.__RM,k="fxm|"+PR.cur+"|"+(FXS.duo||"");if(R&&k in R)return R[k];const v=fxMax0();if(R)R[k]=v;return v};
 const fxBlocked=f=>{const m=fxMax();return !!f&&f.type==="f"&&m!=null&&fxAgeOf(f)>m};
 {const _s=srcs;srcs=function(key){const L=_s(key);if(L.length&&!key.startsWith("ch:")&&fxBlocked(ALL[key]))return [];return L}}
 /* langue préférée (apprise ou réglée) */
@@ -4525,7 +4537,7 @@ const FHNAMES={reprendre:"Reprendre",top:"Top 10 du moment",new:"Nouveau sur pri
 let FHLAST=null;function fhLast(){if(FHLAST==null){const h=fhP();FHLAST=h.last||Date.now()-3*864e5;h.last=Date.now();prSave()}return FHLAST}
 
 /* ---------- données ---------- */
-const fhFilms=()=>films().filter(f=>!fxBlocked(f));
+const fhFilms=()=>(RMEMO.fhf||(RMEMO.fhf=films().filter(f=>!fxBlocked(f)))).slice();
 const fhNo=id=>ME().no.includes(id),fhSeen=id=>ME().seen.includes(id);
 function fhAddDays(f){const r=f._real;if(r&&r.a)return Math.max(0,Math.floor((Date.now()/1000-r.a)/86400));const a=added(f.id);return a?a.d:999}
 function fhProv(f){const a=added(f.id);return a&&a.p?a.p.name:(S.playlists[0]||{}).name||"ton fournisseur"}
@@ -4756,7 +4768,10 @@ function fhHoriz(k){const ln=F.closest(fxQ("row")+",.hline,.acts");if(!ln||!ln.c
  const C=L.filter(e=>e!==F&&(k==="right"?e.getBoundingClientRect().left>x+2:e.getBoundingClientRect().left<x-2)).sort((a,b)=>Math.abs(a.getBoundingClientRect().left-x)-Math.abs(b.getBoundingClientRect().left-x));if(C[0])setFocus(C[0]);return true}
 function fhCarousel(k){const hb=F.closest(".acts");if(!hb||!hb.closest(fxQ("hero")))return false;const nd=view.querySelectorAll(".dots i:not(.cnt)").length;if(nd<2)return false;
  FH.h1i=((FH.h1i+(k==="right"?1:-1))%nd+nd)%nd;FH.hdir=k;FXS.ready=null;FH.prep=null;render("fh-b0");FH.hdir=null;return true}
-let FHT=0;function fhTick(){clearInterval(FHT);FHT=setInterval(()=>{if(!fhOn()||S.modal||FH.skel)return;if(F&&(F.closest(fxQ("hero"))||F.closest(".hline")))return;const sc=$("#hscr");if(!sc||sc.scrollTop>200)return;if(view.querySelector(".hpeek"))return;FH.h1i++;render(F&&F.dataset.fid)},8000)}
+let FHT=0;function fhTick(){clearInterval(FHT);FHT=setInterval(()=>{if(!fhOn()||S.modal||FH.skel)return;if(F&&(F.closest(fxQ("hero"))||F.closest(".hline")))return;const sc=$("#hscr");if(!sc||sc.scrollTop>200)return;if(view.querySelector(".hpeek"))return;FH.h1i++;
+ /* seule la grande affiche change toutes les 8 s : on ne redessine qu'elle (avant : tout l'accueil) */
+ const old=sc.querySelector(fxQ("hero"));if(old&&old.parentElement===sc){const d=document.createElement("div");d.innerHTML=fxC(fhHero());const nw=d.firstElementChild;if(nw&&nw.matches(fxQ("hero"))){old.replaceWith(nw);return}}
+ render(F&&F.dataset.fid)},8000)}
 /* grilles (Tout voir, genres) : ▲ ▼ restent dans la même colonne, ▲ depuis la 1re ligne remonte aux tris */
 function gridNav(k){const g=F&&F.closest("#ggrid");if(!g||S.modal||!["up","down","left","right"].includes(k))return false;const r=+(F.dataset.row||"g0").slice(1),row=n=>[...g.querySelectorAll(`[data-row="g${n}"]`)],cur=row(r),i=cur.indexOf(F);
  if(k==="left"||k==="right"){const j=i+(k==="right"?1:-1);if(cur[j])setFocus(cur[j]);else if(k==="right"&&row(r+1)[0])setFocus(row(r+1)[0]);else if(k==="left"&&r>0){const p=row(r-1);setFocus(p[p.length-1])}return true}
@@ -4806,7 +4821,7 @@ const MQB={"4K":[3840,2160,"HEVC",50,16000],"1080p":[1920,1080,"H.264",50,7800],
 function measNow(v){const b=MQB[v.q]||MQB["1080p"],h=hash(v.name||"")%9;return {q:v.q,w:b[0],h:b[1],vc:(/hevc|h\.?265/i.test(v.codec||"")?"HEVC":b[2]),fps:b[3],kb:b[4]+h*180,a:/e-?ac3|5\.1/i.test((v.audio||[]).join(" "))?"E-AC3 5.1":"AAC stéréo",at:Date.now()}}
 let MST=0;
 {const _sp=startPlayer;startPlayer=function(o){const r=_sp(o);clearTimeout(MST);if(o&&o.kind==="live"){const key="ch:"+o.id;MST=setTimeout(()=>{if(!P||P.kind!=="live"||P.id!==o.id||!P.playing)return;
-  const v=srcs(key).find(x=>x.id===(P.src||o.src))||pickSrc(key);const k=measKey(v);if(!k)return;const first=!MEAS[k];MEAS[k]=measNow(v);try{localStorage.setItem("prisme-meas",JSON.stringify(MEAS))}catch(e){}
+  const v=srcs(key).find(x=>x.id===(P.src||o.src))||pickSrc(key);const k=measKey(v);if(!k)return;const first=!MEAS[k];MEAS[k]=measNow(v);window.__dv=(window.__dv||0)+1;try{localStorage.setItem("prisme-meas",JSON.stringify(MEAS))}catch(e){}
   if(first)toast(`✓ Qualité de ${CH[o.id]?CH[o.id].n:"la chaîne"} mesurée : ${MEAS[k].q} · ${MEAS[k].fps} i/s · retenue pour la prochaine fois`)},4000)}return r}}
 const fmtD=t=>{const d=new Date(t);return d.toLocaleDateString("fr-FR",{day:"2-digit",month:"2-digit"})+" à "+d.toLocaleTimeString("fr-FR",{hour:"2-digit",minute:"2-digit"})};
 {const _s=srcs;srcs=function(key){const L=_s(key);if(!key.startsWith("ch:"))return L;return L.map(v=>{const m=MEAS[measKey(v)];
@@ -4819,7 +4834,15 @@ if(!REAL){const _s=srcs;srcs=function(key){const L=_s(key);const it=ALL[key];if(
 
 /* ---------- mémoire des sources : srcs() est appelée des dizaines de milliers de fois par affichage (films() la rappelle
    pour chaque film). On garde le résultat le temps d'un affichage ou d'une action, puis on l'oublie. */
-const SRCM=new Map();const RMEMO={};const srcmClear=()=>{SRCM.clear();for(const k in RMEMO)delete RMEMO[k];if(typeof AVM!=="undefined"){AVM.f=AVM.s=AVM.c=null}};
+const SRCM=new Map();const RMEMO=window.__RM;
+/* on ne vide ces mémoires que si quelque chose a pu changer : une action (OK), une donnée rechargée, un fournisseur
+   activé ou masqué, un autre profil… Se déplacer avec les flèches ne change rien : la mémoire reste (fluidité). */
+const DV={s:"",dirty:true};
+const dsig=()=>{let h="";for(const p of S.playlists){const hd=p.hidden||[];h+=p.id+(p.on?"1":"0")+hd.length+"."+(hd.length?hd[0]+hd[hd.length-1]:"")+"|"}
+ return h+PR.cur+"|"+(typeof FXS!=="undefined"&&FXS.duo?FXS.duo.join("+"):"")+"|"+(typeof fxMax0==="function"?fxMax0():"")+"|"+CHS.length+"/"+FILMS.length+"/"+SERIES.length+"|"+(typeof TMD!=="undefined"?TMD.n:"")+"|"+(typeof SXD!=="undefined"?SXD.n:"")+"|"+(window.__dv||0)+"|"+(typeof REAL!=="undefined"&&REAL?REAL.pls.length:0)};
+const srcmClear=()=>{const s=dsig();if(!DV.dirty&&s===DV.s)return;DV.s=s;DV.dirty=false;SRCM.clear();for(const k in RMEMO)delete RMEMO[k];if(typeof AVM!=="undefined"){AVM.f=AVM.s=AVM.c=null}};
+window.dataChanged=()=>{DV.dirty=true};
+const NAVACT=/^(open|tab|fxopen|key|srq|srf|srsay|sxft|sxfs|mn:sub|mn:mood|fxxmode|ap:svc|fxwhere|fxsyn|fxclose|fxactor|actor|live|genre|fhg|pf|col)[:]?/;
 /* calculs lourds avec un gros catalogue : faits une fois par affichage (le Top 10 était recalculé pour chaque film) */
 {const _t=fhTop;fhTop=function(){return (RMEMO.top||(RMEMO.top=_t())).slice()}}
 genreList=function(ty){const k="g"+ty;if(!RMEMO[k]){const L=ty==="f"?films():series(),by={};for(const i of L)for(const g of new Set(genreKeys(i)))(by[g]=by[g]||[]).push(i);RMEMO[k]=GDEF[ty].map(g=>({g,items:by[g[0]]||[]})).filter(x=>x.items.length)}return RMEMO[k].slice()};
@@ -4832,7 +4855,7 @@ genreList=function(ty){const k="g"+ty;if(!RMEMO[k]){const L=ty==="f"?films():ser
   all.forEach(e=>e.style.scrollBehavior="auto");sc.scrollTop=keep.y;sc._ty=keep.y;sc._tt2=0;if(rows.length===keep.x.length)rows.forEach((r,i)=>{r.scrollLeft=keep.x[i];r._tx=keep.x[i];r._tt=0});
   const f=S.modal?null:F;if(f&&sc.contains(f))ensureVisible(f,true);requestAnimationFrame(()=>all.forEach(e=>e.style.scrollBehavior=""))}}
  return out}}
-{const _a=act;act=function(a){srcmClear();return _a(a)}}
+{const _a=act;act=function(a){if(!(typeof a==="string"&&NAVACT.test(a)))DV.dirty=true;srcmClear();return _a(a)}}
 {const _k=key;key=function(k){srcmClear();return _k(k)}}
 
 /* ===================== Section Séries (maquettes Mix B2 + fiche G3 v2) =====================
@@ -4942,11 +4965,13 @@ function taste2(){const g={};for(const it of SL())if(isDone(it)||sProg(it)>.3)(i
 function sFor(){const ck="fy|"+PR.cur+"|"+SERIES.length+"|"+JSON.stringify(MX().sp).length+MX().done.length+"|"+MX().no.length+"|"+((ME().taste||{}).at||0);if(X.cache[ck])return X.cache[ck];const g=taste2(),tot=Object.values(g).reduce((a,b)=>a+b,0)||1;
  return X.cache[ck]=SL().filter(it=>!MX().no.includes(it.id)&&!(window.gtNever&&gtNever(it))).map(it=>{const m=(it.g||[]).reduce((a,k)=>a+(g[k]||0),0)/tot;return {c:it,pct:Math.max(40,Math.min(97,Math.round(55+m*40+(it.imdb-7.5)*8))),why:m>.5?`Tes genres : ${(it.g||[]).filter(k=>g[k]).join(", ")}`:`★ ${it.imdb} · très bien notée`}}).sort((a,b)=>b.pct-a.pct)}
 const pmap=()=>{const m={};sFor().forEach(o=>m[o.c.id]=o);return m};
-function sUp(){const x=MX(),av=new Set(series().map(i=>i.id));return Object.keys(x.sp).map(id=>ALL[id]).filter(it=>it&&av.has(it.id)&&!blk(it)&&!isDone(it)&&jOf(it)<30&&!(isWait(it)&&!WEEK().some(w=>w.id===it.id&&w.j<=0&&!w.seen&&!w.full&&w.e===nextEp(it).e))).sort((a,b)=>(spOf(b).t||0)-(spOf(a).t||0))}
-const sStale=()=>{const av=new Set(series().map(i=>i.id));return Object.keys(MX().sp).map(id=>ALL[id]).filter(it=>it&&av.has(it.id)&&!blk(it)&&!isDone(it)&&jOf(it)>=30)};
+function sUp(){return (RMEMO.sxup||(RMEMO.sxup=sUp0())).slice()}
+function sUp0(){const x=MX(),av=new Set(series().map(i=>i.id));return Object.keys(x.sp).map(id=>ALL[id]).filter(it=>it&&av.has(it.id)&&!blk(it)&&!isDone(it)&&jOf(it)<30&&!(isWait(it)&&!WEEK().some(w=>w.id===it.id&&w.j<=0&&!w.seen&&!w.full&&w.e===nextEp(it).e))).sort((a,b)=>(spOf(b).t||0)-(spOf(a).t||0))}
+const sStale=()=>(RMEMO.sxst||(RMEMO.sxst=sStale0())).slice();const sStale0=()=>{const av=new Set(series().map(i=>i.id));return Object.keys(MX().sp).map(id=>ALL[id]).filter(it=>it&&av.has(it.id)&&!blk(it)&&!isDone(it)&&jOf(it)>=30)};
 const added2=it=>{const r=it._real;if(r&&r.a)return Math.max(0,Math.floor((Date.now()/1000-r.a)/86400));const a=added(it.id);return a?a.d:999};
 function sNew(){return SL().map(it=>({it,d:added2(it)})).filter(x=>x.d<=14&&!MX().no.includes(x.it.id)).sort((a,b)=>a.d-b.d||b.it.imdb-a.it.imdb).slice(0,12)}
-function sTop(){const T=window.SXDATA&&SXDATA.top;if(T&&T.length)return T.map(id=>ALL[id]).filter(it=>it&&!blk(it)).slice(0,10).map((it,i)=>({it,rk:i+1,mv:"="}));
+function sTop(){return (RMEMO.sxtop||(RMEMO.sxtop=sTop0())).slice()}
+function sTop0(){const T=window.SXDATA&&SXDATA.top;if(T&&T.length)return T.map(id=>ALL[id]).filter(it=>it&&!blk(it)).slice(0,10).map((it,i)=>({it,rk:i+1,mv:"="}));
  return SL().slice().sort((a,b)=>trendScore(b)-trendScore(a)).slice(0,10).map((it,i)=>{const h=hash(it.id+"#mv")%7;return {it,rk:i+1,mv:h===0?"NOUV":h<3?"▲"+(h+1):h<5?"▼"+(h-2):"="}})}
 const isNew=id=>{const x=MX();if(x.nseen.includes(id))return false;const it=ALL[id];if(!it)return false;if(added2(it)<=7)return true;return WEEK().some(w=>w.id===id&&w.j<=0&&!w.seen)};
 
@@ -5009,9 +5034,11 @@ function collHtml(k){const c=coll(k)||{n:"Collection",why:"",ic:"",items:()=>[]}
 
 /* ---------- bannière : 5 types de pages, jamais une série déjà proposée plus bas ---------- */
 const btn=(i,lbl,a,extra="")=>`<div class="btn ${i===0?"prim":""}" data-f data-fid="sx-b${i}" ${i===0?"data-default":""} data-act="${a}" data-row="sxh" ${extra}>${lbl}</div>`;
-function sxTV(){const k="tv|"+Math.floor(NOW()/10)+"|"+SERIES.length;if(X.cache[k])return X.cache[k];const idx={};for(const it of SL()){const w=norm(it.t).replace(/[^a-z0-9]/g,"");if(w.length>=3)idx[w]=it}
- const n=NOW(),out=[];for(const c of chans()){let L;try{L=epg(c)}catch(e){continue}for(const p of L){if(p.e<=n||p.s>24*60+120)continue;const w=norm(p.t||"").replace(/[^a-z0-9]/g,""),it=idx[w];if(!it)continue;
-  out.push({it,c,p,live:p.s<=n,t:p.s<=n?"en direct":(p.s<24*60?"ce soir ":"cette nuit ")+fmt(p.s%1440)});break}if(out.length>=4)break}return X.cache[k]=out}
+function sxTV(){const k="tv|"+Math.floor(NOW()/10)+"|"+SERIES.length;if(X.cache[k])return X.cache[k];
+ /* même résultat qu'avant, mais avec l'index des titres du guide (plus de relecture de tout le guide) */
+ const idx=new Map();for(const it of SL()){const w=tkey(it.t);if(w.length>=3)idx.set(w,it)}const n=NOW(),I=epgIdx(),av=new Map(chans().map((c,i)=>[c.id,i])),best=new Map();
+ for(const [w,it] of idx)for(const x of I.get(w)||[]){const p=x.p;if(p.e<=n||p.s>24*60+120||!av.has(x.c.id))continue;const b=best.get(x.c.id);if(!b||x.pi<b.pi)best.set(x.c.id,{it,c:x.c,p,pi:x.pi})}
+ const out=[...best.values()].sort((a,b)=>av.get(a.c.id)-av.get(b.c.id)).slice(0,4).map(({it,c,p})=>({it,c,p,live:p.s<=n,t:p.s<=n?"en direct":(p.s<24*60?"ce soir ":"cette nuit ")+fmt(p.s%1440)}));return X.cache[k]=out}
 function slides(){const ck="sl|"+PR.cur+"|"+JSON.stringify(MX().sp).length+MX().done.length+"|"+MX().no.length+"|"+Math.floor(NOW()/30)+"|"+(S.sxAlerts||[]).length+"|"+S.favs.length;if(X.cache[ck])return X.cache[ck];
  const L=[],now=NOW(),eve=now>=17*60&&now<=21*60+30,fresh=it=>it&&!blk(it)&&!spOf(it)&&!isDone(it)&&!MX().no.includes(it.id);
  const nw=sNew().filter(x=>fresh(x.it)),a=nw.sort((p,q)=>q.it.imdb-p.it.imdb)[0];
@@ -6093,17 +6120,20 @@ const IC={clock:`<svg ${SV}><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"
  phone:`<svg ${SV}><rect x="7" y="2" width="10" height="20" rx="2.5"/><path d="M11 18h2"/></svg>`,mic:`<svg ${SV}><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>`,
  trend:`<svg ${SV}><path d="M3 17l6-6 4 4 8-8"/><path d="M14 7h7v7"/></svg>`};
 const SR=window.SR={filt:"all",sel:null,siri:false};
-const nz=t=>norm(String(t||"")).replace(/[^a-z0-9 ]+/g," ").replace(/\s+/g," ").trim();
+const NZM=new Map();const nz=t=>{t=String(t||"");let r=NZM.get(t);if(r===undefined){r=norm(t).replace(/[^a-z0-9 ]+/g," ").replace(/\s+/g," ").trim();if(NZM.size>150000)NZM.clear();NZM.set(t,r)}return r};
+const NWM=new Map();const nzw=t=>{t=String(t||"");let r=NWM.get(t);if(r===undefined){r=nz(t).split(" ");if(NWM.size>150000)NWM.clear();NWM.set(t,r)}return r};
 const KEYS2="abcdefghijklmnopqrstuvwxyz1234567890".split("");
 const FILT=[["all","Tout"],["f","Films"],["s","Séries"],["tv","TV en direct"],["actor","Acteurs"]];
 /* ---------- index : titres, chaînes, programmes en cours, acteurs ---------- */
 function lev(a,b){if(Math.abs(a.length-b.length)>1)return 9;const n=b.length,d=[...Array(n+1).keys()];for(let i=1;i<=a.length;i++){let p=d[0];d[0]=i;for(let j=1;j<=n;j++){const t=d[j];d[j]=Math.min(d[j]+1,d[j-1]+1,p+(a[i-1]===b[j-1]?0:1));p=t}}return d[n]}
+/* distance d'édition ≤ 1 (même résultat que lev(a,b)<=1, sans tableau) */
+function ed1(a,b){const la=a.length,lb=b.length;if(Math.abs(la-lb)>1)return false;let i=0;while(i<la&&i<lb&&a[i]===b[i])i++;if(la===lb)return a.slice(i+1)===b.slice(i+1);if(la>lb)return a.slice(i+1)===b.slice(i);return a.slice(i)===b.slice(i+1)}
 /* chaque mot cherché doit commencer un mot du texte, ou en être à une faute près (mots de 4 lettres et plus) */
-function wscore(q,text){const Q=nz(q).split(" ").filter(Boolean);if(!Q.length)return null;const W=nz(text).split(" ");let s=0,fuz=false;
- for(const w of Q){let b=0;for(const x of W){if(x===w){b=3;break}if(x.startsWith(w))b=Math.max(b,2);else if((w.length>=4||(Q.length>1&&w.length>=2&&x.length<=w.length+1))&&(lev(w,x)<=1||(w.length>=4&&lev(w,x.slice(0,w.length))<=1)))b=Math.max(b,1.4)}if(!b)return null;if(b===1.4)fuz=true;s+=b}
+function wscore(q,text){const Q=nzw(q).filter(Boolean);if(!Q.length)return null;const W=nzw(text);let s=0,fuz=false;
+ for(const w of Q){let b=0;for(const x of W){if(x===w){b=3;break}if(x.startsWith(w))b=Math.max(b,2);else if((w.length>=4||(Q.length>1&&w.length>=2&&x.length<=w.length+1))&&(ed1(w,x)||(w.length>=4&&ed1(w,x.slice(0,w.length)))))b=Math.max(b,1.4)}if(!b)return null;if(b===1.4)fuz=true;s+=b}
  return {s:s/Q.length,fuz}}
 const actName=a=>(typeof A!=="undefined"&&A[a])||a;
-function actorIndex(){const M={};for(const it of [...films(),...series()])for(const c of it.cast||[]){const a=Array.isArray(c)?c[0]:c;if(!a)continue;(M[a]=M[a]||[]).push(it)}return M}
+function actorIndex(){const k="ai|"+films().length+"|"+series().length+"|"+(typeof TMD!=="undefined"?TMD.n:"")+"|"+(typeof SXD!=="undefined"?SXD.n:"");if(RMEMO[k])return RMEMO[k];const M={};RMEMO[k]=M;for(const it of [...films(),...series()])for(const c of it.cast||[]){const a=Array.isArray(c)?c[0]:c;if(!a)continue;(M[a]=M[a]||[]).push(it)}return M}
 const nowList=()=>chans().map(c=>({c,p:epgAt(c).cur})).filter(x=>x.p&&x.p.t!=="Programme non communiqué");
 const genOf=it=>(it.g||[]).map(nz).join(" ");
 const verOf=it=>{const L=srcs(it.id),T=[...new Set(L.map(v=>v.fr&&v.fr!=="VF"?v.fr:v.tag||"VF"))],Q=L.some(v=>v.q==="4K")?" 4K":"";return T.slice(0,3).join(" · ")+Q};
@@ -6156,7 +6186,7 @@ function rowTv(x,grp){const {c,p}=x,pct=Math.max(0,Math.min(100,Math.round((nowM
  return `<div class="sr-lst" data-f data-fid="sr-${grp}-ch${c.id}" data-act="live:${c.id}" data-hov="ch:${c.id}" data-srsel="ch:${c.id}">${th([c.col||"#334","#111"],"sr-w",logo?`<img src="${logo}" alt="">`:esc(c.n))}<div class="tx"><b>${esc(p.t)}</b><small>${esc(c.n)} · ${fmt(p.s)} – ${fmt(p.e)}</small><div class="sr-pg"><i style="width:${pct}%"></i></div></div><span class="sr-tg sr-live">DIRECT</span></div>`}
 function rowActor(a,AI){const n=actName(a),L=AI[a]||[];return `<div class="sr-lst" data-f data-fid="sr-a-${a}" data-act="${typeof A!=="undefined"&&A[a]?"actor:"+a:"srq:"+n}" data-srsel="a:${a}">${(ph=>ph?`<div class="sr-th sr-av aph" style="background-image:url(${ph})"></div>`:th(["#5b6f99","#1a1d26"],"sr-av",esc(n.split(" ").map(w=>w[0]).join("").slice(0,2))))(window.actorPh&&typeof A!=="undefined"&&A[a]?actorPh(a):"")}<div class="tx"><b>${esc(n)}</b><small>${esc(L.slice(0,3).map(x=>x.t).join(" · "))}</small></div></div>`}
 function listH(r){const g=(t,ic)=>`<div class="sr-gh">${ic||""}${esc(t)}</div>`;
- if(!S.q.trim()){const rec=(ME().recent||[]).slice(0,5),trend=[...films(),...series()].sort((a,b)=>trendScore(b)-trendScore(a)).slice(0,6),live=nowList().slice(0,6);
+ if(!S.q.trim()){const rec=(ME().recent||[]).slice(0,5),trend=(RMEMO.srtr||(RMEMO.srtr=[...films(),...series()].map(i=>[i,trendScore(i)]).sort((a,b)=>b[1]-a[1]).slice(0,6).map(x=>x[0]))),live=nowList().slice(0,6);
   return (rec.length?g("Recherches récentes",IC.clock)+rec.map((q,i)=>`<div class="sr-lst" data-f data-fid="sr-rc-${i}" data-act="srq:${esc(q)}">${th(["#33384a","#1a1d26"],"sr-w",IC.clock)}<div class="tx"><b>${esc(q)}</b><small>recherché récemment</small></div></div>`).join(""):"")
    +g("Tendances cette semaine",IC.trend)+trend.map(it=>rowIt(it,"tr")).join("")+g("En ce moment à la TV")+live.map(x=>rowTv(x,"lv")).join("")}
  let h=r.fuz?`<div class="sr-why">${IC.spark}Résultats pour une orthographe proche de « ${esc(S.q)} »</div>`:"";const F=SR.filt;
@@ -6599,7 +6629,7 @@ window.__fc={C,E,get extras(){return extras},get findId(){return findId}};
 const isReal=()=>!E.demo&&!!getKey();
 const nf=n=>Math.round(n).toLocaleString("fr-FR");
 const kOf=it=>it.prog?it.id:(it.type==="s"||SERIES.includes(it)?"s":"f")+":"+it.id;
-const hasFiche=it=>SERIES.includes(it)?!!(it.sxk&&/^t/.test(it.sxk)):!!it.tmd;
+const hasFiche=it=>it.type==="s"?!!(it.sxk&&/^t/.test(it.sxk)):!!it.tmd;
 const playing=()=>topS().t==="player"&&typeof P!=="undefined"&&P;
 const night=()=>{const h=new Date().getHours();return h>=1&&h<6};
 function allowed(){if(C.mode===2||E.paused)return false;if(C.mode===1&&!night())return false;if(playing()&&!C.pp)return false;return true}
@@ -6751,7 +6781,7 @@ function cleanTitles(){if(E.demo||E.cleaned)return;E.cleaned=true;let n=0;
  if(n){saveC();if(window.__sx&&__sx.X)__sx.X.cache={};if(typeof FXS!=="undefined")FXS.cache={}}return n}
 try{cleanTitles()}catch(e){}
 /* casting donné par le fournisseur : chaque acteur retrouve aussi ses films et séries (fiche acteur) */
-try{if(typeof CRED!=="undefined")for(const it of [...FILMS,...SERIES]){if(!it._real||!it.cast)continue;for(const [aid,r] of it.cast){const L=CRED[aid]=CRED[aid]||[];if(!L.some(x=>x[0]===it.id))L.push([it.id,r||""])}}}catch(e){}
+try{if(typeof CRED!=="undefined"){const H=new Map();for(const it of [...FILMS,...SERIES]){if(!it._real||!it.cast)continue;for(const [aid,r] of it.cast){const L=CRED[aid]=CRED[aid]||[];let h=H.get(aid);if(!h){h=new Set(L.map(x=>x[0]));H.set(aid,h)}if(!h.has(it.id)){h.add(it.id);L.push([it.id,r||""])}}}}}catch(e){}
 function start(){try{cleanTitles()}catch(e){}if(!inApp()||C.mode===2)return paint();if(!E.demo&&!getKey())return paint();build();if(left()){E.wasRunning=true;loop()}paint()}
 
 /* ---------- anneau dans la barre d'onglets + panneau ---------- */
@@ -7180,6 +7210,66 @@ const apCur=()=>{const m=S.modal,t=topS();return ALL[(m&&m.id)||(t.t==="detail"&
  if(k==="pref"){AP.pref=AP.pref===v?"":v;apSave();toast(AP.pref?`★ ${XAPPS.find(x=>x.k===v).n} : ton app préférée`:"App préférée retirée");return render("m-pref")}
  if(k==="here"){const it=apCur();S.modal=null;if(!it)return render();if(isSer(it)){render();return act(__sx.fMain(it).act)}return fxStart(it.id)}
  return}return _a(a)}}
+
+/* ===== Fluidité (2/2) : calculs lourds faits une fois, puis repris tant que rien n'a changé ===== */
+/* nombre de chaînes / films / séries par fournisseur (réglages, chargement) : recalculé seulement si les données changent */
+{const _c=counts;counts=function(pl){const k="cnt:"+pl.id;return RMEMO[k]||(RMEMO[k]=_c(pl))}}
+/* TV en direct : replays récents et « ce soir », une fois par minute (comme « en direct » et « bientôt ») */
+{const _t=hTonight;hTonight=function(){return lmemo("tonight",_t).slice()}}
+/* « à la TV » (fiche film, accueil films) : un index des titres du guide, refait toutes les 10 minutes,
+   au lieu de relire tout le guide de toutes les chaînes pour chaque film */
+const tkn=t=>norm(t||"").replace(/[^a-z0-9]/g,"");
+const TKM=new Map();const tkey=t=>{let r=TKM.get(t);if(r===undefined){r=tkn(t);if(TKM.size>80000)TKM.clear();TKM.set(t,r)}return r};
+/* index des programmes du guide dont le titre est celui d'un film du catalogue (le reste du guide n'est pas gardé) */
+const EPGI={k:"",m:null};
+function epgIdx(){const n=nowMin(),k=Math.floor(n/10)+"|"+CHS.length+"|"+FILMS.length+"|"+SERIES.length+"|"+S.playlists.length;if(EPGI.k===k)return EPGI.m;const m=new Map(),want=new Set();for(const L of [FILMS,SERIES])for(const f of L){const w=tkey(f.t);if(w.length>=3)want.add(w)}
+ CHS.forEach((c,ci)=>{let L;try{L=epg(c)}catch(e){return}for(let pi=0;pi<L.length;pi++){const p=L[pi];if(p.e<n-2880||p.s>n+1440)continue;const w=tkn(p.t);if(!want.has(w))continue;let a=m.get(w);if(!a)m.set(w,a=[]);a.push({c,p,ci,pi})}});
+ EPGI.k=k;EPGI.m=m;return m}
+fxTV=function(f){const k=f.id+"|"+Math.floor(nowMin()/10);if(FXS.tvk===k)return FXS.tv;const want=tkey(f.t),n=nowMin(),out=[];
+ if(want.length>=3){const L=(epgIdx().get(want)||[]).slice().sort((a,b)=>a.ci-b.ci||a.pi-b.pi),done=new Set();
+  for(const {c,p} of L){if(out.length>=3)break;if(done.has(c.id))continue;const live=p.s<=n&&p.e>n,past=p.e<=n;if(past&&!(typeof arDays==="function"&&arDays(c)))continue;done.add(c.id);
+   out.push({c,p,live,past,t:live?"en direct":past?"en replay":(p.s<1440?"ce soir ":"demain ")+fmt(p.s)})}}
+ FXS.tvk=k;return FXS.tv=out};
+fhTV=function(){const k="tv|"+Math.floor(fhNow()/10)+"|"+FILMS.length;if(FH.cache[k])return FH.cache[k];const n=fhNow(),I=epgIdx(),av=new Map(chans().map((c,i)=>[c.id,i])),best=new Map();
+ const idx=new Map();for(const f of fhFilms()){const w=tkey(f.t);if(w.length>=4)idx.set(w,f)}
+ for(const [w,f] of idx){if(fhNo(f.id))continue;for(const x of I.get(w)||[]){const p=x.p;if(p.e<=n||p.s>24*60+120||!av.has(x.c.id))continue;const b=best.get(x.c.id);if(!b||x.pi<b.pi)best.set(x.c.id,{f,c:x.c,p,pi:x.pi})}}
+ const out=[...best.values()].sort((a,b)=>av.get(a.c.id)-av.get(b.c.id)).slice(0,6).map(({f,c,p})=>{const live=p.s<=n;return {f,c,p,live,t:live?"en direct · depuis "+fmt(p.s):(p.s<24*60?"ce soir ":"cette nuit ")+fmt(p.s%1440)}});
+ out.sort((a,b)=>(a.live?0:1)-(b.live?0:1)||a.p.s-b.p.s);return FH.cache[k]=out};
+/* données TMDB d'un film mises en forme : une fois par film (refait si de nouvelles fiches arrivent) */
+{const _t=tmOf,TM=new WeakMap();tmOf=function(f){const n=TMD.n+"|"+(f.tmd?1:0),c=TM.get(f);if(c&&c.n===n)return c.v;const v=_t(f);TM.set(f,{n,v});return v}}
+/* nombre de sources d'un titre sans fabriquer toutes leurs fiches (réglages : « titres en plusieurs versions ») */
+window.nsrc=key=>{if(!key.startsWith("ch:")&&ALL[key]&&typeof fxBlocked==="function"&&fxBlocked(ALL[key]))return 0;let n=0;
+ for(const p of S.playlists){if(!p.on||!has(p,key))continue;if(REAL){const r=key.startsWith("ch:")?(CH[key.slice(3)]||{})._real:(ALL[key]||{})._real;if(r)for(const x of r.s)if(x[0]===p.id)n++}else n+=variants(p,key).length}return n};
+/* fiche film : « Si tu hésites encore » compare le film à tout le catalogue (0,1 à 0,2 s sur 40 000 films).
+   La fiche s'affiche tout de suite ; cette rangée, plus bas, se remplit juste après (avant qu'on ait pu descendre jusqu'à elle). */
+const LZ={n:0};{const _x=xSimHtml;let lzT=0;xSimHtml=function(f){const mode=FXS.xmode||"mix",ck=f.id+"|"+mode+"|"+(FXS.duo||[PR.cur]).join("+")+"|"+FILMS.length+"|"+TMD.n;
+ if(FXS.cache[ck]||FILMS.length<3000)return _x(f);clearTimeout(lzT);
+ const fill=()=>{const t=topS();if(!t||t.t!=="detail"||t.id!==f.id)return;const h=_x(f),el=view.querySelector("#xsimlz");if(!el)return;
+  if(!h){el.remove();return}const d=document.createElement("div");d.innerHTML=fxC(h);const sec=d.firstElementChild;el.replaceWith(sec);
+  if(F&&!view.contains(F)){const e=sec.querySelector("[data-f]");if(e)setFocus(e,true)}};
+ const tok=++LZ.n;lzT=setTimeout(()=>{if(FXS.duo)return fill();
+  /* même calcul que crossPick, découpé en tranches de 8 ms pour que les touches restent instantanées pendant ce temps */
+  const pid=PR.cur,p=PR.list[pid],T=taste(pid),L=liked(pid),W=SW[mode]||SW.mix,seen=new Set(p.seen),no=new Set(p.no),ab=new Set(fxHist(pid).filter(h=>h.done<.35).map(h=>h.id));
+  const C=films().filter(c=>c.id!==f.id&&!seen.has(c.id)&&!no.has(c.id)&&!(ab.has(c.id)&&!S.prog[c.id])),A=[];let i=0;
+  (function step(){if(tok!==LZ.n)return;const end=performance.now()+8;while(i<C.length&&performance.now()<end)for(let j=0;j<100&&i<C.length;j++,i++){const c=C[i],o=scoreOne(f,c,T,L,pid),gate=mode==="toi"?.6+.4*o.rel:.35+.65*o.rel;o.raw=Object.keys(W).reduce((s2,k)=>s2+W[k]*o.parts[k],0)*gate-o.pen;A.push(o)}
+   if(i<C.length)return setTimeout(step,0);
+   const all=A.sort((a,b)=>b.raw-a.raw).slice(0,80),out=[],pool=all.slice();while(pool.length&&out.length<10){let best=null,bv=-1e9;for(const o of pool){const red=out.length?Math.max(...out.map(x=>kwSim(x.c,o.c)+(x.c.dir&&x.c.dir===o.c.dir?.3:0))):0;const v=o.raw-.18*red;if(v>bv){bv=v;best=o}}out.push(best);pool.splice(pool.indexOf(best),1)}
+   out.forEach(o=>o.pct=Math.max(35,Math.min(99,Math.round(40+o.raw*95))));FXS.cache[ck]=out.sort((a,b)=>b.raw-a.raw);fill()})()},30);
+ return `<section data-anchor id="xsimlz"><div class="lh">${FXS.duo?"Pour vous deux":"Si tu hésites encore"}</div><div style="height:330px"></div></section>`}}
+/* au repos après l'ouverture : on prépare ce qui sert partout (disponibilités, compteurs, index du guide) pour que le premier affichage soit immédiat */
+/* une étape à la fois, seulement quand personne n'appuie sur la télécommande, et jamais pendant la lecture */
+{const W=[()=>films(),()=>series(),()=>chans(),()=>S.playlists.forEach(p=>counts(p)),()=>epgIdx(),()=>{const f0=films()[0];if(f0){bInfo(f0);fxIDF()}},
+  ...[FILMS,SERIES].flatMap(L=>Array.from({length:Math.ceil(L.length/4000)},(_,i)=>()=>{for(const it of L.slice(i*4000,(i+1)*4000))genreKeys(it)})),()=>{if(typeof forYou==="function")forYou()},()=>genreList("f"),()=>genreList("s")];let wi=0;
+ setTimeout(function warm(){if(wi>=W.length)return;if(Date.now()-(window.__lastKey||0)<1500||S.loading||(typeof P!=="undefined"&&P))return setTimeout(warm,1000);try{W[wi]()}catch(e){}wi++;setTimeout(warm,60)},1500)}
+/* genres d'un titre : les mêmes listes sont partagées (des dizaines de milliers de titres ont les mêmes genres) → moins de mémoire */
+{const _g=genreKeys,IN=new Map();genreKeys=function(it){const r=GK[it.id];if(r)return r;const v=_g(it),k=v.join("|");let s=IN.get(k);if(!s){IN.set(k,v);s=v}GK[it.id]=s;return s}}
+/* « bientôt » et « replay récent » : le guide de chaque chaîne est trié par heure, on va directement au bon moment
+   (recherche par dichotomie) au lieu de relire tous les programmes de toutes les chaînes. Résultat identique. */
+const isSortedS=L=>{for(let i=1;i<L.length;i++)if(L[i].s<L[i-1].s)return false;return true};
+const firstAt=(L,t)=>{let lo=0,hi=L.length;while(lo<hi){const m=(lo+hi)>>1;if(L[m].s<t)lo=m+1;else hi=m}return lo};
+lSoon0=function(g,win=90){const n=nowMin(),out=[];for(const c of lvis()){const L=epg(c);if(!isSortedS(L)){for(const p of L)if(p.s>n&&p.s<=n+win&&(!g||pgen(p)===g))out.push({c,p});continue}for(let i=firstAt(L,n+1e-9);i<L.length;i++){const p=L[i];if(p.s>n+win)break;if(p.s>n&&(!g||pgen(p)===g))out.push({c,p})}}return out.sort((a,b)=>a.p.s-b.p.s)};
+{lPast=function(){return lmemo("past",()=>{const n=nowMin(),out=[];for(const c of lvis()){const d=arDays(c);if(!d)continue;const L=epg(c);if(!isSortedS(L)){for(const p of L)if(p.e<=n&&p.s>=n-d*1440&&p.t!=="Programme non communiqué")out.push({c,p});continue}
+  for(let i=firstAt(L,n-d*1440);i<L.length;i++){const p=L[i];if(p.s>n)break;if(p.e<=n&&p.t!=="Programme non communiqué")out.push({c,p})}}return out.sort((a,b)=>b.p.e-a.p.e)}).slice()}}
 
 /* Icônes prisme : remplace les emojis de l'interface par des icônes au trait (style symboles tvOS).
    Choix de Steven (12/11/2026) : trait seul, une couleur qui suit le texte.

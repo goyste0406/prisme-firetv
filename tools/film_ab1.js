@@ -44,7 +44,9 @@ function prSwitch(id){if(!PR.list[id])return;prSnap();PR.cur=id;const d=ME().d||
  S.favs=d.favs||[];S.prog=d.prog||{};S.seasons=d.seasons||{};S.srcSel=d.srcSel||{};LS.hist=d.lh||[];LS.gw=d.lg||{};LS.hidden=d.lx||[];FXS.cache={};save();lsave();prSave()}
 const pav=(id,cls="")=>{const p=PR.list[id];return `<i class="pav ${cls}" style="--c:${p.c}">${p.emo||esc((p.n||"?")[0])}</i>`};
 const fxAgeOf=f=>{const m=String(f.age||"").match(/\d+/);return m?+m[0]:0};
-const fxMax=()=>{const L=(FXS.duo||[PR.cur]).map(id=>PR.list[id]&&PR.list[id].max).filter(x=>x!=null);return L.length?Math.min(...L):null};
+const fxMax0=()=>{const L=(FXS.duo||[PR.cur]).map(id=>PR.list[id]&&PR.list[id].max).filter(x=>x!=null);return L.length?Math.min(...L):null};
+/* limite d'âge du profil : relue une fois par affichage (appelée pour chacun des dizaines de milliers de titres) */
+const fxMax=()=>{const R=window.__RM,k="fxm|"+PR.cur+"|"+(FXS.duo||"");if(R&&k in R)return R[k];const v=fxMax0();if(R)R[k]=v;return v};
 const fxBlocked=f=>{const m=fxMax();return !!f&&f.type==="f"&&m!=null&&fxAgeOf(f)>m};
 {const _s=srcs;srcs=function(key){const L=_s(key);if(L.length&&!key.startsWith("ch:")&&fxBlocked(ALL[key]))return [];return L}}
 /* langue préférée (apprise ou réglée) */

@@ -23,7 +23,7 @@ window.__fc={C,E,get extras(){return extras},get findId(){return findId}};
 const isReal=()=>!E.demo&&!!getKey();
 const nf=n=>Math.round(n).toLocaleString("fr-FR");
 const kOf=it=>it.prog?it.id:(it.type==="s"||SERIES.includes(it)?"s":"f")+":"+it.id;
-const hasFiche=it=>SERIES.includes(it)?!!(it.sxk&&/^t/.test(it.sxk)):!!it.tmd;
+const hasFiche=it=>it.type==="s"?!!(it.sxk&&/^t/.test(it.sxk)):!!it.tmd;
 const playing=()=>topS().t==="player"&&typeof P!=="undefined"&&P;
 const night=()=>{const h=new Date().getHours();return h>=1&&h<6};
 function allowed(){if(C.mode===2||E.paused)return false;if(C.mode===1&&!night())return false;if(playing()&&!C.pp)return false;return true}
@@ -175,7 +175,7 @@ function cleanTitles(){if(E.demo||E.cleaned)return;E.cleaned=true;let n=0;
  if(n){saveC();if(window.__sx&&__sx.X)__sx.X.cache={};if(typeof FXS!=="undefined")FXS.cache={}}return n}
 try{cleanTitles()}catch(e){}
 /* casting donné par le fournisseur : chaque acteur retrouve aussi ses films et séries (fiche acteur) */
-try{if(typeof CRED!=="undefined")for(const it of [...FILMS,...SERIES]){if(!it._real||!it.cast)continue;for(const [aid,r] of it.cast){const L=CRED[aid]=CRED[aid]||[];if(!L.some(x=>x[0]===it.id))L.push([it.id,r||""])}}}catch(e){}
+try{if(typeof CRED!=="undefined"){const H=new Map();for(const it of [...FILMS,...SERIES]){if(!it._real||!it.cast)continue;for(const [aid,r] of it.cast){const L=CRED[aid]=CRED[aid]||[];let h=H.get(aid);if(!h){h=new Set(L.map(x=>x[0]));H.set(aid,h)}if(!h.has(it.id)){h.add(it.id);L.push([it.id,r||""])}}}}}catch(e){}
 function start(){try{cleanTitles()}catch(e){}if(!inApp()||C.mode===2)return paint();if(!E.demo&&!getKey())return paint();build();if(left()){E.wasRunning=true;loop()}paint()}
 
 /* ---------- anneau dans la barre d'onglets + panneau ---------- */

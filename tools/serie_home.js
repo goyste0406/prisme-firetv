@@ -105,11 +105,13 @@ function taste2(){const g={};for(const it of SL())if(isDone(it)||sProg(it)>.3)(i
 function sFor(){const ck="fy|"+PR.cur+"|"+SERIES.length+"|"+JSON.stringify(MX().sp).length+MX().done.length+"|"+MX().no.length+"|"+((ME().taste||{}).at||0);if(X.cache[ck])return X.cache[ck];const g=taste2(),tot=Object.values(g).reduce((a,b)=>a+b,0)||1;
  return X.cache[ck]=SL().filter(it=>!MX().no.includes(it.id)&&!(window.gtNever&&gtNever(it))).map(it=>{const m=(it.g||[]).reduce((a,k)=>a+(g[k]||0),0)/tot;return {c:it,pct:Math.max(40,Math.min(97,Math.round(55+m*40+(it.imdb-7.5)*8))),why:m>.5?`Tes genres : ${(it.g||[]).filter(k=>g[k]).join(", ")}`:`★ ${it.imdb} · très bien notée`}}).sort((a,b)=>b.pct-a.pct)}
 const pmap=()=>{const m={};sFor().forEach(o=>m[o.c.id]=o);return m};
-function sUp(){const x=MX(),av=new Set(series().map(i=>i.id));return Object.keys(x.sp).map(id=>ALL[id]).filter(it=>it&&av.has(it.id)&&!blk(it)&&!isDone(it)&&jOf(it)<30&&!(isWait(it)&&!WEEK().some(w=>w.id===it.id&&w.j<=0&&!w.seen&&!w.full&&w.e===nextEp(it).e))).sort((a,b)=>(spOf(b).t||0)-(spOf(a).t||0))}
-const sStale=()=>{const av=new Set(series().map(i=>i.id));return Object.keys(MX().sp).map(id=>ALL[id]).filter(it=>it&&av.has(it.id)&&!blk(it)&&!isDone(it)&&jOf(it)>=30)};
+function sUp(){return (RMEMO.sxup||(RMEMO.sxup=sUp0())).slice()}
+function sUp0(){const x=MX(),av=new Set(series().map(i=>i.id));return Object.keys(x.sp).map(id=>ALL[id]).filter(it=>it&&av.has(it.id)&&!blk(it)&&!isDone(it)&&jOf(it)<30&&!(isWait(it)&&!WEEK().some(w=>w.id===it.id&&w.j<=0&&!w.seen&&!w.full&&w.e===nextEp(it).e))).sort((a,b)=>(spOf(b).t||0)-(spOf(a).t||0))}
+const sStale=()=>(RMEMO.sxst||(RMEMO.sxst=sStale0())).slice();const sStale0=()=>{const av=new Set(series().map(i=>i.id));return Object.keys(MX().sp).map(id=>ALL[id]).filter(it=>it&&av.has(it.id)&&!blk(it)&&!isDone(it)&&jOf(it)>=30)};
 const added2=it=>{const r=it._real;if(r&&r.a)return Math.max(0,Math.floor((Date.now()/1000-r.a)/86400));const a=added(it.id);return a?a.d:999};
 function sNew(){return SL().map(it=>({it,d:added2(it)})).filter(x=>x.d<=14&&!MX().no.includes(x.it.id)).sort((a,b)=>a.d-b.d||b.it.imdb-a.it.imdb).slice(0,12)}
-function sTop(){const T=window.SXDATA&&SXDATA.top;if(T&&T.length)return T.map(id=>ALL[id]).filter(it=>it&&!blk(it)).slice(0,10).map((it,i)=>({it,rk:i+1,mv:"="}));
+function sTop(){return (RMEMO.sxtop||(RMEMO.sxtop=sTop0())).slice()}
+function sTop0(){const T=window.SXDATA&&SXDATA.top;if(T&&T.length)return T.map(id=>ALL[id]).filter(it=>it&&!blk(it)).slice(0,10).map((it,i)=>({it,rk:i+1,mv:"="}));
  return SL().slice().sort((a,b)=>trendScore(b)-trendScore(a)).slice(0,10).map((it,i)=>{const h=hash(it.id+"#mv")%7;return {it,rk:i+1,mv:h===0?"NOUV":h<3?"▲"+(h+1):h<5?"▼"+(h-2):"="}})}
 const isNew=id=>{const x=MX();if(x.nseen.includes(id))return false;const it=ALL[id];if(!it)return false;if(added2(it)<=7)return true;return WEEK().some(w=>w.id===id&&w.j<=0&&!w.seen)};
 
@@ -172,9 +174,11 @@ function collHtml(k){const c=coll(k)||{n:"Collection",why:"",ic:"",items:()=>[]}
 
 /* ---------- bannière : 5 types de pages, jamais une série déjà proposée plus bas ---------- */
 const btn=(i,lbl,a,extra="")=>`<div class="btn ${i===0?"prim":""}" data-f data-fid="sx-b${i}" ${i===0?"data-default":""} data-act="${a}" data-row="sxh" ${extra}>${lbl}</div>`;
-function sxTV(){const k="tv|"+Math.floor(NOW()/10)+"|"+SERIES.length;if(X.cache[k])return X.cache[k];const idx={};for(const it of SL()){const w=norm(it.t).replace(/[^a-z0-9]/g,"");if(w.length>=3)idx[w]=it}
- const n=NOW(),out=[];for(const c of chans()){let L;try{L=epg(c)}catch(e){continue}for(const p of L){if(p.e<=n||p.s>24*60+120)continue;const w=norm(p.t||"").replace(/[^a-z0-9]/g,""),it=idx[w];if(!it)continue;
-  out.push({it,c,p,live:p.s<=n,t:p.s<=n?"en direct":(p.s<24*60?"ce soir ":"cette nuit ")+fmt(p.s%1440)});break}if(out.length>=4)break}return X.cache[k]=out}
+function sxTV(){const k="tv|"+Math.floor(NOW()/10)+"|"+SERIES.length;if(X.cache[k])return X.cache[k];
+ /* même résultat qu'avant, mais avec l'index des titres du guide (plus de relecture de tout le guide) */
+ const idx=new Map();for(const it of SL()){const w=tkey(it.t);if(w.length>=3)idx.set(w,it)}const n=NOW(),I=epgIdx(),av=new Map(chans().map((c,i)=>[c.id,i])),best=new Map();
+ for(const [w,it] of idx)for(const x of I.get(w)||[]){const p=x.p;if(p.e<=n||p.s>24*60+120||!av.has(x.c.id))continue;const b=best.get(x.c.id);if(!b||x.pi<b.pi)best.set(x.c.id,{it,c:x.c,p,pi:x.pi})}
+ const out=[...best.values()].sort((a,b)=>av.get(a.c.id)-av.get(b.c.id)).slice(0,4).map(({it,c,p})=>({it,c,p,live:p.s<=n,t:p.s<=n?"en direct":(p.s<24*60?"ce soir ":"cette nuit ")+fmt(p.s%1440)}));return X.cache[k]=out}
 function slides(){const ck="sl|"+PR.cur+"|"+JSON.stringify(MX().sp).length+MX().done.length+"|"+MX().no.length+"|"+Math.floor(NOW()/30)+"|"+(S.sxAlerts||[]).length+"|"+S.favs.length;if(X.cache[ck])return X.cache[ck];
  const L=[],now=NOW(),eve=now>=17*60&&now<=21*60+30,fresh=it=>it&&!blk(it)&&!spOf(it)&&!isDone(it)&&!MX().no.includes(it.id);
  const nw=sNew().filter(x=>fresh(x.it)),a=nw.sort((p,q)=>q.it.imdb-p.it.imdb)[0];

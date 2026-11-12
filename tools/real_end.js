@@ -145,7 +145,7 @@ async function rImport(files,provName,status,opt){
  ph("save");status("Enregistrement dans ce navigateur…");
  return rSave(R,st)}
 /* enregistrement compressé : tout le catalogue tient dans la mémoire du navigateur ; s'il est vraiment trop gros, on garde les plus récents */
-function rSave(R,st){st=st||{};
+function rSave(R,st){st=st||{};if(window.dataChanged)dataChanged();
  let nf=R.films.length,ns=R.series.length,nc=R.chans.length;
  for(let tries=0;tries<14;tries++){const o2={...R,chans:R.chans.slice(0,nc),films:R.films.slice(0,nf),series:R.series.slice(0,ns),at:Date.now()};let z;try{z=RZ.enc(JSON.stringify(o2))}catch(e){z=null}
   if(z){try{localStorage.removeItem("prisme-real");localStorage.setItem("prisme-realz",z);window.__RLAST=o2;return {...st,keptF:nf,keptS:ns,keptC:nc,totF:R.films.length,totS:R.series.length,totC:R.chans.length,pls:R.pls.length}}catch(e){}}

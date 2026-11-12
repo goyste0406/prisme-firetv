@@ -13,12 +13,14 @@ const L0={view:"Accueil",deck:null,hist:["bein1","tf1","f2"],gw:{"Sport":7,"Cin�
 let LS=L0;try{const v=JSON.parse(localStorage.getItem("prisme-atv-live")||"null");if(v)LS={...L0,...v,deck:null,view:"Accueil"}}catch(e){}
 function lsave(){try{localStorage.setItem("prisme-atv-live",JSON.stringify(LS))}catch(e){}}
 /* Genre d'un programme, déduit du guide */
-function pgen(p){const g=norm(p.g||"");return /film|cinema|telefilm|movie/.test(g)?"Cinéma":/serie|feuilleton|fiction|drama|soap|sitcom/.test(g)?"Séries":/sport|foot|rugby|tennis|cyclisme|match|basket|golf|moteur|f1/.test(g)?"Sport":/info|journal|politique|debat|actualite|news|meteo/.test(g)?"Info":/dessin|anim|jeunesse|enfant|kids|children|cartoon/.test(g)?"Jeunesse":/docu|decouverte|nature|histoire|science|voyage|animaux/.test(g)?"Découverte":"Divertissement"}
-const lvis=()=>chans().filter(c=>!LS.hidden.includes(c.id));
-function chanGenre(c){if(c._cg!==undefined)return c._cg;const lab=((typeof LCATS!=="undefined"&&LCATS.find(x=>x[0]===c.cat))||[])[1]||"";let g=lab?pgen({g:lab}):"Divertissement";
+const PGM=new Map();function pgen(p){const g0=p.g||"";let r=PGM.get(g0);if(r===undefined){r=pgen0(g0);PGM.set(g0,r)}return r}
+function pgen0(g0){const g=norm(g0);return /film|cinema|telefilm|movie/.test(g)?"Cinéma":/serie|feuilleton|fiction|drama|soap|sitcom/.test(g)?"Séries":/sport|foot|rugby|tennis|cyclisme|match|basket|golf|moteur|f1/.test(g)?"Sport":/info|journal|politique|debat|actualite|news|meteo/.test(g)?"Info":/dessin|anim|jeunesse|enfant|kids|children|cartoon/.test(g)?"Jeunesse":/docu|decouverte|nature|histoire|science|voyage|animaux/.test(g)?"Découverte":"Divertissement"}
+const lvis=()=>{const k="lvis|"+LS.hidden.length;return (__RM[k]||(__RM[k]=(h=>chans().filter(c=>!h.has(c.id)))(new Set(LS.hidden)))).slice()};
+const LCXM={n:-1,m:null};const lcatOf=k=>{if(LCXM.n!==LCATS.length){LCXM.m=new Map();for(const x of LCATS)if(!LCXM.m.has(x[0]))LCXM.m.set(x[0],x);LCXM.n=LCATS.length}return LCXM.m.get(k)};
+function chanGenre(c){if(c._cg!==undefined)return c._cg;const lab=((typeof LCATS!=="undefined"&&lcatOf(c.cat))||[])[1]||"";let g=lab?pgen({g:lab}):"Divertissement";
  if(g==="Divertissement"){const t={sport:"Sport",info:"Info",cine:"Cinéma",kids:"Jeunesse",doc:"Découverte"}[c.tpl];g=t||null}return c._cg=g}
 /* gros fournisseurs (des milliers de chaînes) : « en direct » et « bientôt » sont calculés une fois par minute, et les rangées affichent les premières */
-const LNM={};const lmemo=(k,f)=>{const m=nowMin()+"|"+CHS.length+"|"+S.playlists.filter(p=>p.on).length;if(LNM.m!==m){for(const x in LNM)delete LNM[x];LNM.m=m}return LNM[k]||(LNM[k]=f())};
+const LNM={};const lmemo=(k,f)=>{const m=Math.floor(nowMin())+"|"+CHS.length+"|"+S.playlists.filter(p=>p.on).length;if(LNM.m!==m){for(const x in LNM)delete LNM[x];LNM.m=m}return LNM[k]||(LNM[k]=f())};
 function lNow(g){return lmemo("n"+(g||""),()=>lNow0(g)).slice()}
 function lSoon(g,win=90){return lmemo("s"+(g||"")+win,()=>lSoon0(g,win)).slice()}
 function lNow0(g){return lvis().map(c=>({c,e:epgAt(c)})).filter(x=>!g||pgen(x.e.cur)===g||chanGenre(x.c)===g).sort((a,b)=>((g&&pgen(b.e.cur)===g)-(g&&pgen(a.e.cur)===g))||(b.e.cur.s-a.e.cur.s))}
