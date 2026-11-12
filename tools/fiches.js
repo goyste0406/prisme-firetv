@@ -68,7 +68,7 @@ window.actorPh=function(aid){const u=APH[aid];if(u)return u;if(u===undefined&&is
 async function apRun(){if(apBusy)return;apBusy=true;let got=0;try{while(APQ.length){const aid=APQ.shift();if(APH[aid]!==undefined)continue;const nm=A[aid];
   try{const j=await tm(`/search/person?query=${encodeURIComponent(nm)}&include_adult=false`);let b=null,bs=0;for(const x of (j.results||[]).slice(0,5)){const sc=dice(x.name,nm)+Math.min(.05,(x.popularity||0)/400);if(sc>bs&&x.profile_path){bs=sc;b=x}}
    APH[aid]=b&&bs>=.9?img(b.profile_path,"w185"):"";if(APH[aid])got++;dirty=1}catch(e){APH[aid]="";if(e.message==="cle")break}}}finally{apBusy=false}
- if(got){const ids=[...document.querySelectorAll('#view [data-act^="fxactor:"],#view [data-act^="actor:"]')];if(ids.length&&idleFor(1500))render(F&&F.dataset.fid);else E.apPend=1}}
+ if(got&&inApp()&&!playing()){const go=()=>{if(idleFor(1500))render(F&&F.dataset.fid);else setTimeout(go,1500)};go()}}
 /* ---------- sagas, plateformes, studios, logos, bande-annonce, recommandations ---------- */
 const SVLG=window.SVLG=window.SVLG||{};const COK={};const CLG={};
 function logoOf(d){const L=((d.images||{}).logos||[]).slice().sort((a,b)=>(a.iso_639_1==="fr"?0:a.iso_639_1==="en"?1:2)-(b.iso_639_1==="fr"?0:b.iso_639_1==="en"?1:2)||(b.vote_average||0)-(a.vote_average||0));return L[0]?img(L[0].file_path,"w300"):""}
