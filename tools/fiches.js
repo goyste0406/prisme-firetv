@@ -92,7 +92,15 @@ async function loop(){if(E.running)return;E.running=true;
 function finish(){if(!total())return;const first=!C.first;C.first=C.first||Date.now();C.at=Date.now();saveC();persist();const u=Object.keys(C.unk).length;
  E.bilan=`✓ Fiches à jour · ${nf(E.ok.f)} films, ${nf(E.ok.s)} séries${u?` · ${u} à vérifier`:""}`;E.bilanT=Date.now()+5000;E.ringKeep=false;paint();
  if(first||E.wasRunning)refresh();E.wasRunning=false}
-function start(){if(!inApp()||C.mode===2)return paint();if(!E.demo&&!getKey())return paint();build();if(left()){E.wasRunning=true;loop()}paint()}
+/* titres importés avant le nettoyage (« Brothers 2026 US ») : on les nettoie au chargement, sans réimporter,
+   et les fiches qui n'avaient pas été trouvées sous l'ancien titre sont recherchées à nouveau */
+function cleanTitles(){if(E.demo||E.cleaned)return;E.cleaned=true;let n=0;
+ for(const it of [...FILMS,...SERIES]){const r=it._real;if(!r||hasFiche(it))continue;const raw=((r.s||[])[0]||[])[1]||r.t||it.t;const nt=RI.title(raw);
+  if(!it.y||it.y===2024){const y=RI.year(raw);if(y)it.y=y}
+  if(nt&&nt.length>=2&&nt!==it.t){it.t=nt;r.t=nt;n++;const k=kOf(it);delete C.done[k];delete C.unk[k]}}
+ if(n){saveC();if(window.__sx&&__sx.X)__sx.X.cache={};if(typeof FXS!=="undefined")FXS.cache={}}return n}
+try{cleanTitles()}catch(e){}
+function start(){try{cleanTitles()}catch(e){}if(!inApp()||C.mode===2)return paint();if(!E.demo&&!getKey())return paint();build();if(left()){E.wasRunning=true;loop()}paint()}
 
 /* ---------- anneau dans la barre d'onglets + panneau ---------- */
 const CIRC=2*Math.PI*15;
