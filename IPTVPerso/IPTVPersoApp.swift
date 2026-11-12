@@ -32,14 +32,10 @@ struct MainTabView: View {
         TabView {
             LiveHomeView()
                 .tabItem { Label("TV en direct", systemImage: "tv") }
-            Group {
-                if let p = store.active.first { MoviesView(api: XtreamAPI(account: p.account)) } else { Text("Aucun fournisseur actif") }
-            }
-            .tabItem { Label("Films", systemImage: "film") }
-            Group {
-                if let p = store.active.first { SeriesView(api: XtreamAPI(account: p.account)) } else { Text("Aucun fournisseur actif") }
-            }
-            .tabItem { Label("Séries", systemImage: "play.rectangle.on.rectangle") }
+            MediaHomeView(kind: .film)
+                .tabItem { Label("Films", systemImage: "film") }
+            MediaHomeView(kind: .series)
+                .tabItem { Label("Séries", systemImage: "play.rectangle.on.rectangle") }
             ProvidersSettingsView()
                 .tabItem { Label("Réglages", systemImage: "gear") }
         }

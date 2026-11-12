@@ -1,0 +1,281 @@
+import Foundation
+import SwiftUI
+
+enum MediaKind: String { case film, series }
+
+/// Un film ou une série, tel que rangé dans la base.
+struct MediaItem: Identifiable, Hashable {
+    let kind: MediaKind
+    let pid: String
+    let sid: String
+    let name: String       // nom brut chez le fournisseur
+    let year: Int
+    let icon: String
+    let cid: String
+    let ext: String
+    let rating: Double
+    let added: Int
+    let tmdb: String
+    let plot: String
+    var id: String { kind.rawValue + ":" + pid + ":" + sid }
+    var clean: CleanTitle { TitleTools.clean(name, year: year) }
+}
+
+struct CleanTitle {
+    let title: String
+    let year: Int
+    let tags: [String]     // VF, MULTI, VOSTFR, 4K, 1080p…
+    var key: String { TitleTools.fold(title) + "|" + String(year) }
+}
+
+/// Titres des fournisseurs (« FR| Dune (2021) 4K MULTI ») → titre propre + étiquettes.
+enum TitleTools {
+    private static let lead = try! NSRegularExpression(pattern: #"^\s*(\[[^\]]{1,12}\]|[A-Z]{2,4}\s*[|:\-–]\s*)+"#)
+    private static let tagRx = try! NSRegularExpression(pattern: #"\b(4K|UHD|2160p|FHD|1080p|HD|720p|SD|MULTI|VOSTFR|VOST|VFF|VFQ|VF|TRUEFRENCH|FRENCH|HEVC|H265|x265|HDR|DV)\b"#, options: [.caseInsensitive])
+    private static let yearRx = try! NSRegularExpression(pattern: #"[\(\[]?\b(19[2-9]\d|20[0-4]\d)\b[\)\]]?"#)
+
+    static func clean(_ raw: String, year: Int) -> CleanTitle {
+        var s = raw
+        s = lead.stringByReplacingMatches(in: s, range: NSRange(s.startIndex..., in: s), withTemplate: "")
+        var tags: [String] = []
+        for m in tagRx.matches(in: s, range: NSRange(s.startIndex..., in: s)) {
+            if let r = Range(m.range, in: s) {
+                var t = s[r].uppercased()
+                if ["UHD", "2160P"].contains(t) { t = "4K" }
+                if t == "FHD" { t = "1080P" }
+                if ["TRUEFRENCH", "FRENCH", "VFF", "VFQ"].contains(t) { t = "VF" }
+                if t == "VOST" { t = "VOSTFR" }
+                if ["HEVC", "H265", "X265", "HDR", "DV", "SD", "HD", "720P"].contains(t) { continue }
+                let label = t == "1080P" ? "1080p" : t
+                if !tags.contains(label) { tags.append(label) }
+            }
+        }
+        s = tagRx.stringByReplacingMatches(in: s, range: NSRange(s.startIndex..., in: s), withTemplate: "")
+        var y = year
+        if let m = yearRx.matches(in: s, range: NSRange(s.startIndex..., in: s)).last, let r = Range(m.range(at: 1), in: s) {
+            if y == 0 { y = Int(s[r]) ?? 0 }
+            if let full = Range(m.range, in: s) { s.removeSubrange(full) }
+        }
+        s = s.replacingOccurrences(of: #"[\s\-–|:_.]+$"#, with: "", options: .regularExpression)
+        s = s.replacingOccurrences(of: #"\s{2,}"#, with: " ", options: .regularExpression).trimmingCharacters(in: .whitespaces)
+        if s.isEmpty { s = raw }
+        return CleanTitle(title: s, year: y, tags: tags)
+    }
+
+    static func fold(_ s: String) -> String {
+        s.folding(options: [.diacriticInsensitive, .caseInsensitive], locale: Locale(identifier: "fr_FR"))
+            .replacingOccurrences(of: #"[^a-z0-9]+"#, with: " ", options: .regularExpression).trimmingCharacters(in: .whitespaces)
+    }
+}
+
+// MARK: - Lectures dans la base
+
+enum MediaStore {
+    private static let filmCols = "pid,sid,name,year,icon,cid,ext,rating,added,tmdb,''"
+    private static let seriesCols = "pid,sid,name,year,cover,cid,'',rating,added,tmdb,plot"
+    private static func table(_ k: MediaKind) -> String { k == .film ? "vod" : "series" }
+    private static func cols(_ k: MediaKind) -> String { k == .film ? filmCols : seriesCols }
+
+    private static func row(_ k: MediaKind, _ r: Database.Statement) -> MediaItem {
+        MediaItem(kind: k, pid: r.str(0), sid: r.str(1), name: r.str(2), year: r.int(3), icon: r.str(4), cid: r.str(5),
+                  ext: r.str(6), rating: r.double(7), added: r.int(8), tmdb: r.str(9), plot: r.str(10))
+    }
+
+    private static func inList(_ pids: [String]) -> String { "(" + pids.map { _ in "?" }.joined(separator: ",") + ")" }
+
+    /// Une rangée, sans doublons (même titre chez plusieurs fournisseurs ou en plusieurs qualités = une seule affiche).
+    static func list(_ k: MediaKind, pids: [String], where cond: String = "1", args: [Any?] = [], order: String, limit: Int) async -> [MediaItem] {
+        guard !pids.isEmpty else { return [] }
+        let sql = "SELECT \(cols(k)) FROM \(table(k)) WHERE pid IN \(inList(pids)) AND \(cond) ORDER BY \(order) LIMIT \(limit * 3)"
+        return await Database.shared.read { db in
+            var out: [MediaItem] = [], seen = Set<String>()
+            db.query(sql, pids + args) { r in
+                let it = row(k, r)
+                if seen.insert(it.clean.key).inserted { out.append(it) }
+            }
+            return Array(out.prefix(limit))
+        }
+    }
+
+    struct Cat: Identifiable, Hashable { let pid: String; let cid: String; let name: String; let count: Int; var id: String { pid + ":" + cid } }
+
+    static func categories(_ k: MediaKind, pids: [String]) async -> [Cat] {
+        guard !pids.isEmpty else { return [] }
+        let type = k == .film ? "vod" : "series"
+        let sql = """
+            SELECT c.pid, c.cid, c.name, COUNT(m.sid) FROM category c JOIN \(table(k)) m ON m.pid=c.pid AND m.cid=c.cid
+            WHERE c.type='\(type)' AND c.pid IN \(inList(pids)) GROUP BY c.pid, c.cid HAVING COUNT(m.sid)>0 ORDER BY c.pid, c.pos
+            """
+        return await Database.shared.read { db in
+            var out: [Cat] = []
+            db.query(sql, pids) { r in out.append(Cat(pid: r.str(0), cid: r.str(1), name: r.str(2), count: r.int(3))) }
+            return out
+        }
+    }
+
+    static func page(_ k: MediaKind, cat: Cat, offset: Int, limit: Int) async -> [MediaItem] {
+        await Database.shared.read { db in
+            var out: [MediaItem] = []
+            db.query("SELECT \(cols(k)) FROM \(table(k)) WHERE pid=? AND cid=? ORDER BY added DESC LIMIT ? OFFSET ?", [cat.pid, cat.cid, limit, offset]) { r in out.append(row(k, r)) }
+            return out
+        }
+    }
+
+    static func items(ids: [String]) async -> [MediaItem] {
+        var films: [(String, String)] = [], series: [(String, String)] = []
+        for id in ids {
+            let p = id.split(separator: ":", maxSplits: 2).map(String.init)
+            guard p.count == 3 else { continue }
+            if p[0] == "film" { films.append((p[1], p[2])) } else { series.append((p[1], p[2])) }
+        }
+        let byID: [String: MediaItem] = await Database.shared.read { db in
+            var m: [String: MediaItem] = [:]
+            for (k, L) in [(MediaKind.film, films), (.series, series)] where !L.isEmpty {
+                for chunk in stride(from: 0, to: L.count, by: 300) {
+                    let part = Array(L[chunk..<min(L.count, chunk + 300)])
+                    let cond = part.map { _ in "(pid=? AND sid=?)" }.joined(separator: " OR ")
+                    db.query("SELECT \(cols(k)) FROM \(table(k)) WHERE \(cond)", part.flatMap { [$0.0, $0.1] as [Any?] }) { r in let it = row(k, r); m[it.id] = it }
+                }
+            }
+            return m
+        }
+        return ids.compactMap { byID[$0] }
+    }
+
+    /// Toutes les versions d'un titre (fournisseurs, langues, qualités), la plus adaptée en premier.
+    static func versions(of it: MediaItem, pids: [String]) async -> [MediaItem] {
+        let c = it.clean
+        let words = c.title.split(separator: " ").prefix(3).joined(separator: " ")
+        guard !pids.isEmpty, !words.isEmpty else { return [it] }
+        let like = "%" + words.replacingOccurrences(of: "%", with: "") + "%"
+        let found = await Database.shared.read { db -> [MediaItem] in
+            var out: [MediaItem] = []
+            db.query("SELECT \(cols(it.kind)) FROM \(table(it.kind)) WHERE pid IN \(inList(pids)) AND name LIKE ? LIMIT 200", pids + [like]) { r in out.append(row(it.kind, r)) }
+            return out
+        }
+        var same = found.filter { $0.clean.key == c.key }
+        if !same.contains(where: { $0.id == it.id }) { same.insert(it, at: 0) }
+        func score(_ m: MediaItem) -> Int {
+            let t = m.clean.tags
+            return (t.contains("MULTI") ? 30 : t.contains("VF") ? 25 : t.contains("VOSTFR") ? 5 : 15) + (t.contains("4K") ? 6 : t.contains("1080p") ? 4 : 2)
+        }
+        return same.sorted { score($0) > score($1) }
+    }
+}
+
+// MARK: - Reprise de lecture et historique (données à toi : gardées d'une version à l'autre)
+
+@MainActor
+final class WatchStore: ObservableObject {
+    static let shared = WatchStore()
+    struct Entry: Codable { var pos: Double; var dur: Double; var at: Date; var title: String; var icon: String; var item: String; var ep: String? }
+    @Published private(set) var entries: [String: Entry] = [:]   // clé : id du film ou de l'épisode
+    @Published var favorites: [String] = [] { didSet { UserDefaults.standard.set(favorites, forKey: "prisme.media.favs") } }
+
+    private init() {
+        if let d = UserDefaults.standard.data(forKey: "prisme.watch"), let e = try? JSONDecoder().decode([String: Entry].self, from: d) { entries = e }
+        favorites = UserDefaults.standard.stringArray(forKey: "prisme.media.favs") ?? []
+    }
+
+    func save(key: String, pos: Double, dur: Double, title: String, icon: String, item: String, ep: String? = nil) {
+        guard dur > 0 else { return }
+        entries[key] = Entry(pos: pos, dur: dur, at: Date(), title: title, icon: icon, item: item, ep: ep)
+        if entries.count > 600 {
+            let old = entries.sorted { $0.value.at < $1.value.at }.prefix(entries.count - 600).map(\.key)
+            old.forEach { entries.removeValue(forKey: $0) }
+        }
+        if let d = try? JSONEncoder().encode(entries) { UserDefaults.standard.set(d, forKey: "prisme.watch") }
+    }
+
+    func resume(_ key: String) -> Double? {
+        guard let e = entries[key], e.dur > 0, e.pos > 30, e.pos / e.dur < 0.92 else { return nil }
+        return e.pos
+    }
+    func fraction(_ key: String) -> Double? {
+        guard let e = entries[key], e.dur > 0 else { return nil }
+        return min(1, e.pos / e.dur)
+    }
+    func watched(_ key: String) -> Bool { (fraction(key) ?? 0) >= 0.92 }
+
+    /// « Reprendre » : ce qui a été commencé et pas fini, le plus récent d'abord (un seul épisode par série).
+    var inProgress: [Entry] {
+        var seen = Set<String>()
+        return entries.values.filter { $0.dur > 0 && $0.pos > 30 && $0.pos / $0.dur < 0.92 }.sorted { $0.at > $1.at }
+            .filter { seen.insert($0.item).inserted }
+    }
+
+    func toggleFavorite(_ id: String) {
+        if let i = favorites.firstIndex(of: id) { favorites.remove(at: i) } else { favorites.insert(id, at: 0) }
+    }
+}
+
+// MARK: - Infos détaillées chez le fournisseur (résumé, distribution, durée, image de fond, épisodes)
+
+struct MediaInfo {
+    var plot = "", cast = "", director = "", genre = "", duration = "", backdrop = "", rating = 0.0, year = 0
+    var seasons: [Season] = []
+}
+struct Season: Identifiable { let number: Int; let episodes: [EpisodeInfo]; var id: Int { number } }
+struct EpisodeInfo: Identifiable, Hashable {
+    let id: String; let season: Int; let number: Int; let title: String; let ext: String; let plot: String; let image: String; let duration: String
+}
+
+enum InfoLoader {
+    private static let cache = NSCache<NSString, Box>()
+    final class Box { let v: MediaInfo; init(_ v: MediaInfo) { self.v = v } }
+
+    static func load(_ it: MediaItem) async -> MediaInfo {
+        if let b = cache.object(forKey: it.id as NSString) { return b.v }
+        guard let prov = await ProviderStore.shared.provider(it.pid) else { return MediaInfo() }
+        var c = URLComponents(string: prov.account.baseURL + "/player_api.php")
+        c?.queryItems = [URLQueryItem(name: "username", value: prov.username), URLQueryItem(name: "password", value: prov.password),
+                         URLQueryItem(name: "action", value: it.kind == .film ? "get_vod_info" : "get_series_info"),
+                         URLQueryItem(name: it.kind == .film ? "vod_id" : "series_id", value: it.sid)]
+        let q0 = c?.percentEncodedQuery
+        c?.percentEncodedQuery = q0?.replacingOccurrences(of: "+", with: "%2B")
+        guard let url = c?.url, let res = try? await URLSession.shared.data(from: url),
+              let root = try? JSONSerialization.jsonObject(with: res.0) as? [String: Any] else { return MediaInfo() }
+        var m = MediaInfo()
+        let info = root["info"] as? [String: Any] ?? [:]
+        func s(_ k: String) -> String {
+            switch info[k] { case let v as String: return v; case let n as NSNumber: return n.stringValue; default: return "" }
+        }
+        m.plot = s("plot").isEmpty ? s("description") : s("plot")
+        m.cast = s("cast").isEmpty ? s("actors") : s("cast")
+        m.director = s("director")
+        m.genre = s("genre")
+        m.duration = s("duration")
+        if let bd = info["backdrop_path"] as? [String], let f = bd.first { m.backdrop = f } else { m.backdrop = s("backdrop_path") }
+        m.rating = Double(s("rating")) ?? 0
+        m.year = Int((s("releasedate").isEmpty ? s("releaseDate") : s("releasedate")).prefix(4)) ?? 0
+        if it.kind == .series {
+            var seasons: [Int: [EpisodeInfo]] = [:]
+            func add(_ arr: [[String: Any]], season: Int) {
+                for e in arr {
+                    func es(_ k: String) -> String { switch e[k] { case let v as String: return v; case let n as NSNumber: return n.stringValue; default: return "" } }
+                    let inf = e["info"] as? [String: Any] ?? [:]
+                    func isf(_ k: String) -> String { switch inf[k] { case let v as String: return v; case let n as NSNumber: return n.stringValue; default: return "" } }
+                    let sn = Int(es("season")) ?? season
+                    seasons[sn, default: []].append(EpisodeInfo(id: es("id"), season: sn, number: Int(es("episode_num")) ?? (seasons[sn]?.count ?? 0) + 1,
+                        title: es("title"), ext: es("container_extension").isEmpty ? "mp4" : es("container_extension"),
+                        plot: isf("plot"), image: isf("movie_image"), duration: isf("duration")))
+                }
+            }
+            if let d = root["episodes"] as? [String: Any] {
+                for (k, v) in d { if let arr = v as? [[String: Any]] { add(arr, season: Int(k) ?? 1) } }
+            } else if let a = root["episodes"] as? [[[String: Any]]] {
+                for (i, arr) in a.enumerated() { add(arr, season: i + 1) }
+            }
+            m.seasons = seasons.keys.sorted().map { Season(number: $0, episodes: seasons[$0]!.sorted { $0.number < $1.number }) }
+        }
+        cache.setObject(Box(m), forKey: it.id as NSString)
+        return m
+    }
+}
+
+extension Provider {
+    private var userEnc: String { username.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? username }
+    private var passEnc: String { password.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? password }
+    func movieURL(_ it: MediaItem) -> URL? { URL(string: "\(account.baseURL)/movie/\(userEnc)/\(passEnc)/\(it.sid).\(it.ext.isEmpty ? "mp4" : it.ext)") }
+    func episodeURL(_ e: EpisodeInfo) -> URL? { URL(string: "\(account.baseURL)/series/\(userEnc)/\(passEnc)/\(e.id).\(e.ext)") }
+}
