@@ -125,7 +125,7 @@ async function applySerie(it,id){const r=it._real||{};const d=await tm(`/tv/${id
  const wpS=((d["watch/providers"]||{}).results||{}).FR||{};for(const t of ["flatrate","free","ads"])for(const x of wpS[t]||[])if(x.logo_path)SVLG[x.provider_name]=SVLG[x.provider_name]||img(x.logo_path,"w92");let age="";
  for(const x of ((d.content_ratings||{}).results||[]))if(x.iso_3166_1==="FR"&&x.rating){age=x.rating;break}
  const k="t"+id;SXD.m[k]={t:d.name,y:+(d.first_air_date||"").slice(0,4)||it.y,g:(d.genres||[]).map(g=>g.name),ov:d.overview||"",net:(((d.networks||[])[0])||{}).name||"",cr:(d.created_by||[]).map(c=>c.name).join(", "),
-  va:d.vote_average||0,age,po:img(d.poster_path,C.hd?"w342":"w185"),bd:img(d.backdrop_path,"w780"),ext:1,lg:logoOf(d),wpf:(wpS.flatrate||[]).map(x=>x.provider_name),ep:(d.episode_run_time||[])[0]||0,cast:((d.credits||{}).cast||[]).slice(0,8).map(c=>[c.name,c.character||""])};
+  va:d.vote_average||0,age,po:img(d.poster_path,C.hd?"w342":"w185"),bd:img(d.backdrop_path,"w780"),ext:1,lg:logoOf(d),wpf:(wpS.flatrate||[]).map(x=>x.provider_name),wp:(()=>{const W={f:[],g:[],r:[],b:[]};for(const [k,t] of [["f","flatrate"],["g","free"],["g","ads"],["r","rent"],["b","buy"]])for(const x of wpS[t]||[]){if(!W[k].includes(x.provider_name))W[k].push(x.provider_name);if(x.logo_path)SVLG[x.provider_name]=SVLG[x.provider_name]||img(x.logo_path,"w92")}return W})(),ep:(d.episode_run_time||[])[0]||0,cast:((d.credits||{}).cast||[]).slice(0,8).map(c=>[c.name,c.character||""])};
  for(const s of r.s||[])if(s[1])SXD.names[s[1]]=k;r.tm=id;return {id}}
 
 /* ---------- sauvegarde des fiches téléchargées (reprise après coupure) ---------- */
