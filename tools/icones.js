@@ -77,12 +77,14 @@ warn:'<path d="M12 4 2.8 19.5h18.4z"/><path d="M12 10v4.5M12 17v.2"/>',
 layers:'<path d="M12 4 3 8.5l9 4.5 9-4.5z"/><path d="M3 12.5l9 4.5 9-4.5M3 16.5l9 4.5 9-4.5"/>',
 prism:'<path d="M12 3.5 20.5 19h-17z"/><path d="M12 3.5 9.5 19"/>',
 note:'<path d="M9 18V6l10-2v12"/><circle cx="6.5" cy="18" r="2.5"/><circle cx="16.5" cy="16" r="2.5"/>',
+home:'<path d="M4 11 12 4.5 20 11"/><path d="M6 9.5V19.5h4.5v-5h3v5H18V9.5"/>',
+search:'<circle cx="10.5" cy="10.5" r="6"/><path d="M15 15l5 5"/>',
 photo:'<rect x="3.5" y="5" width="17" height="14" rx="2.5"/><circle cx="9" cy="10" r="1.6"/><path d="M4 17l5-4.5 3.5 3 3-2.5 4.5 4"/>'
 };
 PI.down='<g transform="rotate(180 12 12)">'+PI.up+'</g>';
 const MAP={"🇫🇷":"flag","▶":"play","⏯":"playpause","⏸":"pause","⏮":"prev","⏭":"next","⏩":"fwd","⏪":"rwd","⏹":"stop","⏺":"live","↺":"restart","↩":"back",
 "🔊":"spk3","🔉":"spk2","🔈":"spk1","🔇":"mute","🔔":"bell","🔕":"belloff","⏰":"alarm","⏱":"timer","📅":"cal","🕰":"clock","🌙":"moon","☾":"moon","☀":"sun","🎄":"tree",
-"👍":"up","👎":"down","★":"starf","⭐":"star","🏆":"trophy","🔥":"flame","♥":"heartf","♡":"heart","💛":"heart","✨":"spark","✦":"star4",
+"👍":"up","👎":"down","★":"starf","⭐":"star","☆":"star","🏠":"home","🔎":"search","🔍":"search","🏆":"trophy","🔥":"flame","♥":"heartf","♡":"heart","💛":"heart","✨":"spark","✦":"star4",
 "👤":"user","👥":"users","🎬":"clap","🍿":"pop","🚀":"rocket","⚽":"ball","🎮":"pad","🐱":"cat","😄":"laugh","😂":"laugh","😱":"scared","🥲":"tear","🧠":"bulb",
 "📡":"antenna","🎯":"target","🧭":"compass","🎞":"film","⚡":"bolt","🎲":"dice","🔒":"lock","🚫":"never","🙈":"eyeoff","🧩":"saga","🃏":"cards","⚖":"scale","⚔":"duel",
 "📊":"chart","🔵":"dot","📺":"tv","🎤":"mic","⚙":"gear","✎":"pen","⌫":"del","✕":"close","📶":"signal","⚠":"warn","◎":"layers","◆":"prism","♪":"note","▣":"photo"};
