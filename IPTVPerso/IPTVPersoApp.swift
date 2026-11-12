@@ -20,7 +20,8 @@ struct IPTVPersoApp: App {
             }
             .environmentObject(store)
             .preferredColorScheme(.dark)
-            .onAppear { store.refreshIfStale() }
+            .onAppear { store.refreshIfStale(); FicheService.shared.start() }
+            .onChange(of: store.catalogVersion) { _ in FicheService.shared.restart() }
         }
     }
 }

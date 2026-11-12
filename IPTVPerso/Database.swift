@@ -47,6 +47,17 @@ final class Database: @unchecked Sendable {
             PRAGMA user_version=1;
             """)
         }
+        if v < 2 {
+            exec("""
+            CREATE TABLE IF NOT EXISTS fiche(kind TEXT, ckey TEXT, pid TEXT, sid TEXT, tmdb INTEGER, title TEXT, overview TEXT, poster TEXT, backdrop TEXT,
+              genres TEXT, runtime INTEGER, vote REAL, year INTEGER, coll INTEGER, cast TEXT, wp TEXT, collname TEXT, PRIMARY KEY(kind,ckey));
+            CREATE INDEX IF NOT EXISTS fiche_tmdb ON fiche(kind,tmdb);
+            CREATE INDEX IF NOT EXISTS fiche_coll ON fiche(kind,coll);
+            CREATE TABLE IF NOT EXISTS fmiss(kind TEXT, ckey TEXT, at INTEGER, PRIMARY KEY(kind,ckey));
+            CREATE TABLE IF NOT EXISTS coll(id INTEGER PRIMARY KEY, name TEXT, parts TEXT);
+            PRAGMA user_version=2;
+            """)
+        }
     }
 
     // MARK: Requêtes

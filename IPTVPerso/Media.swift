@@ -17,8 +17,22 @@ struct MediaItem: Identifiable, Hashable {
     let added: Int
     let tmdb: String
     let plot: String
+    var fiche: Fiche? = nil
     var id: String { kind.rawValue + ":" + pid + ":" + sid }
     var clean: CleanTitle { TitleTools.clean(name, year: year) }
+    /// Titre affiché : celui de TMDB (en français) s'il est connu.
+    var displayTitle: String { fiche?.title.isEmpty == false ? fiche!.title : clean.title }
+    var posterURL: String { (fiche?.poster.isEmpty == false) ? Fiche.img(fiche!.poster) : icon }
+    var backdropURL: String { (fiche?.backdrop.isEmpty == false) ? Fiche.img(fiche!.backdrop, "w1280") : "" }
+}
+
+extension Array where Element == MediaItem {
+    /// Ajoute les fiches TMDB connues (une requête pour toute la liste). À appeler sur la file de la base.
+    func withFiches() -> [MediaItem] {
+        guard let k = first?.kind else { return self }
+        let f = FicheStore.byKeys(k, map { $0.clean.key })
+        return map { var m = $0; m.fiche = f[m.clean.key]; return m }
+    }
 }
 
 struct CleanTitle {
@@ -93,7 +107,56 @@ enum MediaStore {
                 let it = row(k, r)
                 if seen.insert(it.clean.key).inserted { out.append(it) }
             }
-            return Array(out.prefix(limit))
+            return Array(out.prefix(limit)).withFiches()
+        }
+    }
+
+    /// Une rangée par genre (genres TMDB), les mieux notés d'abord.
+    static func byGenre(_ k: MediaKind, pids: [String], genre: String, limit: Int) async -> [MediaItem] {
+        guard !pids.isEmpty else { return [] }
+        let t = table(k), c = cols(k).split(separator: ",").map { $0.hasPrefix("'") ? String($0) : "m." + $0 }.joined(separator: ",")
+        let sql = "SELECT \(c) FROM fiche f JOIN \(t) m ON m.pid=f.pid AND m.sid=f.sid WHERE f.kind=? AND f.genres LIKE ? AND m.pid IN \(inList(pids)) ORDER BY f.vote DESC LIMIT \(limit * 2)"
+        return await Database.shared.read { db in
+            var out: [MediaItem] = [], seen = Set<String>()
+            db.query(sql, [k.rawValue, "%" + genre + "%"] + pids) { r in let it = row(k, r); if seen.insert(it.clean.key).inserted { out.append(it) } }
+            return Array(out.prefix(limit)).withFiches()
+        }
+    }
+
+    /// Titres disponibles correspondant à des fiches TMDB (sagas, même univers).
+    static func items(kind k: MediaKind, tmdb ids: [Int], pids: [String]) async -> [Int: MediaItem] {
+        guard !ids.isEmpty, !pids.isEmpty else { return [:] }
+        let t = table(k), c = cols(k).split(separator: ",").map { $0.hasPrefix("'") ? String($0) : "m." + $0 }.joined(separator: ",")
+        let sql = "SELECT \(c), f.tmdb FROM fiche f JOIN \(t) m ON m.pid=f.pid AND m.sid=f.sid WHERE f.kind=? AND f.tmdb IN (" + ids.map { _ in "?" }.joined(separator: ",") + ") AND m.pid IN \(inList(pids))"
+        return await Database.shared.read { db in
+            var out: [Int: MediaItem] = [:]
+            db.query(sql, [k.rawValue] + ids.map { $0 as Any? } + pids) { r in let it = row(k, r); out[r.int(11)] = it }
+            let withF = Array(out.values).withFiches()
+            var res: [Int: MediaItem] = [:]
+            for m in withF { if let f = m.fiche { res[f.tmdb] = m } }
+            return res
+        }
+    }
+
+    /// Même univers : titres dont le début (avant « : ») ou un mot composé (« spider-man ») est le même.
+    static func universe(of it: MediaItem, pids: [String], exclude: Set<Int>) async -> [MediaItem] {
+        let base = it.displayTitle.components(separatedBy: CharacterSet(charactersIn: ":–(")).first?.trimmingCharacters(in: .whitespaces) ?? ""
+        var terms: [String] = []
+        let core = base.replacingOccurrences(of: #"\s+\d+$"#, with: "", options: .regularExpression).replacingOccurrences(of: #"^(The|Le|La|Les|L')\s+"#, with: "", options: .regularExpression)
+        if core.count >= 4 { terms.append(core) }
+        for w in base.split(separator: " ") where w.contains("-") && w.count >= 5 { terms.append(String(w)) }
+        guard !terms.isEmpty, !pids.isEmpty else { return [] }
+        let k = it.kind, t = table(k), c = cols(k).split(separator: ",").map { $0.hasPrefix("'") ? String($0) : "m." + $0 }.joined(separator: ",")
+        let cond = terms.map { _ in "(f.title LIKE ? OR f.title LIKE ?)" }.joined(separator: " OR ")
+        let args: [Any?] = terms.flatMap { [$0 + "%", "% " + $0 + "%"] as [Any?] }
+        let sql = "SELECT \(c), f.tmdb FROM fiche f JOIN \(t) m ON m.pid=f.pid AND m.sid=f.sid WHERE f.kind=? AND (\(cond)) AND m.pid IN \(inList(pids)) ORDER BY f.year LIMIT 60"
+        return await Database.shared.read { db in
+            var out: [MediaItem] = [], seen = Set<String>()
+            db.query(sql, [k.rawValue] + args + pids) { r in
+                let m = row(k, r)
+                if !exclude.contains(r.int(11)), m.clean.key != it.clean.key, seen.insert(m.clean.key).inserted { out.append(m) }
+            }
+            return Array(out.prefix(24)).withFiches()
         }
     }
 
@@ -117,7 +180,7 @@ enum MediaStore {
         await Database.shared.read { db in
             var out: [MediaItem] = []
             db.query("SELECT \(cols(k)) FROM \(table(k)) WHERE pid=? AND cid=? ORDER BY added DESC LIMIT ? OFFSET ?", [cat.pid, cat.cid, limit, offset]) { r in out.append(row(k, r)) }
-            return out
+            return out.withFiches()
         }
     }
 
@@ -137,7 +200,10 @@ enum MediaStore {
                     db.query("SELECT \(cols(k)) FROM \(table(k)) WHERE \(cond)", part.flatMap { [$0.0, $0.1] as [Any?] }) { r in let it = row(k, r); m[it.id] = it }
                 }
             }
-            return m
+            let f1 = Array(m.values.filter { $0.kind == .film }).withFiches(), f2 = Array(m.values.filter { $0.kind == .series }).withFiches()
+            var all: [String: MediaItem] = [:]
+            for x in f1 + f2 { all[x.id] = x }
+            return all
         }
         return ids.compactMap { byID[$0] }
     }
@@ -153,7 +219,7 @@ enum MediaStore {
             db.query("SELECT \(cols(it.kind)) FROM \(table(it.kind)) WHERE pid IN \(inList(pids)) AND name LIKE ? LIMIT 200", pids + [like]) { r in out.append(row(it.kind, r)) }
             return out
         }
-        var same = found.filter { $0.clean.key == c.key }
+        var same = found.filter { $0.clean.key == c.key }.map { var x = $0; x.fiche = it.fiche; return x }
         if !same.contains(where: { $0.id == it.id }) { same.insert(it, at: 0) }
         func score(_ m: MediaItem) -> Int {
             let t = m.clean.tags

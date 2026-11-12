@@ -54,6 +54,8 @@ struct ProvidersSettingsView: View {
     @State private var adding = false
     @State private var confirmDelete: Provider?
     @State private var dbSize: Int64 = 0
+    @State private var tmdbKey = TmdbKey.value ?? ""
+    @ObservedObject var fiches = FicheService.shared
 
     var body: some View {
         NavigationStack {
@@ -76,6 +78,16 @@ struct ProvidersSettingsView: View {
                 }
                 if let e = store.lastError {
                     Section("Dernière erreur") { Text(e).foregroundStyle(.red) }
+                }
+                Section("Fiches TMDB (affiches, acteurs, sagas, où regarder)") {
+                    SecureField("Clé API TMDB (v3)", text: $tmdbKey)
+                    Button("Enregistrer la clé") { TmdbKey.set(tmdbKey.trimmingCharacters(in: .whitespaces)); fiches.restart() }
+                    if TmdbKey.value == nil { Text("Crée une clé gratuite sur themoviedb.org › Paramètres › API, puis tape-la ici. Elle reste sur cette Apple TV.").font(.callout).foregroundStyle(.secondary) }
+                    else if let e = fiches.lastError { Text(e).foregroundStyle(.red) }
+                    else if fiches.total > 0 {
+                        ProgressView(value: Double(fiches.done), total: Double(max(1, fiches.total)))
+                        Text(fiches.running ? "Fiches : \(fiches.done) sur \(fiches.total) · en arrière-plan" : "Fiches à jour").font(.callout).foregroundStyle(.secondary)
+                    } else { Text(fiches.running ? "Recherche des fiches manquantes…" : "Fiches à jour").font(.callout).foregroundStyle(.secondary) }
                 }
                 Section("Stockage") {
                     LabeledContent("Catalogue et guide", value: ByteCountFormatter.string(fromByteCount: dbSize, countStyle: .file))
