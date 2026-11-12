@@ -87,7 +87,8 @@ function profDet(id){const p=PR.list[id],x=PX(p),cur=id===PR.cur,conf=SA.conf;
 /* ---------- détail d'une catégorie ---------- */
 function subPrev(){const sz=[18,22,27,32][val("stsize")],bg=["","text-shadow:0 2px 6px #000,0 0 3px #000","background:rgba(0,0,0,.72)"][val("stbg")],col=["#fff","#ffe14a"][val("stcol")];
  return `<div class="sa-prev"><span class="sa-k">Aperçu</span><span class="s" style="font-size:${sz}px;color:${col};${bg}">Je t'avais dit de ne pas revenir ici.</span></div>`}
-function catItems(id,O){const L=O[id].map(o=>o.h),grp=[];let last="";O[id].forEach(o=>{grp.push(o.grp&&o.grp!==last?`<div class="sa-grp">${esc(o.grp)}</div>`:"");last=o.grp});const old=L.map((h,i)=>grp[i]+h).join("");
+function catItems(id,O){const x0=window.SAX&&SAX[id]?SAX[id]():"";return x0+catItems0(id,O)}
+function catItems0(id,O){const L=O[id].map(o=>o.h),grp=[];let last="";O[id].forEach(o=>{grp.push(o.grp&&o.grp!==last?`<div class="sa-grp">${esc(o.grp)}</div>`:"");last=o.grp});const old=L.map((h,i)=>grp[i]+h).join("");
  switch(id){
  case "acc":return provRows()+`<div class="sa-grp">Catalogue</div>`+old+`<div class="it" data-f data-fid="sa-test" data-act="sa:test" data-desc="Mesure le temps de réponse de chaque fournisseur, sans ouvrir aucun flux."><span>Tester mes serveurs</span><span>${S.playlists.some(p=>p.ms)?S.playlists.filter(p=>p.ms).map(p=>esc(p.name)+" "+p.ms+" ms").join(" · "):"temps de réponse"} ›</span></div>`;
  case "lang":return `<div class="it" data-f data-fid="sa-plang0" data-act="sa:openprof:plang" data-desc="La version (VFF, VF, VOSTFR…) se règle par profil : OK pour régler celle de ${esc(ME().n)}."><span>Version préférée (${esc(ME().n)})</span><span>${esc(LANGN[ME().lang||"auto"])} ›</span></div>`+old+["autost","stsize","stbg","stcol"].map(newH).join("");

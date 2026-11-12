@@ -1874,6 +1874,34 @@ kbd{font-family:var(--ui);font-size:12px;background:#1c1f27;border:1px solid #2a
 .gt-rc .sc{position:absolute;right:10px;top:10px;font-size:12px;font-weight:800;padding:4px 7px;border-radius:7px;background:#34c759}
 .gt-rc small{font-size:12.5px;color:rgba(255,255,255,.72);line-height:1.35}.gt-rc.foc .gt-pst{box-shadow:0 0 0 4px #fff,0 20px 40px rgba(0,0,0,.55);transform:scale(1.05)}
 .gt-acts{display:flex;gap:12px;margin-top:auto}
+/* ===== fiches en arrière-plan (A + C) ===== */
+.tab.fcring{position:relative;width:46px;height:46px;padding:0;display:grid;place-items:center;border-radius:50%}
+.tab.fcring svg{position:absolute;inset:5px;width:36px;height:36px;transform:rotate(-90deg)}
+.tab.fcring .tr{fill:none;stroke:rgba(255,255,255,.18);stroke-width:3}
+.tab.fcring .pg{fill:none;stroke:#7dd3fc;stroke-width:3;stroke-linecap:round;transition:stroke-dashoffset .6s}
+.tab.fcring.fin .pg{stroke:#22c55e}
+.tab.fcring .fcn{position:relative;font-size:13px;font-weight:800;line-height:1}.tab.fcring .fcn.num{font-size:11px}
+.fcpopw{position:absolute;right:48px;top:96px;z-index:40;pointer-events:none}
+.fcpop{width:380px;padding:18px 20px;border-radius:22px;background:rgba(28,31,42,.62);-webkit-backdrop-filter:blur(26px) saturate(1.6);backdrop-filter:blur(26px) saturate(1.6);border:1px solid rgba(255,255,255,.16);box-shadow:inset 0 1px 0 rgba(255,255,255,.14),0 20px 50px rgba(0,0,0,.5);color:#fff;font-size:15px}
+.fcpop h3{margin:0 0 4px;font-size:18px}.fcpop .mut{color:rgba(255,255,255,.72)}.fcpop .sm{font-size:12.5px;margin-top:10px}
+.fcbar{display:grid;grid-template-columns:62px 1fr 110px;gap:10px;align-items:center;font-size:14px;margin-top:10px}
+.fcbar .t{height:6px;border-radius:6px;background:rgba(255,255,255,.15);overflow:hidden}.fcbar .t i{display:block;height:100%;border-radius:6px;background:var(--c);transition:width .6s}
+.fcbar span:last-child{text-align:right;color:rgba(255,255,255,.72);font-variant-numeric:tabular-nums}
+.fcpop .now{font-size:13.5px;color:rgba(255,255,255,.72);margin-top:8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.fcpop .now em{font-style:normal;color:#7dd3fc}
+.fcwh{position:absolute;left:50%;bottom:26px;transform:translateX(-50%);z-index:40;padding:10px 20px;border-radius:999px;font-size:15px;font-weight:600;color:#fff;white-space:nowrap;background:rgba(28,31,42,.62);-webkit-backdrop-filter:blur(24px) saturate(1.5);backdrop-filter:blur(24px) saturate(1.5);border:1px solid rgba(255,255,255,.16);animation:fcin .5s}
+@keyframes fcin{from{opacity:0;transform:translate(-50%,10px)}}
+.fcnew{animation:fcnew 1.1s ease}
+@keyframes fcnew{0%{opacity:.25;filter:brightness(1.9) saturate(.3)}100%{opacity:1;filter:none}}
+.sa-op.fcuk code{font:600 13px ui-monospace,Menlo,monospace;opacity:.6;display:block}
+.sa-op.fcuk small{display:block;font-size:14px;margin-top:3px}
+.fckey{margin-top:14px;padding-top:12px;border-top:1px solid rgba(255,255,255,.1)}
+.fckey p{margin:6px 0}.fckr{display:flex;gap:8px;flex-wrap:wrap}
+.fckr input{flex:1;min-width:220px;padding:9px 12px;border-radius:10px;border:1px solid rgba(255,255,255,.18);background:#0f1116;color:#fff;font:inherit}
+.fckr button{padding:9px 14px;border-radius:10px;border:1px solid rgba(255,255,255,.18);background:#1d2029;color:#fff;font:inherit;font-weight:600;cursor:pointer}
+.fcmsg{font-size:13px;opacity:.8}
+.sa-det .it[data-f]>span:first-child>small#fc-st{display:block;font-size:14px;font-weight:500;opacity:.68;margin-top:3px}
+.sa-det .it.foc>span:first-child>small#fc-st{opacity:.75}
+.sa-op.fcuk>span:first-child{display:flex;flex-direction:column;align-items:flex-start;gap:2px}
 </style>
 
 <div class="page">
@@ -3188,7 +3216,7 @@ PRISME_FIN
 perl /tmp/prisme-series.pl`;
 const RCMDSH="c(){ curl -sSLG --compressed -A \"Mozilla/5.0\" \"$@\"; }; [ -n \"$F\" ] || { printf \"Nom de ce fournisseur : \"; read -r F; }; [ -n \"$U\" ] || { printf \"Adresse du serveur (ex. http://monserveur.com:8080) : \"; read -r U; }; [ -n \"$N\" ] || { printf \"Nom d'utilisateur : \"; read -r N; }; printf \"Mot de passe de %s chez %s (il ne s'affiche pas quand tu tapes) : \" \"$N\" \"$F\"; read -rs P; echo; case \"$U\" in http*) ;; *) U=\"http://$U\";; esac; U=\"${U%%/get.php*}\"; U=\"${U%%/player_api.php*}\"; U=\"${U%/}\"; MS=$(c \"$U/player_api.php\" --data-urlencode \"username=$N\" --data-urlencode \"password=$P\" -o /dev/null -w \"%{time_total}\"); R=$(c \"$U/player_api.php\" --data-urlencode \"username=$N\" --data-urlencode \"password=$P\"); case \"$R\" in *'\"auth\":1'*|*'\"auth\": 1'*|*'\"auth\":\"1\"'*) echo \"\u2713 Connexion accept\u00e9e\";; *) echo \"\u26a0 Le serveur refuse la connexion ou r\u00e9pond autre chose. D\u00e9but de la r\u00e9ponse :\"; echo \"${R:0:200}\";; esac; D=~/Desktop/prisme-\"${F// /-}\"; mkdir -p \"$D\" && cd \"$D\" && printf '%s' \"$R\" | MS=\"$MS\" HOSTU=\"$U\" perl -MJSON::PP -0777 -e 'my $j = eval { JSON::PP->new->utf8->decode(<STDIN>) } || {}; delete $j->{user_info}{password} if ref $j->{user_info} eq \"HASH\"; $j->{ms} = int(($ENV{MS} || 0) * 1000); $j->{at} = time; $j->{host} = $ENV{HOSTU}; print JSON::PP->new->utf8->canonical->encode($j)' > compte.json; echo \"\u2713 compte : $(head -c 120 compte.json)\"; for a in get_live_categories get_live_streams get_vod_categories get_vod_streams get_series_categories get_series; do c \"$U/player_api.php\" --data-urlencode \"username=$N\" --data-urlencode \"password=$P\" --data-urlencode \"action=$a\" -o \"$a.json\"; echo \"\u2713 $a : $(wc -c < \"$a.json\" | tr -d ' ') octets, d\u00e9but : $(head -c 60 \"$a.json\")\"; done; c \"$U/xmltv.php\" --data-urlencode \"username=$N\" --data-urlencode \"password=$P\" -o xmltv.xml; echo \"\u2713 guide : $(wc -c < xmltv.xml | tr -d ' ') octets\"; ";
 const RXFLUX="export PRISME_U=\"$U\" PRISME_N=\"$N\" PRISME_P=\"$P\"; cat > /tmp/prisme-flux.pl <<'PRISME_FLUX'\n#!/usr/bin/perl\n# prisme : qualit\u00e9 de chaque flux SANS l'ouvrir. On demande au serveur la fiche technique qu'il a d\u00e9j\u00e0\n# (player_api.php ?action=get_vod_info / get_series_info : vid\u00e9o, audio, d\u00e9bit, dur\u00e9e, conteneur).\n# Ce sont des requ\u00eates d'information, comme la liste des films : aucune lecture de flux, donc aucune\n# connexion de lecture utilis\u00e9e. Les requ\u00eates sont envoy\u00e9es doucement (4 \u00e0 la fois, avec des pauses)\n# et gard\u00e9es en cache : la fois suivante, seuls les nouveaux films sont demand\u00e9s.\nuse strict; use warnings; use utf8; use JSON::PP; use File::Temp qw(tempdir); use File::Path qw(make_path);\nbinmode(STDOUT, \":utf8\");\nmy ($dir) = @ARGV; my ($U, $N, $P) = @ENV{qw(PRISME_U PRISME_N PRISME_P)};\ndie \"Dossier manquant\\n\" unless $dir && -d $dir; die \"Identifiants manquants\\n\" unless $U && defined $N && defined $P;\nmy $MAXV = $ENV{PRISME_MAXV} || 4000; my $MAXS = $ENV{PRISME_MAXS} || 1500;\nmy $J = JSON::PP->new->utf8->canonical; my $tmp = tempdir(CLEANUP => 1);\n(my $host = $U) =~ s{^https?://}{}; $host =~ s/[^A-Za-z0-9]+/-/g;\nmy $CACHE = \"$ENV{HOME}/Library/Caches/prisme-flux/$host\"; make_path(\"$CACHE/v\", \"$CACHE/s\");\nsub slurp { my ($f) = @_; open(my $h, \"<:raw\", $f) or return \"\"; local $/; my $d = <$h>; close $h; return defined $d ? $d : \"\" }\n# --- cat\u00e9gories : m\u00eame r\u00e8gle que prisme sur l'Apple TV (rep\u00e8re fran\u00e7ais, pays francophone ; langue \u00e9trang\u00e8re ignor\u00e9e) ---\n# On traite tout sauf les adultes et les cat\u00e9gories marqu\u00e9es d'une autre langue : celles que tu coches sur la TV en font partie.\nmy $CADULT = qr/adult|xxx|porn|\\+ ?18|18 ?\\+|for adults|erotic|\\bsex|\\bhot\\b/i;\nmy $CFR = qr/(^|[^a-z0-9])(fr|fra|fre|france|french|truefrench|vf|vff|vfq|vfi|vf2|vostfr|vost|stfr|subfrench|francais|francaises?)(?=$|[^a-z0-9])/;\nmy $CFO = qr/(^|[^a-z0-9])(be|bel|belgique|belgium|ca|qc|quebec|ch|suisse|swiss|lu|luxembourg|afrique|africain|francophones?|maghreb|dom-?tom|antilles|reunion)(?=$|[^a-z0-9])/;\nmy $CXX = qr/(^|[^a-z0-9])(en|eng|english|uk|gb|us|usa|american|de|ger|german|deutsch|deutschland|at|it|ita|italia|italian|italy|es|esp|spa|espana|spanish|latino|latam|mx|mexico|pt|por|portugal|portuguese|br|brasil|brazil|ar|arab|arabic|arabe|tr|tur|turk|turkish|turkiye|turkey|nl|dutch|nederland|pl|polska|polish|ru|rus|russia|russian|hindi|india|indian|pk|pakistan|urdu|punjabi|tamil|bangla|ex-?yu|yu|balkan|albania|greek|gr|ro|romania|swe|sweden|nordic|scandinavian|dk|denmark|norway|finland|kr|korea|korean|jp|japan|japanese|cn|china|chinese|filipino|pinoy|persian|iran|kurd|kurdish|hebrew|israel|afghan|somali|filme|serien|peliculas)(?=$|[^a-z0-9])/;\nsub cnrm { my ($s) = @_; $s = lc($s // \"\"); $s =~ tr/\u00e0\u00e2\u00e4\u00e1\u00e3\u00e5\u00e7\u00e9\u00e8\u00ea\u00eb\u00ed\u00ec\u00ee\u00ef\u00f1\u00f3\u00f2\u00f4\u00f6\u00f5\u00fa\u00f9\u00fb\u00fc\u00fd\u00ff\u0153\u00e6/aaaaaaceeeeiiiinooooouuuuyyoa/; return $s }\nsub catok { my ($f) = @_; my $c = eval { JSON::PP->new->utf8->decode(slurp($f)) }; return undef unless ref $c eq \"ARRAY\" && @$c; my %ok;\n  for my $x (@$c) { next unless ref $x eq \"HASH\"; my $raw = \"\" . ($x->{category_name} // \"\"); next if $raw =~ $CADULT; my $n = cnrm($raw);\n    next if $n !~ $CFR && $n !~ $CFO && $n =~ $CXX; $ok{\"\" . ($x->{category_id} // \"\")} = 1 } return \\%ok }\nsub enc { my ($s) = @_; utf8::encode($s) if utf8::is_utf8($s); $s =~ s/([^A-Za-z0-9\\-_.~])/sprintf(\"%%%02X\", ord $1)/ge; return $s }\nmy $auth = \"username=\" . enc($N) . \"&password=\" . enc($P);\n# 4 requ\u00eates \u00e0 la fois, 150 par vague, une pause entre les vagues : le serveur n'est jamais bouscul\u00e9\nsub fetch_api { my ($list) = @_; my $i = 0;\n  while ($i < @$list) { my @b = @$list[$i .. ($i + 149 < $#$list ? $i + 149 : $#$list)]; $i += 150;\n    my $cfg = \"$tmp/c\" . int(rand(1e9)); open(my $c, \">\", $cfg) or die; for (@b) { print $c \"url = \\\"$U/player_api.php?$auth&$_->[0]\\\"\\noutput = \\\"$_->[1]\\\"\\n\" } close $c;\n    system(\"curl\", \"-sSL\", \"--compressed\", \"--max-time\", \"20\", \"--retry\", \"1\", \"-A\", \"Mozilla/5.0\", \"--parallel\", \"--parallel-max\", \"4\", \"-K\", $cfg); unlink $cfg;\n    printf \"\\r  %d / %d\", ($i < @$list ? $i : scalar @$list), scalar @$list; sleep 1 if $i < @$list }\n  print \"\\n\" if @$list }\n# fiche technique ffprobe du serveur \u2192 r\u00e9sum\u00e9 compact\nsub probe { my ($inf) = @_; return undef unless ref $inf eq \"HASH\"; my $v = ref $inf->{video} eq \"HASH\" ? $inf->{video} : {}; my $a = ref $inf->{audio} eq \"HASH\" ? $inf->{audio} : {};\n  return undef unless $v->{codec_name} || $v->{height} || $a->{codec_name};\n  my $fr = $v->{avg_frame_rate} || $v->{r_frame_rate} || \"\"; my $fps = $fr =~ m{^(\\d+)/(\\d+)$} && $2 ? sprintf(\"%.3g\", $1 / $2) + 0 : 0;\n  my $tr = $v->{color_transfer} // \"\"; my $tag = lc($v->{codec_tag_string} // \"\") . \" \" . ($v->{profile} // \"\");\n  my $hdr = $tag =~ /dvh[e1]|dolby ?vision/i ? \"DV\" : $tr eq \"smpte2084\" ? \"HDR10\" : $tr eq \"arib-std-b67\" ? \"HLG\" : \"\";\n  my ($lang, $ttl) = (\"\", \"\"); for my $t ($a->{tags}, $v->{tags}) { next unless ref $t eq \"HASH\"; $lang ||= $t->{language} // $t->{LANGUAGE} // \"\"; $ttl ||= $t->{title} // $t->{handler_name} // \"\" }\n  # doublage : qu\u00e9b\u00e9cois (VFQ) ou de France (VFF) quand la piste le dit (langue fr-CA ou titre de piste)\n  $lang = \"frq\" if $lang =~ /^fr.?ca$/i || $ttl =~ /\\bvfq\\b|qu[\u00e9e]b|canad/i; $lang = \"frf\" if $lang !~ /^frq$/ && ($lang =~ /^fr.?fr$/i || $ttl =~ /\\bvff\\b|truefrench|france/i);\n  my $ap = $a->{profile} // \"\"; my $dur = $inf->{duration_secs} || 0;\n  return [($v->{width} || 0) + 0, ($v->{height} || 0) + 0, lc($v->{codec_name} // \"\"), $hdr, $fps, ($inf->{bitrate} || 0) + 0,\n          lc($a->{codec_name} // \"\"), ($a->{channels} || 0) + 0, lc($lang), $dur + 0, ($ap =~ /atmos|joc/i ? 1 : 0)] }\n\n# --- films : une fiche par flux (stream_id), en cache tant que le flux ne change pas ---\nmy $vs = eval { $J->decode(slurp(\"$dir/get_vod_streams.json\")) }; $vs = [] unless ref $vs eq \"ARRAY\";\nmy $okv = catok(\"$dir/get_vod_categories.json\"); my $oks = catok(\"$dir/get_series_categories.json\");\nmy @V = sort { ($b->{added} || 0) <=> ($a->{added} || 0) } grep { ref $_ eq \"HASH\" && $_->{stream_id} && ($_->{name} // \"\") !~ /adult|xxx|porn|\\+ ?18|18 ?\\+|erotic/i && (!$okv || $okv->{\"\" . ($_->{category_id} // \"\")}) } @$vs;\n@V = @V[0 .. $MAXV - 1] if @V > $MAXV;\nmy @need = grep { my $f = \"$CACHE/v/$_->{stream_id}-\" . ($_->{added} || 0) . \".json\"; !-s $f } @V;\nprint \"Fiches techniques des films : \", scalar(@V), \" flux (\", scalar(@V) - scalar(@need), \" d\u00e9j\u00e0 en cache)\u2026\\n\";\nfetch_api([map { [\"action=get_vod_info&vod_id=$_->{stream_id}\", \"$CACHE/v/$_->{stream_id}-\" . ($_->{added} || 0) . \".json\"] } @need]);\nmy (%VOD, $nv); for my $x (@V) { my $d = eval { $J->decode(slurp(\"$CACHE/v/$x->{stream_id}-\" . ($x->{added} || 0) . \".json\")) } || {};\n  my $p = probe($d->{info}); next unless $p; push @$p, $x->{container_extension} // \"\"; $VOD{$x->{stream_id}} = $p; $nv++ }\n\n# --- s\u00e9ries : la fiche du 1er \u00e9pisode de chaque s\u00e9rie (m\u00eame format), et le nombre d'\u00e9pisodes ---\nmy $ss = eval { $J->decode(slurp(\"$dir/get_series.json\")) }; $ss = [] unless ref $ss eq \"ARRAY\";\nmy @Sx = sort { ($b->{last_modified} || 0) <=> ($a->{last_modified} || 0) } grep { ref $_ eq \"HASH\" && $_->{series_id} && ($_->{name} // \"\") !~ /adult|xxx|porn/i && (!$oks || $oks->{\"\" . ($_->{category_id} // \"\")}) } @$ss;\n@Sx = @Sx[0 .. $MAXS - 1] if @Sx > $MAXS;\nmy @sneed = grep { !-s \"$CACHE/s/$_->{series_id}-\" . ($_->{last_modified} || 0) . \".json\" } @Sx;\nprint \"Fiches techniques des s\u00e9ries : \", scalar(@Sx), \" s\u00e9ries (\", scalar(@Sx) - scalar(@sneed), \" d\u00e9j\u00e0 en cache)\u2026\\n\";\nfetch_api([map { [\"action=get_series_info&series_id=$_->{series_id}\", \"$CACHE/s/$_->{series_id}-\" . ($_->{last_modified} || 0) . \".json\"] } @sneed]);\n# titre d'\u00e9pisode utile : on retire le nom de la s\u00e9rie et \u00ab S01E01 \u00bb ; il reste le vrai titre, ou rien\nsub eptitle { my ($t, $sn) = @_; $t = \"\" unless defined $t; $t =~ s/^.*?\\bS\\d{1,2}\\s*[-.]?\\s*E\\d{1,3}\\b\\s*[-\u2013:|.]*\\s*//i; $t =~ s/^\\s+|\\s+$//g;\n  my $b = lc $sn; $b =~ s/[^a-z0-9]+//g; my $c = lc $t; $c =~ s/[^a-z0-9]+//g; return \"\" if $c eq \"\" || $c eq $b || $t =~ /^(episode|\u00e9pisode|ep\\.?)\\s*\\d+$/i; return substr($t, 0, 90) }\nsub mins { my ($i) = @_; return 0 unless ref $i eq \"HASH\"; my $s = $i->{duration_secs} || 0; if (!$s && ($i->{duration} // \"\") =~ /^(\\d+):(\\d\\d):(\\d\\d)$/) { $s = $1 * 3600 + $2 * 60 + $3 } return int($s / 60 + .5) }\nmy (%SER, %EPI, $ns, $ne); for my $x (@Sx) { my $d = eval { $J->decode(slurp(\"$CACHE/s/$x->{series_id}-\" . ($x->{last_modified} || 0) . \".json\")) } || {};\n  my $eps = ref $d->{episodes} eq \"HASH\" ? $d->{episodes} : {}; my @all = map { ref $_ eq \"ARRAY\" ? @$_ : () } values %$eps; next unless @all;\n  # --- tous les \u00e9pisodes : nombre par saison (saisons 1, 2, 3\u2026 ; les \u00ab sp\u00e9ciaux \u00bb de la saison 0 sont ignor\u00e9s) et fiche courte de chacun ---\n  my (%cnt, %E); my $sname = \"\" . ($x->{name} // \"\");\n  for my $sk (keys %$eps) { next unless ref $eps->{$sk} eq \"ARRAY\"; for my $e (@{ $eps->{$sk} }) { next unless ref $e eq \"HASH\";\n      my $sn = ($e->{season} // $sk); $sn = $sk unless $sn =~ /^\\d+$/; next unless $sn =~ /^\\d+$/ && $sn > 0 && $sn < 100; my $en = $e->{episode_num} // 0; next unless $en =~ /^\\d+$/ && $en > 0 && $en < 1000;\n      my $i = ref $e->{info} eq \"HASH\" ? $e->{info} : {}; my $ad = $i->{air_date} // $i->{releasedate} // $i->{release_date} // \"\"; $ad = $ad =~ /^(\\d{4}-\\d\\d-\\d\\d)/ ? $1 : \"\";\n      my $pl = $i->{plot} // $i->{overview} // \"\"; $pl =~ s/^\\s+|\\s+$//g; $pl = substr($pl, 0, 300);\n      my $r = $i->{rating} // \"\"; $r = $r =~ /^\\d+(\\.\\d+)?$/ && $r > 0 && $r <= 10 ? $r + 0 : 0;\n      $cnt{$sn} = $en if !$cnt{$sn} || $en > $cnt{$sn};\n      $E{\"$sn-$en\"} = [eptitle($e->{title}, $sname), mins($i), $pl, $r, $ad, ($e->{added} && $e->{added} =~ /^\\d+$/ ? $e->{added} + 0 : 0), \"\" . ($e->{id} // \"\"), $e->{container_extension} // \"\"] } }\n  if (%cnt) { my @ss = sort { $a <=> $b } keys %cnt; $EPI{substr($sname, 0, 70)} = { se => [map { $cnt{$_} || 0 } 1 .. $ss[-1]], e => \\%E }; $ne += scalar(keys %E) }\n  my ($first) = grep { probe($_->{info}) } @all; next unless $first; my $p = probe($first->{info}); push @$p, $first->{container_extension} // \"\", scalar(@all);\n  $SER{substr(\"\" . ($x->{name} // \"\"), 0, 70)} = $p; $ns++ }\n\nopen(my $eo, \">:raw\", \"$dir/episodes.json\") or die \"Impossible d'\u00e9crire $dir/episodes.json\\n\"; print $eo $J->encode({ v => 1, at => time, s => \\%EPI }); close $eo;\nprintf \"\u2713 episodes.json : %d s\u00e9ries, %d \u00e9pisodes, %.1f Mo\\n\", scalar(keys %EPI), $ne || 0, (-s \"$dir/episodes.json\") / 1048576;\nopen(my $o, \">:raw\", \"$dir/flux.json\") or die \"Impossible d'\u00e9crire $dir/flux.json\\n\"; print $o $J->encode({ v => 1, at => time, vod => \\%VOD, ser => \\%SER }); close $o;\nprintf \"\u2713 flux.json : qualit\u00e9 connue pour %d flux de films et %d s\u00e9ries, sans ouvrir aucun flux.\\n\", $nv || 0, $ns || 0;\nPRISME_FLUX\nperl /tmp/prisme-flux.pl \"$D\"; unset PRISME_P; ";
-const FXR={"bar": "fx-bar", "l1": "fx-l1", "ok": "fx-ok", "mbox": "fx-mbox", "tab": "fx-tab", "player": "fx-player", "inp": "fx-inp", "tx": "fx-tx", "rk": "fx-rk", "gsec": "fx-gsec", "lbl": "fx-lbl", "hint": "fx-hint", "zap": "fx-zap", "av": "fx-av", "sh2": "fx-sh2", "pv": "fx-pv", "r": "fx-r", "w2": "fx-w2", "hero": "fx-hero", "ic": "fx-ic", "l": "fx-l", "trk": "fx-trk", "bg": "fx-bg", "ring": "fx-ring", "top": "fx-top", "rt": "fx-rt", "pst": "fx-pst", "more": "fx-more", "f-serif": "fx-f-serif", "chips": "fx-chips", "btn": "fx-btn", "st": "fx-st", "k": "fx-k", "ck": "fx-ck", "det": "fx-det", "two": "fx-two", "ph": "fx-ph", "f-black": "fx-f-black", "sub": "fx-sub", "round": "fx-round", "badge": "fx-badge", "lv": "fx-lv", "hd": "fx-hd", "logo": "fx-logo", "kick": "fx-kick", "sh": "fx-sh", "f-bebas": "fx-f-bebas", "grp": "fx-grp", "prev": "fx-prev", "syn": "fx-syn", "tabs": "fx-tabs", "open": "fx-open", "n": "fx-n", "prow": "fx-prow", "vol": "fx-vol", "pc": "fx-pc", "siri": "fx-siri", "brand": "fx-brand", "opt": "fx-opt", "dot": "fx-dot", "tm": "fx-tm", "meta": "fx-meta", "tl": "fx-tl", "d": "fx-d", "caret": "fx-caret", "chip": "fx-chip", "fg": "fx-fg", "row": "fx-row", "lab": "fx-lab", "t": "fx-t", "sw": "fx-sw", "shade": "fx-shade", "mfoot": "fx-mfoot", "f-sans": "fx-f-sans"};
+const FXR={"kick": "fx-kick", "ck": "fx-ck", "tx": "fx-tx", "grp": "fx-grp", "pc": "fx-pc", "player": "fx-player", "av": "fx-av", "btn": "fx-btn", "vol": "fx-vol", "mbox": "fx-mbox", "syn": "fx-syn", "tab": "fx-tab", "det": "fx-det", "two": "fx-two", "fg": "fx-fg", "pst": "fx-pst", "open": "fx-open", "chips": "fx-chips", "prev": "fx-prev", "meta": "fx-meta", "round": "fx-round", "d": "fx-d", "rk": "fx-rk", "mfoot": "fx-mfoot", "dot": "fx-dot", "lv": "fx-lv", "siri": "fx-siri", "ring": "fx-ring", "sw": "fx-sw", "bg": "fx-bg", "gsec": "fx-gsec", "hd": "fx-hd", "badge": "fx-badge", "bar": "fx-bar", "t": "fx-t", "opt": "fx-opt", "ph": "fx-ph", "f-bebas": "fx-f-bebas", "n": "fx-n", "rt": "fx-rt", "w2": "fx-w2", "f-black": "fx-f-black", "more": "fx-more", "chip": "fx-chip", "sh2": "fx-sh2", "sub": "fx-sub", "l1": "fx-l1", "r": "fx-r", "ok": "fx-ok", "caret": "fx-caret", "pv": "fx-pv", "hint": "fx-hint", "f-serif": "fx-f-serif", "tabs": "fx-tabs", "ic": "fx-ic", "lbl": "fx-lbl", "inp": "fx-inp", "zap": "fx-zap", "hero": "fx-hero", "sh": "fx-sh", "top": "fx-top", "tl": "fx-tl", "prow": "fx-prow", "k": "fx-k", "lab": "fx-lab", "shade": "fx-shade", "row": "fx-row", "tm": "fx-tm", "trk": "fx-trk", "l": "fx-l", "st": "fx-st", "logo": "fx-logo", "brand": "fx-brand", "f-sans": "fx-f-sans"};
 /* ===================== TV en direct : version A2C ===================== */
 const LGEN=["Cinéma","Séries","Sport","Info","Divertissement","Jeunesse","Découverte"];
 const LGC={"Cinéma":"#f59e0b","Séries":"#ec4899","Sport":"#22c55e","Info":"#3b82f6","Divertissement":"#a855f7","Jeunesse":"#facc15","Découverte":"#14b8a6","Reprendre":"#e5e7eb","Favoris":"#ff375f"};
@@ -5738,7 +5766,8 @@ function profDet(id){const p=PR.list[id],x=PX(p),cur=id===PR.cur,conf=SA.conf;
 /* ---------- détail d'une catégorie ---------- */
 function subPrev(){const sz=[18,22,27,32][val("stsize")],bg=["","text-shadow:0 2px 6px #000,0 0 3px #000","background:rgba(0,0,0,.72)"][val("stbg")],col=["#fff","#ffe14a"][val("stcol")];
  return `<div class="sa-prev"><span class="sa-k">Aperçu</span><span class="s" style="font-size:${sz}px;color:${col};${bg}">Je t'avais dit de ne pas revenir ici.</span></div>`}
-function catItems(id,O){const L=O[id].map(o=>o.h),grp=[];let last="";O[id].forEach(o=>{grp.push(o.grp&&o.grp!==last?`<div class="sa-grp">${esc(o.grp)}</div>`:"");last=o.grp});const old=L.map((h,i)=>grp[i]+h).join("");
+function catItems(id,O){const x0=window.SAX&&SAX[id]?SAX[id]():"";return x0+catItems0(id,O)}
+function catItems0(id,O){const L=O[id].map(o=>o.h),grp=[];let last="";O[id].forEach(o=>{grp.push(o.grp&&o.grp!==last?`<div class="sa-grp">${esc(o.grp)}</div>`:"");last=o.grp});const old=L.map((h,i)=>grp[i]+h).join("");
  switch(id){
  case "acc":return provRows()+`<div class="sa-grp">Catalogue</div>`+old+`<div class="it" data-f data-fid="sa-test" data-act="sa:test" data-desc="Mesure le temps de réponse de chaque fournisseur, sans ouvrir aucun flux."><span>Tester mes serveurs</span><span>${S.playlists.some(p=>p.ms)?S.playlists.filter(p=>p.ms).map(p=>esc(p.name)+" "+p.ms+" ms").join(" · "):"temps de réponse"} ›</span></div>`;
  case "lang":return `<div class="it" data-f data-fid="sa-plang0" data-act="sa:openprof:plang" data-desc="La version (VFF, VF, VOSTFR…) se règle par profil : OK pour régler celle de ${esc(ME().n)}."><span>Version préférée (${esc(ME().n)})</span><span>${esc(LANGN[ME().lang||"auto"])} ›</span></div>`+old+["autost","stsize","stbg","stcol"].map(newH).join("");
@@ -6269,6 +6298,177 @@ view.addEventListener("click",e=>{if(!(inApp()&&topS().t==="gtest"))return;const
  const m=S.modal;const newId=(k==="fxpdone"&&m&&m.isNew)?m.id:(k==="fxnk"&&v==="ok"&&m&&m.id&&m.id===window.GT_NEW)?m.id:null;
  const r=_a(a);if(newId&&PR.list[newId]){window.GT_NEW=null;S.modal=null;open(newId,"intro")}return r}}
 window.__gt={G,probes,recos,nextCard,neverList,apply,forget};
+})();
+
+/* ========================= FICHES EN ARRIÈRE-PLAN · maquette A + C =========================
+   prisme télécharge tout seul les fiches TMDB (titre, résumé, casting, affiche, note) des films et des séries
+   du fournisseur, l'écran d'abord, pendant que l'on navigue. Un anneau dans la barre d'onglets montre où il en est.
+   - données réelles + clé TMDB (tapée sous la télécommande, gardée dans ce navigateur) : vrais appels à TMDB
+   - données de démonstration : le même parcours, simulé                                                          */
+(function(){
+const LSK="prisme-fiches",KEYK="prisme-tmdb-key",API="https://api.themoviedb.org/3",IMGB="https://image.tmdb.org/t/p/";
+let C={mode:0,pp:0,nouv:1,hd:0,done:{},unk:{},fix:{},first:0,at:0};
+try{Object.assign(C,JSON.parse(localStorage.getItem(LSK)||"{}"))}catch(e){}
+const saveC=()=>{try{localStorage.setItem(LSK,JSON.stringify(C))}catch(e){}};
+const getKey=()=>{try{return localStorage.getItem(KEYK)||""}catch(e){return ""}};
+const MODES=["Automatique","La nuit seulement","Jamais"],PPS=["Mettre en pause","Continuer lentement"];
+/* état du moteur (non sauvegardé) */
+const E={q:[],prio:[],busy:0,paused:false,tot:{f:0,s:0},ok:{f:0,s:0},rate:[],fresh:{},bilan:"",bilanT:0,running:false,lastRender:0,demo:!(typeof REAL!=="undefined"&&REAL),lastErr:""};
+window.__fc={C,E};
+const isReal=()=>!E.demo&&!!getKey();
+const nf=n=>Math.round(n).toLocaleString("fr-FR");
+const kOf=it=>(it.type==="s"||SERIES.includes(it)?"s":"f")+":"+it.id;
+const hasFiche=it=>SERIES.includes(it)?!!(it.sxk&&/^t/.test(it.sxk)):!!it.tmd;
+const playing=()=>topS().t==="player"&&typeof P!=="undefined"&&P;
+const night=()=>{const h=new Date().getHours();return h>=1&&h<6};
+function allowed(){if(C.mode===2||E.paused)return false;if(C.mode===1&&!night())return false;if(playing()&&!C.pp)return false;return true}
+
+/* ---------- la file : l'écran d'abord, puis en cours, ma liste, nouveautés, le reste ---------- */
+function build(){const F=FILMS.slice(),Sx=SERIES.slice(),week=7*864e5,now=Date.now();
+ E.tot={f:F.length,s:Sx.length};const need=it=>{const k=kOf(it),d=C.done[k];if(C.fix[k])return false;if(isReal()&&hasFiche(it)&&!E.force)return false;if(!d)return true;if(!C.nouv&&now-d>week)return true;return false};
+ const score=it=>(S.prog[it.id]?3e9:0)+(S.favs.includes(it.id)?2e9:0)+((it._real&&it._real.a)||it.y*1e5||0);
+ E.q=[...F,...Sx].filter(need).sort((a,b)=>score(b)-score(a)).map(kOf);
+ E.ok={f:F.filter(it=>!need(it)).length,s:Sx.filter(it=>!need(it)).length}}
+const left=()=>E.q.length+E.prio.length;
+const total=()=>E.tot.f+E.tot.s,doneN=()=>E.ok.f+E.ok.s;
+const pct=()=>total()?Math.min(100,Math.floor(doneN()/total()*100)):100;
+function itemOfK(k){const id=k.slice(2);return ALL[id]||null}
+
+/* ---------- TMDB ---------- */
+const simp=s=>RI.strip(String(s||"")).replace(/[^a-z0-9]+/g,"");
+async function tm(path){const key=getKey(),v4=key.length>60;const u=API+path+(path.includes("?")?"&":"?")+"language=fr-FR"+(v4?"":"&api_key="+encodeURIComponent(key));
+ const r=await fetch(u,v4?{headers:{Authorization:"Bearer "+key}}:{});if(r.status===429){await new Promise(z=>setTimeout(z,1500));return tm(path)}
+ if(r.status===401){E.lastErr="TMDB refuse la clé";throw new Error("cle")}if(!r.ok)throw new Error("http "+r.status);return r.json()}
+const img=(p,w)=>p?IMGB+w+p:"";
+async function fetchFilm(it){const r=it._real||{};let id=+r.tm||0,cands=[];
+ if(!id){const j=await tm(`/search/movie?query=${encodeURIComponent(it.t)}${it.y?"&year="+it.y:""}&include_adult=false`);const w=simp(it.t);
+  cands=(j.results||[]).slice(0,3).map(m=>[m.id,m.title,(m.release_date||"").slice(0,4),m.poster_path||""]);
+  for(const m of j.results||[]){if([m.title,m.original_title].some(x=>x&&(simp(x)===w||(w.length>=5&&simp(x).indexOf(w)===0)))){id=m.id;break}}
+  if(!id&&(j.results||[]).length===1)id=j.results[0].id}
+ if(!id)return {unk:cands};
+ const d=await tm(`/movie/${id}?append_to_response=credits,release_dates`);let age="";
+ for(const x of ((d.release_dates||{}).results||[]))if(x.iso_3166_1==="FR")for(const y of x.release_dates||[])if(y.certification){age=y.certification;break}
+ const dir=((d.credits||{}).crew||[]).filter(c=>c.job==="Director").map(c=>c.name).join(", ");
+ const m={t:d.title,ot:d.original_title,y:+(d.release_date||"").slice(0,4)||it.y,d:d.runtime||0,g:(d.genres||[]).map(g=>g.name),ov:d.overview||"",tg:d.tagline||"",age,va:d.vote_average||0,vc:d.vote_count||0,dir,
+  po:img(d.poster_path,C.hd?"w342":"w185"),bd:img(d.backdrop_path,"w780"),cast:((d.credits||{}).cast||[]).slice(0,8).map(c=>[c.name,c.character||""])};
+ TMD.m[id]=m;for(const s of r.s||[]){if(s[1])TMD.names[s[1]]=id;if(s[4])TMD.sids[s[4]]=id}if(!r.tm)r.tmfc=1;r.tm=id;return {id}}
+async function fetchSerie(it){const r=it._real||{};const j=await tm(`/search/tv?query=${encodeURIComponent(it.t)}`);const w=simp(it.t);let id=0;
+ const cands=(j.results||[]).slice(0,3).map(m=>[m.id,m.name,(m.first_air_date||"").slice(0,4),m.poster_path||""]);
+ for(const m of j.results||[]){if([m.name,m.original_name].some(x=>x&&(simp(x)===w||(w.length>=5&&simp(x).indexOf(w)===0)))){id=m.id;break}}
+ if(!id&&(j.results||[]).length===1)id=j.results[0].id;if(!id)return {unk:cands};return applySerie(it,id)}
+async function applySerie(it,id){const r=it._real||{};const d=await tm(`/tv/${id}?append_to_response=credits,content_ratings`);let age="";
+ for(const x of ((d.content_ratings||{}).results||[]))if(x.iso_3166_1==="FR"&&x.rating){age=x.rating;break}
+ const k="t"+id;SXD.m[k]={t:d.name,y:+(d.first_air_date||"").slice(0,4)||it.y,g:(d.genres||[]).map(g=>g.name),ov:d.overview||"",net:(((d.networks||[])[0])||{}).name||"",cr:(d.created_by||[]).map(c=>c.name).join(", "),
+  va:d.vote_average||0,age,po:img(d.poster_path,C.hd?"w342":"w185"),bd:img(d.backdrop_path,"w780"),ep:(d.episode_run_time||[])[0]||0,cast:((d.credits||{}).cast||[]).slice(0,8).map(c=>[c.name,c.character||""])};
+ for(const s of r.s||[])if(s[1])SXD.names[s[1]]=k;return {id}}
+
+/* ---------- sauvegarde des fiches téléchargées (reprise après coupure) ---------- */
+let dirty=0;
+async function persist(){if(!dirty||E.demo)return;dirty=0;try{await idbSet("fcfilms",{m:TMD.m,names:TMD.names,sids:TMD.sids});await idbSet("fcseries",{m:SXD.m,names:SXD.names})}catch(e){}}
+setInterval(persist,8000);
+if(!E.demo)Promise.all([idbGet("fcfilms").catch(()=>null),idbGet("fcseries").catch(()=>null)]).then(([f,s])=>{
+ if(f){Object.assign(TMD.m,f.m||{});Object.assign(TMD.names,f.names||{});Object.assign(TMD.sids,f.sids||{});tmApply()}
+ if(s){Object.assign(SXD.m,s.m||{});Object.assign(SXD.names,s.names||{});sxApply()}
+ if((f||s)&&inApp()&&!S.loading)render(F&&F.dataset.fid);start()}).catch(()=>start());
+
+/* ---------- le moteur ---------- */
+async function one(k){const it=itemOfK(k);if(!it){C.done[k]=Date.now();return}
+ const ser=k[0]==="s";
+ if(isReal()){let res;try{res=ser?await fetchSerie(it):await fetchFilm(it)}catch(e){if(e.message==="cle"){E.paused=true;toast("TMDB refuse la clé : vérifie-la sous la télécommande");return}E.q.push(k);return}
+  if(res.unk){C.unk[k]={raw:((it._real||{}).s||[[0,it.t]])[0][1]||it.t,t:it.t,c:res.unk,i:0}}else{delete C.unk[k];dirty=1;applySoon(it.id)}}
+ else{await new Promise(z=>setTimeout(z,E.demo?380:10));applySoon(it.id)}
+ C.done[k]=Date.now();E.ok[ser?"s":"f"]++;E.rate.push(Date.now());if(E.rate.length>40)E.rate.shift()}
+let applyT=null,pend=new Set();
+function applySoon(id){pend.add(id);if(applyT)return;applyT=setTimeout(()=>{applyT=null;const ids=[...pend];pend.clear();
+ if(isReal()){tmApply();sxApply();if(typeof FXS!=="undefined")FXS.cache={};if(window.__sx&&__sx.X)__sx.X.cache={}}
+ const t=Date.now();ids.forEach(i=>E.fresh[i]=t);refresh()},1200)}
+/* on redessine sans perdre le focus, jamais pendant la lecture ni dans une fenêtre */
+function refresh(){if(!inApp()||S.loading||S.modal||playing()||topS().t==="search")return;if(Date.now()-E.lastRender<4000)return;E.lastRender=Date.now();render(F&&F.dataset.fid)}
+async function loop(){if(E.running)return;E.running=true;
+ while(left()){if(!allowed()){await new Promise(z=>setTimeout(z,1000));paint();continue}
+  const slow=playing()&&C.pp;const n=slow?1:isReal()?4:1;const batch=[];
+  while(batch.length<n&&left()){const k=E.prio.length?E.prio.shift():E.q.shift();if(k&&!C.done[k]&&!batch.includes(k))batch.push(k)}
+  await Promise.all(batch.map(one));saveC();paint();if(slow)await new Promise(z=>setTimeout(z,1500))}
+ E.running=false;E.force=false;finish()}
+function finish(){if(!total())return;const first=!C.first;C.first=C.first||Date.now();C.at=Date.now();saveC();persist();const u=Object.keys(C.unk).length;
+ E.bilan=`✓ Fiches à jour · ${nf(E.ok.f)} films, ${nf(E.ok.s)} séries${u?` · ${u} à vérifier`:""}`;E.bilanT=Date.now()+5000;E.ringKeep=false;paint();
+ if(first||E.wasRunning)refresh();E.wasRunning=false}
+function start(){if(!inApp()||C.mode===2)return paint();if(!E.demo&&!getKey())return paint();build();if(left()){E.wasRunning=true;loop()}paint()}
+
+/* ---------- anneau dans la barre d'onglets + panneau ---------- */
+const CIRC=2*Math.PI*15;
+function ringIc(){if(C.mode===2)return "";if(!E.demo&&!getKey())return "";const fin=!left();if(fin&&Date.now()>E.bilanT&&!E.ringKeep)return "";
+ const ic=fin?"✓":E.paused?"⏸":playing()&&!C.pp?"⏸":C.mode===1&&!night()?"🌙":pct();
+ return `<div class="tab ic fcring ${fin?"fin":""}" data-f data-fid="tab-fc" data-row="tabs" data-act="fc:go" aria-label="Fiches"><svg viewBox="0 0 36 36"><circle cx="18" cy="18" r="15" class="tr"/><circle cx="18" cy="18" r="15" class="pg" style="stroke-dasharray:${CIRC};stroke-dashoffset:${CIRC*(1-pct()/100)}"/></svg><span class="fcn ${typeof ic==="number"?"num":""}">${ic}</span></div>`}
+{const _tb=tabbar;tabbar=function(){const h=_tb(),r=ringIc();if(!r)return h;const i=h.lastIndexOf("</div></div>");return h.slice(0,i)+r+h.slice(i)}}
+function status(){if(C.mode===2)return "désactivé · les fiches arrivent seulement quand tu les ouvres";if(!E.demo&&!getKey())return "ajoute ta clé TMDB sous la télécommande";
+ if(!left())return `à jour · ${nf(doneN())} fiches${C.at?" · le "+new Date(C.at).toLocaleDateString("fr-FR"):""} · ${mo()} Mo`;
+ if(E.paused)return "en pause · "+nf(doneN())+" / "+nf(total());if(playing()&&!C.pp)return "en pause pendant la lecture";if(C.mode===1&&!night())return "prévu cette nuit, entre 1 h et 6 h";
+ return `${nf(doneN())} / ${nf(total())} · reste ${eta()} · ${mo()} Mo`}
+function eta(){const r=E.rate;if(r.length<5)return "…";const per=(r[r.length-1]-r[0])/(r.length-1)||100,s=left()*per/1000;return s<60?"moins d'1 min":"≈ "+Math.ceil(s/60)+" min"}
+const mo=()=>Math.round(doneN()*(C.hd?.16:.06));
+function popHtml(){const f=E.ok.f,s=E.ok.s,bar=(n,a,b,c)=>`<div class="fcbar" style="--c:${c}"><span>${n}</span><span class="t"><i style="width:${b?a/b*100:100}%"></i></span><span>${nf(a)} / ${nf(b)}</span></div>`;
+ const nx=E.prio[0]||E.q[0],it=nx&&itemOfK(nx);
+ return `<div class="fcpop"><h3>${left()?"Fiches en cours":"Fiches à jour"}</h3><div class="mut">${esc(status())}${E.demo?" · démo":""}</div>${bar("Films",f,E.tot.f,"#7dd3fc")}${bar("Séries",s,E.tot.s,"#a78bfa")}
+ ${left()&&allowed()&&it?`<div class="now">En ce moment : <em>${esc(it.t)}</em></div><div class="now">${E.prio.length?"Priorité : ce que tu regardes":"Ordre : en cours, ma liste, nouveautés, puis le reste"}</div>`:""}
+ ${Object.keys(C.unk).length?`<div class="now">${Object.keys(C.unk).length} fiche(s) à vérifier</div>`:""}<div class="mut sm">OK : ouvrir le réglage</div></div>`}
+function paint(){const v=$("#view");if(!v)return;const r=v.querySelector(".fcring");
+ if(r){const pg=r.querySelector(".pg");if(pg)pg.style.strokeDashoffset=CIRC*(1-pct()/100);const n=r.querySelector(".fcn");const ic=!left()?"✓":E.paused||(playing()&&!C.pp)?"⏸":C.mode===1&&!night()?"🌙":pct();if(n&&n.textContent!==String(ic)){n.textContent=ic;n.classList.toggle("num",typeof ic==="number")}r.classList.toggle("fin",!left())}
+ let p=v.querySelector(".fcpop");const want=F&&F.dataset&&F.dataset.fid==="tab-fc";
+ if(want){if(!p){v.insertAdjacentHTML("beforeend",`<div class="fcpopw"></div>`);p=v.querySelector(".fcpopw")}else p=p.parentNode;p.innerHTML=popHtml()}else if(p)p.parentNode.remove();
+ let w=v.querySelector(".fcwh");const show=E.bilan&&Date.now()<E.bilanT;if(show&&!w){v.insertAdjacentHTML("beforeend",`<div class="fcwh">${esc(E.bilan)}</div>`)}else if(!show&&w)w.remove();
+ const st=v.querySelector("#fc-st");if(st)st.textContent=status();}
+setInterval(()=>{paint();if(E.bilanT&&Date.now()>E.bilanT+300&&!left()){E.bilanT=0;if(inApp()&&!S.loading&&!S.modal&&!playing()&&F&&F.dataset.fid!=="tab-fc")render(F&&F.dataset.fid)}},1000);
+/* priorité : la fiche que l'on survole passe devant */
+{const _sf=setFocus;setFocus=function(el,i){const r=_sf(el,i);try{const id=el&&el.dataset&&el.dataset.hid;if(id&&ALL[id]){const k=kOf(ALL[id]);if(!C.done[k]&&E.q.includes(k)){E.q.splice(E.q.indexOf(k),1);E.prio.unshift(k);E.prio=E.prio.slice(0,6)}}}catch(e){}paint();return r}}
+/* fiches qui s'allument : fondu sur les affiches arrivées à l'instant */
+{const _r=render;render=function(fid){const r=_r(fid);try{const t=Date.now();for(const id in E.fresh){if(t-E.fresh[id]>5000){delete E.fresh[id];continue}document.querySelectorAll(`#view [data-hid="${CSS.escape(id)}"]`).forEach(e=>e.classList.add("fcnew"))}}catch(e){}paint();return r}}
+
+/* ---------- Réglages › Accueils et notes ---------- */
+window.SAX=window.SAX||{};
+const row=(fid,act,t,d,v)=>`<div class="it" data-f data-fid="${fid}" data-act="${act}" data-desc="${esc(d)}"><span>${t}</span><span>${v} ›</span></div>`;
+SAX.homes=()=>{const u=Object.keys(C.unk).length,key=getKey();let h=`<div class="sa-grp">Fiches en arrière-plan</div>`;
+ h+=`<div class="it" data-f data-fid="fc-mode" data-act="fc:mode" data-desc="Automatique : prisme télécharge les fiches dès qu'un fournisseur est ajouté, l'écran d'abord. La nuit seulement : entre 1 h et 6 h. Jamais : une fiche arrive quand tu l'ouvres."><span>Fiches TMDB<small id="fc-st">${esc(status())}</small></span><span>${MODES[C.mode]} ›</span></div>`;
+ if(C.mode!==2&&left())h+=row("fc-pause","fc:pause",E.paused?"Reprendre maintenant":"Mettre en pause",E.paused?"Le téléchargement repart où il en était.":"Jusqu'à ce que tu relances. Rien n'est perdu.","");
+ h+=row("fc-nouv","fc:nouv","Après le premier passage","Seulement les nouveautés : les fois suivantes, prisme ne télécharge que les films et séries arrivés chez le fournisseur.",C.nouv?"Seulement les nouveautés":"Tout revérifier chaque semaine");
+ h+=row("fc-pp","fc:pp","Pendant la lecture","Pour ne pas gêner la vidéo.",PPS[C.pp]);
+ h+=row("fc-hd","fc:hd","Qualité des affiches",C.hd?"HD : ≈ 160 Mo pour 1 000 fiches.":"Légères : ≈ 60 Mo pour 1 000 fiches.",C.hd?"HD":"Légères");
+ h+=row("fc-unk","fc:unk","Fiches non reconnues","Les titres que TMDB n'a pas trouvés tels quels, avec sa proposition à valider.",u?u+" à vérifier":"aucune");
+ if(SA.open==="fcunk")h+=Object.entries(C.unk).slice(0,30).map(([k,x],i)=>{const c=x.c[x.i||0];return `<div class="sa-op fcuk" data-f data-fid="fc-u-${i}" data-act="fc:pick:${k}" data-desc="OK : associer cette fiche · → : proposition suivante"><span><code>${esc(x.raw)}</code><small>${c?`${esc(c[1])} (${c[2]||"?"})${x.c.length>1?` · ${(x.i||0)+1}/${x.c.length}`:""}`:"aucune proposition"}</small></span><span>${c?"Associer ›":"Ignorer ›"}</span></div>`}).join("");
+ h+=row("fc-redo","fc:redo","Tout retélécharger","Efface les fiches téléchargées par prisme et recommence.","");
+ h+=`<div class="it sa-fixed"><span>Clé TMDB<small>${key?"enregistrée dans ce navigateur":"à taper sous la télécommande, dans « Mes données fournisseur »"}</small></span><span>${key?"✓":E.demo?"démo":"manquante"}</span></div>`;
+ return h};
+{const _a=act;act=function(a){if(typeof a!=="string"||!a.startsWith("fc:"))return _a(a);const rest=a.slice(3),ci=rest.indexOf(":"),w=ci<0?rest:rest.slice(0,ci),x=ci<0?"":rest.slice(ci+1);
+ switch(w){
+ case "go":if(window.SA){SA.cat="homes";SA.q="";SA.open=null;SA.prof=null}S.stack=[S.stack[0]];S.tab="settings";save();return render("fc-mode");
+ case "mode":C.mode=(C.mode+1)%3;saveC();E.paused=false;if(C.mode!==2)start();return render("fc-mode");
+ case "pause":E.paused=!E.paused;toast(E.paused?"⏸ Fiches en pause":"▶︎ Les fiches reprennent");if(!E.paused)start();return render("fc-pause");
+ case "nouv":C.nouv=C.nouv?0:1;saveC();return render("fc-nouv");
+ case "pp":C.pp=C.pp?0:1;saveC();return render("fc-pp");
+ case "hd":C.hd=C.hd?0:1;saveC();toast(C.hd?"Les prochaines affiches seront en HD":"Les prochaines affiches seront légères");return render("fc-hd");
+ case "unk":if(!Object.keys(C.unk).length){toast("Tout est reconnu ✓");return}SA.open=SA.open==="fcunk"?null:"fcunk";return render(SA.open?"fc-u-0":"fc-unk");
+ case "pick":{const u=C.unk[x];if(!u)return;const c=u.c[u.i||0],it=itemOfK(x);delete C.unk[x];C.fix[x]=1;saveC();
+  if(c&&it&&isReal()){(x[0]==="s"?applySerie(it,c[0]):(it._real.tm=c[0],fetchFilm(it))).then(()=>{dirty=1;applySoon(it.id);E.lastRender=0;refresh()}).catch(()=>{})}
+  toast(c?`✓ Associé à « ${c[1]} »`:"Titre ignoré");return render(Object.keys(C.unk).length?"fc-u-0":"fc-unk")}
+ case "redo":C.done={};C.unk={};C.fix={};C.first=0;saveC();E.force=true;if(isReal()){for(const it of FILMS)if(it._real&&it._real.tmfc){delete it._real.tm;delete it._real.tmfc}idbSet("fcfilms",{m:{},names:{},sids:{}}).catch(()=>{});idbSet("fcseries",{m:{},names:{}}).catch(()=>{})}
+  E.paused=false;E.ringKeep=true;start();toast("On recommence depuis le début");return render("fc-redo")}}}
+/* → sur une fiche non reconnue : proposition suivante */
+{const _k=key;key=function(k){if((k==="right"||k==="left")&&F&&/^fc-u-/.test(F.dataset.fid||"")){const a=F.dataset.act.slice(8),u=C.unk[a];if(u&&u.c.length>1){u.i=((u.i||0)+(k==="right"?1:u.c.length-1))%u.c.length;saveC();return render(F.dataset.fid)}return}return _k(k)}}
+
+/* ---------- clé TMDB sous la télécommande (jamais dans la conversation) ---------- */
+const box=document.querySelector(".rimp");
+if(box){box.insertAdjacentHTML("beforeend",`<div class="fckey"><b>Fiches en arrière-plan</b><p>Avec ta clé API TMDB, l'Apple TV télécharge elle-même les fiches des films et des séries, sans commande Terminal. La clé reste dans ce navigateur.</p>
+ <div class="fckr"><input type="password" id="fckey" placeholder="${getKey()?"clé enregistrée ✓ (tape une autre clé pour la changer)":"colle ta clé API TMDB ici"}" autocomplete="off" spellcheck="false"><button id="fckok">Enregistrer</button>${getKey()?`<button id="fckdel">Oublier la clé</button>`:""}</div><p id="fckmsg" class="fcmsg"></p></div>`);
+ const msg=t=>{const m=$("#fckmsg");if(m)m.textContent=t};
+ $("#fckey").addEventListener("keydown",e=>{e.stopPropagation();if(e.key==="Enter")$("#fckok").click()});
+ $("#fckok").addEventListener("click",async()=>{const v=$("#fckey").value.trim();if(!v)return msg("Colle d'abord ta clé.");msg("Vérification auprès de TMDB…");
+  try{const v4=v.length>60;const r=await fetch(API+"/configuration"+(v4?"":"?api_key="+encodeURIComponent(v)),v4?{headers:{Authorization:"Bearer "+v}}:{});if(!r.ok)throw 0;
+   localStorage.setItem(KEYK,v);$("#fckey").value="";msg(E.demo?"✓ Clé acceptée. Elle servira dès que tes données réelles seront importées.":"✓ Clé acceptée : les fiches se téléchargent sur la TV.");E.paused=false;start();if(inApp()&&!S.loading)render(F&&F.dataset.fid)}
+  catch(e){msg("TMDB refuse cette clé, ou la connexion a échoué. Vérifie-la sur themoviedb.org › Paramètres › API.")}});
+ const del=$("#fckdel");if(del)del.addEventListener("click",()=>{try{localStorage.removeItem(KEYK)}catch(e){}msg("Clé oubliée.");paint()})}
+
+/* démarrage : après l'écran de chargement */
+const boot=setInterval(()=>{if(typeof S!=="undefined"&&!S.loading&&inApp()){clearInterval(boot);start()}},700);
 })();
 
 render();if(inApp())lPreload(()=>render());
