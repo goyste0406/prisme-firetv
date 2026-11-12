@@ -259,6 +259,7 @@ rd = lambda n: open(os.path.join(D, n), encoding="utf-8").read()
 R("const FILMS = [", "/* pako 1.0.11 (MIT) : compression du catalogue */\n" + rd("pako.min.js") + "\n" + rd("real_boot.js") + "const FILMS = [")
 R("C.filter(c=>c.cat===S.lcat)}", "C.filter(c=>inCatL(c,S.lcat))}")
 R(":C.filter(c=>c.cat===k).length;", ":C.filter(c=>inCatL(c,k)).length;")
+R(' ${sec("l","Catégories TV en direct",LCATS.filter(([k])=>k!=="all"&&k!=="fav"))}\n ${sec("f","Catégories films",FCATS.filter(([k])=>k!=="nolan"))}\n ${sec("s","Catégories séries",SCATS)}', ' ${sec("l","Catégories TV en direct",LCATS.filter(([k])=>k!=="all"&&k!=="fav"&&(!REAL||catCount(p,"l",k)>0)))}\n ${sec("f","Catégories films",FCATS.filter(([k])=>k!=="nolan"&&(!REAL||catCount(p,"f",k)>0)))}\n ${sec("s","Catégories séries",SCATS.filter(([k])=>!REAL||catCount(p,"s",k)>0))}')
 R('function catCount(pl,type,k){if(type==="l")return CHS.filter(c=>c.cat===k&&base(pl,"ch:"+c.id)).length;return (type==="f"?FILMS:SERIES).filter(i=>base(pl,i.id)&&provCat(pl,i)===k).length}', 'function catCount(pl,type,k){if(type==="l")return CHS.filter(c=>inCatL(c,k)&&base(pl,"ch:"+c.id)).length;return (type==="f"?FILMS:SERIES).filter(i=>base(pl,i.id)&&(i._real&&i._real.c?i._real.c.includes(k):provCat(pl,i)===k)).length}')
 R('FILMS.forEach(f=>f.type="f"); SERIES.forEach(s=>s.type="s");', rd("real_block1.js") + 'FILMS.forEach(f=>f.type="f"); SERIES.forEach(s=>s.type="s");')
 R("const CH={}; CHS.forEach(c=>CH[c.id]=c);", rd("real_block2.js") + "const CH={}; CHS.forEach(c=>CH[c.id]=c);")
@@ -286,6 +287,9 @@ R('setBg([CH[S.lch].col,"#08080c"])', 'setBg([(CH[S.lch]||{col:"#1a1a22"}).col,"
 R("<kbd>M</kbd> (ou maintenir le clic) ajouter/retirer des favoris", "<kbd>M</kbd> (ou maintenir le clic) favoris, ou options d'une chaîne dans la TV en direct")
 
 R('<div class="pkick">${it.type==="s"?"Série · "+esc(it.net):"Film · "+it.y}', '<div class="pkick">${it.rp?"Replay · "+esc(CH[it.rp.c].n)+" · diffusé "+lday(it.rp.s):it.type==="s"?"Série · "+esc(it.net):"Film · "+it.y}')
+_k = src.index("<script>", src.index("</style>")); src = src[:_k] + "<script>\n" + rd("errh.js") + src[_k+len("<script>"):]
+src = src.replace("\nrender();if(inApp())lPreload(()=>render());\n</script>", "\nrender();if(inApp())lPreload(()=>render());window.__prReady=true;\n</script>")
+assert "window.__prReady=true" in src
 assert "fire tv" not in src.lower().replace("prisme-firetv", ""), [m.start() for m in re.finditer("(?i)fire ?tv", src)]
 open(OUT, "w", encoding="utf-8").write(src)
 print("OK", OUT, len(src))
