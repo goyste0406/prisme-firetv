@@ -303,6 +303,8 @@ R('<div class="mlist sy">${L.map', '<div class="mlist sy ty"><div class="ttrack"
 R('}).join("")}</div><div class="mfoot">OK pour lire cette source', '}).join("")}</div></div><div class="mfoot">OK pour lire cette source')
 R('  if(cs.contains("sy")){const a=el.closest("[data-anchor]")', '  if(cs.contains("ty")){tyFollow(p,el,instant)}else if(cs.contains("sy")){const a=el.closest("[data-anchor]")')
 R("</style>", rd("defil.css") + "</style>")
+# réglages d'un fournisseur : avec des centaines de catégories, on dessine les 60 premières de chaque type, la suite arrive en descendant
+R('<div class="grp">${cats.map(([k,l])=>{const hk=type+":"+k,h=hid.includes(hk)', '<div class="grp">${plmCut(p.id,type,cats).map(([k,l])=>{const hk=type+":"+k,h=hid.includes(hk)')
 R("function ensureVisible(el,instant){", rd("defil.js") + "function ensureVisible(el,instant){")
 R('const norm=s=>s.normalize("NFD")', 'let norm=s=>s.normalize("NFD")')
 R(' const dup=[...FILMS,...SERIES].filter(i=>srcs(i.id).length>1).length+CHS.filter(c=>srcs("ch:"+c.id).length>1).length;', ' const dup=RMEMO.dup!=null?RMEMO.dup:(RMEMO.dup=[...FILMS,...SERIES].filter(i=>nsrc(i.id)>1).length+CHS.filter(c=>nsrc("ch:"+c.id)>1).length);')

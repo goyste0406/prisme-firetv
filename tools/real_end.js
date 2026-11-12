@@ -5,14 +5,17 @@ if(REAL){
  if(!CH[S.lch]&&CHS[0])S.lch=CHS[0].id;
  LCATS.splice(0,LCATS.length,["all","Toutes les chaînes"],["fav","Favoris"],...REAL.lcats);
  const itemOf=key=>key.startsWith("ch:")?(CH[key.slice(3)]||{})._real:(ALL[key]||{})._real;
- const plsOf=r=>r._pl instanceof Set?r._pl:(r._pl=new Set(r.s.map(x=>x[0])));
- base=function(pl,key){const r=itemOf(key);return r?plsOf(r).has(pl.id):false};
+ /* « ce fournisseur a-t-il ce titre ? » : on lit directement ses 1 à 3 sources (avant : un ensemble créé pour chacun des
+    80 000 titres, environ 10 Mo de mémoire pour rien) */
+ const inPl=(r,id)=>{const S1=r.s;for(let i=0;i<S1.length;i++)if(S1[i][0]===id)return true;return false};
+ const plsOf=r=>({has:id=>inPl(r,id)});
+ base=function(pl,key){const r=itemOf(key);return r?inPl(r,pl.id):false};
  variants=function(pl,key){const r=itemOf(key);if(!r)return [];const L=r.s.filter(x=>x[0]===pl.id);
   if(key.startsWith("ch:"))return L.map((x,i)=>({id:pl.id+"|"+i,i,p:pl,q:x[2],name:x[1],codec:RCODEC[x[2]],audio:["Français"],subs:["Télétexte si diffusé"],ext:"ts",ar:x[3]||0}));
   return L.map((x,i)=>{const tag=tagOf(x[1]),fr=tag==="VOSTFR"?null:frOf(x[1]),frl=fr&&fr!=="VF"?`${FRL[fr]} · ${fr}`:"Français (VF)";const v={id:pl.id+"|"+i,i,p:pl,q:x[2],tag,fr,name:x[1],codec:RCODEC[x[2]],audio:tag==="VOSTFR"?["Anglais (VO)"]:tag==="MULTI"?[frl,"Anglais (VO)"]:[frl],subs:tag==="VOSTFR"?["Français"]:["Aucun"],size:"—",ext:x[3]||"mkv"};
    const fx=(ALL[key]||{}).type==="s"?FLUX.ser[x[1]]:FLUX.vod[x[4]];return fx?fluxApply(v,fx,tag):v})};
  /* nombre de contenus par catégorie et par fournisseur : calculé une fois (des milliers de catégories × des dizaines de milliers de flux) */
- const CC={};catCount=function(pl,type,k){let m=CC[pl.id];if(!m){m=CC[pl.id]={l:{},f:{},s:{}};const add=(t,r)=>{if(!plsOf(r).has(pl.id))return;for(const c of r.c||[])m[t][c]=(m[t][c]||0)+1};
+ const CC={};catCount=function(pl,type,k){let m=CC[pl.id];if(!m){m=CC[pl.id]={l:{},f:{},s:{}};const add=(t,r)=>{if(!inPl(r,pl.id))return;for(const c of r.c||[])m[t][c]=(m[t][c]||0)+1};
   for(const c of CHS)if(c._real)add("l",c._real);for(const i of FILMS)if(i._real)add("f",i._real);for(const i of SERIES)if(i._real)add("s",i._real)}return m[type][k]||0};
  addDays=function(pl,it){const a=it._real&&it._real.a;return a?Math.max(0,Math.floor((Date.now()/1000-a)/86400)):400};
  const M0=new Date().setHours(0,0,0,0)/60000;

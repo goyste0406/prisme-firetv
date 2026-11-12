@@ -9,12 +9,19 @@ const tkn=t=>norm(t||"").replace(/[^a-z0-9]/g,"");
 const TKM=new Map();const tkey=t=>{let r=TKM.get(t);if(r===undefined){r=tkn(t);if(TKM.size>80000)TKM.clear();TKM.set(t,r)}return r};
 /* index des programmes du guide dont le titre est celui d'un film du catalogue (le reste du guide n'est pas gardé) */
 const EPGI={k:"",m:null};
-function epgIdx(){const n=nowMin(),k=Math.floor(n/10)+"|"+CHS.length+"|"+FILMS.length+"|"+SERIES.length+"|"+S.playlists.length;if(EPGI.k===k)return EPGI.m;const m=new Map(),want=new Set();for(const L of [FILMS,SERIES])for(const f of L){const w=tkey(f.t);if(w.length>=3)want.add(w)}
- CHS.forEach((c,ci)=>{let L;try{L=epg(c)}catch(e){return}for(let pi=0;pi<L.length;pi++){const p=L[pi];if(p.e<n-2880||p.s>n+1440)continue;const w=tkn(p.t);if(!want.has(w))continue;let a=m.get(w);if(!a)m.set(w,a=[]);a.push({c,p,ci,pi})}});
- EPGI.k=k;EPGI.m=m;return m}
+/* construit une fois par jour (le guide est en minutes depuis minuit), par petites tranches pendant les temps morts ;
+   la fenêtre de temps (2 jours avant, 1 jour après) est appliquée au moment de la lecture */
+const epgKey=()=>CHS.length+"|"+FILMS.length+"|"+SERIES.length+"|"+S.playlists.length+"|"+new Date().toDateString();
+function epgStep(ms){const k=epgKey();if(EPGI.k!==k){EPGI.k=k;EPGI.b={m:new Map(),want:new Set(),wi:0,ci:0};EPGI.m=null}if(EPGI.m)return true;
+ const B=EPGI.b,end=performance.now()+ms,NI=FILMS.length+SERIES.length;
+ while(B.wi<NI){const f=B.wi<FILMS.length?FILMS[B.wi]:SERIES[B.wi-FILMS.length];B.wi++;const w=tkey(f.t);if(w.length>=3)B.want.add(w);if((B.wi&511)===0&&performance.now()>end)return false}
+ while(B.ci<CHS.length){const ci=B.ci,c=CHS[ci];B.ci++;let L;try{L=epg(c)}catch(e){L=[]}for(let pi=0;pi<L.length;pi++){const p=L[pi],w=tkn(p.t);if(!B.want.has(w))continue;let a=B.m.get(w);if(!a)B.m.set(w,a=[]);a.push({c,p,ci,pi})}
+  if((B.ci&63)===0&&performance.now()>end)return false}
+ EPGI.m=B.m;EPGI.b=null;return true}
+function epgIdx(){epgStep(1e9);return EPGI.m}
 fxTV=function(f){const k=f.id+"|"+Math.floor(nowMin()/10);if(FXS.tvk===k)return FXS.tv;const want=tkey(f.t),n=nowMin(),out=[];
  if(want.length>=3){const L=(epgIdx().get(want)||[]).slice().sort((a,b)=>a.ci-b.ci||a.pi-b.pi),done=new Set();
-  for(const {c,p} of L){if(out.length>=3)break;if(done.has(c.id))continue;const live=p.s<=n&&p.e>n,past=p.e<=n;if(past&&!(typeof arDays==="function"&&arDays(c)))continue;done.add(c.id);
+  for(const {c,p} of L){if(out.length>=3)break;if(done.has(c.id)||p.e<n-2880||p.s>n+1440)continue;const live=p.s<=n&&p.e>n,past=p.e<=n;if(past&&!(typeof arDays==="function"&&arDays(c)))continue;done.add(c.id);
    out.push({c,p,live,past,t:live?"en direct":past?"en replay":(p.s<1440?"ce soir ":"demain ")+fmt(p.s)})}}
  FXS.tvk=k;return FXS.tv=out};
 fhTV=function(){const k="tv|"+Math.floor(fhNow()/10)+"|"+FILMS.length;if(FH.cache[k])return FH.cache[k];const n=fhNow(),I=epgIdx(),av=new Map(chans().map((c,i)=>[c.id,i])),best=new Map();
@@ -45,8 +52,17 @@ const LZ={n:0};{const _x=xSimHtml;let lzT=0;xSimHtml=function(f){const mode=FXS.
  return `<section data-anchor id="xsimlz"><div class="lh">${FXS.duo?"Pour vous deux":"Si tu hésites encore"}</div><div style="height:330px"></div></section>`}}
 /* au repos après l'ouverture : on prépare ce qui sert partout (disponibilités, compteurs, index du guide) pour que le premier affichage soit immédiat */
 /* une étape à la fois, seulement quand personne n'appuie sur la télécommande, et jamais pendant la lecture */
-{const W=[()=>films(),()=>series(),()=>chans(),()=>S.playlists.forEach(p=>counts(p)),()=>epgIdx(),()=>{const f0=films()[0];if(f0){bInfo(f0);fxIDF()}},
-  ...[FILMS,SERIES].flatMap(L=>Array.from({length:Math.ceil(L.length/4000)},(_,i)=>()=>{for(const it of L.slice(i*4000,(i+1)*4000))genreKeys(it)})),()=>{if(typeof forYou==="function")forYou()},()=>genreList("f"),()=>genreList("s")];let wi=0;
+/* disponibilités et compteurs préparés par tranches de 10 ms (même résultat que films(), series(), chans(), counts()) */
+const AVB={};function availStep(t,ms){const src=t==="f"?FILMS:t==="s"?SERIES:CHS;if(AVM[t]){AVB[t]=null;return true}
+ let b=AVB[t];if(!b||b.sig!==DV.s||b.src!==src)b=AVB[t]={sig:DV.s,src,i:0,out:[]};const end=performance.now()+ms;
+ while(b.i<src.length){const it=src[b.i++];if(avail(t==="c"?"ch:"+it.id:it.id))b.out.push(it);if((b.i&255)===0&&performance.now()>end)return false}
+ if(b.sig===DV.s)AVM[t]=Object.freeze(b.out);AVB[t]=null;return true}
+const CNB={};function countStep(pl,ms){const k="cnt:"+pl.id;if(RMEMO[k]){CNB[k]=null;return true}let b=CNB[k];if(!b||b.sig!==DV.s)b=CNB[k]={sig:DV.s,ph:0,i:0,r:{c:0,f:0,s:0}};const end=performance.now()+ms;
+ const PH=[[CHS,"c",c=>"ch:"+c.id],[FILMS,"f",i=>i.id],[SERIES,"s",i=>i.id]];
+ while(b.ph<3){const [L,f,kf]=PH[b.ph];while(b.i<L.length){if(has(pl,kf(L[b.i])))b.r[f]++;b.i++;if((b.i&255)===0&&performance.now()>end)return false}b.ph++;b.i=0}
+ if(b.sig===DV.s)RMEMO[k]=b.r;CNB[k]=null;return true}
+const WS=[];{const W=[()=>{if(!availStep("f",10))wi--},()=>{if(!availStep("s",10))wi--},()=>{if(!availStep("c",10))wi--},()=>{if(!S.playlists.every(p=>countStep(p,10)))wi--},()=>{if(!epgStep(10))wi--},()=>{const f0=films()[0];if(f0){bInfo(f0);fxIDF()}},
+  ...[FILMS,SERIES].flatMap(L=>Array.from({length:Math.ceil(L.length/4000)},(_,i)=>()=>{for(const it of L.slice(i*4000,(i+1)*4000))genreKeys(it)})),()=>{if(typeof forYou==="function")forYou()},...[0,1,2].map(j=>()=>{const L=j===0?films():j===1?series():chans();const st=(WS[j]=WS[j]||0),end=performance.now()+10;let i=st;for(;i<L.length&&performance.now()<end;i++)nzw(L[i].t||L[i].n||"");WS[j]=i;if(i<L.length)wi--}),()=>genreList("f"),()=>genreList("s")];let wi=0;
  setTimeout(function warm(){if(wi>=W.length)return;if(Date.now()-(window.__lastKey||0)<1500||S.loading||(typeof P!=="undefined"&&P))return setTimeout(warm,1000);try{W[wi]()}catch(e){}wi++;setTimeout(warm,60)},1500)}
 /* genres d'un titre : les mêmes listes sont partagées (des dizaines de milliers de titres ont les mêmes genres) → moins de mémoire */
 {const _g=genreKeys,IN=new Map();genreKeys=function(it){const r=GK[it.id];if(r)return r;const v=_g(it),k=v.join("|");let s=IN.get(k);if(!s){IN.set(k,v);s=v}GK[it.id]=s;return s}}
@@ -57,3 +73,8 @@ const firstAt=(L,t)=>{let lo=0,hi=L.length;while(lo<hi){const m=(lo+hi)>>1;if(L[
 lSoon0=function(g,win=90){const n=nowMin(),out=[];for(const c of lvis()){const L=epg(c);if(!isSortedS(L)){for(const p of L)if(p.s>n&&p.s<=n+win&&(!g||pgen(p)===g))out.push({c,p});continue}for(let i=firstAt(L,n+1e-9);i<L.length;i++){const p=L[i];if(p.s>n+win)break;if(p.s>n&&(!g||pgen(p)===g))out.push({c,p})}}return out.sort((a,b)=>a.p.s-b.p.s)};
 {lPast=function(){return lmemo("past",()=>{const n=nowMin(),out=[];for(const c of lvis()){const d=arDays(c);if(!d)continue;const L=epg(c);if(!isSortedS(L)){for(const p of L)if(p.e<=n&&p.s>=n-d*1440&&p.t!=="Programme non communiqué")out.push({c,p});continue}
   for(let i=firstAt(L,n-d*1440);i<L.length;i++){const p=L[i];if(p.s>n)break;if(p.e<=n&&p.t!=="Programme non communiqué")out.push({c,p})}}return out.sort((a,b)=>b.p.e-a.p.e)}).slice()}}
+/* réglages d'un fournisseur : 60 catégories par type au départ, 120 de plus quand la sélection approche de la fin (même page, même ordre) */
+const PLMN={id:null,n:{}};
+function plmCut(id,type,cats){if(PLMN.id!==id){PLMN.id=id;PLMN.n={}}const n=PLMN.n[type]||(PLMN.n[type]=60);PLMN.all=PLMN.all||{};PLMN.all[type]=cats.length;return cats.length>n?cats.slice(0,n):cats}
+{const _k=key;key=function(k){const r=_k(k);const t=topS();if(t&&t.t==="plm"&&F&&F.dataset.fid&&F.dataset.fid.startsWith("hc-")){const type=F.dataset.fid[3],g=F.parentElement,rows=g?g.children:[],i=[...rows].indexOf(F);
+  if(i>=0&&rows.length-i<15&&(PLMN.all[type]||0)>rows.length){PLMN.n[type]=rows.length+120;const sc=view.querySelector("#set"),y=sc?sc.scrollTop:0,fid=F.dataset.fid;render(fid);const s2=view.querySelector("#set");if(s2){s2.style.scrollBehavior="auto";s2.scrollTop=y;if(F)ensureVisible(F,true);requestAnimationFrame(()=>s2.style.scrollBehavior="")}}}return r}}

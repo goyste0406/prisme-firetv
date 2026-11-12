@@ -63,7 +63,7 @@ function fullBody(){const k=KIND();
  const c=CH[P.id],L=pbGenreList(),rec=LS.hist.filter(id=>id!==P.id&&CH[id]).slice(0,3),U=["Favoris",...LGEN].filter(u=>u==="Favoris"||lvis().some(x=>chanGenre(x)===u||pgen(epgAt(x).cur)===u));
  return `${rec.length?`<div class="pb-chips"><span class="pb-k" style="margin:0 4px 0 0">Récentes</span>${rec.map(id=>chipH("pbrc-"+id,"pb:zap:"+id,CH[id].n)).join("")}</div>`:""}
   <div class="pb-chips">${chipH("pbu-all","pb:uni:","Toutes",!P.uni)}${U.map((u,i)=>chipH("pbu"+i,"pb:uni:"+u,u,(P.uni||"")===u)).join("")}</div>
-  <div class="pb-list sy ty grow"><div class="ttrack">${L.length?"":`<div class="pb-empty">${P.uni==="Favoris"?"Aucune chaîne en favori pour l'instant":"Aucune chaîne dans « "+esc(P.uni)+" »"}</div>`}${L.map(x=>{const e=epgAt(x),on=x.id===P.id;return `<div class="pb-ch ${on?"cur":""}" data-f data-fid="pbl-${x.id}" data-act="pb:zap:${x.id}" data-pbzap="${x.id}" ${on?"data-default":""}><b class="n">${esc(x.n)}</b><div class="tx"><b>${esc(e.cur.t)}</b><div class="pg"><i style="width:${e.pct}%"></i></div><small>${on?"tu regardes · ":""}${e.next[0]?"ensuite "+fmt(e.next[0].s)+" · "+esc(e.next[0].t):"fin "+fmt(e.cur.e)}</small></div></div>`}).join("")}</div></div>
+  <div class="pb-list sy ty grow"><div class="ttrack">${L.length?"":`<div class="pb-empty">${P.uni==="Favoris"?"Aucune chaîne en favori pour l'instant":"Aucune chaîne dans « "+esc(P.uni)+" »"}</div>`}${pbWin(L,x=>{const e=epgAt(x),on=x.id===P.id;return `<div class="pb-ch ${on?"cur":""}" data-f data-fid="pbl-${x.id}" data-act="pb:zap:${x.id}" data-pbzap="${x.id}" ${on?"data-default":""}><b class="n">${esc(x.n)}</b><div class="tx"><b>${esc(e.cur.t)}</b><div class="pg"><i style="width:${e.pct}%"></i></div><small>${on?"tu regardes · ":""}${e.next[0]?"ensuite "+fmt(e.next[0].s)+" · "+esc(e.next[0].t):"fin "+fmt(e.cur.e)}</small></div></div>`})}</div></div>
   <div class="pb-chips">${chipH("pbc-sr","pb:sub:Source","Source : "+srcShort().split(" · ").slice(0,2).join(" · "))}${chipH("pbc-au","pb:sub:Audio","Audio : "+shortAudio())}${chipH("pbc-im","pb:sub:Image","Image : "+fmtName(effFmt()))}${chipH("pbc-nu","pb:sub:Son de nuit","Son de nuit : "+(nightOn()?"actif":nightMode()===2?"jamais":"auto"))}</div>
   <div class="pb-hint">↑ ↓ chaînes · ◀ étiquettes · ▶ réglages · Retour ×2 = chaîne précédente</div>`}
 
@@ -243,3 +243,16 @@ view.addEventListener("click",e=>{if(!PB_ON()||S.modal)return;const pan=$("#pbpa
 {const _sp=startPlayer;startPlayer=function(p){B.panel=null;B.sub=null;B.memHit=false;B.season=null;_sp(p);if(p.kind==="live")p.lag=0}}
 window.__pb={B,openMini,openFull,closePanel,pbZap,PBD,topKeys,nightOn,effFmt};
 })();
+
+/* Liste des chaînes du lecteur : avec des milliers de chaînes, seules ~80 lignes autour de la sélection sont dessinées
+   (le reste est un espace vide de la même hauteur). Même apparence, même défilement ; la fenêtre suit la sélection. */
+const PBW={rh:0,s:0,e:0,N:0};
+function pbWin(L,row){const N=L.length;PBW.N=N;if(N<=120){PBW.s=0;PBW.e=N;PBW.L=null;return L.map(row).join("")}
+ const fid=(F&&F.dataset&&F.dataset.fid)||"",id=fid.startsWith("pbl-")?fid.slice(4):P.id;let ci=L.findIndex(x=>x.id===id);if(ci<0)ci=Math.max(0,L.findIndex(x=>x.id===P.id));
+ const s=Math.max(0,ci-40),e=Math.min(N,ci+41),rh=PBW.rh||78;PBW.s=s;PBW.e=e;PBW.L=L;
+ return `<div class="pb-sp" style="height:${Math.max(0,s*rh)}px;flex:none"></div>${L.slice(s,e).map(row).join("")}<div class="pb-sp" style="height:${Math.max(0,(N-e)*rh)}px;flex:none"></div>`}
+function pbWinFix(){const p=view.querySelector(".pb-list.ty");if(!p||!PBW.L)return;const r=p.querySelectorAll(".pb-ch");if(r.length<3)return;const h=r[2].offsetTop-r[1].offsetTop;
+ if(h>20&&Math.abs(h-PBW.rh)>1){const old=PBW.rh||78;PBW.rh=h;const sp=p.querySelectorAll(":scope>.ttrack>.pb-sp");if(sp.length===2){const t0=p._ty||0;sp[0].style.height=PBW.s*h+"px";sp[1].style.height=(PBW.N-PBW.e)*h+"px";tySet(p,t0+PBW.s*(h-old),true)}}}
+{const _r=render;render=function(fid){const out=_r(fid);if(PBW.L&&topS().t==="player")pbWinFix();return out}}
+{const _k=key;key=function(k){const r=_k(k);if(topS().t==="player"&&PBW.L&&F&&F.dataset.fid&&F.dataset.fid.startsWith("pbl-")){const id=F.dataset.fid.slice(4),i=PBW.L.findIndex(x=>x.id===id);
+  if(i>=0&&((i-PBW.s<12&&PBW.s>0)||(PBW.e-i<12&&PBW.e<PBW.N))){const p0=view.querySelector(".pb-list.ty"),ty=p0?p0._ty||0:0;render(F.dataset.fid);const p1=view.querySelector(".pb-list.ty");if(p1){tySet(p1,ty,true);if(F)tyFollow(p1,F,true)}}}return r}}

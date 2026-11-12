@@ -13,7 +13,7 @@ const f30=m=>Math.floor(m/30)*30;
 const DAYN=d=>{const x=d+b0();if(d===0)return "Aujourd'hui";if(d===-1)return "Hier";if(d===1)return "Demain";const dt=new Date();dt.setDate(dt.getDate()+x);return dt.toLocaleDateString("fr-FR",{weekday:"long"}).replace(/^./,c=>c.toUpperCase())};
 /* chaînes : une seule ligne par chaîne, même avec plusieurs sources ou des noms différents chez chaque fournisseur */
 let CHL=null,CHK="";
-function chList(){const L=lvis(),k=L.map(c=>c.id).join(",");if(CHL&&CHK===k)return CHL;const seen=new Set(),out=[];
+function chList(){const L=lvis(),k=__RM["lvis|"+LS.hidden.length]||L.map(c=>c.id).join(",");if(CHL&&CHK===k)return CHL;const seen=new Set(),out=[];
  for(const c of L){const n=RI.strip(RI.base(c.n)).replace(/\b(sat|tnt|backup|bk|secours|alt|vip|raw|hd|fhd|uhd|sd|4k|hevc)\b/g,"").replace(/[^a-z0-9+]/g,"");if(n&&seen.has(n))continue;seen.add(n);out.push(c)}CHK=k;return CHL=out}
 const SRCL=c=>srcs("ch:"+c.id).slice().sort((a,b)=>qr(b.q)-qr(a.q));
 /* programmes d'une journée, trous comblés par « Programme non communiqué » */
