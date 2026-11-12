@@ -31,7 +31,7 @@ function fhSagaNext(){const out=[],done=new Set();for(const f of fhFilms()){cons
   if(i>0&&!S.prog[sg[i].id]&&!fhNo(sg[i].id))out.push({f:sg[i],why:`Suite de ${fxShort(sg[i-1])}, que tu as vu`})}return out}
 /* Top 10 : tendances en France (films.json) ou, sans films.json, le classement de démonstration */
 function fhTop(){if(TMD.tr&&TMD.tr.length){const prev=TMD.trp||[];return TMD.tr.map(id=>TMIDX[id]).filter(f=>f&&srcs(f.id).length&&!fxBlocked(f)&&!fhNo(f.id)).slice(0,10).map((f,i)=>{const j=prev.indexOf(f.tm);return {f,rk:i+1,mv:!prev.length?"=":j<0?"NOUV":j>i?"▲"+(j-i):j<i?"▼"+(i-j):"="}})}
- return fhFilms().filter(f=>!fhNo(f.id)).sort((a,b)=>trendScore(b)-trendScore(a)).slice(0,10).map((f,i)=>{const h=hash(f.id+"#mv")%7;return {f,rk:i+1,mv:h===0?"NOUV":h<3?"▲"+(h+1):h<5?"▼"+(h-2):"="}})}
+ return fhFilms().filter(f=>!fhNo(f.id)).map(f=>[trendScore(f),f]).sort((a,b)=>b[0]-a[0]).slice(0,10).map(x=>x[1]).map((f,i)=>{const h=hash(f.id+"#mv")%7;return {f,rk:i+1,mv:h===0?"NOUV":h<3?"▲"+(h+1):h<5?"▼"+(h-2):"="}})}
 function fhNew(){return fhFilms().map(f=>({f,d:fhAddDays(f)})).filter(x=>x.d<=14&&!fhNo(x.f.id)).sort((a,b)=>a.d-b.d||(b.f.imdb-a.f.imdb)).slice(0,20)}
 const fhAgo=d=>d===0?"aujourd'hui":d===1?"hier":`il y a ${d} j`;
 function fhIsNew(id){const h=fhP();if(h.nseen.includes(id))return false;const f=ALL[id];if(!f)return false;const since=(Date.now()-fhLast())/864e5;
@@ -274,7 +274,7 @@ function hPeekArm(el){hPeekOff();const D=(fhSet().fhTrl||0)*1000;if(!D||!fhOn()|
  HPC=setInterval(()=>{const c=view.querySelector(".hcd");if(!c)return clearInterval(HPC);const left=Math.ceil((D-(Date.now()-t0))/1000);if(left<=3&&left>0){c.classList.add("on");c.querySelector("b").textContent=left}},250);
  HPT=setTimeout(()=>{clearInterval(HPC);if(F!==el||!el.isConnected)return;const h=view.querySelector(".fxhome .H");if(!h)return;h.classList.add("hpeek");const c=view.querySelector(".hcd");if(c)c.classList.remove("on");view.querySelectorAll(fxQ("hero")+" .art").forEach(a=>a.classList.add("play"))},D)}
 function prepArm(el){clearTimeout(PRT);if(!fhOn()||!el.dataset.hid||!el.closest('[data-rk="soir"],[data-rk="reprendre"],'+fxQ("hero")))return;
- PRT=setTimeout(()=>{if(F!==el||S.modal)return;FH.prep=el.dataset.hid;FXS.ready=el.dataset.hid;view.querySelectorAll(".fhzap").forEach(z=>z.remove());const z=document.createElement("span");z.className="fhzap";z.textContent="⚡ prêt";el.appendChild(z)},1000)}
+ PRT=setTimeout(()=>{if(F!==el||S.modal)return;FH.prep=el.dataset.hid;FXS.ready=el.dataset.hid;view.querySelectorAll(".fhzap").forEach(z=>z.remove());if(getComputedStyle(el).position==="static")el.style.position="relative";const z=document.createElement("span");z.className="fhzap";z.textContent="⚡ prêt";el.appendChild(z)},1000)}
 function bubArm(el){bubOff();if(!fhOn()||!el.dataset.hid||el.closest(fxQ("hero"))||S.modal)return;
  BUT=setTimeout(()=>{if(F!==el||!el.isConnected||S.modal)return;const f=ALL[el.dataset.hid];if(!f)return;const o=forYou().find(x=>x.c.id===f.id),b=bInfo(f),r=el.getBoundingClientRect(),v=view.getBoundingClientRect();
   const x=(r.right-v.left)/SCALE,y=(r.top-v.top)/SCALE,w=340,left=x+16+w<1270?x+16:(r.left-v.left)/SCALE-w-16;const d=document.createElement("div");d.className="fhbub";d.style.left=Math.max(10,left)+"px";d.style.top=Math.max(110,Math.min(720-200,y))+"px";
@@ -307,7 +307,10 @@ if(!REAL){const _s=srcs;srcs=function(key){const L=_s(key);const it=ALL[key];if(
 
 /* ---------- mémoire des sources : srcs() est appelée des dizaines de milliers de fois par affichage (films() la rappelle
    pour chaque film). On garde le résultat le temps d'un affichage ou d'une action, puis on l'oublie. */
-const SRCM=new Map();const srcmClear=()=>{SRCM.clear();if(typeof AVM!=="undefined"){AVM.f=AVM.s=AVM.c=null}};
+const SRCM=new Map();const RMEMO={};const srcmClear=()=>{SRCM.clear();for(const k in RMEMO)delete RMEMO[k];if(typeof AVM!=="undefined"){AVM.f=AVM.s=AVM.c=null}};
+/* calculs lourds avec un gros catalogue : faits une fois par affichage (le Top 10 était recalculé pour chaque film) */
+{const _t=fhTop;fhTop=function(){return (RMEMO.top||(RMEMO.top=_t())).slice()}}
+genreList=function(ty){const k="g"+ty;if(!RMEMO[k]){const L=ty==="f"?films():series(),by={};for(const i of L)for(const g of new Set(genreKeys(i)))(by[g]=by[g]||[]).push(i);RMEMO[k]=GDEF[ty].map(g=>({g,items:by[g[0]]||[]})).filter(x=>x.items.length)}return RMEMO[k].slice()};
 {const _s=srcs;srcs=function(key){let v=SRCM.get(key);if(v===undefined){v=_s(key);SRCM.set(key,v)}return v}}
 {const _r=render;render=function(fid){srcmClear();
  /* l'accueil et la fiche se redessinent sans sauter : on garde la position verticale et celle de chaque rangée */

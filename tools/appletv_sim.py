@@ -258,6 +258,11 @@ R("</style>", open(os.path.join(D, "live_a2c.css"), encoding="utf-8").read() + o
 rd = lambda n: open(os.path.join(D, n), encoding="utf-8").read()
 R("const FILMS = [", "/* pako 1.0.11 (MIT) : compression du catalogue */\n" + rd("pako.min.js") + "\n" + rd("real_boot.js") + "const FILMS = [")
 R("C.filter(c=>c.cat===S.lcat)}", "C.filter(c=>inCatL(c,S.lcat))}")
+# genres : la table des catégories est construite une fois par type, pas pour chaque titre (des centaines de catégories × des dizaines de milliers de titres)
+R('const GK={};', 'const GK={},GKC={};')
+R('const D=GDEF[it.type],cl={};(it.type==="f"?FCATS:SCATS).forEach(([k,n])=>cl[k]=n);', 'const D=GDEF[it.type],cl=GKC[it.type]||(GKC[it.type]=Object.fromEntries((it.type==="f"?FCATS:SCATS).map(([k,n])=>[k,n])));')
+# fenêtre des sources : la liste suit la sélection (beaucoup de versions d'un film, d'une série ou d'une chaîne)
+R('<h2>${esc(title)}</h2><div class="mlist">', '<h2>${esc(title)}</h2><div class="mlist sy">')
 # disponibilité : un simple « au moins un fournisseur actif l'a » (sans calculer toutes les sources), gardée le temps d'un affichage
 R('const films=()=>FILMS.filter(i=>srcs(i.id).length),series=()=>SERIES.filter(i=>srcs(i.id).length),chans=()=>CHS.filter(c=>srcs("ch:"+c.id).length);', 'const AVM={};const avail=key=>S.playlists.some(p=>p.on&&has(p,key));const films=()=>(AVM.f||(AVM.f=FILMS.filter(i=>avail(i.id)))).slice(),series=()=>(AVM.s||(AVM.s=SERIES.filter(i=>avail(i.id)))).slice(),chans=()=>(AVM.c||(AVM.c=CHS.filter(c=>avail("ch:"+c.id)))).slice();')
 R(":C.filter(c=>c.cat===k).length;", ":C.filter(c=>inCatL(c,k)).length;")

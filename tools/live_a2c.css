@@ -50,7 +50,7 @@
 /* rangées (vue genre) */
 .lrow{display:flex;justify-content:flex-start;gap:18px;padding:12px 4px 4px;margin:0 -4px;overflow-x:auto;scrollbar-width:none}
 .lrow::-webkit-scrollbar{display:none}
-.lcard{flex:0 0 210px;cursor:pointer}
+.lcard{flex:0 0 210px;min-width:0;max-width:210px;cursor:pointer}.lcard>.t,.lcard>.s{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .lcard .lth{height:118px;transition:transform .2s cubic-bezier(.2,.8,.2,1),box-shadow .2s}
 .lcard .t{margin-top:9px;font-size:15px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;transition:transform .2s}
 .lcard .s{font-size:12.5px;color:rgba(255,255,255,.55);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;transition:transform .2s}
@@ -64,7 +64,7 @@
 .lfan h2 small{font-size:14px;color:rgba(255,255,255,.55);font-weight:500}
 .lfan .hint2{margin:0 0 0 140px;font-size:13px;color:rgba(255,255,255,.5)}
 .lfan .lrow{padding:22px 140px;margin:0;gap:22px}
-.lfan .lcard{flex:0 0 272px;animation:lfanin .45s cubic-bezier(.2,.8,.2,1) both}
+.lfan .lcard{flex:0 0 272px;max-width:272px;animation:lfanin .45s cubic-bezier(.2,.8,.2,1) both}
 @keyframes lfanin{from{opacity:0;transform:translateX(-60px) rotate(-4deg)}to{opacity:1;transform:none}}
 .lfan .lcard .lth{height:153px}
 .lfan .lcard.pv .lth{filter:none;animation:lpv 5s ease-in-out infinite alternate}
