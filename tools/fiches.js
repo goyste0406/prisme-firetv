@@ -7,7 +7,12 @@
 const LSK="prisme-fiches",KEYK="prisme-tmdb-key",API="https://api.themoviedb.org/3",IMGB="https://image.tmdb.org/t/p/";
 let C={mode:0,pp:0,nouv:1,hd:0,done:{},unk:{},fix:{},first:0,at:0};
 try{Object.assign(C,JSON.parse(localStorage.getItem(LSK)||"{}"))}catch(e){}
-const saveC=()=>{try{localStorage.setItem(LSK,JSON.stringify(C))}catch(e){}};
+/* réglages (petits) dans localStorage ; l'état de chaque titre (des dizaines de milliers) dans IndexedDB, sinon il remplirait
+   la mémoire du navigateur et empêcherait d'enregistrer le reste (fournisseurs supprimés, favoris…) */
+let bigDirty=0,stLoaded=false;
+const saveC=()=>{bigDirty=1;try{const {done,unk,fix,...small}=C;localStorage.setItem(LSK,JSON.stringify(small))}catch(e){}};
+setInterval(()=>{if(!bigDirty||!stLoaded||typeof idbSet!=="function")return;bigDirty=0;idbSet("fcstate",{done:C.done,unk:C.unk,fix:C.fix}).catch(()=>{bigDirty=1})},5000);
+(typeof idbGet==="function"?idbGet("fcstate"):Promise.resolve(null)).then(st=>{if(st){C.done={...st.done,...C.done};C.unk={...st.unk,...C.unk};C.fix={...st.fix,...C.fix}}stLoaded=true;if(C.done&&Object.keys(C.done).length)bigDirty=1;saveC()}).catch(()=>{stLoaded=true});
 const getKey=()=>{try{return localStorage.getItem(KEYK)||""}catch(e){return ""}};
 const MODES=["Automatique","La nuit seulement","Jamais"],PPS=["Mettre en pause","Continuer lentement"];
 /* état du moteur (non sauvegardé) */
@@ -225,5 +230,5 @@ if(box){box.insertAdjacentHTML("beforeend",`<div class="fckey"><b>Fiches en arri
  const del=$("#fckdel");if(del)del.addEventListener("click",()=>{try{localStorage.removeItem(KEYK)}catch(e){}msg("Clé oubliée.");paint()})}
 
 /* démarrage : après l'écran de chargement */
-const boot=setInterval(()=>{if(typeof S!=="undefined"&&!S.loading&&inApp()){clearInterval(boot);start()}},700);
+const boot=setInterval(()=>{if(stLoaded&&typeof S!=="undefined"&&!S.loading&&inApp()){clearInterval(boot);start()}},700);
 })();

@@ -136,8 +136,9 @@ async function rImport(files,provName,status,opt){
  // garde les catégories utilisées
  const used=new Set([...R.chans,...R.films,...R.series].flatMap(i=>i.c));["lcats","fcats","scats"].forEach(k=>R[k]=R[k].filter(c=>used.has(c[0])));
  ph("save");status("Enregistrement dans ce navigateur…");
- const out={...R,at:Date.now()};
- /* compressé : tout le catalogue tient dans la mémoire du navigateur ; s'il est vraiment trop gros, on garde les plus récents */
+ return rSave(R,st)}
+/* enregistrement compressé : tout le catalogue tient dans la mémoire du navigateur ; s'il est vraiment trop gros, on garde les plus récents */
+function rSave(R,st){st=st||{};
  let nf=R.films.length,ns=R.series.length,nc=R.chans.length;
  for(let tries=0;tries<14;tries++){const o2={...R,chans:R.chans.slice(0,nc),films:R.films.slice(0,nf),series:R.series.slice(0,ns),at:Date.now()};let z;try{z=RZ.enc(JSON.stringify(o2))}catch(e){z=null}
   if(z){try{localStorage.removeItem("prisme-real");localStorage.setItem("prisme-realz",z);window.__RLAST=o2;return {...st,keptF:nf,keptS:ns,keptC:nc,totF:R.films.length,totS:R.series.length,totC:R.chans.length,pls:R.pls.length}}catch(e){}}
@@ -338,3 +339,17 @@ async function fluxImport(files,say){let n=0;for(const f of files){say(`Lecture 
 if(typeof REAL!=="undefined"&&REAL)idbGet("flux").then(d=>{if(!d)return;Object.assign(FLUX.vod,d.vod||{});Object.assign(FLUX.ser,d.ser||{});FLUX.at=d.at||0;const st=$("#rst");if(st)st.textContent+=` · qualité connue pour ${Object.keys(FLUX.vod).length} flux`;if(inApp()&&!S.loading)render(F&&F.dataset.fid)}).catch(()=>{});
 /* catalogue enregistré par la version précédente (IndexedDB) : on le reprend une fois, compressé, puis on recharge */
 if(!REAL)idbGet("real").then(r=>{if(!r||!r.pls||!r.pls.length)return;try{localStorage.setItem("prisme-realz",RZ.enc(JSON.stringify(r)));idbSet("real",null).catch(()=>{});setTimeout(()=>location.reload(),200)}catch(e){}}).catch(()=>{});
+
+/* supprimer un fournisseur importé : ses flux, ses catégories vides et son guide quittent aussi le catalogue enregistré
+   (sans cela il revenait au redémarrage) */
+function rRemoveProvider(pid){if(!REAL)return false;const R=JSON.parse(JSON.stringify(REAL,(k,v)=>k==="_pl"?undefined:v));
+ R.pls=R.pls.filter(p=>p.id!==pid);
+ if(!R.pls.length){try{localStorage.removeItem("prisme-realz");localStorage.removeItem("prisme-real")}catch(e){}return true}
+ for(const k of ["chans","films","series"])R[k]=R[k].filter(r=>{r.s=(r.s||[]).filter(x=>x[0]!==pid);return r.s.length});
+ const used=new Set([...R.chans,...R.films,...R.series].flatMap(i=>i.c||[]));["lcats","fcats","scats"].forEach(k=>R[k]=R[k].filter(c=>used.has(c[0])));
+ const eu=new Set(R.chans.map(c=>c.e).filter(Boolean));for(const e in R.epg)if(!eu.has(e))delete R.epg[e];if(R.elg)for(const e in R.elg)if(!eu.has(e))delete R.elg[e];
+ try{rSave(R);return true}catch(e){return false}}
+{const _a=act;act=function(a){const m=typeof a==="string"&&/^pl:del:(.+)$/.exec(a);
+ if(m&&REAL&&DEL===m[1]){const pl=S.playlists.find(p=>p.id===m[1]);if(pl&&pl.real){const r=_a(a);const ok=rRemoveProvider(m[1]);save();
+   toast(ok?`« ${pl.name} » et son catalogue supprimés`:`« ${pl.name} » retiré, mais le catalogue n'a pas pu être réenregistré`);setTimeout(()=>location.reload(),900);return r}}
+ return _a(a)}}
