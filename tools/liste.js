@@ -78,7 +78,7 @@ function mineHtml(){return `<div class="mn sy" id="mnscr"><div class="mn-sub">${
 /* ---------- fenêtres : duel, options ---------- */
 {const _m=modalHtml;modalHtml=function(){const m=S.modal;
  if(m&&m.type==="mnduel"){const [a,b]=m.pair;return `<div class="modal mn-dm"><div class="mn-dbox"><h2>Duel · ${m.round} / ${m.max}</h2><p>← ou → puis OK pour garder ton préféré</p><div class="mn-dv">${[a,b].map((o,j)=>`<div class="mn-pk" data-f data-fid="mnd-${j}" data-row="mndv" data-act="mn:win:${j}" ${j===0?"data-default":""}>${art(o.it)}<div class="mn-in"><small>${o.it.type==="s"?"Série":"Film · "+durTxt(lenOf(o.it))}</small><b>${esc(o.it.t)}</b><span>fin ${hm(endOf(o))}</span></div></div>`).join('<div class="mn-vs">VS</div>')}</div></div></div>`}
- if(m&&m.type==="mnopt"){const it=ALL[m.id]||CH[String(m.id).slice(3)]||{};return `<div class="modal"><div class="mbox"><div class="kick">${m.h?"HISTORIQUE":"MA LISTE"}</div><h2>${esc(it.t||it.n||"")}</h2><div class="mlist sy">${m.o.map(([a,l],i)=>`<div class="msrc" data-f data-fid="mno-${i}" data-act="mn:${a}:${m.id}" ${i===0?"data-default":""}><div class="mn">${esc(l)}</div></div>`).join("")}</div></div></div>`}
+ if(m&&m.type==="mnopt"){const it=ALL[m.id]||CH[String(m.id).slice(3)]||{};return `<div class="modal"><div class="mbox"><div class="kick">${m.h?"HISTORIQUE":"MA LISTE"}</div><h2>${esc(it.t||it.n||"")}</h2><div class="mlist sy">${m.o.map(([a,l],i)=>`<div class="msrc mn-op" data-f data-fid="mno-${i}" data-act="mn:${a}:${m.id}" ${i===0?"data-default":""}><div class="mn">${esc(l)}</div></div>`).join("")}</div></div></div>`}
  return _m()}}
 {const _a=act;act=function(a){if(typeof a!=="string"||!a.startsWith("mn:"))return _a(a);const [,w,...r]=a.split(":"),v=r.join(":");const x=PX(P_());
  switch(w){

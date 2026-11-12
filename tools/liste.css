@@ -50,3 +50,5 @@
 .mn-po.focus::before,.mn-po.foc::before,.mn-pk.focus::before,.mn-pk.foc::before{box-shadow:inset 0 0 0 3px #fff}
 .mn-po.focus,.mn-po.foc{transform:translateZ(0) scale(1.08)}
 .mn-pk.focus,.mn-pk.foc{transform:translateZ(0) scale(1.04)}
+/* options de Ma liste / historique (appui long ou M) : la ligne d'option n'hérite pas du conteneur .mn */
+.msrc.mn-op{grid-template-columns:1fr}.msrc .mn{position:static;inset:auto;overflow:visible;padding:0}
