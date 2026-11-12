@@ -31,3 +31,5 @@
 .rimp details.rold{margin:10px 0;opacity:.85}.rimp details.rold summary{cursor:pointer;font-weight:600}
 /* ⚡ du bouton Lecture de la fiche : dans le bouton (et non flottant au milieu de l'écran) */
 .fx .btn .pzap{position:static;width:22px;height:22px;flex:none;display:grid;place-items:center;font-size:18px;line-height:1;color:#111}
+/* photo d'acteur */
+.aph{background-size:cover!important;background-position:center 20%!important;color:transparent}

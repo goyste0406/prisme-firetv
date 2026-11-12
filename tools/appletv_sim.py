@@ -258,6 +258,9 @@ R("</style>", open(os.path.join(D, "live_a2c.css"), encoding="utf-8").read() + o
 rd = lambda n: open(os.path.join(D, n), encoding="utf-8").read()
 R("const FILMS = [", "/* pako 1.0.11 (MIT) : compression du catalogue */\n" + rd("pako.min.js") + "\n" + rd("real_boot.js") + "const FILMS = [")
 R("C.filter(c=>c.cat===S.lcat)}", "C.filter(c=>inCatL(c,S.lcat))}")
+# acteurs : photo (TMDB) quand on l'a, et chaque film/série une seule fois même s'il existe sous plusieurs noms
+R('function castCard(aid,role,row){const n=A[aid];return `<div class="cast" data-f data-fid="${row}-${aid}" data-row="${row}" data-act="actor:${aid}"><div class="av" style="--h:${hash(aid)%360}">${initials(n)}</div>', 'function castCard(aid,role,row){const n=A[aid],ph=window.actorPh?actorPh(aid):"";return `<div class="cast" data-f data-fid="${row}-${aid}" data-row="${row}" data-act="actor:${aid}"><div class="av${ph?" aph":""}" style="--h:${hash(aid)%360}${ph?`;background-image:url(${ph})`:""}">${ph?"":initials(n)}</div>')
+R('const acred=a=>(CRED[a]||[]).filter(([id])=>srcs(id).length);', 'const acred=a=>{const seen=new Set();return (CRED[a]||[]).filter(([id])=>{const o=ALL[id];if(!o||seen.has(o))return false;seen.add(o);return srcs(id).length}).map(([id,r])=>[ALL[id].id,r])};')
 # genres : la table des catégories est construite une fois par type, pas pour chaque titre (des centaines de catégories × des dizaines de milliers de titres)
 R('const GK={};', 'const GK={},GKC={};')
 R('const D=GDEF[it.type],cl={};(it.type==="f"?FCATS:SCATS).forEach(([k,n])=>cl[k]=n);', 'const D=GDEF[it.type],cl=GKC[it.type]||(GKC[it.type]=Object.fromEntries((it.type==="f"?FCATS:SCATS).map(([k,n])=>[k,n])));')

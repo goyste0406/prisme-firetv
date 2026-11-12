@@ -525,23 +525,25 @@ const NOFR="Résumé en français pas encore disponible : lance le script « Fic
 if(typeof REAL!=="undefined"&&REAL)for(const it of SERIES)if(it._real&&!frText(it.s))it.s=NOFR;
 /* ---------- fiches séries TMDB (series.json : affiches, grandes images, résumé, casting, chaîne, top 10) ---------- */
 const SXD={m:{},names:{},nl:{},top:[],n:0};
-function sxApply(){let n=0;const byK={};
- for(const it of SERIES){const r=it._real;if(!r)continue;let k="";for(const s of r.s||[]){if(SXD.names[s[1]]){k=SXD.names[s[1]];break}}
+function sxApply(only){let n=0;const byK={};
+ for(const it of SERIES){if(only&&!only.has(it.id))continue;const r=it._real;if(!r)continue;let k="";for(const s of r.s||[]){if(SXD.names[s[1]]){k=SXD.names[s[1]];break}}
   const d=k&&SXD.m[k];if(!d)continue;n++;byK[k]=byK[k]||it.id;it.sxk=k;
   if(d.po)it.po=d.po;if(d.bd)it.bd=d.bd;if(!/^t/.test(k))continue;
   if(d.t)it.t=d.t;if(d.y)it.y=d.y;if(d.g&&d.g.length)it.g=d.g.slice(0,2);if(d.ov)it.s=d.ov;else if(!frText(it.s))it.s=NOFR;if(d.net)it.net=d.net;if(d.cr)it.dir=d.cr;if(d.ep)it.ep=d.ep;
   if(d.va){it.imdb=+(+d.va).toFixed(1);it.tmdb=Math.round(d.va*10)}if(d.age)it.age=fxAge(d.age);if(d.yt){it.yt=d.yt;it.ytl=d.ytl||""}
   if(d.cast&&d.cast.length)it.cast=d.cast.map(([nm,ch])=>{const aid="ra"+(hash(nm)>>>0).toString(36);A[aid]=nm;if(typeof CRED!=="undefined")(CRED[aid]=CRED[aid]||[]).some(x=>x[0]===it.id)||CRED[aid].push([it.id,ch||""]);return [aid,ch||""]})}
  /* même série TMDB proposée sous plusieurs noms (« Lupin », « Lupin - Partie 2 », « Lupin VOSTFR »…) : une seule fiche avec toutes ses versions */
- const keep={};for(const it of SERIES.slice()){const k=it.sxk;if(!k||!/^t/.test(k))continue;const K=keep[k];if(!K){keep[k]=it;continue}
+ const ks=only?new Set(SERIES.filter(it=>only.has(it.id)&&it.sxk).map(it=>it.sxk)):null,rm=new Set();
+ const keep={};for(const it of SERIES){const k=it.sxk;if(!k||!/^t/.test(k)||(ks&&!ks.has(k)))continue;const K=keep[k];if(!K){keep[k]=it;continue}
   for(const s2 of it._real.s||[])if(!K._real.s.some(x=>x[0]===s2[0]&&x[1]===s2[1]))K._real.s.push(s2);(it._real.c||[]).forEach(c=>{if(!K._real.c.includes(c))K._real.c.push(c)});
   for(const pid in PR.list){const x=PR.list[pid].sx;if(!x)continue;if(x.sp&&x.sp[it.id]&&!x.sp[K.id])x.sp[K.id]=x.sp[it.id];if(x.sp)delete x.sp[it.id];["done","mal","no","nseen"].forEach(f=>{if(Array.isArray(x[f])&&x[f].includes(it.id)){x[f]=x[f].filter(z=>z!==it.id);if(!x[f].includes(K.id))x[f].push(K.id)}})}
   if(S.favs.includes(it.id)){S.favs=S.favs.filter(z=>z!==it.id);if(!S.favs.includes(K.id))S.favs.push(K.id)}
-  SERIES.splice(SERIES.indexOf(it),1);ALL[it.id]=K}
- const top=(SXD.top||[]).map(k=>byK[k]&&ALL[byK[k]]&&ALL[byK[k]].id).filter((v,i,A)=>v&&A.indexOf(v)===i);
+  rm.add(it);ALL[it.id]=K}
+ if(rm.size){let j=0;for(let i=0;i<SERIES.length;i++)if(!rm.has(SERIES[i]))SERIES[j++]=SERIES[i];SERIES.length=j}
+ const top=only?[]:(SXD.top||[]).map(k=>byK[k]&&ALL[byK[k]]&&ALL[byK[k]].id).filter((v,i,A)=>v&&A.indexOf(v)===i);
  if(top.length){window.SXDATA=window.SXDATA||{};SXDATA.top=top}
  for(const nm in SXD.nl||{}){const c=SVCN(nm);if(!SXLG[c]||nm===c)SXLG[c]=SXD.nl[nm]}
- if(window.__sx&&__sx.X)__sx.X.cache={};SXD.n=n;return n}
+ if(window.__sx&&__sx.X)__sx.X.cache={};SXD.n=only?(SXD.n||0)+n:n;return n}
 async function sxImportSeries(files,say){const out=[];for(const f of files){say(`Lecture de ${f.name}…`);let d=null;try{d=JSON.parse((await f.text()).replace(/^﻿/,""))}catch(e){}
   if(!d||typeof d!=="object"||!d.m||!d.names)throw new Error(`${f.name} n'est pas un fichier de fiches séries prisme`);out.push(d)}
  let list=[];try{list=(await idbGet("series"))||[]}catch(e){}list=list.concat(out).slice(-4);await idbSet("series",list);return out.reduce((a,d)=>a+Object.keys(d.m).length,0)}

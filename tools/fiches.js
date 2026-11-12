@@ -11,9 +11,11 @@ try{Object.assign(C,JSON.parse(localStorage.getItem(LSK)||"{}"))}catch(e){}
    la mémoire du navigateur et empêcherait d'enregistrer le reste (fournisseurs supprimés, favoris…) */
 let bigDirty=0,stLoaded=false;
 const saveC=()=>{bigDirty=1;try{const {done,unk,fix,...small}=C;localStorage.setItem(LSK,JSON.stringify(small))}catch(e){}};
-setInterval(()=>{if(!bigDirty||!stLoaded||typeof idbSet!=="function")return;bigDirty=0;idbSet("fcstate",{done:C.done,unk:C.unk,fix:C.fix}).catch(()=>{bigDirty=1})},5000);
+/* rien de lourd pendant que l'on navigue : enregistrements et rafraîchissements attendent quelques secondes sans touche */
+const idleFor=ms=>Date.now()-(window.__lastKey||0)>ms;
+setInterval(()=>{if(!bigDirty||!stLoaded||typeof idbSet!=="function"||!idleFor(4000))return;bigDirty=0;idbSet("fcstate",{done:C.done,unk:C.unk,fix:C.fix}).catch(()=>{bigDirty=1})},20000);
 (typeof idbGet==="function"?idbGet("fcstate"):Promise.resolve(null)).then(st=>{if(st){C.done={...st.done,...C.done};C.unk={...st.unk,...C.unk};C.fix={...st.fix,...C.fix}}stLoaded=true;if(C.done&&Object.keys(C.done).length)bigDirty=1;saveC()}).catch(()=>{stLoaded=true});
-const getKey=()=>{try{return localStorage.getItem(KEYK)||""}catch(e){return ""}};
+let KEYC=null;const getKey=()=>{if(KEYC!==null)return KEYC;try{return KEYC=localStorage.getItem(KEYK)||""}catch(e){return ""}};
 const MODES=["Automatique","La nuit seulement","Jamais"],PPS=["Mettre en pause","Continuer lentement"];
 /* état du moteur (non sauvegardé) */
 const E={q:[],prio:[],busy:0,paused:false,tot:{f:0,s:0},ok:{f:0,s:0},rate:[],fresh:{},bilan:"",bilanT:0,running:false,lastRender:0,demo:!(typeof REAL!=="undefined"&&REAL),lastErr:""};
@@ -59,6 +61,14 @@ async function findId(kind,it){const tv=kind==="tv",y=+it.y||0,seen=new Map();le
    if(best&&(best.sc>=.82||(best.sc>=.62&&(!sec||best.sc-sec.sc>=.15))||(best.n===1&&best.sc>=.45)))return {id:best.m.id,sc:best.sc}}}
  const L=[...seen.values()].sort((a,b)=>b.sc-a.sc).slice(0,3);
  return {unk:L.filter(x=>x.sc>=.3).map(({m,sc})=>[m.id,tv?m.name:m.title,((tv?m.first_air_date:m.release_date)||"").slice(0,4),m.poster_path||"",Math.round(Math.min(1,sc)*100)])}}
+/* ---------- photos des acteurs : celles du casting TMDB, sinon une recherche TMDB du nom donné par le fournisseur ---------- */
+const APH=window.APH=window.APH||{};const aidOf=nm=>"ra"+(hash(nm)>>>0).toString(36);const APQ=[];let apBusy=false;
+function castPh(L){for(const c of L||[])if(c.profile_path&&c.name)APH[aidOf(c.name)]=img(c.profile_path,"w185")}
+window.actorPh=function(aid){const u=APH[aid];if(u)return u;if(u===undefined&&isReal()&&A[aid]&&!APQ.includes(aid)&&APQ.length<60){APQ.push(aid);setTimeout(apRun,400)}return ""};
+async function apRun(){if(apBusy)return;apBusy=true;let got=0;try{while(APQ.length){const aid=APQ.shift();if(APH[aid]!==undefined)continue;const nm=A[aid];
+  try{const j=await tm(`/search/person?query=${encodeURIComponent(nm)}&include_adult=false`);let b=null,bs=0;for(const x of (j.results||[]).slice(0,5)){const sc=dice(x.name,nm)+Math.min(.05,(x.popularity||0)/400);if(sc>bs&&x.profile_path){bs=sc;b=x}}
+   APH[aid]=b&&bs>=.9?img(b.profile_path,"w185"):"";if(APH[aid])got++;dirty=1}catch(e){APH[aid]="";if(e.message==="cle")break}}}finally{apBusy=false}
+ if(got){const ids=[...document.querySelectorAll('#view [data-act^="fxactor:"],#view [data-act^="actor:"]')];if(ids.length&&idleFor(1500))render(F&&F.dataset.fid);else E.apPend=1}}
 /* ---------- sagas, plateformes, studios, logos, bande-annonce, recommandations ---------- */
 const SVLG=window.SVLG=window.SVLG||{};const COK={};const CLG={};
 function logoOf(d){const L=((d.images||{}).logos||[]).slice().sort((a,b)=>(a.iso_639_1==="fr"?0:a.iso_639_1==="en"?1:2)-(b.iso_639_1==="fr"?0:b.iso_639_1==="en"?1:2)||(b.vote_average||0)-(a.vote_average||0));return L[0]?img(L[0].file_path,"w300"):""}
@@ -90,7 +100,7 @@ async function fetchFilm(it){const r=it._real||{};let id=+r.tm||0;
  const dir=((d.credits||{}).crew||[]).filter(c=>c.job==="Director").map(c=>c.name).join(", ");
  const m={t:d.title,ot:d.original_title,y:+(d.release_date||"").slice(0,4)||it.y,d:d.runtime||0,g:(d.genres||[]).map(g=>g.name),ov:d.overview||"",tg:d.tagline||"",age,va:d.vote_average||0,vc:d.vote_count||0,dir,
   po:img(d.poster_path,C.hd?"w342":"w185"),bd:img(d.backdrop_path,"w780"),cast:((d.credits||{}).cast||[]).slice(0,8).map(c=>[c.name,c.character||""])};
- Object.assign(m,ext(d));
+ castPh((d.credits||{}).cast);Object.assign(m,ext(d));
  TMD.m[id]=m;for(const s of r.s||[]){if(s[1])TMD.names[s[1]]=id;if(s[4])TMD.sids[s[4]]=id}if(!r.tm)r.tmfc=1;r.tm=id;return {id}}
 async function fetchSerie(it){const r=it._real||{};
  if(r.tm&&!r.tmRetry){try{return await applySerie(it,+r.tm)}catch(e){if(!/http 404/.test(e.message))throw e;r.tmRetry=1}}
@@ -102,7 +112,7 @@ async function fetchProg(t){const j=await tm(`/search/multi?query=${encodeURICom
  if(b&&bs>=.8&&(b.backdrop_path||b.poster_path)){const u=img(b.backdrop_path||b.poster_path,b.backdrop_path?"w300":"w185");PRG[RI.strip(t)]=u;IMG.p[RI.strip(t)]=u;return true}return false}
 function progTitles(){const out=new Set(),n=nowMin();try{for(const c of chans()){let L=[];try{L=epg(c)}catch(e){}for(const p of L){if(p.e<n||p.s>n+1440)continue;const t=(p.t||"").trim();if(t.length<3||p.img||IMG.p[RI.strip(t)])continue;if(/^(journal|météo|meteo|info|programmes? |fin des programmes|téléachat|teleachat|no programme|pas de programme)/i.test(t))continue;out.add(t);if(out.size>=600)return [...out]}}}catch(e){}return [...out]}
 async function applySerie(it,id){const r=it._real||{};const d=await tm(`/tv/${id}?append_to_response=credits,content_ratings,watch/providers,images&include_image_language=fr,en,null`);
- for(const n of d.networks||[])if(n.logo_path&&n.name){SXD.nl=SXD.nl||{};SXD.nl[n.name]=img(n.logo_path,"w185")}
+ castPh((d.credits||{}).cast);for(const n of d.networks||[])if(n.logo_path&&n.name){SXD.nl=SXD.nl||{};SXD.nl[n.name]=img(n.logo_path,"w185")}
  const wpS=((d["watch/providers"]||{}).results||{}).FR||{};for(const t of ["flatrate","free","ads"])for(const x of wpS[t]||[])if(x.logo_path)SVLG[x.provider_name]=SVLG[x.provider_name]||img(x.logo_path,"w92");let age="";
  for(const x of ((d.content_ratings||{}).results||[]))if(x.iso_3166_1==="FR"&&x.rating){age=x.rating;break}
  const k="t"+id;SXD.m[k]={t:d.name,y:+(d.first_air_date||"").slice(0,4)||it.y,g:(d.genres||[]).map(g=>g.name),ov:d.overview||"",net:(((d.networks||[])[0])||{}).name||"",cr:(d.created_by||[]).map(c=>c.name).join(", "),
@@ -111,9 +121,9 @@ async function applySerie(it,id){const r=it._real||{};const d=await tm(`/tv/${id
 
 /* ---------- sauvegarde des fiches téléchargées (reprise après coupure) ---------- */
 let dirty=0;
-async function persist(){if(!dirty||E.demo)return;dirty=0;try{await idbSet("fcfilms",{m:TMD.m,names:TMD.names,sids:TMD.sids});await idbSet("fcseries",{m:SXD.m,names:SXD.names});await idbSet("fcprog",PRG);await idbSet("fcext",{svlg:SVLG,co:TMD.co||null,cl:TMD.cl||null,pop:TMD.pop||null,tr:TMD.tr||null,nl:SXD.nl||null,cok:COK})}catch(e){}}
-setInterval(persist,8000);
-if(!E.demo)Promise.all([idbGet("fcfilms").catch(()=>null),idbGet("fcseries").catch(()=>null),idbGet("fcprog").catch(()=>null),idbGet("fcext").catch(()=>null)]).then(([f,s,pg,xt])=>{if(xt){Object.assign(SVLG,xt.svlg||{});Object.assign(COK,xt.cok||{});if(xt.co)TMD.co=xt.co;if(xt.cl)TMD.cl=xt.cl;if(xt.pop)TMD.pop=xt.pop;if(xt.tr)TMD.tr=xt.tr;if(xt.nl)SXD.nl=Object.assign(SXD.nl||{},xt.nl);for(const n in SVLG){const c=typeof SVCN==="function"?SVCN(n):n;if(window.SXLG&&!SXLG[c])SXLG[c]=SVLG[n]}}if(pg){Object.assign(PRG,pg);Object.assign(IMG.p,pg)}
+async function persist(force){if(!dirty||E.demo)return;if(!force&&!idleFor(4000))return;dirty=0;try{await idbSet("fcfilms",{m:TMD.m,names:TMD.names,sids:TMD.sids});await idbSet("fcseries",{m:SXD.m,names:SXD.names});await idbSet("fcprog",PRG);await idbSet("fcext",{svlg:SVLG,co:TMD.co||null,cl:TMD.cl||null,pop:TMD.pop||null,tr:TMD.tr||null,nl:SXD.nl||null,cok:COK,aph:APH})}catch(e){}}
+setInterval(persist,20000);
+if(!E.demo)Promise.all([idbGet("fcfilms").catch(()=>null),idbGet("fcseries").catch(()=>null),idbGet("fcprog").catch(()=>null),idbGet("fcext").catch(()=>null)]).then(([f,s,pg,xt])=>{if(xt){Object.assign(APH,xt.aph||{});Object.assign(SVLG,xt.svlg||{});Object.assign(COK,xt.cok||{});if(xt.co)TMD.co=xt.co;if(xt.cl)TMD.cl=xt.cl;if(xt.pop)TMD.pop=xt.pop;if(xt.tr)TMD.tr=xt.tr;if(xt.nl)SXD.nl=Object.assign(SXD.nl||{},xt.nl);for(const n in SVLG){const c=typeof SVCN==="function"?SVCN(n):n;if(window.SXLG&&!SXLG[c])SXLG[c]=SVLG[n]}}if(pg){Object.assign(PRG,pg);Object.assign(IMG.p,pg)}
  if(f){Object.assign(TMD.m,f.m||{});Object.assign(TMD.names,f.names||{});Object.assign(TMD.sids,f.sids||{});tmApply()}
  if(s){Object.assign(SXD.m,s.m||{});Object.assign(SXD.names,s.names||{});sxApply()}
  if((f||s)&&inApp()&&!S.loading)render(F&&F.dataset.fid);start()}).catch(()=>start());
@@ -127,18 +137,20 @@ async function one(k){const it=itemOfK(k);if(!it){C.done[k]=Date.now();return}
  else{await new Promise(z=>setTimeout(z,E.demo?380:10));applySoon(it.id)}
  C.done[k]=Date.now();E.ok[ser?"s":"f"]++;E.rate.push(Date.now());if(E.rate.length>40)E.rate.shift()}
 let applyT=null,pend=new Set();
-function applySoon(id){pend.add(id);if(applyT)return;applyT=setTimeout(()=>{applyT=null;const ids=[...pend];pend.clear();
- if(isReal()){tmApply();sxApply();if(typeof FXS!=="undefined")FXS.cache={};if(window.__sx&&__sx.X)__sx.X.cache={}}
- const t=Date.now();ids.forEach(i=>E.fresh[i]=t);refresh()},1200)}
+function applySoon(id){pend.add(id);if(applyT)return;applyT=setTimeout(()=>{applyT=null;const ids=[...pend];pend.clear();const only=new Set(ids);
+ if(isReal()){tmApply(only);sxApply(only);if(typeof FXS!=="undefined")FXS.cache={};if(window.__sx&&__sx.X)__sx.X.cache={}}
+ const t=Date.now();ids.forEach(i=>E.fresh[i]=t);refresh()},3000)}
 /* on redessine sans perdre le focus, jamais pendant la lecture ni dans une fenêtre */
-function refresh(){if(!inApp()||S.loading||S.modal||playing()||topS().t==="search")return;if(Date.now()-E.lastRender<4000)return;E.lastRender=Date.now();render(F&&F.dataset.fid)}
+let refT=null;
+function refresh(){clearTimeout(refT);if(!inApp()||S.loading||S.modal||playing()||topS().t==="search")return;
+ if(!idleFor(3000)||Date.now()-E.lastRender<15000){refT=setTimeout(refresh,4000);return}E.lastRender=Date.now();render(F&&F.dataset.fid)}
 async function loop(){if(E.running)return;E.running=true;
  while(left()){if(!allowed()){await new Promise(z=>setTimeout(z,1000));paint();continue}
   const slow=playing()&&C.pp;const n=slow?1:isReal()?4:1;const batch=[];
   while(batch.length<n&&left()){const k=E.prio.length?E.prio.shift():E.q.shift();if(k&&!C.done[k]&&!batch.includes(k))batch.push(k)}
   await Promise.all(batch.map(one));saveC();paint();if(slow)await new Promise(z=>setTimeout(z,1500))}
  E.running=false;E.force=false;finish()}
-function finish(){if(!total())return;if(isReal()&&!E.xDone){E.xDone=true;extras()}const first=!C.first;C.first=C.first||Date.now();C.at=Date.now();saveC();persist();const u=Object.keys(C.unk).length;
+function finish(){if(!total())return;if(isReal()&&!E.xDone){E.xDone=true;extras()}const first=!C.first;C.first=C.first||Date.now();C.at=Date.now();saveC();persist(true);const u=Object.keys(C.unk).length;
  E.bilan=`✓ Fiches à jour · ${nf(E.ok.f)} films, ${nf(E.ok.s)} séries${u?` · ${u} à vérifier`:""}`;E.bilanT=Date.now()+5000;E.ringKeep=false;paint();
  if(first||E.wasRunning)refresh();E.wasRunning=false}
 /* catalogue importé avant le filtre des langues : les titres marqués d'une langue étrangère sont retirés au chargement */
@@ -151,6 +163,8 @@ function cleanTitles(){if(E.demo||E.cleaned)return;E.cleaned=true;let n=0;
   if(nt&&nt.length>=2&&nt!==it.t){it.t=nt;r.t=nt;n++;const k=kOf(it);delete C.done[k];delete C.unk[k]}}
  if(n){saveC();if(window.__sx&&__sx.X)__sx.X.cache={};if(typeof FXS!=="undefined")FXS.cache={}}return n}
 try{cleanTitles()}catch(e){}
+/* casting donné par le fournisseur : chaque acteur retrouve aussi ses films et séries (fiche acteur) */
+try{if(typeof CRED!=="undefined")for(const it of [...FILMS,...SERIES]){if(!it._real||!it.cast)continue;for(const [aid,r] of it.cast){const L=CRED[aid]=CRED[aid]||[];if(!L.some(x=>x[0]===it.id))L.push([it.id,r||""])}}}catch(e){}
 function start(){try{cleanTitles()}catch(e){}if(!inApp()||C.mode===2)return paint();if(!E.demo&&!getKey())return paint();build();if(left()){E.wasRunning=true;loop()}paint()}
 
 /* ---------- anneau dans la barre d'onglets + panneau ---------- */
@@ -214,7 +228,7 @@ SAX.homes=()=>{const u=Object.keys(C.unk).length,key=getKey();let h=`<div class=
  case "redo":C.done={};C.unk={};C.fix={};C.first=0;saveC();E.force=true;if(isReal()){for(const it of FILMS)if(it._real&&it._real.tmfc){delete it._real.tm;delete it._real.tmfc}idbSet("fcfilms",{m:{},names:{},sids:{}}).catch(()=>{});idbSet("fcseries",{m:{},names:{}}).catch(()=>{})}
   E.paused=false;E.ringKeep=true;start();toast("On recommence depuis le début");return render("fc-redo")}}}
 /* → sur une fiche non reconnue : proposition suivante */
-{const _k=key;key=function(k){if((k==="right"||k==="left")&&F&&/^fc-u-/.test(F.dataset.fid||"")){const a=F.dataset.act.slice(8),u=C.unk[a];if(u&&u.c.length>1){u.i=((u.i||0)+(k==="right"?1:u.c.length-1))%u.c.length;saveC();return render(F.dataset.fid)}return}return _k(k)}}
+{const _k=key;key=function(k){window.__lastKey=Date.now();if((k==="right"||k==="left")&&F&&/^fc-u-/.test(F.dataset.fid||"")){const a=F.dataset.act.slice(8),u=C.unk[a];if(u&&u.c.length>1){u.i=((u.i||0)+(k==="right"?1:u.c.length-1))%u.c.length;saveC();return render(F.dataset.fid)}return}return _k(k)}}
 
 /* ---------- clé TMDB sous la télécommande (jamais dans la conversation) ---------- */
 const box=document.querySelector(".rimp");
@@ -227,9 +241,9 @@ if(box){box.insertAdjacentHTML("beforeend",`<div class="fckey"><b>Fiches en arri
   catch(e){return msg(/^https?:/.test(location.protocol)?"Cette page publiée n'a pas le droit de contacter TMDB (protection des pages Claude). Télécharge le simulateur et ouvre le fichier sur ton Mac : la clé y fonctionnera.":"Impossible de joindre TMDB : vérifie la connexion Internet du Mac.")}
   if(r.status===401)return msg("TMDB refuse cette clé. Vérifie-la sur themoviedb.org › Paramètres › API (la « clé d'API », ou le « jeton d'accès en lecture »).");
   try{if(!r.ok)throw 0;
-   localStorage.setItem(KEYK,v);$("#fckey").value="";msg(E.demo?"✓ Clé acceptée. Elle servira dès que tes données réelles seront importées.":"✓ Clé acceptée : les fiches se téléchargent sur la TV.");E.paused=false;start();if(inApp()&&!S.loading)render(F&&F.dataset.fid)}
+   localStorage.setItem(KEYK,v);KEYC=v;$("#fckey").value="";msg(E.demo?"✓ Clé acceptée. Elle servira dès que tes données réelles seront importées.":"✓ Clé acceptée : les fiches se téléchargent sur la TV.");E.paused=false;start();if(inApp()&&!S.loading)render(F&&F.dataset.fid)}
   catch(e){msg("TMDB a répondu une erreur ("+r.status+"). Réessaie dans un instant.")}});
- const del=$("#fckdel");if(del)del.addEventListener("click",()=>{try{localStorage.removeItem(KEYK)}catch(e){}msg("Clé oubliée.");paint()})}
+ const del=$("#fckdel");if(del)del.addEventListener("click",()=>{try{localStorage.removeItem(KEYK)}catch(e){}KEYC="";msg("Clé oubliée.");paint()})}
 
 /* démarrage : après l'écran de chargement */
 const boot=setInterval(()=>{if(stLoaded&&typeof S!=="undefined"&&!S.loading&&inApp()){clearInterval(boot);start()}},700);

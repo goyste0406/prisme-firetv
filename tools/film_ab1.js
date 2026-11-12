@@ -12,16 +12,18 @@ const fxShort=f=>{const b=f.t.split(" :")[0];return FILMS.some(x=>x!==f&&x.t.spl
 /* ---------- données TMDB (films.json, importé comme images.json) ---------- */
 const TMD={m:{},names:{},sids:{},n:0};const TMIDX={};
 const fxAge=a=>{a=String(a||"");return /^(U|TP|tous)/i.test(a)||a===""?"Tous publics":/^\d+$/.test(a)?a+"+":a};
-function tmApply(){let n=0;for(const f of FILMS){const r=f._real;if(!r)continue;let id=r.tm||0;
+/* only : ensemble d'identifiants à (ré)appliquer — le téléchargement en arrière-plan n'applique que les fiches arrivées */
+function tmApply(only){let n=0;for(const f of FILMS){if(only&&!only.has(f.id))continue;const r=f._real;if(!r)continue;let id=r.tm||0;
   if(!id||!TMD.m[id])for(const s of r.s){if(s[4]&&TMD.sids[s[4]]){id=TMD.sids[s[4]];break}if(TMD.names[s[1]]){id=TMD.names[s[1]];break}}
   const d=id&&TMD.m[id];if(!d)continue;n++;f.tm=+id;f.tmd=d;TMIDX[id]=f;if(d.t)f.t=d.t;if(d.d)f.d=d.d;if(d.g&&d.g.length)f.g=d.g.slice(0,3);if(d.ov)f.s=d.ov;if(d.dir)f.dir=d.dir;if(d.y)f.y=d.y;
   if(d.va){f.imdb=+(+d.va).toFixed(1);f.tmdb=Math.round(d.va*10)}if(d.age)f.age=fxAge(d.age);if(d.po)f.po=d.po;if(d.bd)f.bd=d.bd;
   if(d.cast&&d.cast.length)f.cast=(d.cast||[]).map(([nm,ch])=>{const aid="ra"+(hash(nm)>>>0).toString(36);A[aid]=nm;(CRED[aid]=CRED[aid]||[]).some(x=>x[0]===f.id)||CRED[aid].push([f.id,ch||""]);return [aid,ch||""]})}
  /* même film TMDB proposé sous plusieurs noms : une seule fiche avec toutes ses versions */
- const by={};for(const f of FILMS.slice()){if(!f.tm)continue;const k=by[f.tm];if(!k){by[f.tm]=f;continue}
+ const tms=only?new Set(FILMS.filter(f=>only.has(f.id)&&f.tm).map(f=>f.tm)):null;const by={},rm=new Set();for(const f of FILMS){if(!f.tm||(tms&&!tms.has(f.tm)))continue;const k=by[f.tm];if(!k){by[f.tm]=f;continue}
   for(const s2 of f._real.s)if(!k._real.s.some(x=>x[0]===s2[0]&&x[1]===s2[1]))k._real.s.push(s2);(f._real.c||[]).forEach(c=>{if(!k._real.c.includes(c))k._real.c.push(c)});
-  if(S.prog[f.id]&&!S.prog[k.id])S.prog[k.id]=S.prog[f.id];FILMS.splice(FILMS.indexOf(f),1);ALL[f.id]=k}
- TMD.n=n;return n}
+  if(S.prog[f.id]&&!S.prog[k.id])S.prog[k.id]=S.prog[f.id];rm.add(f);ALL[f.id]=k}
+ if(rm.size){let j=0;for(let i=0;i<FILMS.length;i++)if(!rm.has(FILMS[i]))FILMS[j++]=FILMS[i];FILMS.length=j}
+ TMD.n=only?(TMD.n||0)+n:n;return n}
 async function fxImportFilms(files,say){const out=[];for(const f of files){say(`Lecture de ${f.name}…`);let d=null;try{d=JSON.parse((await f.text()).replace(/^﻿/,""))}catch(e){}
   if(!d||typeof d!=="object"||!d.m)throw new Error(`${f.name} n'est pas un fichier de fiches films prisme`);out.push(d)}
  let list=[];try{list=(await idbGet("films"))||[]}catch(e){}list=list.concat(out).slice(-4);await idbSet("films",list);return out.reduce((a,d)=>a+Object.keys(d.m).length,0)}
@@ -186,7 +188,7 @@ function fxFiche(f){const b=bInfo(f),w1=b.why[0],sg=fxSaga(f);
   <div class="tchip glass" id="tchip">${tchipIn(1)}</div><div class="more">▼ ${sg.length>1?"Saga, ":""}distribution, films proches et où le regarder</div></div>
   <div class="below">
   ${sg.length>1?`<section data-anchor><div class="lh">${esc(tmOf(f).col[1])}<small>${sg.length} films · dans l'ordre</small></div><div class="saga sx">${sg.map((x,i)=>`<div class="sg" data-f data-fid="w-sg-${x.id}" data-act="fxopen:${x.id}" data-row="sg">${fxArt(x)}<span class="n">${i+1}${x.id===f.id?" · cette page":ME().seen.includes(x.id)?" · ✓ Vu":""}</span><div class="t"><b>${esc(x.t)}</b><span>${x.y} · ${fxD(x.d)}</span></div></div>`).join("")}</div></section>`:""}
-  ${f.cast.length?`<section data-anchor><div class="lh">Distribution<small>OK pour ses autres films dans ton abonnement</small></div><div class="row sx">${f.cast.map(([a,r])=>`<div class="av" data-f data-fid="w-c-${a}" data-act="fxactor:${a}" data-row="cast"><div class="ph" style="--h:${hash(a)%360}">${esc(initials(A[a]||"?")||"?")}</div><b>${esc(A[a]||"")}</b><span>${esc(r||"")}</span></div>`).join("")}</div>
+  ${f.cast.length?`<section data-anchor><div class="lh">Distribution<small>OK pour ses autres films dans ton abonnement</small></div><div class="row sx">${f.cast.map(([a,r])=>`<div class="av" data-f data-fid="w-c-${a}" data-act="fxactor:${a}" data-row="cast">${(ph=>`<div class="ph${ph?" aph":""}" style="--h:${hash(a)%360}${ph?`;background-image:url(${ph})`:""}">${ph?"":esc(initials(A[a]||"?")||"?")}</div>`)(window.actorPh?actorPh(a):"")}<b>${esc(A[a]||"")}</b><span>${esc(r||"")}</span></div>`).join("")}</div>
    <div class="detl">${f.dir?`Réalisé par <b>${esc(f.dir)}</b> · `:""}${f.y} · Note <b>${f.imdb}</b> · TMDB <b>${f.tmdb} %</b>${f._real&&f._real.r&&f.tmd?` · fournisseur <b>${(+f._real.r).toFixed(1)}</b>`:""}${f._real?` · <span style="opacity:.65">infos ${f.tmd?"TMDB + fournisseur":"fournisseur"}</span>`:""}</div></section>`:`<section data-anchor><div class="detl" style="margin-top:20px">${f.dir?`Réalisé par <b>${esc(f.dir)}</b> · `:""}${f.y} · Note <b>${f.imdb}</b>${REAL&&!f.tmd?" · fiche complète avec films.json":""}</div></section>`}
   ${xSimHtml(f)}${whereHtml(f)}<div style="height:40px"></div></div></div><div class="clock">${fmt(nowMin())}</div></div>`}
 {const _d=detailHtml;detailHtml=function(it){return it&&it.type==="f"?fxC(fxFiche(it)):_d(it)}}
@@ -195,7 +197,7 @@ function fxFiche(f){const b=bInfo(f),w1=b.why[0],sg=fxSaga(f);
 function fxModal(){const m=S.modal,t=topS(),f=t.t==="detail"?ALL[t.id]:P?ALL[P.id]:null,mt=m.type;
  const opt=(fid,a,b,s,dflt,extra="")=>`<div class="opt ${extra}" data-f data-fid="${fid}" data-act="${a}" ${dflt?"data-default":""}><span class="ck"></span><div class="tx"><b>${b}</b>${s?`<span>${s}</span>`:""}</div></div>`;
  if(mt==="fxsyn")return `<div class="modal"><div class="mbox glass" style="width:780px"><div class="k">SYNOPSIS</div><h2>${esc(f.t)}</h2><p class="mp">${esc(f.s)}</p>${f.tmd&&f.tmd.tg?`<p class="mp" style="font-style:italic;opacity:.7">« ${esc(f.tmd.tg)} »</p>`:""}<div class="opt" data-f data-fid="m-close" data-act="fxclose" data-default style="justify-content:center"><b>Fermer</b></div></div></div>`;
- if(mt==="fxactor"){const L=(CRED[m.a]||[]).map(([id])=>ALL[id]).filter(x=>x&&x.type==="f"&&srcs(x.id).length);return `<div class="modal"><div class="mbox glass" style="width:860px"><div style="display:flex;gap:18px;align-items:center"><div class="av" style="width:auto"><div class="ph" style="--h:${hash(m.a)%360};width:84px;height:84px;font-size:28px">${esc(initials(A[m.a]||"?"))}</div></div><div><div class="k">DANS TON ABONNEMENT</div><h2>${esc(A[m.a]||"")}</h2><div style="opacity:.65;font-size:15px">${L.length} film${L.length>1?"s":""} disponible${L.length>1?"s":""}</div></div></div>
+ if(mt==="fxactor"){const L=[...new Set((CRED[m.a]||[]).map(([id])=>ALL[id]))].filter(x=>x&&x.type==="f"&&srcs(x.id).length);return `<div class="modal"><div class="mbox glass" style="width:860px"><div style="display:flex;gap:18px;align-items:center"><div class="av" style="width:auto">${(ph=>`<div class="ph${ph?" aph":""}" style="--h:${hash(m.a)%360};width:84px;height:84px;font-size:28px${ph?`;background-image:url(${ph})`:""}">${ph?"":esc(initials(A[m.a]||"?"))}</div>`)(window.actorPh?actorPh(m.a):"")}</div><div><div class="k">DANS TON ABONNEMENT</div><h2>${esc(A[m.a]||"")}</h2><div style="opacity:.65;font-size:15px">${L.length} film${L.length>1?"s":""} disponible${L.length>1?"s":""}</div></div></div>
   <div class="row sx" style="padding:14px 6px 10px">${L.map((x,i)=>fxPst(x,"m-a-"+x.id,"fxopen:"+x.id,"ma",i===0?"data-default":"")).join("")}</div></div></div>`}
  if(mt==="fxsplit"){const C=fxCuts(f),sel=m.c==null?1:m.c,n=nowMin();return `<div class="modal"><div class="mbox glass" style="width:760px"><div class="k">EN 2 SOIRÉES</div><h2>${esc(f.t)}</h2><p class="mp">Choisis où t'arrêter ce soir, toujours à la fin d'une scène. prisme s'arrête tout seul, et la partie 2 commence par un résumé de 30 s.</p>
   <div class="cutbar"><div class="ax"></div>${C.map(c=>`<i class="${c.i===sel?"on":""}" style="left:${c.m/f.d*100}%"></i>`).join("")}<span style="left:0">0</span><span style="right:0;left:auto">${fxD(f.d)}</span></div>
