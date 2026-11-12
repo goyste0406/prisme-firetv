@@ -1,0 +1,76 @@
+/* ================================================================
+   PRISME — refonte visuelle premium (maquette)
+   Couche de style uniquement : aucune fonction, aucune navigation modifiée.
+   Le logo officiel « Soft Fold » est utilisé tel quel (image fournie), seule sa taille change.
+   ================================================================ */
+:root{
+  --p0:#08090D;--p1:#10121A;--p2:#171A24;--p3:#202431;
+  --pi:#F5F6FA;--pm:#9298A8;
+  --pb:#168BFF;--pc:#36D5F2;--pv:#8657FF;--pg:#D34BCE;--po:#FF9B45;
+  --prism:linear-gradient(100deg,#36D5F2 0%,#168BFF 26%,#8657FF 54%,#D34BCE 78%,#FF9B45 100%);
+  --prism-soft:linear-gradient(100deg,rgba(54,213,242,.16),rgba(22,139,255,.16) 30%,rgba(134,87,255,.16) 58%,rgba(211,75,206,.14) 82%,rgba(255,155,69,.12));
+  --logo-s:url(LOGO_192);--logo-l:url(LOGO_512);
+  --room:#08090D;--room2:#10121A;--ink:#F5F6FA;--muted:#9298A8;--accent:#168BFF;--focus:#F5F6FA;
+}
+
+/* ---------- fond de l'écran : noir profond, lumière prismatique très discrète ---------- */
+.tv-inner{background:var(--p0)}
+#view{background:
+  radial-gradient(60% 50% at 92% -10%,rgba(134,87,255,.10),transparent 62%),
+  radial-gradient(55% 45% at -6% 108%,rgba(22,139,255,.08),transparent 60%),
+  var(--p0)}
+
+/* ---------- logo officiel (image fournie, proportions intactes) ---------- */
+.brand i,.fx .fx-brand i{width:34px;height:34px;border-radius:0;background:var(--logo-s) center/100% 100% no-repeat;box-shadow:none}
+.brand,.fx .fx-brand{gap:10px;font-size:17px;font-weight:600;letter-spacing:.2em;text-transform:uppercase}
+.lpanel2 h2 i,.sysbox .ic i{border-radius:0;background:var(--logo-s) center/100% 100% no-repeat}
+.splash{background:var(--p0)}
+.splash div{font-size:22px;font-weight:600;letter-spacing:.32em;text-transform:uppercase;gap:6px}
+.splash i{width:200px;height:200px;border-radius:0;background:var(--logo-l) center/100% 100% no-repeat}
+.lsplash{background:radial-gradient(50% 45% at 50% 38%,rgba(134,87,255,.12),transparent 70%),var(--p0)!important}
+.lsplash .lg{flex-direction:column;gap:2px;font-size:22px;font-weight:600;letter-spacing:.32em;text-transform:uppercase}
+.lsplash .lg i{width:200px;height:200px;border-radius:0;background:var(--logo-l) center/100% 100% no-repeat}
+.lsplash .bar{height:4px;background:rgba(245,246,250,.10)}
+.lsplash .bar i{background:var(--prism)}
+.lsplash li.ok::before{color:var(--pc)}
+.pv-top h1{display:flex;align-items:center;gap:16px}
+.pv-top h1::before{content:"";flex:none;width:64px;height:64px;background:var(--logo-s) center/100% 100% no-repeat}
+
+/* ---------- barre d'onglets : verre sombre, liseré prismatique, onglet courant souligné ---------- */
+.tabs{background:rgba(16,18,26,.58);border-color:rgba(245,246,250,.10);position:relative;box-shadow:inset 0 1px 0 rgba(245,246,250,.06),0 18px 50px rgba(0,0,0,.35)}
+.tabs::after{content:"";position:absolute;left:44px;right:44px;bottom:-1px;height:1px;background:var(--prism);opacity:.55;pointer-events:none}
+.tab{color:rgba(245,246,250,.66)}
+.tab.sel{background:rgba(245,246,250,.10);position:relative}
+.tab.sel::after{content:"";position:absolute;left:50%;bottom:5px;width:20px;height:3px;margin-left:-10px;border-radius:2px;background:var(--prism)}
+.tab.ic.sel::after,.tab.fcring.sel::after{bottom:3px;width:14px;margin-left:-7px}
+
+/* ---------- indicateurs : progression et qualité ---------- */
+.prog{background:rgba(245,246,250,.18)}
+.prog i,.pb-zov .pg i{background:var(--prism)}
+.qb.q4K{background:var(--prism);color:#fff;text-shadow:0 1px 2px rgba(8,9,13,.35)}
+.qb.q1080p{background:var(--pc);color:var(--p0)}
+.qb.q720p{background:#C9CEDA;color:var(--p0)}
+.qb.qSD{background:#7A8090;color:var(--p0)}
+
+/* ---------- fenêtres : verre sombre légèrement translucide, liseré lumineux ---------- */
+.modal{background:rgba(8,9,13,.62)}
+.mbox,.pb-pan{background:rgba(23,26,36,.72);border:1px solid rgba(245,246,250,.10);box-shadow:inset 0 1px 0 rgba(245,246,250,.08),0 30px 80px rgba(0,0,0,.5)}
+.mbox::before,.pb-pan::before{content:"";position:absolute;left:28px;right:28px;top:0;height:1px;background:var(--prism);opacity:.55;pointer-events:none}
+.mbox,.pb-pan{position:relative}
+.pb-pan{position:absolute}
+.msrc{background:rgba(32,36,49,.55)}
+
+/* ---------- en direct : badge rouge conservé (repère), barres de progression prismatiques ---------- */
+:root{--live:#E5484D}
+.lpb i,.gd-pc .pg{background:linear-gradient(90deg,#D34BCE,#FF9B45)}
+.gd-now,.gd-now::before{background:#FF9B45}
+.gd-now{box-shadow:0 0 12px rgba(255,155,69,.6)}
+
+/* ---------- page du simulateur (hors écran) ---------- */
+body{background:radial-gradient(120% 80% at 50% 0%,#10121A,#08090D 70%)}
+.tv{background:#050608}
+.top h1{display:flex;align-items:center;gap:12px}
+.top h1 img{width:34px;height:34px}
+.ptog{margin-left:6px;font:600 13px/1 var(--ui);color:var(--pi);background:rgba(245,246,250,.08);border:1px solid rgba(245,246,250,.16);border-radius:999px;padding:8px 14px;cursor:pointer}
+.ptog:hover{background:rgba(245,246,250,.14)}
+.ptog b{background:var(--prism);-webkit-background-clip:text;background-clip:text;color:transparent}

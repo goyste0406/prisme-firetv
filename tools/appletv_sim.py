@@ -298,6 +298,12 @@ R('setBg([CH[S.lch].col,"#08080c"])', 'setBg([(CH[S.lch]||{col:"#1a1a22"}).col,"
 R("<kbd>M</kbd> (ou maintenir le clic) ajouter/retirer des favoris", "<kbd>M</kbd> (ou maintenir le clic) favoris, ou options d'une chaîne dans la TV en direct")
 
 R('<div class="pkick">${it.type==="s"?"Série · "+esc(it.net):"Film · "+it.y}', '<div class="pkick">${it.rp?"Replay · "+esc(CH[it.rp.c].n)+" · diffusé "+lday(it.rp.s):it.type==="s"?"Série · "+esc(it.net):"Film · "+it.y}')
+# fenêtre des sources et listes du lecteur : défilement par transformation (fiable avec beaucoup de flux, et dans Safari sous le verre)
+R('<div class="mlist sy">${L.map', '<div class="mlist sy ty"><div class="ttrack">${L.map')
+R('}).join("")}</div><div class="mfoot">OK pour lire cette source', '}).join("")}</div></div><div class="mfoot">OK pour lire cette source')
+R('  if(cs.contains("sy")){const a=el.closest("[data-anchor]")', '  if(cs.contains("ty")){tyFollow(p,el,instant)}else if(cs.contains("sy")){const a=el.closest("[data-anchor]")')
+R("</style>", rd("defil.css") + "</style>")
+R("function ensureVisible(el,instant){", rd("defil.js") + "function ensureVisible(el,instant){")
 _k = src.index("<script>", src.index("</style>")); src = src[:_k] + "<script>\n" + rd("errh.js") + src[_k+len("<script>"):]
 src = src.replace("\nrender();if(inApp())lPreload(()=>render());\n</script>", "\nrender();if(inApp())lPreload(()=>render());window.__prReady=true;\n</script>")
 assert "window.__prReady=true" in src
