@@ -120,7 +120,11 @@ function fhColls(){const ck="co|"+FILMS.length+"|"+TMD.n+"|"+PR.cur+"|"+ME().see
  kws.forEach(k=>C.push({k:"kw:"+k,n:k[0].toUpperCase()+k.slice(1),ic:"🧭",why:`Un thème que tu regardes souvent (mot-clé TMDB « ${k} »)`,items:()=>av.filter(f=>tmOf(f).kw.includes(k))}));
  for(const [mk,M] of Object.entries(MOMS))C.push({k:"mom:"+mk,n:M.t,ic:M.ic,why:M.s,items:()=>av.filter(M.f).sort((a,b)=>b.imdb-a.imdb),hide:1});
  const cols={};av.forEach(f=>{const c=f.tmd&&f.tmd.col;if(c)(cols[c[0]]=cols[c[0]]||{n:c[1],L:[]}).L.push(f)});
- Object.entries(cols).filter(([id,x])=>x.L.length>=2).forEach(([id,x])=>C.push({k:"col:"+id,n:x.n,ic:"🧩",why:"Saga complète (collection TMDB), dans l'ordre",items:()=>x.L.slice().sort((a,b)=>a.y-b.y),hide:1,lic:1}));
+ Object.entries(cols).filter(([id,x])=>x.L.length>=2).forEach(([id,x])=>C.push({k:"col:"+id,n:x.n,ic:"🧩",why:"Saga complète (collection TMDB), dans l'ordre",items:()=>x.L.slice().sort((a,b)=>a.y-b.y),hide:1,lic:1,lg:(TMD.cl||{})[id]||(x.L.slice().sort((a,b)=>a.y-b.y).map(f=>f.tmd&&f.tmd.lg).find(Boolean))||""}));
+ /* plateformes : catégories du fournisseur qui portent le nom d'un service (« FR| NETFLIX », « Disney+ »…), avec le logo TMDB */
+ if(typeof SVCS!=="undefined"){const P={};for(const [ck,cn] of FCATS){const sv=SVCS.find(([,r])=>r.test(cn));if(!sv)continue;(P[sv[0]]=P[sv[0]]||[]).push(ck)}
+  for(const [n,cks] of Object.entries(P)){const L=av.filter(f=>(f.cat||[]).some(c=>cks.includes(c)));if(L.length<2)continue;const lg=(window.SXLG||{})[n]||Object.entries(window.SVLG||{}).find(([k])=>SVCN(k)===n)?.[1]||"";
+   C.push({k:"pf:"+n,n,ic:"📺",why:`Les films de ton fournisseur rangés dans sa catégorie ${n}`,items:()=>L,hide:1,lic:1,lg,pf:1})}}
  const cos=TMD.co||{};Object.entries(cos).forEach(([id,x])=>C.push({k:"co:"+id,n:x.n,ic:"🎞",why:`Studio · ${x.k} films chez ton fournisseur`,items:()=>av.filter(f=>f.tmd&&(f.tmd.co||[]).includes(+id)),hide:1,lic:1,lg:x.lg}));
  return FH.cache[ck]=C}
 const fhColl=k=>fhColls().find(c=>c.k===k);
@@ -138,7 +142,7 @@ function fhTrendOf(L){const pop=TMD.pop||{};let sc=0;for(const f of L){const r=f
  const tl=fhTop().map(x=>x.f.id);L.forEach(f=>{const i=tl.indexOf(f.id);if(i>=0)sc+=30-i*2});
  const ts=L.map(f=>trendScore(f)).sort((a,b)=>b-a).slice(0,3);return sc*10+ts.reduce((a,b)=>a+b,0)/Math.max(1,ts.length)+Math.max(0,...L.map(f=>f.y))/1e4}
 function fhLics(){const C=fhColls().filter(c=>c.lic);
- if(C.length)return C.map(c=>{const L=c.items();return {n:c.n,k:c.k.startsWith("co:")?"Studio":"Saga",d:L.length,c:"#"+((hash(c.k)&0xffffff)|0x404040).toString(16).slice(-6),a:"fhcoll:"+c.k,lg:c.lg,tr:fhTrendOf(L)}}).filter(x=>x.d>=2).sort((a,b)=>b.tr-a.tr).map((x,i)=>({...x,rk:i+1}));
+ if(C.length)return C.map(c=>{const L=c.items();return {n:c.n,k:c.k.startsWith("co:")?"Studio":c.k.startsWith("pf:")?"Plateforme":"Saga",d:L.length,c:"#"+((hash(c.k)&0xffffff)|0x404040).toString(16).slice(-6),a:"fhcoll:"+c.k,lg:c.lg,tr:fhTrendOf(L)}}).filter(x=>x.d>=2).sort((a,b)=>b.tr-a.tr).map((x,i)=>({...x,rk:i+1}));
  return LICS_DEMO.map(([n,k,d,c],i)=>({n,k,d,c,a:"fhdemo:"+encodeURIComponent(n),tr:LICS_TR[i]||0})).sort((a,b)=>b.tr-a.tr).map((x,i)=>({...x,rk:i+1}))}
 const LICS_TR=[70,40,95,88,55,48,62,20,35,66,58];
 function fhBrowse(){const t=FH.catT,G=genreList("f"),L=fhLics();

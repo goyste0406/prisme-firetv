@@ -12,7 +12,7 @@ const getKey=()=>{try{return localStorage.getItem(KEYK)||""}catch(e){return ""}}
 const MODES=["Automatique","La nuit seulement","Jamais"],PPS=["Mettre en pause","Continuer lentement"];
 /* état du moteur (non sauvegardé) */
 const E={q:[],prio:[],busy:0,paused:false,tot:{f:0,s:0},ok:{f:0,s:0},rate:[],fresh:{},bilan:"",bilanT:0,running:false,lastRender:0,demo:!(typeof REAL!=="undefined"&&REAL),lastErr:""};
-window.__fc={C,E,get findId(){return findId}};
+window.__fc={C,E,get extras(){return extras},get findId(){return findId}};
 const isReal=()=>!E.demo&&!!getKey();
 const nf=n=>Math.round(n).toLocaleString("fr-FR");
 const kOf=it=>it.prog?it.id:(it.type==="s"||SERIES.includes(it)?"s":"f")+":"+it.id;
@@ -23,7 +23,7 @@ function allowed(){if(C.mode===2||E.paused)return false;if(C.mode===1&&!night())
 
 /* ---------- la file : l'écran d'abord, puis en cours, ma liste, nouveautés, le reste ---------- */
 function build(){if(C.mver!==2){for(const k in C.unk)delete C.done[k];C.mver=2;saveC()}const F=FILMS.slice(),Sx=SERIES.slice(),week=7*864e5,now=Date.now();
- E.tot={f:F.length,s:Sx.length,p:0};const need=it=>{const k=kOf(it),d=C.done[k];if(C.fix[k])return false;if(isReal()&&hasFiche(it)&&!E.force)return false;if(!d)return true;if(!C.nouv&&now-d>week)return true;return false};
+ E.tot={f:F.length,s:Sx.length,p:0};const need=it=>{const k=kOf(it),d=C.done[k];if(C.fix[k])return false;if(isReal()&&hasFiche(it)&&!E.force){if(it.tmd&&!it.tmd.wp&&it._real&&it._real.tm)return true;if(it.sxk&&SXD.m[it.sxk]&&!SXD.m[it.sxk].ext&&it._real&&it._real.tm)return true;return false}if(!d)return true;if(!C.nouv&&now-d>week)return true;return false};
  const score=it=>(S.prog[it.id]?3e9:0)+(S.favs.includes(it.id)?2e9:0)+((it._real&&it._real.a)||it.y*1e5||0);
  for(const k in C.unk)if(!itemOfK(k))delete C.unk[k];
  E.q=[...F,...Sx].filter(need).sort((a,b)=>score(b)-score(a)).map(kOf);
@@ -54,13 +54,38 @@ async function findId(kind,it){const tv=kind==="tv",y=+it.y||0,seen=new Map();le
    if(best&&(best.sc>=.82||(best.sc>=.62&&(!sec||best.sc-sec.sc>=.15))||(best.n===1&&best.sc>=.45)))return {id:best.m.id,sc:best.sc}}}
  const L=[...seen.values()].sort((a,b)=>b.sc-a.sc).slice(0,3);
  return {unk:L.filter(x=>x.sc>=.3).map(({m,sc})=>[m.id,tv?m.name:m.title,((tv?m.first_air_date:m.release_date)||"").slice(0,4),m.poster_path||"",Math.round(Math.min(1,sc)*100)])}}
+/* ---------- sagas, plateformes, studios, logos, bande-annonce, recommandations ---------- */
+const SVLG=window.SVLG=window.SVLG||{};const COK={};const CLG={};
+function logoOf(d){const L=((d.images||{}).logos||[]).slice().sort((a,b)=>(a.iso_639_1==="fr"?0:a.iso_639_1==="en"?1:2)-(b.iso_639_1==="fr"?0:b.iso_639_1==="en"?1:2)||(b.vote_average||0)-(a.vote_average||0));return L[0]?img(L[0].file_path,"w300"):""}
+function ext(d){const wp=((d["watch/providers"]||{}).results||{}).FR||{},W={f:[],g:[],r:[],b:[]};
+ for(const [k,t] of [["f","flatrate"],["g","free"],["g","ads"],["r","rent"],["b","buy"]])for(const x of wp[t]||[]){if(!W[k].includes(x.provider_name))W[k].push(x.provider_name);if(x.logo_path)SVLG[x.provider_name]=SVLG[x.provider_name]||img(x.logo_path,"w92")}
+ const vid=((d.videos||{}).results||[]).filter(v=>v.site==="YouTube"&&/Trailer|Teaser/.test(v.type||"")).map(v=>{const n=v.name||"",l=v.iso_639_1||"";return [(l==="fr"?100:l==="en"?10:0)+(/vostf?r?|sous-titr/i.test(n)?-45:0)+(/\bvf\b|version fran|en fran/i.test(n)?25:0)+(v.type==="Trailer"?10:0)+(v.official?4:0),v]}).sort((a,b)=>b[0]-a[0]);
+ const v0=vid[0]&&vid[0][1],col=d.belongs_to_collection;
+ for(const c of d.production_companies||[]){if(!c.id)continue;const e=COK[c.id]=COK[c.id]||{n:c.name,k:0,lg:c.logo_path?img(c.logo_path,"w185"):""};e.k++}
+ const lg=logoOf(d);if(col&&col.id&&lg&&!CLG[col.id])CLG[col.id]=lg;
+ return {wp:W,kw:((d.keywords||{}).keywords||[]).map(k=>k.name),rec:((d.recommendations||{}).results||[]).map(x=>x.id),yt:v0?v0.key:"",ytl:!v0?"":(v0.iso_639_1!=="fr"?"vo":/vostf?r?|sous-titr/i.test(v0.name||"")?"vost":"vf"),
+  imdb:d.imdb_id||"",lang:d.original_language||"",col:col&&col.id?[col.id,col.name]:null,co:(d.production_companies||[]).map(c=>c.id).filter(Boolean),lg}}
+/* studios gardés : au moins 3 films chez le fournisseur, les 24 plus présents (comme films.json) */
+function studios(){const L=Object.entries(COK).filter(([,x])=>x.k>=3).sort((a,b)=>b[1].k-a[1].k).slice(0,24);if(!L.length)return;TMD.co=TMD.co||{};for(const [id,x] of L)TMD.co[id]={n:x.n,k:x.k,lg:(TMD.co[id]&&TMD.co[id].lg)||x.lg}}
+/* logo d'une saga : celui de la collection TMDB, sinon le logo du premier film de la saga */
+async function sagaLogos(){const want=new Set();for(const f of FILMS){const c=f.tmd&&f.tmd.col;if(c)want.add(c[0])}TMD.cl=TMD.cl||{};
+ for(const id of want){if(TMD.cl[id])continue;try{const j=await tm(`/collection/${id}/images?include_image_language=fr,en,null`);const L=(j.logos||[]).sort((a,b)=>(a.iso_639_1==="fr"?0:1)-(b.iso_639_1==="fr"?0:1));TMD.cl[id]=L[0]?img(L[0].file_path,"w300"):(CLG[id]||"")}catch(e){TMD.cl[id]=CLG[id]||""}}}
+/* plateformes de France (logos) et tendances de la semaine en France */
+async function extras(){if(!isReal())return;try{
+ for(const t of ["movie","tv"]){const j=await tm(`/watch/providers/${t}?watch_region=FR`);for(const x of j.results||[])if(x.logo_path)SVLG[x.provider_name]=SVLG[x.provider_name]||img(x.logo_path,"w92")}
+ for(const n in SVLG){const c=typeof SVCN==="function"?SVCN(n):n;if(window.SXLG&&!SXLG[c])SXLG[c]=SVLG[n]}
+ }catch(e){console.warn("fiches plateformes",e)}
+ try{const ids=[];for(let pg=1;pg<=5;pg++){const j=await tm(`/movie/popular?region=FR&page=${pg}`);for(const m of j.results||[])if(TMD.m[m.id]&&!ids.includes(m.id))ids.push(m.id)}
+ if(ids.length){TMD.pop={};ids.forEach((id,i)=>TMD.pop[id]=i+1);TMD.tr=ids.slice(0,10)}}catch(e){console.warn("fiches tendances",e)}
+ try{studios();await sagaLogos();dirty=1;if(typeof FH!=="undefined")FH.cache={};if(window.__sx&&__sx.X)__sx.X.cache={};E.lastRender=0;refresh()}catch(e){console.warn("fiches extras",e)}}
 async function fetchFilm(it){const r=it._real||{};let id=+r.tm||0;
  if(!id){const f=await findId("movie",it);if(f.unk)return f;id=f.id}
- let d;try{d=await tm(`/movie/${id}?append_to_response=credits,release_dates`)}catch(e){if(/http 404/.test(e.message)&&r.tm&&!r.tmRetry){r.tmRetry=1;delete r.tm;return fetchFilm(it)}throw e}let age="";
+ let d;try{d=await tm(`/movie/${id}?append_to_response=credits,release_dates,watch/providers,keywords,recommendations,videos,images&include_image_language=fr,en,null&include_video_language=fr,en,null`)}catch(e){if(/http 404/.test(e.message)&&r.tm&&!r.tmRetry){r.tmRetry=1;delete r.tm;return fetchFilm(it)}throw e}let age="";
  for(const x of ((d.release_dates||{}).results||[]))if(x.iso_3166_1==="FR")for(const y of x.release_dates||[])if(y.certification){age=y.certification;break}
  const dir=((d.credits||{}).crew||[]).filter(c=>c.job==="Director").map(c=>c.name).join(", ");
  const m={t:d.title,ot:d.original_title,y:+(d.release_date||"").slice(0,4)||it.y,d:d.runtime||0,g:(d.genres||[]).map(g=>g.name),ov:d.overview||"",tg:d.tagline||"",age,va:d.vote_average||0,vc:d.vote_count||0,dir,
   po:img(d.poster_path,C.hd?"w342":"w185"),bd:img(d.backdrop_path,"w780"),cast:((d.credits||{}).cast||[]).slice(0,8).map(c=>[c.name,c.character||""])};
+ Object.assign(m,ext(d));
  TMD.m[id]=m;for(const s of r.s||[]){if(s[1])TMD.names[s[1]]=id;if(s[4])TMD.sids[s[4]]=id}if(!r.tm)r.tmfc=1;r.tm=id;return {id}}
 async function fetchSerie(it){const r=it._real||{};
  if(r.tm&&!r.tmRetry){try{return await applySerie(it,+r.tm)}catch(e){if(!/http 404/.test(e.message))throw e;r.tmRetry=1}}
@@ -71,17 +96,19 @@ async function fetchProg(t){const j=await tm(`/search/multi?query=${encodeURICom
  for(const m of (j.results||[]).slice(0,6)){if(m.media_type!=="movie"&&m.media_type!=="tv")continue;const sc=Math.max(dice(m.title||m.name,t),dice(m.original_title||m.original_name,t))+Math.min(.05,Math.log10((m.vote_count||0)+1)/60);if(sc>bs){bs=sc;b=m}}
  if(b&&bs>=.8&&(b.backdrop_path||b.poster_path)){const u=img(b.backdrop_path||b.poster_path,b.backdrop_path?"w300":"w185");PRG[RI.strip(t)]=u;IMG.p[RI.strip(t)]=u;return true}return false}
 function progTitles(){const out=new Set(),n=nowMin();try{for(const c of chans()){let L=[];try{L=epg(c)}catch(e){}for(const p of L){if(p.e<n||p.s>n+1440)continue;const t=(p.t||"").trim();if(t.length<3||p.img||IMG.p[RI.strip(t)])continue;if(/^(journal|météo|meteo|info|programmes? |fin des programmes|téléachat|teleachat|no programme|pas de programme)/i.test(t))continue;out.add(t);if(out.size>=600)return [...out]}}}catch(e){}return [...out]}
-async function applySerie(it,id){const r=it._real||{};const d=await tm(`/tv/${id}?append_to_response=credits,content_ratings`);let age="";
+async function applySerie(it,id){const r=it._real||{};const d=await tm(`/tv/${id}?append_to_response=credits,content_ratings,watch/providers,images&include_image_language=fr,en,null`);
+ for(const n of d.networks||[])if(n.logo_path&&n.name){SXD.nl=SXD.nl||{};SXD.nl[n.name]=img(n.logo_path,"w185")}
+ const wpS=((d["watch/providers"]||{}).results||{}).FR||{};for(const t of ["flatrate","free","ads"])for(const x of wpS[t]||[])if(x.logo_path)SVLG[x.provider_name]=SVLG[x.provider_name]||img(x.logo_path,"w92");let age="";
  for(const x of ((d.content_ratings||{}).results||[]))if(x.iso_3166_1==="FR"&&x.rating){age=x.rating;break}
  const k="t"+id;SXD.m[k]={t:d.name,y:+(d.first_air_date||"").slice(0,4)||it.y,g:(d.genres||[]).map(g=>g.name),ov:d.overview||"",net:(((d.networks||[])[0])||{}).name||"",cr:(d.created_by||[]).map(c=>c.name).join(", "),
-  va:d.vote_average||0,age,po:img(d.poster_path,C.hd?"w342":"w185"),bd:img(d.backdrop_path,"w780"),ep:(d.episode_run_time||[])[0]||0,cast:((d.credits||{}).cast||[]).slice(0,8).map(c=>[c.name,c.character||""])};
- for(const s of r.s||[])if(s[1])SXD.names[s[1]]=k;return {id}}
+  va:d.vote_average||0,age,po:img(d.poster_path,C.hd?"w342":"w185"),bd:img(d.backdrop_path,"w780"),ext:1,lg:logoOf(d),wpf:(wpS.flatrate||[]).map(x=>x.provider_name),ep:(d.episode_run_time||[])[0]||0,cast:((d.credits||{}).cast||[]).slice(0,8).map(c=>[c.name,c.character||""])};
+ for(const s of r.s||[])if(s[1])SXD.names[s[1]]=k;r.tm=id;return {id}}
 
 /* ---------- sauvegarde des fiches téléchargées (reprise après coupure) ---------- */
 let dirty=0;
-async function persist(){if(!dirty||E.demo)return;dirty=0;try{await idbSet("fcfilms",{m:TMD.m,names:TMD.names,sids:TMD.sids});await idbSet("fcseries",{m:SXD.m,names:SXD.names});await idbSet("fcprog",PRG)}catch(e){}}
+async function persist(){if(!dirty||E.demo)return;dirty=0;try{await idbSet("fcfilms",{m:TMD.m,names:TMD.names,sids:TMD.sids});await idbSet("fcseries",{m:SXD.m,names:SXD.names});await idbSet("fcprog",PRG);await idbSet("fcext",{svlg:SVLG,co:TMD.co||null,cl:TMD.cl||null,pop:TMD.pop||null,tr:TMD.tr||null,nl:SXD.nl||null,cok:COK})}catch(e){}}
 setInterval(persist,8000);
-if(!E.demo)Promise.all([idbGet("fcfilms").catch(()=>null),idbGet("fcseries").catch(()=>null),idbGet("fcprog").catch(()=>null)]).then(([f,s,pg])=>{if(pg){Object.assign(PRG,pg);Object.assign(IMG.p,pg)}
+if(!E.demo)Promise.all([idbGet("fcfilms").catch(()=>null),idbGet("fcseries").catch(()=>null),idbGet("fcprog").catch(()=>null),idbGet("fcext").catch(()=>null)]).then(([f,s,pg,xt])=>{if(xt){Object.assign(SVLG,xt.svlg||{});Object.assign(COK,xt.cok||{});if(xt.co)TMD.co=xt.co;if(xt.cl)TMD.cl=xt.cl;if(xt.pop)TMD.pop=xt.pop;if(xt.tr)TMD.tr=xt.tr;if(xt.nl)SXD.nl=Object.assign(SXD.nl||{},xt.nl);for(const n in SVLG){const c=typeof SVCN==="function"?SVCN(n):n;if(window.SXLG&&!SXLG[c])SXLG[c]=SVLG[n]}}if(pg){Object.assign(PRG,pg);Object.assign(IMG.p,pg)}
  if(f){Object.assign(TMD.m,f.m||{});Object.assign(TMD.names,f.names||{});Object.assign(TMD.sids,f.sids||{});tmApply()}
  if(s){Object.assign(SXD.m,s.m||{});Object.assign(SXD.names,s.names||{});sxApply()}
  if((f||s)&&inApp()&&!S.loading)render(F&&F.dataset.fid);start()}).catch(()=>start());
@@ -106,7 +133,7 @@ async function loop(){if(E.running)return;E.running=true;
   while(batch.length<n&&left()){const k=E.prio.length?E.prio.shift():E.q.shift();if(k&&!C.done[k]&&!batch.includes(k))batch.push(k)}
   await Promise.all(batch.map(one));saveC();paint();if(slow)await new Promise(z=>setTimeout(z,1500))}
  E.running=false;E.force=false;finish()}
-function finish(){if(!total())return;const first=!C.first;C.first=C.first||Date.now();C.at=Date.now();saveC();persist();const u=Object.keys(C.unk).length;
+function finish(){if(!total())return;if(isReal()&&!E.xDone){E.xDone=true;extras()}const first=!C.first;C.first=C.first||Date.now();C.at=Date.now();saveC();persist();const u=Object.keys(C.unk).length;
  E.bilan=`✓ Fiches à jour · ${nf(E.ok.f)} films, ${nf(E.ok.s)} séries${u?` · ${u} à vérifier`:""}`;E.bilanT=Date.now()+5000;E.ringKeep=false;paint();
  if(first||E.wasRunning)refresh();E.wasRunning=false}
 /* titres importés avant le nettoyage (« Brothers 2026 US ») : on les nettoie au chargement, sans réimporter,

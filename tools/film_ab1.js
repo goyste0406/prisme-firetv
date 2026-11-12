@@ -136,7 +136,7 @@ function streams(f){const t=tmOf(f),out=[];if(t.wp){for(const [k,ty] of [["f","a
  return out.map((x,i)=>({...x,i}))}
 const TYP={abo:"Inclus dans l'abonnement",gratuit:"Gratuit",loc:"Location",achat:"Achat"};
 const svIni=n=>n.replace(/[^A-Za-z0-9+ .]/g,"").split(/[ .]/).filter(Boolean).map(w=>w[0]).join("").slice(0,2).toUpperCase();
-const svTile=(x,cls="")=>`<i class="svt ${cls}" style="--h:${hash(x.n)%360}">${esc(svIni(x.n))}</i>`;
+const svTile=(x,cls="")=>{const lg=(window.SVLG||{})[x.n];return lg?`<i class="svt img ${cls}" style="--h:${hash(x.n)%360}"><img src="${lg}" alt="${esc(x.n)}"></i>`:`<i class="svt ${cls}" style="--h:${hash(x.n)%360}">${esc(svIni(x.n))}</i>`};
 function fxQual(f){const v=pickSrc(f.id);if(!v)return "";return [v.fx?(v.q==="4K"?"4K"+(v.hdr?" "+(v.hdr==="DV"?"Dolby Vision":v.hdr):""):v.q+(v.hdr?" "+v.hdr:"")):v.q==="4K"?"4K HDR":v.q,(v.audio||[])[0]&&/atmos/i.test(v.audio[0])?"Atmos":(v.audio||[])[0]&&/5\.1/.test(v.audio[0])?"5.1":""].filter(Boolean).join(" · ")}
 
 /* ---------- fiche ---------- */

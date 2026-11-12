@@ -159,7 +159,8 @@ function colls(){const ck="co|"+PR.cur+"|"+SERIES.length+"|"+MX().no.length+"|"+
  C.push({k:"court",n:"Épisodes courts",ic:"⏱",why:"Des épisodes de 35 minutes ou moins",items:()=>av.filter(it=>ED(it)<=35)});
  C.push({k:"fr",n:"Séries françaises",ic:"🇫🇷",why:"Produites en France",items:()=>av.filter(FR)});
  C.push({k:"top",n:"★ 8,5 et plus",ic:"🏆",why:"Les mieux notées de ton fournisseur",items:()=>av.filter(it=>it.imdb>=8.5).sort((a,b)=>b.imdb-a.imdb)});
- const nets={};av.forEach(it=>{const n=SVCN(NET(it));if(n)(nets[n]=nets[n]||[]).push(it)});Object.entries(nets).sort((p,q)=>SVCR(p[0])-SVCR(q[0])||q[1].length-p[1].length).forEach(([n,L])=>C.push({k:"net:"+n,n,ic:"📡",why:"Chaîne ou plateforme d'origine (TMDB)",items:()=>L,hide:1,net:1}));
+ const nets={};const pcs={};for(const [ck,cn] of SCATS){const sv=SVCS.find(([,r])=>r.test(cn));if(sv)pcs[ck]=sv[0]}
+ av.forEach(it=>{const ns=new Set();const n=SVCN(NET(it));if(n)ns.add(n);for(const c of it.cat||[])if(pcs[c])ns.add(pcs[c]);for(const x of ns)(nets[x]=nets[x]||[]).push(it)});Object.entries(nets).sort((p,q)=>SVCR(p[0])-SVCR(q[0])||q[1].length-p[1].length).forEach(([n,L])=>C.push({k:"net:"+n,n,ic:"📡",why:"Chaîne ou plateforme d'origine (TMDB)",items:()=>L,hide:1,net:1}));
  return X.cache[ck]=C}
 const coll=k=>colls().find(c=>c.k===k);
 const SORT=[["pert","Pertinence"],["note","Note"],["duree","Plus courtes"],["recent","Récentes"]];
