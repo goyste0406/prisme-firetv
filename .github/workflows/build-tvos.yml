@@ -3,6 +3,8 @@ name: Compiler l'appli Apple TV
 on:
   push:
     branches: [appletv]
+    # seulement quand l'appli elle-même change (pas le simulateur)
+    paths: ["IPTVPerso/**", "project.yml", "Podfile", ".github/workflows/**"]
   workflow_dispatch:
 
 permissions:
@@ -33,9 +35,23 @@ jobs:
           set -o pipefail
           xcodebuild -workspace IPTVPerso.xcworkspace -scheme IPTVPerso -configuration Release \
             -sdk appletvos -destination 'generic/platform=tvOS' -derivedDataPath build \
-            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" build 2>&1 \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" CURRENT_PROJECT_VERSION=${GITHUB_RUN_NUMBER} build 2>&1 \
             | tee build.log | grep -E "error:|warning: .*\.swift|BUILD (SUCCEEDED|FAILED)" || true
           grep -q "BUILD SUCCEEDED" build.log
+
+      - name: Contrôle de l'identité de l'appli (Bundle ID, version, build, tvOS)
+        run: |
+          APP=build/Build/Products/Release-appletvos/IPTVPerso.app
+          PB=/usr/libexec/PlistBuddy
+          BID=$($PB -c "Print CFBundleIdentifier" "$APP/Info.plist")
+          VER=$($PB -c "Print CFBundleShortVersionString" "$APP/Info.plist")
+          BLD=$($PB -c "Print CFBundleVersion" "$APP/Info.plist")
+          PLAT=$($PB -c "Print CFBundleSupportedPlatforms:0" "$APP/Info.plist")
+          echo "Bundle ID : $BID · Version : $VER · Build : $BLD · Plateforme : $PLAT"
+          # Apparition ajoute lui-même le suffixe d'équipe (.5Q7T95F5D3) : on doit livrer exactement com.steven.iptvperso
+          if [ "$BID" != "com.steven.iptvperso" ]; then echo "::error::Bundle ID inattendu ($BID) : compilation arrêtée"; exit 1; fi
+          if [ "$PLAT" != "AppleTVOS" ]; then echo "::error::Plateforme inattendue ($PLAT) : compilation arrêtée"; exit 1; fi
+          { echo "BID=$BID"; echo "VER=$VER"; echo "BLD=$BLD"; echo "PLAT=$PLAT"; } >> "$GITHUB_ENV"
 
       - name: Fabriquer le fichier .ipa
         run: |
@@ -49,8 +65,10 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          NOTE="Version du $(date -u '+%d/%m/%Y %H:%M') UTC · commit ${GITHUB_SHA::7}
-          À installer avec Sideloadly (Apple ID gratuit), à refaire tous les 7 jours."
+          NOTE="Version $VER (build $BLD) du $(date -u '+%d/%m/%Y %H:%M') UTC · commit ${GITHUB_SHA::7}
+          Bundle ID : $BID (Apparition y ajoute ton suffixe d'équipe .5Q7T95F5D3 : même appli que celle installée, mise à jour)
+          Plateforme : tvOS ($PLAT)
+          À installer avec Apparition (Apple ID gratuit), à rafraîchir tous les 7 jours."
           if gh release view appletv-latest >/dev/null 2>&1; then
             gh release upload appletv-latest prisme-AppleTV.ipa --clobber
             gh release edit appletv-latest --notes "$NOTE"

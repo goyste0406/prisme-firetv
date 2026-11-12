@@ -1,52 +1,6 @@
 import SwiftUI
 import TVVLCKit
 
-// MARK: - Connexion
-
-struct LoginView: View {
-    @EnvironmentObject var state: AppState
-    @State private var server = ""
-    @State private var username = ""
-    @State private var password = ""
-    @State private var loading = false
-    @State private var errorMessage: String?
-
-    var body: some View {
-        VStack(spacing: 30) {
-            Text("IPTV Perso").font(.largeTitle).bold()
-            TextField("Serveur (ex : http://monserveur.com:8080)", text: $server)
-            TextField("Nom d'utilisateur", text: $username)
-            SecureField("Mot de passe", text: $password)
-            if let errorMessage {
-                Text(errorMessage).foregroundStyle(.red)
-            }
-            Button {
-                Task { await login() }
-            } label: {
-                if loading { ProgressView() } else { Text("Se connecter") }
-            }
-            .disabled(loading || server.isEmpty || username.isEmpty || password.isEmpty)
-        }
-        .frame(maxWidth: 900)
-        .padding(80)
-        .autocorrectionDisabled()
-        .textInputAutocapitalization(.never)
-    }
-
-    private func login() async {
-        loading = true
-        errorMessage = nil
-        let account = XtreamAccount(server: server, username: username, password: password)
-        do {
-            try await XtreamAPI(account: account).authenticate()
-            state.account = account
-        } catch {
-            errorMessage = error.localizedDescription
-        }
-        loading = false
-    }
-}
-
 // MARK: - Outils communs
 
 /// Affiche un chargement, puis le contenu, ou une erreur avec bouton Réessayer.
@@ -266,67 +220,6 @@ final class VLCPlayerController: UIViewController, VLCMediaPlayerDelegate {
     }
 }
 
-// MARK: - TV en direct
-
-struct LiveTVView: View {
-    let api: XtreamAPI
-
-    var body: some View {
-        NavigationStack {
-            AsyncContent(load: { try await api.liveCategories() }) { categories in
-                List {
-                    NavigationLink("Toutes les chaînes") {
-                        ChannelListView(api: api, categoryID: nil, title: "Toutes les chaînes")
-                    }
-                    ForEach(categories) { category in
-                        NavigationLink(category.name) {
-                            ChannelListView(api: api, categoryID: category.id, title: category.name)
-                        }
-                    }
-                }
-            }
-            .navigationTitle("TV en direct")
-        }
-    }
-}
-
-struct ChannelListView: View {
-    let api: XtreamAPI
-    let categoryID: String?
-    let title: String
-    @AppStorage("liveFormat") private var liveFormat = "ts"
-    @State private var search = ""
-    @State private var playing: PlayItem?
-
-    var body: some View {
-        AsyncContent(load: { try await api.liveStreams(categoryID: categoryID) }) { channels in
-            let filtered = search.isEmpty
-                ? channels
-                : channels.filter { $0.displayName.localizedCaseInsensitiveContains(search) }
-            List(filtered) { channel in
-                Button {
-                    if let url = api.liveURL(channel, format: liveFormat) {
-                        playing = PlayItem(url: url, title: channel.displayName)
-                    }
-                } label: {
-                    HStack(spacing: 24) {
-                        AsyncImage(url: URL(string: channel.stream_icon ?? "")) { image in
-                            image.resizable().scaledToFit()
-                        } placeholder: {
-                            Image(systemName: "tv")
-                        }
-                        .frame(width: 80, height: 60)
-                        Text(channel.displayName)
-                    }
-                }
-            }
-        }
-        .searchable(text: $search)
-        .navigationTitle(title)
-        .fullScreenCover(item: $playing) { PlayerView(item: $0) }
-    }
-}
-
 // MARK: - Films
 
 struct MoviesView: View {
@@ -454,30 +347,3 @@ struct SeriesDetailView: View {
     }
 }
 
-// MARK: - Réglages
-
-struct SettingsView: View {
-    @EnvironmentObject var state: AppState
-    @AppStorage("liveFormat") private var liveFormat = "ts"
-
-    var body: some View {
-        NavigationStack {
-            Form {
-                Section("Compte") {
-                    LabeledContent("Serveur", value: state.account?.baseURL ?? "-")
-                    LabeledContent("Utilisateur", value: state.account?.username ?? "-")
-                }
-                Section("Lecture") {
-                    Picker("Format TV en direct", selection: $liveFormat) {
-                        Text("MPEG-TS (ts) – recommandé").tag("ts")
-                        Text("HLS (m3u8)").tag("m3u8")
-                    }
-                }
-                Section {
-                    Button("Se déconnecter", role: .destructive) { state.account = nil }
-                }
-            }
-            .navigationTitle("Réglages")
-        }
-    }
-}

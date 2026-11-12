@@ -2,58 +2,62 @@ import SwiftUI
 
 @main
 struct IPTVPersoApp: App {
-    @StateObject private var state = AppState()
+    @StateObject private var store = ProviderStore.shared
+
+    init() {
+        // affiches et logos : 30 Mo en mémoire, 300 Mo sur le disque au plus (le plus ancien est supprimé d'abord)
+        URLCache.shared = URLCache(memoryCapacity: 30 * 1024 * 1024, diskCapacity: 300 * 1024 * 1024)
+    }
 
     var body: some Scene {
         WindowGroup {
             Group {
-                if let account = state.account {
-                    MainTabView(api: XtreamAPI(account: account))
+                if store.providers.isEmpty {
+                    AddProviderView(firstLaunch: true)
                 } else {
-                    LoginView()
+                    MainTabView()
                 }
             }
-            .environmentObject(state)
-        }
-    }
-}
-
-/// Garde les identifiants Xtream sur l'Apple TV entre deux lancements.
-@MainActor
-final class AppState: ObservableObject {
-    private let key = "xtream_account"
-
-    @Published var account: XtreamAccount? {
-        didSet {
-            if let account, let data = try? JSONEncoder().encode(account) {
-                UserDefaults.standard.set(data, forKey: key)
-            } else {
-                UserDefaults.standard.removeObject(forKey: key)
-            }
-        }
-    }
-
-    init() {
-        if let data = UserDefaults.standard.data(forKey: key),
-           let saved = try? JSONDecoder().decode(XtreamAccount.self, from: data) {
-            account = saved
+            .environmentObject(store)
+            .preferredColorScheme(.dark)
+            .onAppear { store.refreshIfStale() }
         }
     }
 }
 
 struct MainTabView: View {
-    let api: XtreamAPI
+    @EnvironmentObject var store: ProviderStore
 
     var body: some View {
         TabView {
-            LiveTVView(api: api)
+            LiveHomeView()
                 .tabItem { Label("TV en direct", systemImage: "tv") }
-            MoviesView(api: api)
-                .tabItem { Label("Films", systemImage: "film") }
-            SeriesView(api: api)
-                .tabItem { Label("Séries", systemImage: "play.rectangle.on.rectangle") }
-            SettingsView()
+            Group {
+                if let p = store.active.first { MoviesView(api: XtreamAPI(account: p.account)) } else { Text("Aucun fournisseur actif") }
+            }
+            .tabItem { Label("Films", systemImage: "film") }
+            Group {
+                if let p = store.active.first { SeriesView(api: XtreamAPI(account: p.account)) } else { Text("Aucun fournisseur actif") }
+            }
+            .tabItem { Label("Séries", systemImage: "play.rectangle.on.rectangle") }
+            ProvidersSettingsView()
                 .tabItem { Label("Réglages", systemImage: "gear") }
+        }
+        .overlay(alignment: .topTrailing) { ImportBadge().padding(40) }
+    }
+}
+
+/// Petit indicateur discret pendant que le catalogue se met à jour en arrière-plan.
+struct ImportBadge: View {
+    @EnvironmentObject var store: ProviderStore
+    var body: some View {
+        if store.importing != nil {
+            HStack(spacing: 12) {
+                ProgressView(value: store.progress).frame(width: 120).tint(.white)
+                Text(store.status).font(.system(size: 20)).lineLimit(1)
+            }
+            .padding(.horizontal, 18).padding(.vertical, 10)
+            .background(.ultraThinMaterial, in: Capsule())
         }
     }
 }
