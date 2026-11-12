@@ -78,3 +78,22 @@ const PLMN={id:null,n:{}};
 function plmCut(id,type,cats){if(PLMN.id!==id){PLMN.id=id;PLMN.n={}}const n=PLMN.n[type]||(PLMN.n[type]=60);PLMN.all=PLMN.all||{};PLMN.all[type]=cats.length;return cats.length>n?cats.slice(0,n):cats}
 {const _k=key;key=function(k){const r=_k(k);const t=topS();if(t&&t.t==="plm"&&F&&F.dataset.fid&&F.dataset.fid.startsWith("hc-")){const type=F.dataset.fid[3],g=F.parentElement,rows=g?g.children:[],i=[...rows].indexOf(F);
   if(i>=0&&rows.length-i<15&&(PLMN.all[type]||0)>rows.length){PLMN.n[type]=rows.length+120;const sc=view.querySelector("#set"),y=sc?sc.scrollTop:0,fid=F.dataset.fid;render(fid);const s2=view.querySelector("#set");if(s2){s2.style.scrollBehavior="auto";s2.scrollTop=y;if(F)ensureVisible(F,true);requestAnimationFrame(()=>s2.style.scrollBehavior="")}}}return r}}
+/* « Pour toi », « Parce que tu as aimé », « Si tu hésites » : chaque suggestion compare un film à tout le catalogue.
+   Avec beaucoup de fiches TMDB (mots-clés), ce calcul pouvait figer Safari plusieurs secondes au démarrage.
+   Gros catalogue : le calcul se fait maintenant par tranches de 8 ms, les rangées se remplissent dès qu'il est fini.
+   Mêmes règles de score, même résultat ; petit catalogue : inchangé (calcul immédiat). */
+const CPJ={q:[],run:false,last:{},sync:false};
+function scoredAllAsync(f,mode,pid,cb){pid=pid||PR.cur;const p=PR.list[pid];if(!p)return cb([]);const T=taste(pid),L=liked(pid),W=SW[mode]||SW.mix,seen=new Set(p.seen),no=new Set(p.no),ab=new Set(fxHist(pid).filter(h=>h.done<.35).map(h=>h.id));
+ const C=films().filter(c=>c.id!==f.id&&!seen.has(c.id)&&!no.has(c.id)&&!(ab.has(c.id)&&!S.prog[c.id])),A=[],K=Object.keys(W);let i=0;
+ (function step(){const end=performance.now()+8;while(i<C.length&&performance.now()<end)for(let j=0;j<50&&i<C.length;j++,i++){const c=C[i],o=scoreOne(f,c,T,L,pid),gate=mode==="toi"?.6+.4*o.rel:.35+.65*o.rel;o.raw=K.reduce((s2,k)=>s2+W[k]*o.parts[k],0)*gate-o.pen;A.push(o)}
+  if(i<C.length)return setTimeout(step,0);cb(A)})()}
+let CPRT=0;function cpRerender(){clearTimeout(CPRT);CPRT=setTimeout(()=>{if(CPJ.run||CPJ.q.length)return;if(typeof FH!=="undefined")FH.cache={};if(!inApp()||(typeof P!=="undefined"&&P))return;const t=topS();if(!t||(t.t!=="home"&&t.t!=="detail"))return;render(F&&F.dataset&&F.dataset.fid)},60)}
+{const _cp=crossPick;
+ const ckOf=(f,mode)=>f.id+"|"+mode+"|"+(FXS.duo||[PR.cur]).join("+")+"|"+FILMS.length+"|"+TMD.n;
+ function pump(){if(CPJ.run||!CPJ.q.length)return;CPJ.run=true;const j=CPJ.q.shift();const pids=FXS.duo?FXS.duo.slice():[PR.cur],res={};let k=0;
+  DG("suggestions : calcul pour « "+(j.f.t||"")+" »");
+  const next=()=>{if(k>=pids.length){const save=scoredAll;scoredAll=(f,m,pid)=>res[pid||PR.cur]||[];CPJ.sync=true;let out;try{out=_cp(j.f,j.mode)}catch(e){out=[]}finally{scoredAll=save;CPJ.sync=false}
+    CPJ.last[j.f.id+"|"+j.mode]=out;CPJ.run=false;DGend();cpRerender();setTimeout(pump,0);return}
+   const pid=pids[k++];scoredAllAsync(j.f,j.mode,pid,A=>{res[pid]=A;next()})};next()}
+ crossPick=function(f,mode){const ck=ckOf(f,mode);if(FXS.cache[ck]||CPJ.sync||films().length<3000)return _cp(f,mode);
+  if(!CPJ.q.some(j=>j.ck===ck))CPJ.q.push({ck,f,mode});setTimeout(pump,0);return CPJ.last[f.id+"|"+mode]||[]}}

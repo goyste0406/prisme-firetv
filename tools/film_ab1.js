@@ -7,7 +7,11 @@ const FXI={play:'<svg viewBox="0 0 24 24" fill="currentColor"><path d="M7 4.5v15
  back:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12a8 8 0 1 0 2.3-5.6"/><path d="M4 4v4h4"/></svg>',moon:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 14.5A8 8 0 0 1 9.5 4 8 8 0 1 0 20 14.5z"/></svg>'};
 const fxFont=f=>({serif:"f-serif",bebas:"f-bebas",black:"f-black"})[f.f]||"f-sans";
 const fxPays=s=>{try{const D=new Intl.DisplayNames(["fr"],{type:"region"});return s.split(/,\s*/).slice(0,2).map(c=>D.of(c)).join(", ").toUpperCase()}catch(e){return s}};
-const fxShort=f=>{const b=f.t.split(" :")[0];return FILMS.some(x=>x!==f&&x.t.split(" :")[0]===b)?f.t:b};
+/* titre court d'un film (sans sous-titre) sauf si un autre film porte le même début : le décompte des débuts de titres
+   est fait une fois pour tout le catalogue (avant : tout le catalogue relu à chaque appel, des milliers de fois par suggestion) */
+const FXSH={k:"",m:null};const fxShort=f=>{const b=f.t.split(" :")[0];const k=FILMS.length+"|"+(FILMS[0]&&FILMS[0].t)+"|"+(FILMS.length&&FILMS[FILMS.length-1].t)+"|"+(window.__dv||0)+"|"+(typeof TMD!=="undefined"?TMD.n:0);
+ if(FXSH.k!==k){const m=new Map();for(const x of FILMS){const y=x.t.split(" :")[0];m.set(y,(m.get(y)||0)+1)}FXSH.k=k;FXSH.m=m;FXSH.in=new Set(FILMS)}
+ return (FXSH.m.get(b)||0)>(FXSH.in.has(f)?1:0)?f.t:b};
 
 /* ---------- données TMDB (films.json, importé comme images.json) ---------- */
 const TMD={m:{},names:{},sids:{},n:0};const TMIDX={};
@@ -73,7 +77,10 @@ const STOP=new Set(["film","movie","based on novel or book","duringcreditsstinge
 function tmOf(f){if(f.tmd){const d=f.tmd;return {kw:(d.kw||[]).filter(k=>!STOP.has(k)),rec:(d.rec||[]).map(id=>TMIDX[id]).filter(Boolean),w:d.w,mu:d.mu,ph:d.ph,col:d.col,vc:d.vc||1500,wp:d.wp||{},yt:d.yt,ytl:d.ytl||"",post:(d.kw||[]).some(k=>/creditsstinger/.test(k))}}
  return {kw:[...new Set([...f.g.map(g=>g.toLowerCase()),...(f.cat||[]).filter(c=>!["new","fr","top","trend","4k","nolan"].includes(c)).map(c=>c.toLowerCase())])],rec:[],w:"",mu:"",ph:"",col:null,vc:1500,wp:null,yt:"",post:hash(f.id)%5===0}}
 function fxIDF(){const key=FILMS.length+"#"+TMD.n;if(FXS.idfk===key)return FXS.idf;const df={},L=films();L.forEach(f=>new Set(tmOf(f).kw).forEach(k=>df[k]=(df[k]||0)+1));const I={};for(const k in df)I[k]=Math.log(1+L.length/df[k]);FXS.idf=I;FXS.idfk=key;return I}
-const kwSim=(a,b)=>{const I=fxIDF(),A1=tmOf(a).kw,B1=tmOf(b).kw,u=new Set([...A1,...B1]);let sh=0,un=0;u.forEach(k=>{const w=I[k]||1;un+=w;if(A1.includes(k)&&B1.includes(k))sh+=w});return un?sh/un:0};
+/* thèmes communs : mêmes poids et même formule, mais chaque film garde ses mots-clés prêts (ensemble + total des poids)
+   au lieu de tout reconstruire à chaque comparaison (appelé des centaines de milliers de fois pour « Pour toi ») */
+const KWC=new WeakMap();const kwInfo=f=>{const t=tmOf(f),I=fxIDF();let e=KWC.get(t);if(!e||e.I!==I){const st=new Set(t.kw);let sum=0;st.forEach(k=>{sum+=I[k]||1});e={st,sum,I};KWC.set(t,e)}return e};
+const kwSim=(a,b)=>{const A=kwInfo(a),B=kwInfo(b),I=A.I;let sm=A.st,lg=B.st;if(sm.size>lg.size){sm=B.st;lg=A.st}let sh=0;sm.forEach(k=>{if(lg.has(k))sh+=I[k]||1});const un=A.sum+B.sum-sh;return un>1e-12?sh/un:0};
 function fxHist(pid){const p=PR.list[pid];return (p.hist||[]).filter(h=>ALL[h.id])}
 function taste(pid){pid=pid||PR.cur;const p=PR.list[pid],g={},d={},a={},kw={},neg={},negk={},crew={};let tot=0;const I=fxIDF();
  const items=fxHist(pid).map(h=>({id:h.id,w:p.fb[h.id]===1?1.6:p.fb[h.id]===-1?-1.2:(h.done>=.85?1:h.done>=.35?.5:-.6)*(Date.now()-h.at<14*864e5?1.2:1)}));
@@ -92,9 +99,9 @@ function scoreOne(f,c,T,L,pid){const p=PR.list[pid||PR.cur],t=tmOf(c),tf=tmOf(f)
  const kw=kwSim(f,c),I=fxIDF(),shk=tf.kw.filter(k=>t.kw.includes(k)).sort((x,y)=>(I[y]||0)-(I[x]||0));if(shk.length)why.push({c:"kw",w:kw*1.4,t:`Thèmes communs : ${shk.slice(0,2).join(", ")}`});
  let crew=0;const cw=[];if(c.dir&&c.dir===f.dir){crew+=.5;cw.push(`Même réalisateur (${c.dir.split(",")[0]})`)}if(t.w&&t.w===tf.w){crew+=.2;cw.push(`Même scénariste (${t.w})`)}if(t.mu&&t.mu===tf.mu){crew+=.15;cw.push(`Même compositeur (${t.mu})`)}if(t.ph&&t.ph===tf.ph){crew+=.15;cw.push(`Même directeur photo (${t.ph})`)}
  const sc=c.cast.filter(x=>f.cast.some(y=>y[0]===x[0]));crew+=.1*sc.length;if(sc.length)cw.push(`Avec ${A[sc[0][0]]}`);crew=Math.min(1,crew);if(cw.length)why.push({c:"crew",w:crew,t:cw[0]});
- let prof=0;const gA=c.g.reduce((s2,x)=>s2+(T.g[x]||0),0);prof+=Math.min(1,gA)*.35;const kA=t.kw.reduce((s2,k)=>s2+(T.kw[k]||0),0),kMax=Math.max(1,...Object.values(T.kw));prof+=Math.min(1,kA/kMax/1.5)*.3;
+ let prof=0;const gA=c.g.reduce((s2,x)=>s2+(T.g[x]||0),0);prof+=Math.min(1,gA)*.35;const kA=t.kw.reduce((s2,k)=>s2+(T.kw[k]||0),0),kMax=T._km||(T._km=Math.max(1,...Object.values(T.kw)));prof+=Math.min(1,kA/kMax/1.5)*.3;
  if(c.dir&&T.d[c.dir])prof+=.15;if([t.mu,t.ph].some(x=>x&&T.crew[x]))prof+=.1;if(c.cast.some(x=>T.a[x[0]]))prof+=.1;prof=Math.min(1,prof);
- const likedSame=L.find(id=>id!==c.id&&ALL[id].dir&&ALL[id].dir===c.dir),thumb=Object.keys(p.fb||{}).find(id=>p.fb[id]===1&&ALL[id]&&(ALL[id].dir===c.dir||kwSim(ALL[id],c)>.25));
+ const likedSame=L.find(id=>id!==c.id&&ALL[id].dir&&ALL[id].dir===c.dir),thumb=(T._thf===p.fb&&T._th?T._th:(T._thf=p.fb,T._th=Object.keys(p.fb||{}).filter(id=>p.fb[id]===1&&ALL[id]))).find(id=>ALL[id].dir===c.dir||kwSim(ALL[id],c)>.25);
  if(thumb)why.push({c:"prof",w:prof+.3,t:`Tu as aimé 👍 ${fxShort(ALL[thumb])}`});else if(likedSame)why.push({c:"prof",w:prof+.1,t:`Du réalisateur de ${fxShort(ALL[likedSame])}`});
  else{const tk=t.kw.filter(k=>T.kw[k]).sort((x,y)=>T.kw[y]-T.kw[x])[0];if(tk)why.push({c:"prof",w:prof,t:`Un thème que tu aimes : ${tk}`})}
  const qual=Math.max(0,Math.min(1,((c.imdb*10*t.vc+68*1500)/(t.vc+1500)/10-6)/3)),fresh=Math.max(0,Math.min(1,(c.y-1990)/36));
