@@ -37,3 +37,5 @@
 .sr-siri h2{margin:0;font-size:30px}
 .sr-orb{width:96px;height:96px;border-radius:50%;background:conic-gradient(from 0deg,#5ac8fa,#af52de,#ff2d55,#ffcc00,#5ac8fa);animation:sror 3s linear infinite;box-shadow:0 0 60px rgba(175,82,222,.6)}@keyframes sror{to{transform:rotate(360deg)}}
 .sr-sug{display:flex;flex-wrap:wrap;gap:10px;justify-content:center;max-width:900px}
+
+.sr-th.sr-po{padding:0}.sr-th.sr-po img{position:absolute;inset:0;width:100%;height:100%;max-width:none;max-height:none;object-fit:cover}
