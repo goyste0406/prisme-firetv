@@ -84,6 +84,7 @@ const RL={
  /* sélection proposée par prisme */
  on(c,name){return c.g==="fr"||(c.g==="fo"&&/belg|quebec|qc|(^|[^a-z])(be|ca)([^a-z]|$)/.test(RL.n(name)))||(c.g==="chk"&&c.pct>=50)}
 };
+const RELG={};
 async function rReadEpg(f,want,status){
  let stream=f.stream();const head=new Uint8Array(await f.slice(0,2).arrayBuffer());
  if(head[0]===0x1f&&head[1]===0x8b){if(typeof DecompressionStream==="undefined")throw new Error("Guide compressé non pris en charge par ce navigateur");stream=stream.pipeThrough(new DecompressionStream("gzip"))}
@@ -94,6 +95,7 @@ async function rReadEpg(f,want,status){
    const s=RI.t((/start="([^"]*)"/.exec(a)||[])[1]),e=RI.t((/stop="([^"]*)"/.exec(a)||[])[1]);if(s==null||e==null||e<lo||s>hi)continue;
    const t=RI.ent((/<title[^>]*>([\s\S]*?)<\/title>/.exec(m[2])||[])[1]||"").trim(),g=RI.ent((/<category[^>]*>([\s\S]*?)<\/category>/.exec(m[2])||[])[1]||"").trim();
    const ic=(/<icon[^>]*src="([^"]*)"/.exec(m[2])||[])[1]||"";(out[ch]=out[ch]||[]).push(ic&&ic.length<220?[s,e,t.slice(0,90),g.slice(0,40),ic]:[s,e,t.slice(0,90),g.slice(0,40)]);kept++}
+  {const rc=/<channel\b[^>]*id="([^"]*)"[^>]*>([\s\S]*?)<\/channel>/g;let c;while((c=rc.exec(buf))){if(!want.has(c[1]))continue;const ic=(/<icon[^>]*src="([^"]*)"/.exec(c[2])||[])[1];if(ic&&ic.length<300&&/^https?:/.test(ic))RELG[c[1]]=ic}}
   buf=buf.slice(last);if(buf.length>4e6)buf=buf.slice(-2e6);
   if(n%2000<50)status(`Guide des programmes : ${n.toLocaleString("fr-FR")} programmes lus, ${kept.toLocaleString("fr-FR")} gardés…`);
   if(done)break}
@@ -115,7 +117,7 @@ async function rImport(files,provName,status,opt){
  const merge=(arr,pref,key,make,add)=>{let it=arr.find(x=>x.k===key);if(!it){it=make();it.k=key;it.id=RI.id(pref,key);it.s=[];arr.push(it)}add(it);return it};
  if(by.get_live_streams){ph("live");status("Lecture des chaînes…");const L=await rReadJson(by.get_live_streams);let n=0;
   const frOnly=!Object.keys(lc).length&&L.some(x=>RI.FR.test(x.name||""));for(const x of L){const ck=lc[String(x.category_id)];if(Object.keys(lc).length&&!ck)continue;if(frOnly&&!RI.FR.test(x.name||""))continue;if(RI.ADULT.test(x.name||""))continue;const nm=RI.base(x.name),key=RI.strip(nm);if(!key)continue;n++;
-   merge(R.chans,"rc",key,()=>({n:nm,c:[],e:"",num:+x.num||0}),it=>{if(ck&&!it.c.includes(ck))it.c.push(ck);if(!it.e&&x.epg_channel_id)it.e=String(x.epg_channel_id);const ad=String(x.tv_archive)==="1"?Math.max(1,+x.tv_archive_duration||1):0;if(ad){it.ar=Math.max(it.ar||0,ad);st.arch=(st.arch||0)+1}if(it.s.length<8)it.s.push([pid,String(x.name).slice(0,60),RI.q(x.name),ad])})}
+   merge(R.chans,"rc",key,()=>({n:nm,c:[],e:"",num:+x.num||0}),it=>{if(!it.lg&&/^https?:\/\/\S+$/.test(x.stream_icon||""))it.lg=String(x.stream_icon).slice(0,300);if(ck&&!it.c.includes(ck))it.c.push(ck);if(!it.e&&x.epg_channel_id)it.e=String(x.epg_channel_id);const ad=String(x.tv_archive)==="1"?Math.max(1,+x.tv_archive_duration||1):0;if(ad){it.ar=Math.max(it.ar||0,ad);st.arch=(st.arch||0)+1}if(it.s.length<8)it.s.push([pid,String(x.name).slice(0,60),RI.q(x.name),ad])})}
   st.chans=n}
  if(by.get_vod_streams){ph("vod");status("Lecture des films…");const L=await rReadJson(by.get_vod_streams);let n=0;
   const frOnly=!Object.keys(fc).length&&L.some(x=>RI.FR.test(x.name||""));for(const x of L){const ck=fc[String(x.category_id)];if(Object.keys(fc).length&&!ck)continue;if(frOnly&&!RI.FR.test(x.name||""))continue;if(RI.ADULT.test(x.name||""))continue;const t=RI.title(x.name),y=+x.year||RI.year(x.name),key=RI.strip(t)+"#"+(y||"");if(!t)continue;n++;
@@ -123,11 +125,11 @@ async function rImport(files,provName,status,opt){
   st.films=n}
  if(by.get_series){ph("ser");status("Lecture des séries…");const L=await rReadJson(by.get_series);let n=0;
   const frOnly=!Object.keys(sc).length&&L.some(x=>RI.FR.test(x.name||""));for(const x of L){const ck=sc[String(x.category_id)];if(Object.keys(sc).length&&!ck)continue;if(frOnly&&!RI.FR.test(x.name||""))continue;if(RI.ADULT.test(x.name||""))continue;const t=RI.title(x.name),y=RI.year(x.releaseDate||x.release_date||"")||RI.year(x.name),key=RI.strip(t);if(!t)continue;n++;
-   merge(R.series,"rs",key,()=>({t,y,c:[],r:+x.rating||0,a:+x.last_modified||0,p:(x.plot||"").slice(0,400),cast:(x.cast||"").slice(0,200),dir:(x.director||"").slice(0,80),g:(x.genre||"").slice(0,60),ep:+x.episode_run_time||0}),it=>{const u=v=>/^https?:\/\/\S+$/.test(v||"")?String(v).slice(0,300):"";if(!it.po)it.po=u(x.cover);if(!it.bd)it.bd=u(Array.isArray(x.backdrop_path)?x.backdrop_path[0]:x.backdrop_path);if(ck&&!it.c.includes(ck))it.c.push(ck);if(!it.p&&x.plot)it.p=x.plot.slice(0,400);if(it.s.length<6)it.s.push([pid,String(x.name).slice(0,70),RI.q(x.name)])})}
+   merge(R.series,"rs",key,()=>({t,y,c:[],r:+x.rating||0,a:+x.last_modified||0,p:(x.plot||"").slice(0,400),cast:(x.cast||"").slice(0,200),dir:(x.director||"").slice(0,80),g:(x.genre||"").slice(0,60),ep:+x.episode_run_time||0}),it=>{const u=v=>/^https?:\/\/\S+$/.test(v||"")?String(v).slice(0,300):"";if(!it.po)it.po=u(x.cover);if(!it.bd)it.bd=u(Array.isArray(x.backdrop_path)?x.backdrop_path[0]:x.backdrop_path);if(ck&&!it.c.includes(ck))it.c.push(ck);if(!it.p&&x.plot)it.p=x.plot.slice(0,400);{const tmv=String(x.tmdb||x.tmdb_id||"");if(!it.tm&&/^\d+$/.test(tmv)&&+tmv)it.tm=+tmv}if(it.s.length<6)it.s.push([pid,String(x.name).slice(0,70),RI.q(x.name)])})}
   st.series=n}
  R.chans.sort((a,b)=>(a.num||9999)-(b.num||9999));R.chans=R.chans.slice(0,700);
  R.films.sort((a,b)=>b.a-a.a);R.series.sort((a,b)=>b.a-a.a);
- if(by.epg){ph("epg");const want=new Set(R.chans.map(c=>c.e).filter(Boolean));R.epg={...R.epg,...await rReadEpg(by.epg,want,status)};st.epg=Object.values(R.epg).reduce((a,l)=>a+l.length,0)}
+ if(by.epg){ph("epg");const want=new Set(R.chans.map(c=>c.e).filter(Boolean));R.epg={...R.epg,...await rReadEpg(by.epg,want,status)};R.elg={...(R.elg||{}),...RELG};st.epg=Object.values(R.epg).reduce((a,l)=>a+l.length,0)}
  // garde les catégories utilisées
  const used=new Set([...R.chans,...R.films,...R.series].flatMap(i=>i.c));["lcats","fcats","scats"].forEach(k=>R[k]=R[k].filter(c=>used.has(c[0])));
  ph("save");status("Enregistrement dans ce navigateur…");
@@ -288,7 +290,7 @@ async function idbGet(k){const db=await idb();return new Promise((ok,ko)=>{const
 const EXTRA={};
 function imgLoad(d){if(!d)return;for(const c of d.chans||[])for(const n of c.n||[]){const k=RI.strip(RI.base(n));EXTRA[k]=c.p}for(const [e,n,u] of d.logos||[]){if(e)IMG.l[e]=u;if(n)IMG.n[RI.strip(RI.base(n))]=u}for(const t in d.progs||{})IMG.p[RI.strip(t)]=d.progs[t];IMG.count=Object.keys(IMG.p).length+Object.keys(IMG.l).length}
 const imgProg=p=>p&&(p.img||IMG.p[RI.strip(p.t||"")])||"";
-const imgLogo=c=>c&&c._real&&(IMG.l[c._real.e]||IMG.n[RI.strip(c.n)])||"";
+const imgLogo=c=>c&&c._real&&(IMG.l[c._real.e]||IMG.n[RI.strip(c.n)]||(REAL&&REAL.elg&&REAL.elg[c._real.e])||c._real.lg)||"";
 if(REAL){const M1=new Date().setHours(0,0,0,0)/60000;const _e2=epg;epg=function(ch){if(!ch._real||EPGC[ch.id])return _e2(ch);const X=EXTRA[ch._real.k];const L=_e2(ch);if(!X||!X.length)return L;
  const ex=X.map(([s,e,t,g,img])=>({s:s-M1,e:e-M1,t,g:g||L[0].g,img}));
  if(L.length===1&&L[0].t==="Programme non communiqué")return EPGC[ch.id]=ex;

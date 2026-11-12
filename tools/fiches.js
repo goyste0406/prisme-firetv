@@ -12,26 +12,27 @@ const getKey=()=>{try{return localStorage.getItem(KEYK)||""}catch(e){return ""}}
 const MODES=["Automatique","La nuit seulement","Jamais"],PPS=["Mettre en pause","Continuer lentement"];
 /* état du moteur (non sauvegardé) */
 const E={q:[],prio:[],busy:0,paused:false,tot:{f:0,s:0},ok:{f:0,s:0},rate:[],fresh:{},bilan:"",bilanT:0,running:false,lastRender:0,demo:!(typeof REAL!=="undefined"&&REAL),lastErr:""};
-window.__fc={C,E};
+window.__fc={C,E,get findId(){return findId}};
 const isReal=()=>!E.demo&&!!getKey();
 const nf=n=>Math.round(n).toLocaleString("fr-FR");
-const kOf=it=>(it.type==="s"||SERIES.includes(it)?"s":"f")+":"+it.id;
+const kOf=it=>it.prog?it.id:(it.type==="s"||SERIES.includes(it)?"s":"f")+":"+it.id;
 const hasFiche=it=>SERIES.includes(it)?!!(it.sxk&&/^t/.test(it.sxk)):!!it.tmd;
 const playing=()=>topS().t==="player"&&typeof P!=="undefined"&&P;
 const night=()=>{const h=new Date().getHours();return h>=1&&h<6};
 function allowed(){if(C.mode===2||E.paused)return false;if(C.mode===1&&!night())return false;if(playing()&&!C.pp)return false;return true}
 
 /* ---------- la file : l'écran d'abord, puis en cours, ma liste, nouveautés, le reste ---------- */
-function build(){const F=FILMS.slice(),Sx=SERIES.slice(),week=7*864e5,now=Date.now();
- E.tot={f:F.length,s:Sx.length};const need=it=>{const k=kOf(it),d=C.done[k];if(C.fix[k])return false;if(isReal()&&hasFiche(it)&&!E.force)return false;if(!d)return true;if(!C.nouv&&now-d>week)return true;return false};
+function build(){if(C.mver!==2){for(const k in C.unk)delete C.done[k];C.mver=2;saveC()}const F=FILMS.slice(),Sx=SERIES.slice(),week=7*864e5,now=Date.now();
+ E.tot={f:F.length,s:Sx.length,p:0};const need=it=>{const k=kOf(it),d=C.done[k];if(C.fix[k])return false;if(isReal()&&hasFiche(it)&&!E.force)return false;if(!d)return true;if(!C.nouv&&now-d>week)return true;return false};
  const score=it=>(S.prog[it.id]?3e9:0)+(S.favs.includes(it.id)?2e9:0)+((it._real&&it._real.a)||it.y*1e5||0);
  for(const k in C.unk)if(!itemOfK(k))delete C.unk[k];
  E.q=[...F,...Sx].filter(need).sort((a,b)=>score(b)-score(a)).map(kOf);
- E.ok={f:F.filter(it=>!need(it)).length,s:Sx.filter(it=>!need(it)).length}}
+ E.ok={f:F.filter(it=>!need(it)).length,s:Sx.filter(it=>!need(it)).length,p:0};
+ if(isReal()||E.demo){const P=progTitles().map(t=>"p:"+t).filter(k=>!C.done[k]||(Date.now()-C.done[k]>week&&!C.pdone));E.tot.p=P.length;E.q.push(...P)}}
 const left=()=>E.q.length+E.prio.length;
-const total=()=>E.tot.f+E.tot.s,doneN=()=>E.ok.f+E.ok.s;
+const total=()=>E.tot.f+E.tot.s+(E.tot.p||0),doneN=()=>E.ok.f+E.ok.s+(E.ok.p||0);
 const pct=()=>{const t=doneN()+left();return t&&left()?Math.min(99,Math.floor(doneN()/t*100)):100};
-function itemOfK(k){const id=k.slice(2);return ALL[id]||null}
+function itemOfK(k){const id=k.slice(2);if(k[0]==="p")return {t:id,id:k,prog:1};return ALL[id]||null}
 
 /* ---------- TMDB ---------- */
 const simp=s=>RI.strip(String(s||"")).replace(/[^a-z0-9]+/g,"");
@@ -39,22 +40,37 @@ async function tm(path){const key=getKey(),v4=key.length>60;const u=API+path+(pa
  const r=await fetch(u,v4?{headers:{Authorization:"Bearer "+key}}:{});if(r.status===429){await new Promise(z=>setTimeout(z,1500));return tm(path)}
  if(r.status===401){E.lastErr="TMDB refuse la clé";throw new Error("cle")}if(!r.ok)throw new Error("http "+r.status);return r.json()}
 const img=(p,w)=>p?IMGB+w+p:"";
-async function fetchFilm(it){const r=it._real||{};let id=+r.tm||0,cands=[];
- if(!id){const j=await tm(`/search/movie?query=${encodeURIComponent(it.t)}${it.y?"&year="+it.y:""}&include_adult=false`);const w=simp(it.t);
-  cands=(j.results||[]).slice(0,3).map(m=>[m.id,m.title,(m.release_date||"").slice(0,4),m.poster_path||""]);
-  for(const m of j.results||[]){if([m.title,m.original_title].some(x=>x&&(simp(x)===w||(w.length>=5&&simp(x).indexOf(w)===0)))){id=m.id;break}}
-  if(!id&&(j.results||[]).length===1)id=j.results[0].id}
- if(!id)return {unk:cands};
+/* ---------- reconnaissance : plusieurs recherches, un score de ressemblance, l'année pour départager ---------- */
+const bg=s=>{const t=simp(s),o=new Map();for(let i=0;i<t.length-1;i++){const k=t.slice(i,i+2);o.set(k,(o.get(k)||0)+1)}return [o,Math.max(1,t.length-1)]};
+function dice(a,b){if(!a||!b)return 0;const A=simp(a),B=simp(b);if(A===B)return 1;if(A.length<2||B.length<2)return 0;const [x,nx]=bg(a),[y,ny]=bg(b);let c=0;for(const [k,v] of x)c+=Math.min(v,y.get(k)||0);return 2*c/(nx+ny)}
+function variants(t){const V=[t];const add=v=>{v=(v||"").trim();if(v.length>=2&&!V.includes(v))V.push(v)};
+ add(t.replace(/\s*[\(\[].*?[\)\]]\s*/g," "));add(t.split(/\s+[-–:]\s+|:\s*/)[0]);add(t.replace(/^(the|le|la|les|l'|un|une)\s+/i,""));add(t.replace(/&/g,"et"));add(t.replace(/\s+\d{1,2}$/,""));return V.slice(0,4)}
+async function findId(kind,it){const tv=kind==="tv",y=+it.y||0,seen=new Map();let best=null;
+ const score=m=>{const ts=[tv?m.name:m.title,tv?m.original_name:m.original_title];let sc=Math.max(...ts.map(x=>dice(x,it.t)));const my=+((tv?m.first_air_date:m.release_date)||"").slice(0,4);
+  if(y&&my){const d=Math.abs(my-y);sc+=d===0?.15:d<=1?.08:(!tv&&d>3)?-.15:0}sc+=Math.min(.05,Math.log10((m.vote_count||0)+1)/60);return sc};
+ for(const q of variants(it.t)){for(const wy of y?[1,0]:[0]){const j=await tm(`/search/${kind}?query=${encodeURIComponent(q)}${wy?(tv?"&first_air_date_year=":"&year=")+y:""}&include_adult=false`);
+   for(const m of (j.results||[]).slice(0,8)){if(seen.has(m.id))continue;const sc=score(m);seen.set(m.id,{m,sc,n:(j.results||[]).length})}
+   const L=[...seen.values()].sort((a,b)=>b.sc-a.sc);best=L[0];const sec=L[1];
+   if(best&&(best.sc>=.82||(best.sc>=.62&&(!sec||best.sc-sec.sc>=.15))||(best.n===1&&best.sc>=.45)))return {id:best.m.id,sc:best.sc}}}
+ const L=[...seen.values()].sort((a,b)=>b.sc-a.sc).slice(0,3);
+ return {unk:L.filter(x=>x.sc>=.3).map(({m,sc})=>[m.id,tv?m.name:m.title,((tv?m.first_air_date:m.release_date)||"").slice(0,4),m.poster_path||"",Math.round(Math.min(1,sc)*100)])}}
+async function fetchFilm(it){const r=it._real||{};let id=+r.tm||0;
+ if(!id){const f=await findId("movie",it);if(f.unk)return f;id=f.id}
  let d;try{d=await tm(`/movie/${id}?append_to_response=credits,release_dates`)}catch(e){if(/http 404/.test(e.message)&&r.tm&&!r.tmRetry){r.tmRetry=1;delete r.tm;return fetchFilm(it)}throw e}let age="";
  for(const x of ((d.release_dates||{}).results||[]))if(x.iso_3166_1==="FR")for(const y of x.release_dates||[])if(y.certification){age=y.certification;break}
  const dir=((d.credits||{}).crew||[]).filter(c=>c.job==="Director").map(c=>c.name).join(", ");
  const m={t:d.title,ot:d.original_title,y:+(d.release_date||"").slice(0,4)||it.y,d:d.runtime||0,g:(d.genres||[]).map(g=>g.name),ov:d.overview||"",tg:d.tagline||"",age,va:d.vote_average||0,vc:d.vote_count||0,dir,
   po:img(d.poster_path,C.hd?"w342":"w185"),bd:img(d.backdrop_path,"w780"),cast:((d.credits||{}).cast||[]).slice(0,8).map(c=>[c.name,c.character||""])};
  TMD.m[id]=m;for(const s of r.s||[]){if(s[1])TMD.names[s[1]]=id;if(s[4])TMD.sids[s[4]]=id}if(!r.tm)r.tmfc=1;r.tm=id;return {id}}
-async function fetchSerie(it){const r=it._real||{};let j=it.y?await tm(`/search/tv?query=${encodeURIComponent(it.t)}&first_air_date_year=${it.y}`):{results:[]};if(!(j.results||[]).length)j=await tm(`/search/tv?query=${encodeURIComponent(it.t)}`);const w=simp(it.t);let id=0;
- const cands=(j.results||[]).slice(0,3).map(m=>[m.id,m.name,(m.first_air_date||"").slice(0,4),m.poster_path||""]);
- for(const m of j.results||[]){if([m.name,m.original_name].some(x=>x&&(simp(x)===w||(w.length>=5&&simp(x).indexOf(w)===0)))){id=m.id;break}}
- if(!id&&(j.results||[]).length===1)id=j.results[0].id;if(!id)return {unk:cands};return applySerie(it,id)}
+async function fetchSerie(it){const r=it._real||{};
+ if(r.tm&&!r.tmRetry){try{return await applySerie(it,+r.tm)}catch(e){if(!/http 404/.test(e.message))throw e;r.tmRetry=1}}
+ const f=await findId("tv",it);if(f.unk)return f;return applySerie(it,f.id)}
+/* ---------- images des programmes de la TV en direct (aujourd'hui et demain) ---------- */
+const PRG={};
+async function fetchProg(t){const j=await tm(`/search/multi?query=${encodeURIComponent(t)}&include_adult=false`);let b=null,bs=0;
+ for(const m of (j.results||[]).slice(0,6)){if(m.media_type!=="movie"&&m.media_type!=="tv")continue;const sc=Math.max(dice(m.title||m.name,t),dice(m.original_title||m.original_name,t))+Math.min(.05,Math.log10((m.vote_count||0)+1)/60);if(sc>bs){bs=sc;b=m}}
+ if(b&&bs>=.8&&(b.backdrop_path||b.poster_path)){const u=img(b.backdrop_path||b.poster_path,b.backdrop_path?"w300":"w185");PRG[RI.strip(t)]=u;IMG.p[RI.strip(t)]=u;return true}return false}
+function progTitles(){const out=new Set(),n=nowMin();try{for(const c of chans()){let L=[];try{L=epg(c)}catch(e){}for(const p of L){if(p.e<n||p.s>n+1440)continue;const t=(p.t||"").trim();if(t.length<3||p.img||IMG.p[RI.strip(t)])continue;if(/^(journal|météo|meteo|info|programmes? |fin des programmes|téléachat|teleachat|no programme|pas de programme)/i.test(t))continue;out.add(t);if(out.size>=600)return [...out]}}}catch(e){}return [...out]}
 async function applySerie(it,id){const r=it._real||{};const d=await tm(`/tv/${id}?append_to_response=credits,content_ratings`);let age="";
  for(const x of ((d.content_ratings||{}).results||[]))if(x.iso_3166_1==="FR"&&x.rating){age=x.rating;break}
  const k="t"+id;SXD.m[k]={t:d.name,y:+(d.first_air_date||"").slice(0,4)||it.y,g:(d.genres||[]).map(g=>g.name),ov:d.overview||"",net:(((d.networks||[])[0])||{}).name||"",cr:(d.created_by||[]).map(c=>c.name).join(", "),
@@ -63,15 +79,16 @@ async function applySerie(it,id){const r=it._real||{};const d=await tm(`/tv/${id
 
 /* ---------- sauvegarde des fiches téléchargées (reprise après coupure) ---------- */
 let dirty=0;
-async function persist(){if(!dirty||E.demo)return;dirty=0;try{await idbSet("fcfilms",{m:TMD.m,names:TMD.names,sids:TMD.sids});await idbSet("fcseries",{m:SXD.m,names:SXD.names})}catch(e){}}
+async function persist(){if(!dirty||E.demo)return;dirty=0;try{await idbSet("fcfilms",{m:TMD.m,names:TMD.names,sids:TMD.sids});await idbSet("fcseries",{m:SXD.m,names:SXD.names});await idbSet("fcprog",PRG)}catch(e){}}
 setInterval(persist,8000);
-if(!E.demo)Promise.all([idbGet("fcfilms").catch(()=>null),idbGet("fcseries").catch(()=>null)]).then(([f,s])=>{
+if(!E.demo)Promise.all([idbGet("fcfilms").catch(()=>null),idbGet("fcseries").catch(()=>null),idbGet("fcprog").catch(()=>null)]).then(([f,s,pg])=>{if(pg){Object.assign(PRG,pg);Object.assign(IMG.p,pg)}
  if(f){Object.assign(TMD.m,f.m||{});Object.assign(TMD.names,f.names||{});Object.assign(TMD.sids,f.sids||{});tmApply()}
  if(s){Object.assign(SXD.m,s.m||{});Object.assign(SXD.names,s.names||{});sxApply()}
  if((f||s)&&inApp()&&!S.loading)render(F&&F.dataset.fid);start()}).catch(()=>start());
 
 /* ---------- le moteur ---------- */
 async function one(k){const it=itemOfK(k);if(!it){C.done[k]=Date.now();return}
+ if(k[0]==="p"){if(isReal()){try{if(await fetchProg(it.t)){dirty=1;applySoon(k)}}catch(e){if(e.message==="cle"){E.paused=true;return}}}else await new Promise(z=>setTimeout(z,120));C.done[k]=Date.now();E.ok.p=(E.ok.p||0)+1;E.rate.push(Date.now());if(E.rate.length>40)E.rate.shift();return}
  const ser=k[0]==="s";
  if(isReal()){let res;try{res=ser?await fetchSerie(it):await fetchFilm(it)}catch(e){if(e.message==="cle"){E.paused=true;toast("TMDB refuse la clé : vérifie-la sous la télécommande");return}E.tries=E.tries||{};E.tries[k]=(E.tries[k]||0)+1;if(E.tries[k]<3&&!/http 4/.test(e.message)){E.q.push(k);await new Promise(z=>setTimeout(z,800));return}res={unk:[]}}
   if(res.unk){C.unk[k]={raw:((it._real||{}).s||[[0,it.t]])[0][1]||it.t,t:it.t,c:res.unk,i:0}}else{delete C.unk[k];dirty=1;applySoon(it.id)}}
@@ -116,7 +133,7 @@ function eta(){const r=E.rate;if(r.length<5)return "…";const per=(r[r.length-1
 const mo=()=>Math.round(doneN()*(C.hd?.16:.06));
 function popHtml(){const f=E.ok.f,s=E.ok.s,bar=(n,a,b,c)=>`<div class="fcbar" style="--c:${c}"><span>${n}</span><span class="t"><i style="width:${b?a/b*100:100}%"></i></span><span>${nf(a)} / ${nf(b)}</span></div>`;
  const nx=E.prio[0]||E.q[0],it=nx&&itemOfK(nx);
- return `<div class="fcpop"><h3>${left()?"Fiches en cours":"Fiches à jour"}</h3><div class="mut">${esc(status())}${E.demo?" · démo":""}</div>${bar("Films",f,E.tot.f,"#7dd3fc")}${bar("Séries",s,E.tot.s,"#a78bfa")}
+ return `<div class="fcpop"><h3>${left()?"Fiches en cours":"Fiches à jour"}</h3><div class="mut">${esc(status())}${E.demo?" · démo":""}</div>${bar("Films",f,E.tot.f,"#7dd3fc")}${bar("Séries",s,E.tot.s,"#a78bfa")}${E.tot.p?bar("TV en direct",E.ok.p||0,E.tot.p,"#f472b6"):""}
  ${left()&&allowed()&&it?`<div class="now">En ce moment : <em>${esc(it.t)}</em></div><div class="now">${E.prio.length?"Priorité : ce que tu regardes":"Ordre : en cours, ma liste, nouveautés, puis le reste"}</div>`:""}
  ${Object.keys(C.unk).length?`<div class="now">${Object.keys(C.unk).length} fiche(s) à vérifier</div>`:""}<div class="mut sm">OK : ouvrir le réglage</div></div>`}
 function paint(){const v=$("#view");if(!v)return;const r=v.querySelector(".fcring");
@@ -140,8 +157,9 @@ SAX.homes=()=>{const u=Object.keys(C.unk).length,key=getKey();let h=`<div class=
  h+=row("fc-nouv","fc:nouv","Après le premier passage","Seulement les nouveautés : les fois suivantes, prisme ne télécharge que les films et séries arrivés chez le fournisseur.",C.nouv?"Seulement les nouveautés":"Tout revérifier chaque semaine");
  h+=row("fc-pp","fc:pp","Pendant la lecture","Pour ne pas gêner la vidéo.",PPS[C.pp]);
  h+=row("fc-hd","fc:hd","Qualité des affiches",C.hd?"HD : ≈ 160 Mo pour 1 000 fiches.":"Légères : ≈ 60 Mo pour 1 000 fiches.",C.hd?"HD":"Légères");
+ {const sure=Object.values(C.unk).filter(x=>x.c[0]&&x.c[0][4]>=70).length;if(sure)h+=row("fc-all","fc:all",`Accepter les ${sure} propositions sûres`,"Associe d'un coup les fiches dont la proposition de TMDB ressemble à 70 % ou plus au titre du fournisseur. Les autres restent à vérifier une par une.","")}
  h+=row("fc-unk","fc:unk","Fiches non reconnues","Les titres que TMDB n'a pas trouvés tels quels, avec sa proposition à valider.",u?u+" à vérifier":"aucune");
- if(SA.open==="fcunk")h+=Object.entries(C.unk).slice(0,30).map(([k,x],i)=>{const c=x.c[x.i||0];return `<div class="sa-op fcuk" data-f data-fid="fc-u-${i}" data-act="fc:pick:${k}" data-desc="OK : associer cette fiche · → : proposition suivante"><span><code>${esc(x.raw)}</code><small>${c?`${esc(c[1])} (${c[2]||"?"})${x.c.length>1?` · ${(x.i||0)+1}/${x.c.length}`:""}`:"aucune proposition"}</small></span><span>${c?"Associer ›":"Ignorer ›"}</span></div>`}).join("");
+ if(SA.open==="fcunk")h+=Object.entries(C.unk).slice(0,30).map(([k,x],i)=>{const c=x.c[x.i||0];return `<div class="sa-op fcuk" data-f data-fid="fc-u-${i}" data-act="fc:pick:${k}" data-desc="OK : associer cette fiche · → : proposition suivante"><span><code>${esc(x.raw)}</code><small>${c?`${esc(c[1])} (${c[2]||"?"})${c[4]!=null?` · ressemblance ${c[4]} %`:""}${x.c.length>1?` · ${(x.i||0)+1}/${x.c.length}`:""}`:"aucune proposition : la fiche garde les infos du fournisseur"}</small></span><span>${c?"Associer ›":"Ignorer ›"}</span></div>`}).join("");
  h+=row("fc-redo","fc:redo","Tout retélécharger","Efface les fiches téléchargées par prisme et recommence.","");
  h+=`<div class="it sa-fixed"><span>Clé TMDB<small>${key?"enregistrée dans ce navigateur":"à taper sous la télécommande, dans « Mes données fournisseur »"}</small></span><span>${key?"✓":E.demo?"démo":"manquante"}</span></div>`;
  return h};
@@ -157,6 +175,8 @@ SAX.homes=()=>{const u=Object.keys(C.unk).length,key=getKey();let h=`<div class=
  case "pick":{const u=C.unk[x];if(!u)return;const c=u.c[u.i||0],it=itemOfK(x);delete C.unk[x];C.fix[x]=1;saveC();
   if(c&&it&&isReal()){(x[0]==="s"?applySerie(it,c[0]):(it._real.tm=c[0],fetchFilm(it))).then(()=>{dirty=1;applySoon(it.id);E.lastRender=0;refresh()}).catch(()=>{})}
   toast(c?`✓ Associé à « ${c[1]} »`:"Titre ignoré");return render(Object.keys(C.unk).length?"fc-u-0":"fc-unk")}
+ case "all":{let n=0;for(const [k,u] of Object.entries(C.unk)){const c=u.c[0],it=itemOfK(k);if(!c||c[4]<70||!it)continue;delete C.unk[k];C.fix[k]=1;n++;
+   if(isReal())(k[0]==="s"?applySerie(it,c[0]):(it._real.tm=c[0],fetchFilm(it))).then(()=>{dirty=1;applySoon(it.id)}).catch(()=>{})}saveC();toast(`✓ ${n} fiche${n>1?"s":""} associée${n>1?"s":""}`);return render("fc-unk")}
  case "redo":C.done={};C.unk={};C.fix={};C.first=0;saveC();E.force=true;if(isReal()){for(const it of FILMS)if(it._real&&it._real.tmfc){delete it._real.tm;delete it._real.tmfc}idbSet("fcfilms",{m:{},names:{},sids:{}}).catch(()=>{});idbSet("fcseries",{m:{},names:{}}).catch(()=>{})}
   E.paused=false;E.ringKeep=true;start();toast("On recommence depuis le début");return render("fc-redo")}}}
 /* → sur une fiche non reconnue : proposition suivante */
