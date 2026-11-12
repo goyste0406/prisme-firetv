@@ -1,3 +1,7 @@
-/* diagnostic : chaque affichage et chaque touche notent l'étape en cours (voir diag.js) */
-{const _r=render;render=function(f){DG("affichage : "+(S.modal?"fenêtre "+S.modal.type:((topS()||{}).t||"")+" · onglet "+S.tab));const o=_r(f);DGend();return o}}
-{const _k=key;key=function(k){DG("touche « "+k+" » ("+(S.modal?"fenêtre "+S.modal.type:((topS()||{}).t||"")+" · onglet "+S.tab)+")");const o=_k(k);DGend();return o}}
+/* diagnostic : chaque affichage et chaque touche notent l'étape en cours (voir diag.js), avec le détail des fonctions d'affichage */
+const DST=[];let DGB="";const DGw=()=>DG(DGB+(DST.length?" › "+DST.join(" › "):""));
+{const _r=render;render=function(f){const prev=DGB;DGB="affichage : "+(S.modal?"fenêtre "+S.modal.type:((topS()||{}).t||"")+" · onglet "+S.tab);DGw();const o=_r(f);DGB=prev;if(prev)DGw();else DGend();return o}}
+{const _k=key;key=function(k){DGB="touche « "+k+" » ("+(S.modal?"fenêtre "+S.modal.type:((topS()||{}).t||"")+" · onglet "+S.tab)+")";DGw();const o=_k(k);DGB="";DGend();return o}}
+window.DGwrap=function(n,f){return function(){DST.push(n);DGw();try{return f.apply(this,arguments)}finally{DST.pop();DGw()}}};
+for(const n of ["homeHtml","modalHtml","tabbar","fxModal","fxProfModal","detailHtml","fhHero","fhTop","forYou","fhTV","fhNew","fhResume","fhColls","fhCarousel","fhLines","fhSkel","fhView","fhSlides","fhTonightPst","fhProv","fhBrowse","fhSagaNext","genreList","hTonight","hForYou","hGuideRows","homeMain","hdeck","hBig","lNow","lSoon","lPast","mineHtml","myList","weekHtml","nightMsg","epgIdx","counts","setFocus","ensureVisible","whereHtml","xSimHtml","crossPick","bInfo","fxFiche","actsHtml","sagaHtml","fxUniverse","srHtml","search","gRender","plmHtml","settingsHtml","provRows","lPreload","startCd"]){
+ try{const f=window[n];if(typeof f==="function")window[n]=DGwrap(n,f)}catch(e){}}

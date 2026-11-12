@@ -12,14 +12,17 @@ function guess(){const h=new Date().getHours(),ids=Object.keys(PR.list).filter(i
 const usual=id=>{const r=(PR.list[id]&&PR.list[id].hrs)||[];let h=-1,m=0;r.forEach((v,i)=>{if(v>m){m=v;h=i}});if(h<0)return "";return h<12?"d'habitude le matin":h<17?"d'habitude l'après-midi":h<20?"d'habitude en fin de journée":"d'habitude le soir"};
 /* ce que chaque profil regardait */
 function progOf(id){return id===PR.cur?S.prog:((PR.list[id].d||{}).prog||{})}
-function resumeOf(id){const p=PR.list[id],pr=progOf(id),H=[...(p.hist||[])].reverse();
+function resumeOf(id){return (window.DGwrap?DGwrap("resumeOf",resumeOf0):resumeOf0)(id)}
+function resumeOf0(id){const p=PR.list[id],pr=progOf(id),H=[...(p.hist||[])].reverse();
  for(const h of H){const it=ALL[h.id];if(it&&pr[h.id]&&pr[h.id]<.97&&srcs(it.id).length)return {it,pct:pr[h.id]}}
  for(const k of Object.keys(pr).reverse()){const it=ALL[k];if(it&&pr[k]<.97&&srcs(k).length)return {it,pct:pr[k]}}return null}
-function newsOf(id){const p=PR.list[id],favs=id===PR.cur?S.favs:((p.d||{}).favs||[]);const L=favs.map(k=>ALL[k]).filter(it=>it&&(added(it.id)||{d:99}).d<=7);return L}
+function newsOf(id){return (window.DGwrap?DGwrap("newsOf",newsOf0):newsOf0)(id)}
+function newsOf0(id){const p=PR.list[id],favs=id===PR.cur?S.favs:((p.d||{}).favs||[]);const L=favs.map(k=>ALL[k]).filter(it=>it&&(added(it.id)||{d:99}).d<=7);return L}
 const hello=()=>{const h=new Date().getHours();return h<5?"Bonsoir":h<12?"Bonjour":h<18?"Bon après-midi":"Bonsoir"};
 const AV=(id,cls,extra)=>{const p=PR.list[id];return `<div class="wa-av ${cls||""}" style="--c:${p.c}">${p.emo||esc((p.n||"?")[0])}${extra||""}</div>`};
 function ringH(){const r=48,C=2*Math.PI*r;return `<div class="wa-ring"><svg viewBox="0 0 104 104"><circle cx="52" cy="52" r="${r}" stroke-dasharray="${C}" stroke-dashoffset="${C*(1-W.cd/5)}"/></svg></div>`}
-function whoHtml(){const ids=Object.keys(PR.list).filter(id=>!PR.list[id].guest),g=guess(),cd=W.cd>0;const foc=(F&&F.dataset&&F.dataset.pid)||null;
+function whoHtml(){return (window.DGwrap?DGwrap("whoHtml",whoHtml0):whoHtml0)()}
+function whoHtml0(){const ids=Object.keys(PR.list).filter(id=>!PR.list[id].guest),g=guess(),cd=W.cd>0;const foc=(F&&F.dataset&&F.dataset.pid)||null;
  const items=ids.map(id=>{const p=PR.list[id],nw=newsOf(id).length;const sub=p.max!=null?"🔒 "+ageLbl(p.max):id===g&&usual(id)?usual(id):"&nbsp;";
   return `<div class="wa-p" data-f data-fid="m-p-${id}" data-act="fxprof:${id}" data-pid="${id}" ${id===g?"data-default":""}>${AV(id,"",(nw?`<span class="wa-bd">${nw}</span>`:"")+(cd&&id===g?ringH():""))}<b>${esc(p.n)}</b><small>${sub}</small></div>`});
  if(ids.length>=2)items.push(`<div class="wa-p" data-f data-fid="m-p-duo" data-act="fxduo:${ids[0]}:${ids[1]}" data-pid="duo"><div class="wa-av wa-duo"><span style="--c:${PR.list[ids[0]].c}">${esc(PR.list[ids[0]].n[0])}</span><span style="--c:${PR.list[ids[1]].c}">${esc(PR.list[ids[1]].n[0])}</span></div><b>À deux</b><small>${esc(PR.list[ids[0]].n)} + ${esc(PR.list[ids[1]].n)}</small></div>`);
@@ -28,7 +31,8 @@ function whoHtml(){const ids=Object.keys(PR.list).filter(id=>!PR.list[id].guest)
  return `<div class="modal wa"><div class="wa-bg" id="wabg"></div><div class="wa-h"><h1>${cd?`${hello()} ${esc(PR.list[g].n)} ?`:"Qui regarde ?"}</h1><p>${cd?`prisme t'ouvre ton profil dans ${W.cd} s · choisis-en un autre si ce n'est pas toi`:"OK pour choisir · ▶︎ pour reprendre directement · maintiens pour modifier"}</p></div>
  <div class="wa-row">${items.join("")}</div><div class="wa-res" id="wares">${resH(foc||g)}</div>
  <div class="wa-bot"><div class="btn" data-f data-fid="m-p-man" data-act="fxpman">Gérer les profils</div></div></div>`}
-function resH(pid){if(pid==="guest")return `<div class="wa-card"><div class="wa-tx"><span class="wa-k">Mode invité</span><b>Regarder sans rien changer</b><small>Ni historique, ni reprises, ni recommandations touchés · effacé en changeant de profil</small></div></div>`;
+function resH(pid){return (window.DGwrap?DGwrap("resH",resH0):resH0)(pid)}
+function resH0(pid){if(pid==="guest")return `<div class="wa-card"><div class="wa-tx"><span class="wa-k">Mode invité</span><b>Regarder sans rien changer</b><small>Ni historique, ni reprises, ni recommandations touchés · effacé en changeant de profil</small></div></div>`;
  if(pid==="duo")return `<div class="wa-card"><div class="wa-tx"><span class="wa-k">À deux</span><b>Des films que vous aimerez tous les deux</b><small>Un score commun, fini avant l'heure de coucher la plus tôt</small></div></div>`;
  if(pid==="add"||!PR.list[pid])return "";const p=PR.list[pid],r=resumeOf(pid),nw=newsOf(pid);
  if(!r&&!nw.length)return `<div class="wa-card"><div class="wa-tx"><span class="wa-k">${esc(p.n)}</span><b>Rien en cours</b><small>OK : ouvrir son accueil</small></div></div>`;
