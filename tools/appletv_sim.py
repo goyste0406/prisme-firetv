@@ -306,6 +306,9 @@ R("</style>", rd("defil.css") + "</style>")
 R("function ensureVisible(el,instant){", rd("defil.js") + "function ensureVisible(el,instant){")
 R('const norm=s=>s.normalize("NFD")', 'let norm=s=>s.normalize("NFD")')
 R(' const dup=[...FILMS,...SERIES].filter(i=>srcs(i.id).length>1).length+CHS.filter(c=>srcs("ch:"+c.id).length>1).length;', ' const dup=RMEMO.dup!=null?RMEMO.dup:(RMEMO.dup=[...FILMS,...SERIES].filter(i=>nsrc(i.id)>1).length+CHS.filter(c=>nsrc("ch:"+c.id)>1).length);')
+# logo officiel de prisme (icône de l'écran d'accueil Apple TV)
+import base64 as _b64
+R("function ensureVisible(el,instant){", 'const PRLOGO="data:image/png;base64,' + _b64.b64encode(open(os.path.join(os.path.dirname(os.path.abspath(__file__)),"assets","logo-prisme-192.png"),"rb").read()).decode() + '";\nfunction ensureVisible(el,instant){')
 _k = src.index("<script>", src.index("</style>")); src = src[:_k] + "<script>\n" + rd("errh.js") + src[_k+len("<script>"):]
 src = src.replace("\nrender();if(inApp())lPreload(()=>render());\n</script>", "\nrender();if(inApp())lPreload(()=>render());window.__prReady=true;\n</script>")
 assert "window.__prReady=true" in src

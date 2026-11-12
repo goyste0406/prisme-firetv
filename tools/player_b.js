@@ -60,12 +60,12 @@ function fullBody(){const k=KIND();
    <div class="pb-list sy ty grow"><div class="ttrack">${eps||'<div class="pb-hint">Aucun épisode pour cette saison</div>'}</div></div><div class="pb-sep"></div>
    <div class="pb-k">Réglages de cette série</div><div class="pb-chips">${chipH("pbc-au","pb:sub:Audio","Audio : "+shortAudio())}${chipH("pbc-st","pb:sub:Sous-titres","Sous-titres : "+(curSub()||"non"))}${chipH("pbc-ve","pb:sub:Version",srcShort().split(" · ").slice(0,2).join(" · "))}${chipH("pbc-sk","pb:skipauto","Intro passée auto",!!window.__sx.MX().skip[P.id])}${chipH("pbc-lo","pb:last",P.sx&&P.sx.last?"✓ Arrêt après cet épisode":"Arrêt après cet épisode",P.sx&&P.sx.last)}${chipH("pbc-im","pb:sub:Image","Image : "+fmtName(effFmt()))}${chipH("pbc-nu","pb:sub:Son de nuit","Son de nuit : "+(nightOn()?"actif":nightMode()===2?"jamais":"auto"))}</div>
    ${!(typeof REAL!=="undefined"&&REAL)?`<div class="pb-chips">${chipH("pbc-di","pb:demo:intro","Démo : aller à l'intro")}${chipH("pbc-dc","pb:demo:cred","Démo : générique")}${chipH("pbc-sl","pb:sleepdemo","Démo : 90 min sans toucher")}</div>`:""}`}
- const c=CH[P.id],L=lzapList(),rec=LS.hist.filter(id=>id!==P.id&&CH[id]).slice(0,3),U=["Favoris",...LGEN].filter(u=>u==="Favoris"||lvis().some(x=>chanGenre(x)===u||pgen(epgAt(x).cur)===u));
+ const c=CH[P.id],L=pbGenreList(),rec=LS.hist.filter(id=>id!==P.id&&CH[id]).slice(0,3),U=["Favoris",...LGEN].filter(u=>u==="Favoris"||lvis().some(x=>chanGenre(x)===u||pgen(epgAt(x).cur)===u));
  return `${rec.length?`<div class="pb-chips"><span class="pb-k" style="margin:0 4px 0 0">Récentes</span>${rec.map(id=>chipH("pbrc-"+id,"pb:zap:"+id,CH[id].n)).join("")}</div>`:""}
   <div class="pb-chips">${U.map((u,i)=>chipH("pbu"+i,"pb:uni:"+u,u,(P.uni||"")===u)).join("")}</div>
-  <div class="pb-list sy ty grow"><div class="ttrack">${L.map(x=>{const e=epgAt(x),on=x.id===P.id;return `<div class="pb-ch ${on?"cur":""}" data-f data-fid="pbl-${x.id}" data-act="pb:zap:${x.id}" data-pbzap="${x.id}" ${on?"data-default":""}><b class="n">${esc(x.n)}</b><div class="tx"><b>${esc(e.cur.t)}</b><div class="pg"><i style="width:${e.pct}%"></i></div><small>${on?"tu regardes · ":""}${e.next[0]?"ensuite "+fmt(e.next[0].s)+" · "+esc(e.next[0].t):"fin "+fmt(e.cur.e)}</small></div></div>`}).join("")}</div></div>
+  <div class="pb-list sy ty grow"><div class="ttrack">${L.length?"":`<div class="pb-empty">${P.uni==="Favoris"?"Aucune chaîne en favori pour l'instant":"Aucune chaîne dans « "+esc(P.uni)+" »"}</div>`}${L.map(x=>{const e=epgAt(x),on=x.id===P.id;return `<div class="pb-ch ${on?"cur":""}" data-f data-fid="pbl-${x.id}" data-act="pb:zap:${x.id}" data-pbzap="${x.id}" ${on?"data-default":""}><b class="n">${esc(x.n)}</b><div class="tx"><b>${esc(e.cur.t)}</b><div class="pg"><i style="width:${e.pct}%"></i></div><small>${on?"tu regardes · ":""}${e.next[0]?"ensuite "+fmt(e.next[0].s)+" · "+esc(e.next[0].t):"fin "+fmt(e.cur.e)}</small></div></div>`}).join("")}</div></div>
   <div class="pb-chips">${chipH("pbc-sr","pb:sub:Source","Source : "+srcShort().split(" · ").slice(0,2).join(" · "))}${chipH("pbc-au","pb:sub:Audio","Audio : "+shortAudio())}${chipH("pbc-im","pb:sub:Image","Image : "+fmtName(effFmt()))}${chipH("pbc-nu","pb:sub:Son de nuit","Son de nuit : "+(nightOn()?"actif":nightMode()===2?"jamais":"auto"))}</div>
-  <div class="pb-hint">↑ ↓ change de chaîne sans fermer · Retour ×2 = chaîne précédente</div>`}
+  <div class="pb-hint">↑ ↓ chaînes · ◀ étiquettes · ▶ réglages · Retour ×2 = chaîne précédente</div>`}
 
 /* ---------- écran ---------- */
 function specials(base){let o="";const a=base.indexOf('<div class="player">');if(a>=0){const b=base.indexOf('<div class="pframe');if(b>a+20)o+=base.slice(a+20,b)}
@@ -215,6 +215,8 @@ window.pbSeasonEnd=function(it,nx){if(!P||!P.sx)return false;P.playing=false;S.m
   if(live&&(k==="left"||k==="right")){const e=epgAt(CH[P.id]),max=Math.max(0,(nowMin()-e.cur.s)*60);P.lag=Math.max(0,Math.min(max,(P.lag||0)+(k==="left"?60:-60)));if(k==="left"&&P.lag>=max)toast("Début du programme · « Reprendre au début » pour le voir en entier");pbRender("p-seek");return}
   if(k==="up"){openMini();return}}
  if(k==="ok"){if(F&&F.dataset.act)act(F.dataset.act);return}
+ if(live&&B.panel==="full"&&!B.sub&&F&&F.dataset.fid&&F.dataset.fid.startsWith("pbl-")&&(k==="left"||k==="right")){
+  const t=k==="left"?(view.querySelector('#pbpanel [data-fid^="pbu"].sel')||view.querySelector('#pbpanel [data-fid^="pbu"]')):view.querySelector('#pbpanel [data-fid="pbc-sr"]');if(t){setFocus(t,true);return}}
  if(["up","down","left","right"].includes(k)){if(pbMove(k))return;
   if(k==="up"&&B.panel==="mini"&&!B.sub)return openFull();
   if(k==="left"&&B.panel&&!B.sub)return closePanel();

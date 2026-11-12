@@ -69,3 +69,4 @@
 .pb-mb{display:flex;gap:10px;justify-content:center;flex-wrap:wrap}
 .pb-stats{display:flex;gap:10px}.pb-stats div{flex:1 1 0;padding:12px 14px;border-radius:14px;background:rgba(255,255,255,.1);display:flex;flex-direction:column;gap:2px}.pb-stats b{font-size:22px}.pb-stats span{font-size:13px;color:rgba(255,255,255,.8)}
 .pb-lr{display:flex;align-items:center;gap:14px;padding:12px 14px;border-radius:14px;background:rgba(255,255,255,.08)}.pb-lr>div{flex-grow:1;display:flex;flex-direction:column;gap:2px}.pb-lr small{font-size:13px;color:rgba(255,255,255,.78)}
+.pb-empty{padding:28px 10px;font-size:16px;color:rgba(255,255,255,.6);text-align:center}

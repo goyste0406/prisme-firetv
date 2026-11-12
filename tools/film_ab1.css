@@ -585,3 +585,6 @@
 .W2 .hero{overflow:hidden}
 .A .sg.miss{filter:grayscale(.85);opacity:.55}.A .sg.miss .n{background:rgba(0,0,0,.7)}
 .A .sg.miss.foc{opacity:.9;filter:grayscale(.4)}
+
+/* icône de prisme sur l'accueil Apple TV : logo officiel */
+.app.pr .ai{position:relative;background:#000;overflow:hidden}.app .prlogo{position:absolute;top:0;left:50%;height:100%;width:auto;max-width:none;transform:translateX(-50%)}

@@ -18,7 +18,9 @@ function lopening(id){lcxSet("ouverture",id);clearTimeout(LCXT);LCXT=setTimeout(
 function lzapList(){const u=P&&P.uni;let L=[];
  if(u==="Reprendre"||u==="Favoris")L=deckList(u).map(x=>x.c);
  else if(u)L=lvis().filter(c=>chanGenre(c)===u||pgen(epgAt(c).cur)===u).sort((a,b)=>a.num-b.num);
- if(L.length<2||!L.some(c=>c.id===P.id))L=lvis().slice().sort((a,b)=>a.num-b.num);return L}
+ if(!L.length)L=lvis().slice().sort((a,b)=>a.num-b.num);return L}
+function pbGenreList(){const u=P&&P.uni;if(!u)return lvis().slice().sort((a,b)=>a.num-b.num);const seen=new Set();return lzapListRaw(u).filter(c=>!seen.has(c.id)&&seen.add(c.id))}
+function lzapListRaw(u){if(u==="Reprendre"||u==="Favoris")return deckList(u).map(x=>x.c);return lvis().filter(c=>chanGenre(c)===u||pgen(epgAt(c).cur)===u).sort((a,b)=>a.num-b.num)}
 let LZT=null;
 function lgoCh(id,how){if(!P||P.kind!=="live"||!CH[id]||id===P.id)return;P.prev=P.id;P.id=id;P.src=srcId("ch:"+id);P.audio=0;P.sub=null;S.lch=id;lrecord(id);
  P.ui=false;render("p-pp");const o=$("#pov");if(o)o.classList.add("hid");lzapShow(how);lopening(id)}

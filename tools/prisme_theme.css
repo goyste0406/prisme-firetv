@@ -21,7 +21,7 @@
   var(--p0)}
 
 /* ---------- logo officiel (image fournie, proportions intactes) ---------- */
-.brand i,.fx .fx-brand i{width:34px;height:34px;border-radius:0;background:var(--logo-s) center/100% 100% no-repeat;box-shadow:none}
+.brand i,.fx .fx-brand i{width:28px;height:28px;border-radius:0;background:var(--logo-s) center/100% 100% no-repeat;box-shadow:none}
 .brand,.fx .fx-brand{gap:10px;font-size:17px;font-weight:600;letter-spacing:.2em;text-transform:uppercase}
 .lpanel2 h2 i,.sysbox .ic i{border-radius:0;background:var(--logo-s) center/100% 100% no-repeat}
 .splash{background:var(--p0)}
@@ -43,6 +43,7 @@
 .tab.sel{background:rgba(245,246,250,.10);position:relative}
 .tab.sel::after{content:"";position:absolute;left:50%;bottom:5px;width:20px;height:3px;margin-left:-10px;border-radius:2px;background:var(--prism)}
 .tab.ic.sel::after,.tab.fcring.sel::after{bottom:3px;width:14px;margin-left:-7px}
+.tab.foc,.tab.sel.foc{background:var(--pi);color:var(--p0)}
 
 /* ---------- indicateurs : progression et qualité ---------- */
 .prog{background:rgba(245,246,250,.18)}
@@ -51,6 +52,10 @@
 .qb.q1080p{background:var(--pc);color:var(--p0)}
 .qb.q720p{background:#C9CEDA;color:var(--p0)}
 .qb.qSD{background:#7A8090;color:var(--p0)}
+.lcard .s i.q4K,.lfan .lcard .s i.q4K{background:var(--prism);color:#fff;text-shadow:0 1px 2px rgba(8,9,13,.35)}
+.lcard .s i.q1080p,.lfan .lcard .s i.q1080p{background:var(--pc);color:var(--p0)}
+.lcard .s i.q720p,.lfan .lcard .s i.q720p{background:#C9CEDA;color:var(--p0)}
+.lcard .s i.qSD,.lfan .lcard .s i.qSD{background:#7A8090;color:var(--p0)}
 
 /* ---------- fenêtres : verre sombre légèrement translucide, liseré lumineux ---------- */
 .modal{background:rgba(8,9,13,.62)}

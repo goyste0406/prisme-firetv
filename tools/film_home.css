@@ -272,3 +272,9 @@
 .below>.hsec,.below>.anc{padding-top:72px;margin-top:-72px}
 .below>.anc{margin-top:-72px}
 .lic2 .ltr{position:absolute;left:8px;top:7px;font-size:10.5px;font-weight:800;padding:2px 7px;border-radius:7px;background:rgba(255,120,60,.22);color:#ffb08a;letter-spacing:.02em}
+/* héro de l'accueil Films : le texte ne remonte jamais sous la barre du haut (titre sur une ligne, résumé sur deux) */
+.mchero.c3h .tx,.MC .mchero.c3h .tx{bottom:198px}
+.mchero .htag{margin-bottom:8px}
+.mchero .tx h1{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:780px}
+.mchero .hsub{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.mchero .acts{margin-top:14px}
