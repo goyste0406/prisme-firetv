@@ -281,10 +281,10 @@ _simcss = src[src.index("<style>"):src.index("</style>")]
 import re as _re
 # défilement : une section plus haute que l'écran (ex. 100 catégories d'un fournisseur) suit l'élément, pas le haut de la section
 R('const a=el.closest("[data-anchor]");const tg=a&&p.contains(a)&&a!==p?a:el;', 'const a=el.closest("[data-anchor]");const tg=a&&p.contains(a)&&a!==p&&a.offsetHeight<=p.clientHeight-20?a:el;')
-_jsall = src[src.index("</style>"):] + "".join(rd(n) for n in ["live_a2c.js", "real_end.js", "live_home.js", "live_plus.js", "film_ab1.js", "film_home.js", "serie_home.js", "player_b.js", "prov.js", "settings_a.js", "search_b.js", "guide_a.js", "who_a.js", "gouts.js", "fiches.js"])
+_jsall = src[src.index("</style>"):] + "".join(rd(n) for n in ["live_a2c.js", "real_end.js", "live_home.js", "live_plus.js", "film_ab1.js", "film_home.js", "serie_home.js", "player_b.js", "prov.js", "settings_a.js", "search_b.js", "guide_a.js", "who_a.js", "gouts.js", "fiches.js", "erreurs.js"])
 _used = set(_re.findall(r"[A-Za-z_][\w-]*", _jsall))
 _fxcss, _fxren = _fxbuild(rd("film_ab1.css") + "\n" + rd("film_home.css") + "\n" + rd("serie_home.css"), _simcss, _used)
-R("</style>", _fxcss + "\n" + rd("film_ab1_global.css") + rd("film_home_global.css") + rd("player_b.css") + rd("prov.css") + rd("settings_a.css") + rd("search_b.css") + rd("guide_a.css") + rd("who_a.css") + rd("gouts.css") + rd("fiches.css") + "</style>")
+R("</style>", _fxcss + "\n" + rd("film_ab1_global.css") + rd("film_home_global.css") + rd("player_b.css") + rd("prov.css") + rd("settings_a.css") + rd("search_b.css") + rd("guide_a.css") + rd("who_a.css") + rd("gouts.css") + rd("fiches.css") + rd("erreurs.css") + "</style>")
 _pl = rd("prisme-films.pl").replace("\\", "\\\\").replace("`", "\\`").replace("${", "\\${")
 RFCMD = "const RFCMD=`cat > /tmp/prisme-films.pl <<'PRISME_FIN'\n" + _pl + "PRISME_FIN\nperl /tmp/prisme-films.pl`;\n"
 _ps = rd("prisme-series.pl").replace("\\", "\\\\").replace("`", "\\`").replace("${", "\\${")
@@ -292,7 +292,7 @@ RFCMD += "const RSCMD=`cat > /tmp/prisme-series.pl <<'PRISME_FIN'\n" + _ps + "PR
 _fx = rd("prisme-flux.pl")
 RXFLUX = "const RCMDSH=" + _json.dumps(rd("prisme-cmd.sh").strip() + " ") + ";\n"
 RXFLUX += "const RXFLUX=" + _json.dumps('export PRISME_U="$U" PRISME_N="$N" PRISME_P="$P"; cat > /tmp/prisme-flux.pl <<\'PRISME_FLUX\'\n' + _fx + 'PRISME_FLUX\nperl /tmp/prisme-flux.pl "$D"; unset PRISME_P; ') + ";\n"
-R("render();\n</script>", RFCMD + RXFLUX + "const FXR=" + _json.dumps(_fxren) + ";\n" + rd("live_a2c.js") + "\n" + rd("real_end.js") + "\n" + rd("live_home.js") + "\n" + rd("live_plus.js") + "\n" + rd("film_ab1.js") + "\n" + rd("film_home.js") + "\n" + rd("serie_home.js") + "\n" + rd("player_b.js") + "\n" + rd("prov.js") + "\n" + rd("settings_a.js") + "\n" + rd("search_b.js") + "\n" + rd("guide_a.js") + "\n" + rd("who_a.js") + "\n" + rd("gouts.js") + "\n" + rd("fiches.js") + "\nrender();if(inApp())lPreload(()=>render());\n</script>")
+R("render();\n</script>", RFCMD + RXFLUX + "const FXR=" + _json.dumps(_fxren) + ";\n" + rd("live_a2c.js") + "\n" + rd("real_end.js") + "\n" + rd("live_home.js") + "\n" + rd("live_plus.js") + "\n" + rd("film_ab1.js") + "\n" + rd("film_home.js") + "\n" + rd("serie_home.js") + "\n" + rd("player_b.js") + "\n" + rd("prov.js") + "\n" + rd("settings_a.js") + "\n" + rd("search_b.js") + "\n" + rd("guide_a.js") + "\n" + rd("who_a.js") + "\n" + rd("gouts.js") + "\n" + rd("fiches.js") + "\n" + rd("erreurs.js") + "\nrender();if(inApp())lPreload(()=>render());\n</script>")
 R("const n=SC.streak,st=n<3?10:", 'const n=SC.streak,st=n<3?(window.SAval?[10,15,30][SAval("skip")]:10):')
 R('setBg([CH[S.lch].col,"#08080c"])', 'setBg([(CH[S.lch]||{col:"#1a1a22"}).col,"#08080c"])')
 R("<kbd>M</kbd> (ou maintenir le clic) ajouter/retirer des favoris", "<kbd>M</kbd> (ou maintenir le clic) favoris, ou options d'une chaîne dans la TV en direct")
