@@ -26,21 +26,34 @@ struct IPTVPersoApp: App {
     }
 }
 
+/// Racine : fond prisme, page de l'onglet choisi, barre du haut en verre (comme le simulateur).
+/// Les fiches s'ouvrent par-dessus, en plein écran, sans la barre.
 struct MainTabView: View {
     @EnvironmentObject var store: ProviderStore
+    @ObservedObject var nav = Nav.shared
 
     var body: some View {
-        TabView {
-            LiveHomeView()
-                .tabItem { Label("TV en direct", systemImage: "tv") }
-            MediaHomeView(kind: .film)
-                .tabItem { Label("Films", systemImage: "film") }
-            MediaHomeView(kind: .series)
-                .tabItem { Label("Séries", systemImage: "play.rectangle.on.rectangle") }
-            ProvidersSettingsView()
-                .tabItem { Label("Réglages", systemImage: "gear") }
+        NavigationStack {
+            ZStack(alignment: .top) {
+                PrismeBackground()
+                Group {
+                    switch nav.tab {
+                    case .films: MediaHomeView(kind: .film)
+                    case .series: MediaHomeView(kind: .series)
+                    case .live: LiveHomeView()
+                    case .mine: MineView()
+                    case .search: SearchView()
+                    case .settings: ProvidersSettingsView()
+                    }
+                }
+                .id(nav.tab)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                LinearGradient(colors: [.black.opacity(0.7), .black.opacity(0.35), .clear], startPoint: .top, endPoint: .bottom)
+                    .frame(height: 230).ignoresSafeArea().allowsHitTesting(false)
+                TopBar()
+            }
+            .ignoresSafeArea()
         }
-        .overlay(alignment: .topTrailing) { ImportBadge().padding(40) }
     }
 }
 
@@ -51,10 +64,11 @@ struct ImportBadge: View {
         if store.importing != nil {
             HStack(spacing: 12) {
                 ProgressView(value: store.progress).frame(width: 120).tint(.white)
-                Text(store.status).font(.system(size: 20)).lineLimit(1)
+                Text(store.status).font(P.font(19, .medium)).foregroundStyle(P.dim).lineLimit(1)
             }
-            .padding(.horizontal, 18).padding(.vertical, 10)
-            .background(.ultraThinMaterial, in: Capsule())
+            .padding(.horizontal, 18).padding(.vertical, 9)
+            .glass(30)
+            .frame(maxWidth: 520, alignment: .trailing)
         }
     }
 }
