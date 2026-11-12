@@ -307,7 +307,7 @@ if(!REAL){const _s=srcs;srcs=function(key){const L=_s(key);const it=ALL[key];if(
 
 /* ---------- mémoire des sources : srcs() est appelée des dizaines de milliers de fois par affichage (films() la rappelle
    pour chaque film). On garde le résultat le temps d'un affichage ou d'une action, puis on l'oublie. */
-const SRCM=new Map();const srcmClear=()=>SRCM.clear();
+const SRCM=new Map();const srcmClear=()=>{SRCM.clear();if(typeof AVM!=="undefined"){AVM.f=AVM.s=AVM.c=null}};
 {const _s=srcs;srcs=function(key){let v=SRCM.get(key);if(v===undefined){v=_s(key);SRCM.set(key,v)}return v}}
 {const _r=render;render=function(fid){srcmClear();
  /* l'accueil et la fiche se redessinent sans sauter : on garde la position verticale et celle de chaque rangée */

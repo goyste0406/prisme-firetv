@@ -17,8 +17,12 @@ function pgen(p){const g=norm(p.g||"");return /film|cinema|telefilm|movie/.test(
 const lvis=()=>chans().filter(c=>!LS.hidden.includes(c.id));
 function chanGenre(c){if(c._cg!==undefined)return c._cg;const lab=((typeof LCATS!=="undefined"&&LCATS.find(x=>x[0]===c.cat))||[])[1]||"";let g=lab?pgen({g:lab}):"Divertissement";
  if(g==="Divertissement"){const t={sport:"Sport",info:"Info",cine:"Cinéma",kids:"Jeunesse",doc:"Découverte"}[c.tpl];g=t||null}return c._cg=g}
-function lNow(g){return lvis().map(c=>({c,e:epgAt(c)})).filter(x=>!g||pgen(x.e.cur)===g||chanGenre(x.c)===g).sort((a,b)=>((g&&pgen(b.e.cur)===g)-(g&&pgen(a.e.cur)===g))||(b.e.cur.s-a.e.cur.s))}
-function lSoon(g,win=90){const n=nowMin();return lvis().flatMap(c=>epg(c).filter(p=>p.s>n&&p.s<=n+win&&(!g||pgen(p)===g)).map(p=>({c,p}))).sort((a,b)=>a.p.s-b.p.s)}
+/* gros fournisseurs (des milliers de chaînes) : « en direct » et « bientôt » sont calculés une fois par minute, et les rangées affichent les premières */
+const LNM={};const lmemo=(k,f)=>{const m=nowMin()+"|"+CHS.length+"|"+S.playlists.filter(p=>p.on).length;if(LNM.m!==m){for(const x in LNM)delete LNM[x];LNM.m=m}return LNM[k]||(LNM[k]=f())};
+function lNow(g){return lmemo("n"+(g||""),()=>lNow0(g)).slice()}
+function lSoon(g,win=90){return lmemo("s"+(g||"")+win,()=>lSoon0(g,win)).slice()}
+function lNow0(g){return lvis().map(c=>({c,e:epgAt(c)})).filter(x=>!g||pgen(x.e.cur)===g||chanGenre(x.c)===g).sort((a,b)=>((g&&pgen(b.e.cur)===g)-(g&&pgen(a.e.cur)===g))||(b.e.cur.s-a.e.cur.s))}
+function lSoon0(g,win=90){const n=nowMin();return lvis().flatMap(c=>epg(c).filter(p=>p.s>n&&p.s<=n+win&&(!g||pgen(p)===g)).map(p=>({c,p}))).sort((a,b)=>a.p.s-b.p.s)}
 function deckList(d){if(d==="Reprendre")return LS.hist.filter(id=>CH[id]&&srcs("ch:"+id).length).slice(0,3).map(id=>({c:CH[id],e:epgAt(CH[id])}));
  if(d==="Favoris")return lvis().filter(c=>isFav("ch:"+c.id)).map(c=>({c,e:epgAt(c)}));return lNow(d)}
 function deckOrder(){return ["Reprendre","Favoris",...[...LGEN].sort((a,b)=>(LS.gw[b]||0)-(LS.gw[a]||0))].filter(d=>deckList(d).length)}
@@ -51,12 +55,12 @@ function liveHtml(){
    main=`<div class="lhero" id="lhero">${first?lheroHtml(first.c,first.p):""}</div>${G.map(([g,L],i)=>`<section data-anchor><div class="lh3">${esc(g)}<small>${i===0&&g.startsWith("Revoir")?L.length+" en cours":L.length+" · "+A+" chaînes avec replay"}</small></div><div class="lrow sx">${L.slice(0,30).map(x=>lrpCard(x.c,x.p,"rp"+i)).join("")}</div></section>`).join("")}`}}
  else{const g=LS.view,N=lNow(g),Sn=lSoon(g).slice(0,10);const first=N[0];
   main=`<div class="lhero" id="lhero">${first?lheroHtml(first.c):`<h1 style="font-size:30px">Rien en direct en ${esc(g.toLowerCase())}</h1>`}</div>
-  <section data-anchor><div class="lh3">En ce moment<small>${N.length} · ${esc(g.toLowerCase())}</small></div><div class="lrow sx">${N.map(x=>lcard(x.c,"gn")).join("")}</div></section>
+  <section data-anchor><div class="lh3">En ce moment<small>${N.length} · ${esc(g.toLowerCase())}</small></div><div class="lrow sx">${N.slice(0,60).map(x=>lcard(x.c,"gn")).join("")}</div></section>
   <section data-anchor><div class="lh3">Bientôt<small>${Sn.length} dans l'heure et demie · OK pour un rappel</small></div><div class="lrow sx">${Sn.map(x=>lcard(x.c,"gs",x.p)).join("")}</div></section>`}
  let fan="";
  if(LS.deck){const d=LS.deck,L=deckList(d);
   fan=`<div class="lfan"><h2>${lsvg(d)}${d==="Reprendre"?"Reprendre":esc(d)}<small>${d==="Reprendre"?"tes dernières chaînes · reprise sur la même source, sans question":L.length+" en direct"}</small></h2><div class="hint2">OK pour regarder · maintiens le clic (ou M) pour plus d'options · Retour pour refermer</div>
-  <div class="lrow sx">${L.map((x,i)=>{const c=x.c,key="ch:"+c.id,ns=srcs(key).length,b=lbest(key),last=pickSrc(key);
+  <div class="lrow sx">${L.slice(0,120).map((x,i)=>{const c=x.c,key="ch:"+c.id,ns=srcs(key).length,b=lbest(key),last=pickSrc(key);
    return `<div class="lcard" style="animation-delay:${i*45}ms" data-f data-fid="fc-${c.id}" data-row="fan" data-act="lp:${c.id}" data-hov="lp:${c.id}" data-lp="${c.id}" ${i===0?"data-default":""}>${lth(c,`<span class="lbd">DIRECT</span><div class="lpb"><i style="width:${x.e.pct}%"></i></div>`)}<div class="t">${esc(x.e.cur.t)}</div><div class="s">${d==="Reprendre"&&last?`${esc(c.n)} · reprend en <i class="q${last.q}">${last.q}</i> ${esc(last.p.name)}`:`${esc(c.n)} · ${ns} source${ns>1?"s":""}${b?`<i class="q${b.q}">${b.q}</i>`:""}`}</div></div>`}).join("")}</div>
   <div class="btn lclose" data-f data-fid="fan-close" data-act="lclose">✕ Refermer</div></div>`}
  if(!main.includes("hscroll")&&main.includes("<section")){const i=main.indexOf("<section");main=main.slice(0,i)+`<div class="hscroll sy">${main.slice(i)}<div style="height:30px"></div></div>`}

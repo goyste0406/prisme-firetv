@@ -141,6 +141,8 @@ async function loop(){if(E.running)return;E.running=true;
 function finish(){if(!total())return;if(isReal()&&!E.xDone){E.xDone=true;extras()}const first=!C.first;C.first=C.first||Date.now();C.at=Date.now();saveC();persist();const u=Object.keys(C.unk).length;
  E.bilan=`✓ Fiches à jour · ${nf(E.ok.f)} films, ${nf(E.ok.s)} séries${u?` · ${u} à vérifier`:""}`;E.bilanT=Date.now()+5000;E.ringKeep=false;paint();
  if(first||E.wasRunning)refresh();E.wasRunning=false}
+/* catalogue importé avant le filtre des langues : les titres marqués d'une langue étrangère sont retirés au chargement */
+try{if(typeof REAL!=="undefined"&&REAL){const fo=it=>{const L=(it._real&&it._real.s)||[];return L.length&&L.every(x=>RI.foreign(x[1]))};for(const A2 of [FILMS,SERIES])for(let i=A2.length-1;i>=0;i--)if(fo(A2[i]))A2.splice(i,1)}}catch(e){console.warn(e)}
 /* titres importés avant le nettoyage (« Brothers 2026 US ») : on les nettoie au chargement, sans réimporter,
    et les fiches qui n'avaient pas été trouvées sous l'ancien titre sont recherchées à nouveau */
 function cleanTitles(){if(E.demo||E.cleaned)return;E.cleaned=true;let n=0;

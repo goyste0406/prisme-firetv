@@ -41,6 +41,9 @@ const RI={
  TRAILS:/[\s_\-–|.]+(?:s\d{1,2}|saison\s*\d{1,2}|season\s*\d{1,2}|partie\s*\d{1,2})\s*$/i,
  LEADC:/^\s*(?:AS|ASIA|AF|EU|EN|UK|US|KR|JP|CN|IN|AR|TR|DE|ES|IT|PT|PL|NL|RU|LAT)\s*[-|:]\s+/,
  title(n){let s=RI.base(n).replace(RI.LEADC,""),p;do{p=s;const t=s.replace(RI.TRAIL,"").replace(RI.TRAILC,"").replace(RI.TRAILL,"").replace(RI.TRAILS,"").replace(/\s*[-–:|,]\s*$/,"").trim();if(t.length<2)break;s=t}while(s!==p);return s},
+ /* titre marqué d'une langue étrangère (« … 2024 KR », « PL| … », « (US) ») sans aucune mention française : écarté */
+ FCODES:"KR|KOR|PL|POL|CN|CHN|JP|JAP|TR|TUR|RU|RUS|AR|ARA|IN|IND|ES|ESP|IT|ITA|DE|GER|PT|BR|NL|SE|NO|DK|FI|EN|ENG|US|USA|UK|LAT|LATINO|TH|THAI|VN|ID|PH|HI|HINDI",
+ foreign(n){n=String(n||"");if(RI.FR.test(n))return false;const c=RI.FCODES;return new RegExp("^\\s*(?:"+c+")\\s*[|:\\-–]").test(n)||new RegExp("[\\s_\\-|(\\[](?:"+c+")[\\])]?\\s*$").test(n)||new RegExp("[(\\[](?:"+c+")[\\])]").test(n)},
  id(p,k){return p+(hash(k)>>>0).toString(36)},
  ent(s){return s.replace(/&amp;/g,"&").replace(/&lt;/g,"<").replace(/&gt;/g,">").replace(/&quot;/g,'"').replace(/&apos;|&#39;/g,"'").replace(/&#x([0-9a-f]+);/gi,(_,h)=>String.fromCodePoint(parseInt(h,16))).replace(/&#(\d+);/g,(_,d)=>String.fromCodePoint(+d))},
  t(v){const m=/^(\d{4})(\d\d)(\d\d)(\d\d)(\d\d)(\d\d)?\s*([+-]\d{4})?/.exec(v||"");if(!m)return null;let ms=Date.UTC(+m[1],+m[2]-1,+m[3],+m[4],+m[5],+(m[6]||0));if(m[7]){const sg=m[7][0]==="-"?-1:1;ms-=sg*(+m[7].slice(1,3)*60+ +m[7].slice(3,5))*60000}else ms+=new Date().getTimezoneOffset()*60000;return Math.round(ms/60000)}
@@ -105,7 +108,7 @@ async function rReadEpg(f,want,status){
  for(const k in out)out[k]=out[k].sort((a,b)=>a[0]-b[0]).slice(-140);return out}
 async function rImport(files,provName,status,opt){
  const by={};for(const f of files){const n=f.name.toLowerCase();
-  if(/xmltv|epg|\.xml|\.gz$/.test(n))by.epg=f;else for(const k of ["get_live_categories","get_live_streams","get_vod_categories","get_vod_streams","get_series_categories","get_series"])if(n.startsWith(k+".")||n===k+".json"||n.startsWith(k+" "))by[k]=f}
+  if(/xmltv|epg|\.xml|\.gz$/.test(n))by.epg=f;else if(n.startsWith("vod_info"))by.vinfo=f;else for(const k of ["get_live_categories","get_live_streams","get_vod_categories","get_vod_streams","get_series_categories","get_series"])if(n.startsWith(k+".")||n===k+".json"||n.startsWith(k+" "))by[k]=f}
  const ph=k=>{if(opt&&opt.ph)opt.ph(k)};
  if(opt&&opt.sel){if(!opt.sel.live||!opt.sel.live.size)by.get_live_streams=null;if(!opt.sel.vod||!opt.sel.vod.size)by.get_vod_streams=null;if(!opt.sel.ser||!opt.sel.ser.size)by.get_series=null;if(!by.get_live_streams)by.epg=null}
  if(!by.get_live_streams&&!by.get_vod_streams&&!by.get_series)throw new Error("Je ne trouve pas les fichiers get_live_streams.json, get_vod_streams.json ou get_series.json. Choisis tous les fichiers du dossier créé par la commande.");
@@ -123,11 +126,15 @@ async function rImport(files,provName,status,opt){
    merge(R.chans,"rc",key,()=>({n:nm,c:[],e:"",num:+x.num||0}),it=>{if(!it.lg&&/^https?:\/\/\S+$/.test(x.stream_icon||""))it.lg=String(x.stream_icon).slice(0,300);if(ck&&!it.c.includes(ck))it.c.push(ck);if(!it.e&&x.epg_channel_id)it.e=String(x.epg_channel_id);const ad=String(x.tv_archive)==="1"?Math.max(1,+x.tv_archive_duration||1):0;if(ad){it.ar=Math.max(it.ar||0,ad);st.arch=(st.arch||0)+1}if(it.s.length<8)it.s.push([pid,String(x.name).slice(0,60),RI.q(x.name),ad])})}
   st.chans=n}
  if(by.get_vod_streams){ph("vod");status("Lecture des films…");const L=await rReadJson(by.get_vod_streams);let n=0;
-  const frOnly=!Object.keys(fc).length&&L.some(x=>RI.FR.test(x.name||""));for(const x of L){const ck=fc[String(x.category_id)];if(Object.keys(fc).length&&!ck)continue;if(frOnly&&!RI.FR.test(x.name||""))continue;if(RI.ADULT.test(x.name||""))continue;const t=RI.title(x.name),y=+x.year||RI.year(x.name),key=RI.strip(t)+"#"+(y||"");if(!t)continue;n++;
+  const frOnly=!Object.keys(fc).length&&L.some(x=>RI.FR.test(x.name||""));for(const x of L){const ck=fc[String(x.category_id)];if(Object.keys(fc).length&&!ck)continue;if(frOnly&&!RI.FR.test(x.name||""))continue;if(RI.ADULT.test(x.name||""))continue;if(RI.foreign(x.name)){st.foreign=(st.foreign||0)+1;continue}const t=RI.title(x.name),y=+x.year||RI.year(x.name),key=RI.strip(t)+"#"+(y||"");if(!t)continue;n++;
    merge(R.films,"rf",key,()=>({t,y,c:[],r:+x.rating||0,a:+x.added||0}),it=>{if(!it.po&&/^https?:\/\/\S+$/.test(x.stream_icon||""))it.po=String(x.stream_icon).slice(0,300);if(ck&&!it.c.includes(ck))it.c.push(ck);it.a=Math.max(it.a,+x.added||0);if(!it.r&&+x.rating)it.r=+x.rating;if(!it.tm&&/^\d+$/.test(String(x.tmdb||x.tmdb_id||""))&&+(x.tmdb||x.tmdb_id))it.tm=+(x.tmdb||x.tmdb_id);if(it.s.length<6)it.s.push([pid,String(x.name).slice(0,70),RI.q(x.name),x.container_extension||"mkv",String(x.stream_id||"")])})}
-  st.films=n}
+  st.films=n;
+  /* fiches du fournisseur (get_vod_info, récupérées par la commande) : résumé, casting, réalisateur, durée, grande image */
+  if(by.vinfo){const VI=await rReadJson(by.vinfo,true)||{};let k=0;for(const r of R.films)for(const x of r.s||[]){const v=VI[x[4]];if(!v)continue;k++;
+    if(v.p&&!r.p)r.p=String(v.p).slice(0,500);if(v.cast&&!r.cast)r.cast=String(v.cast).slice(0,200);if(v.dir&&!r.dir)r.dir=String(v.dir).slice(0,80);if(v.g&&!r.g)r.g=String(v.g).slice(0,60);
+    if(+v.d&&!r.d)r.d=+v.d;if(v.bd&&!r.bd)r.bd=String(v.bd).slice(0,300);if(!r.tm&&/^\d+$/.test(String(v.tm||""))&&+v.tm)r.tm=+v.tm;break}st.vinfo=k}}
  if(by.get_series){ph("ser");status("Lecture des séries…");const L=await rReadJson(by.get_series);let n=0;
-  const frOnly=!Object.keys(sc).length&&L.some(x=>RI.FR.test(x.name||""));for(const x of L){const ck=sc[String(x.category_id)];if(Object.keys(sc).length&&!ck)continue;if(frOnly&&!RI.FR.test(x.name||""))continue;if(RI.ADULT.test(x.name||""))continue;const t=RI.title(x.name),y=RI.year(x.releaseDate||x.release_date||"")||RI.year(x.name),key=RI.strip(t);if(!t)continue;n++;
+  const frOnly=!Object.keys(sc).length&&L.some(x=>RI.FR.test(x.name||""));for(const x of L){const ck=sc[String(x.category_id)];if(Object.keys(sc).length&&!ck)continue;if(frOnly&&!RI.FR.test(x.name||""))continue;if(RI.ADULT.test(x.name||""))continue;if(RI.foreign(x.name)){st.foreign=(st.foreign||0)+1;continue}const t=RI.title(x.name),y=RI.year(x.releaseDate||x.release_date||"")||RI.year(x.name),key=RI.strip(t);if(!t)continue;n++;
    merge(R.series,"rs",key,()=>({t,y,c:[],r:+x.rating||0,a:+x.last_modified||0,p:(x.plot||"").slice(0,400),cast:(x.cast||"").slice(0,200),dir:(x.director||"").slice(0,80),g:(x.genre||"").slice(0,60),ep:+x.episode_run_time||0}),it=>{const u=v=>/^https?:\/\/\S+$/.test(v||"")?String(v).slice(0,300):"";if(!it.po)it.po=u(x.cover);if(!it.bd)it.bd=u(Array.isArray(x.backdrop_path)?x.backdrop_path[0]:x.backdrop_path);if(ck&&!it.c.includes(ck))it.c.push(ck);if(!it.p&&x.plot)it.p=x.plot.slice(0,400);{const tmv=String(x.tmdb||x.tmdb_id||"");if(!it.tm&&/^\d+$/.test(tmv)&&+tmv)it.tm=+tmv}if(it.s.length<6)it.s.push([pid,String(x.name).slice(0,70),RI.q(x.name)])})}
   st.series=n}
  R.chans.sort((a,b)=>(a.num||9999)-(b.num||9999));R.chans=R.chans.slice(0,30000);
@@ -272,13 +279,16 @@ function rPlaylists(R){return R.pls.map((p,i)=>({id:p.id,name:p.name,url:p.host|
 document.querySelector(".ldemo").insertAdjacentHTML("afterend",`<section class="rimp">
  <h2>Mes données fournisseur <span class="rst" id="rst">${REAL?`Données réelles : ${REAL.pls.map(p=>esc(p.name)).join(" + ")} · ${REAL.chans.length} chaînes · ${REAL.films.length} films · ${REAL.series.length} séries`:"Données de démonstration"}</span></h2>
  <p><b>Ton fournisseur s'ajoute maintenant sur l'Apple TV</b>, comme dans la vraie application : au premier lancement, ou dans Réglages › Fournisseurs › Ajouter un fournisseur. La TV te donne la commande à coller dans Terminal (elle te demande seulement ton mot de passe), puis tu choisis les fichiers du dossier créé sur ton Bureau.</p>
- <p>Ensuite, pour les affiches et les fiches complètes, colle ces commandes dans Terminal. Elles te demandent ta clé API TMDB (qui ne s'affiche pas) et créent un fichier dans chaque dossier prisme-… du Bureau. Choisis ces fichiers avec le bouton ci-dessous.</p>
+ <p><b>Fiches, affiches, logos, sagas et plateformes</b> se téléchargent maintenant sur la TV, en arrière-plan : il suffit de ta clé TMDB dans le champ ci-dessous. Plus besoin de commande pour ça.</p>
+ <details class="rold"><summary>Anciennes commandes Terminal (facultatif)</summary>
+<p>Ces commandes font la même chose depuis le Mac. Elles te demandent ta clé API TMDB (qui ne s'affiche pas) et créent un fichier dans chaque dossier prisme-… du Bureau. Choisis ces fichiers avec le bouton ci-dessous.</p>
  <ol><li><b>Affiches et logos</b> des programmes et des chaînes : crée <b>images.json</b>.</li></ol>
  <div class="rcmd"><code id="ricmd">Script de récupération des affiches · ${RICMD.split("\n").length} lignes · utilise le bouton Copier</code><button type="button" id="ricopy">Copier</button></div>
  <ol start="2"><li><b>Fiches films complètes</b> (résumé, casting, sagas, recommandations, plateformes, affiches) : crée <b>films.json</b>. La 1ʳᵉ fois, compte 5 à 15 minutes.</li></ol>
  <div class="rcmd"><code id="rfcmd">Script des fiches films · ${RFCMD.split("\n").length} lignes · utilise le bouton Copier</code><button type="button" id="rfcopy">Copier</button></div>
  <ol start="3"><li><b>Fiches séries</b> (affiches, résumé, casting, chaîne, note, top 10) : crée <b>series.json</b>.</li></ol>
  <div class="rcmd"><code id="rscmd">Script des fiches séries · ${RSCMD.split("\n").length} lignes · utilise le bouton Copier</code><button type="button" id="rscopy">Copier</button></div>
+ </details>
  <div class="rrow"><label class="rbtn" for="rfiles">Choisir les fichiers…</label><input type="file" id="rfiles" multiple accept=".json,.xml,.gz,.txt,application/json,text/xml" hidden>${REAL?'<button type="button" id="rdemo">Revenir aux données de démo</button>':""}</div>
  <div class="rlog" id="rlog" role="status"></div>
 </section>`);
