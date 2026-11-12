@@ -12,6 +12,8 @@ targets:
       path: IPTVPerso/Info.plist
       properties:
         CFBundleDisplayName: prisme
+        CFBundleShortVersionString: "$(MARKETING_VERSION)"
+        CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
         UILaunchScreen: {}
         NSAppTransportSecurity:
           NSAllowsArbitraryLoads: true
