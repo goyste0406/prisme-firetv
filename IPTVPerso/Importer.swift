@@ -120,7 +120,7 @@ struct CatalogImporter {
     private func xmltvURL() -> URL? {
         var c = URLComponents(string: provider.account.baseURL + "/xmltv.php")
         c?.queryItems = [URLQueryItem(name: "username", value: provider.username), URLQueryItem(name: "password", value: provider.password)]
-        c?.percentEncodedQuery = c?.percentEncodedQuery?.replacingOccurrences(of: "+", with: "%2B")
+        let q0 = c?.percentEncodedQuery; c?.percentEncodedQuery = q0?.replacingOccurrences(of: "+", with: "%2B")
         return c?.url
     }
 
@@ -129,7 +129,7 @@ struct CatalogImporter {
         var q = [URLQueryItem(name: "username", value: provider.username), URLQueryItem(name: "password", value: provider.password)]
         if let action { q.append(URLQueryItem(name: "action", value: action)) }
         c?.queryItems = q
-        c?.percentEncodedQuery = c?.percentEncodedQuery?.replacingOccurrences(of: "+", with: "%2B")
+        let q0 = c?.percentEncodedQuery; c?.percentEncodedQuery = q0?.replacingOccurrences(of: "+", with: "%2B")
         guard let url = c?.url else { throw XtreamError.badURL }
         var req = URLRequest(url: url); req.timeoutInterval = 120
         let (data, resp) = try await URLSession.shared.data(for: req)
