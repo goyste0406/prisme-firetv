@@ -25,7 +25,7 @@ const ICO={
  ck:'<svg class="ck" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5 10 17.5 19 7"/></svg>'};
 const NIGHT=["Auto après l'heure du coucher","Toujours","Jamais"];
 const bedM=()=>{const b=ME().bed;return b==null?23*60:b};
-const nightMode=()=>PBD().night[CK()]||0;
+const nightMode=()=>{const v=PBD().night[CK()];return v!=null?v:(window.saNight?saNight():0)};
 const nightOn=()=>{const m=nightMode();if(m===1)return true;if(m===2)return false;const n=nowMin()%1440,b=bedM()%1440;return n>=b||n<300};
 const effFmt=()=>PBD().img[CK()]||S.set.fmt||"auto";
 const fmtName=k=>(FMTS.find(f=>f[0]===k)||FMTS[0])[1];

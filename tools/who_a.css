@@ -1,0 +1,22 @@
+/* ===== « Qui regarde ? » · version A ===== */
+.modal.wa{position:absolute;inset:0;background:#0b0d13;display:block;padding:0;z-index:60}
+.wa-bg{position:absolute;inset:0;background:radial-gradient(ellipse 60% 70% at 50% 30%,color-mix(in srgb,var(--c,#334) 35%,transparent),transparent 70%);transition:background .5s}
+.wa-h{position:absolute;left:0;right:0;top:100px;text-align:center}.wa-h h1{margin:0;font-size:46px;font-weight:800}.wa-h p{margin:10px 0 0;font-size:18px;color:rgba(255,255,255,.75)}
+.wa-row{position:absolute;left:0;right:0;top:240px;display:flex;justify-content:center;gap:30px}
+.wa-p{width:150px;display:flex;flex-direction:column;align-items:center;gap:24px;cursor:pointer}
+.wa-p b{font-size:20px;color:#fff}.wa-p small{font-size:13px;color:rgba(255,255,255,.65);text-align:center;line-height:1.35;min-height:36px}
+.wa-av{width:128px;height:128px;border-radius:50%;display:grid;place-items:center;font-size:52px;font-weight:800;color:#fff;position:relative;background:var(--c);box-shadow:0 10px 30px rgba(0,0,0,.4);transition:transform .25s cubic-bezier(.2,.8,.2,1),box-shadow .25s}
+.wa-p.foc .wa-av{transform:scale(1.14);box-shadow:0 0 0 5px #fff,0 0 40px rgba(0,0,0,.35)}
+.wa-p.add .wa-av{background:rgba(255,255,255,.1);font-weight:300;font-size:48px;box-shadow:none;border:2px dashed rgba(255,255,255,.35)}
+.wa-duo{background:none!important;box-shadow:none!important}.wa-duo span{position:absolute;top:21px;width:86px;height:86px;border-radius:50%;display:grid;place-items:center;font-size:34px;background:var(--c);box-shadow:0 8px 20px rgba(0,0,0,.4)}.wa-duo span:first-child{left:0}.wa-duo span:last-child{right:0;box-shadow:0 0 0 4px #0b0d13}
+.wa-bd{position:absolute;right:-6px;top:-4px;min-width:30px;height:30px;padding:0 8px;border-radius:15px;background:#ff3b30;font-size:15px;display:grid;place-items:center;box-shadow:0 0 0 3px #0b0d13}
+.wa-ring{position:absolute;inset:-10px;pointer-events:none}.wa-ring svg{width:100%;height:100%;transform:rotate(-90deg)}.wa-ring circle{fill:none;stroke:#fff;stroke-width:3;stroke-linecap:round;transition:stroke-dashoffset 1s linear}
+.wa-res{position:absolute;left:0;right:0;top:520px;display:flex;justify-content:center}
+.wa-card{display:flex;align-items:center;gap:16px;padding:12px 18px 12px 12px;border-radius:20px;min-width:520px;max-width:780px;background:rgba(30,33,44,.42);-webkit-backdrop-filter:blur(24px);backdrop-filter:blur(24px);border:1px solid rgba(255,255,255,.14)}
+.wa-card .wa-th{width:132px;height:74px;border-radius:12px;background:linear-gradient(150deg,var(--a),var(--b));flex:none;position:relative;overflow:hidden}.wa-card .wa-th img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}.wa-card .wa-th i{position:absolute;left:0;bottom:0;height:4px;background:#fff}
+.wa-card .wa-tx{display:flex;flex-direction:column;gap:3px;min-width:0}.wa-card .wa-tx b{font-size:17px}.wa-card .wa-tx small{font-size:13px;color:rgba(255,255,255,.7)}.wa-card .wa-tx small.nw{color:#ffd60a}
+.wa-k{font-size:12px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:rgba(255,255,255,.66)}
+.wa-card .wa-hint{margin-left:auto;font-size:12.5px;color:rgba(255,255,255,.6);text-align:right;line-height:1.4;white-space:nowrap;padding-left:14px}
+.wa-bot{position:absolute;left:0;right:0;bottom:40px;display:flex;justify-content:center}
+#view.wa-enter{animation:waen .6s ease}@keyframes waen{from{opacity:.2;transform:scale(1.03)}to{opacity:1;transform:none}}
+.wa-p.foc b,.wa-p b{color:#fff;opacity:1}.wa-card .wa-tx{display:flex;flex-direction:column}

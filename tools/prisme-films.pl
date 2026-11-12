@@ -23,6 +23,16 @@ my $J = JSON::PP->new->utf8->canonical;
 my $hasSips = (-x "/usr/bin/sips") ? 1 : 0;
 
 sub slurp { my ($f) = @_; open(my $h, "<:raw", $f) or return ""; local $/; my $d = <$h>; close $h; return defined $d ? $d : "" }
+# --- catégories : même règle que prisme sur l'Apple TV (repère français, pays francophone ; langue étrangère ignorée) ---
+# On traite tout sauf les adultes et les catégories marquées d'une autre langue : celles que tu coches sur la TV en font partie.
+my $CADULT = qr/adult|xxx|porn|\+ ?18|18 ?\+|for adults|erotic|\bsex|\bhot\b/i;
+my $CFR = qr/(^|[^a-z0-9])(fr|fra|fre|france|french|truefrench|vf|vff|vfq|vfi|vf2|vostfr|vost|stfr|subfrench|francais|francaises?)(?=$|[^a-z0-9])/;
+my $CFO = qr/(^|[^a-z0-9])(be|bel|belgique|belgium|ca|qc|quebec|ch|suisse|swiss|lu|luxembourg|afrique|africain|francophones?|maghreb|dom-?tom|antilles|reunion)(?=$|[^a-z0-9])/;
+my $CXX = qr/(^|[^a-z0-9])(en|eng|english|uk|gb|us|usa|american|de|ger|german|deutsch|deutschland|at|it|ita|italia|italian|italy|es|esp|spa|espana|spanish|latino|latam|mx|mexico|pt|por|portugal|portuguese|br|brasil|brazil|ar|arab|arabic|arabe|tr|tur|turk|turkish|turkiye|turkey|nl|dutch|nederland|pl|polska|polish|ru|rus|russia|russian|hindi|india|indian|pk|pakistan|urdu|punjabi|tamil|bangla|ex-?yu|yu|balkan|albania|greek|gr|ro|romania|swe|sweden|nordic|scandinavian|dk|denmark|norway|finland|kr|korea|korean|jp|japan|japanese|cn|china|chinese|filipino|pinoy|persian|iran|kurd|kurdish|hebrew|israel|afghan|somali|filme|serien|peliculas)(?=$|[^a-z0-9])/;
+sub cnrm { my ($s) = @_; $s = lc($s // ""); $s =~ tr/àâäáãåçéèêëíìîïñóòôöõúùûüýÿœæ/aaaaaaceeeeiiiinooooouuuuyyoa/; return $s }
+sub catok { my ($f) = @_; my $c = eval { JSON::PP->new->utf8->decode(slurp($f)) }; return undef unless ref $c eq "ARRAY" && @$c; my %ok;
+  for my $x (@$c) { next unless ref $x eq "HASH"; my $raw = "" . ($x->{category_name} // ""); next if $raw =~ $CADULT; my $n = cnrm($raw);
+    next if $n !~ $CFR && $n !~ $CFO && $n =~ $CXX; $ok{"" . ($x->{category_id} // "")} = 1 } return \%ok }
 sub spew { my ($f, $d) = @_; open(my $h, ">:raw", $f) or return; print $h $d; close $h }
 sub enc { my ($s) = @_; utf8::encode($s) if utf8::is_utf8($s); $s =~ s/([^A-Za-z0-9\-_.~])/sprintf("%%%02X", ord $1)/ge; return $s }
 sub fetch_many { my ($list, @h) = @_; return unless @$list;
@@ -55,10 +65,11 @@ for my $dir (@dirs) {
   print "== $dir\n";
   my $vs = eval { $J->decode(slurp("$dir/get_vod_streams.json")) }; $vs = [] unless ref $vs eq "ARRAY";
   unless (@$vs) { print "Pas de films dans ce dossier (get_vod_streams.json vide ou absent).\n"; next }
-  # --- regroupe les versions d'un même film ---
+  # --- regroupe les versions d'un même film (catégories françaises, jamais les langues étrangères ni les adultes) ---
+  my $okc = catok("$dir/get_vod_categories.json");
   my (%grp, @order);
   for my $x (@$vs) { next unless ref $x eq "HASH"; my $nm = "" . ($x->{name} // ""); next if $nm eq "";
-    next if $nm =~ /adult|xxx|porn|\+ ?18|18 ?\+|for adults|erotic|\bsex|\bhot\b/i;
+    next if $nm =~ /adult|xxx|porn|\+ ?18|18 ?\+|for adults|erotic|\bsex|\bhot\b/i; next if $okc && !$okc->{"" . ($x->{category_id} // "")};
     my $t = title($nm); next if length($t) < 2; my $y = $x->{year} && $x->{year} =~ /^\d{4}$/ ? $x->{year} : year($nm);
     my $tm = $x->{tmdb} // $x->{tmdb_id} // ""; $tm = "" unless $tm =~ /^\d+$/ && $tm > 0;
     my $k = $tm ne "" ? "t$tm" : "q" . simp($t) . "#$y";

@@ -13,6 +13,16 @@ my $J = JSON::PP->new->utf8->canonical; my $tmp = tempdir(CLEANUP => 1);
 (my $host = $U) =~ s{^https?://}{}; $host =~ s/[^A-Za-z0-9]+/-/g;
 my $CACHE = "$ENV{HOME}/Library/Caches/prisme-flux/$host"; make_path("$CACHE/v", "$CACHE/s");
 sub slurp { my ($f) = @_; open(my $h, "<:raw", $f) or return ""; local $/; my $d = <$h>; close $h; return defined $d ? $d : "" }
+# --- catégories : même règle que prisme sur l'Apple TV (repère français, pays francophone ; langue étrangère ignorée) ---
+# On traite tout sauf les adultes et les catégories marquées d'une autre langue : celles que tu coches sur la TV en font partie.
+my $CADULT = qr/adult|xxx|porn|\+ ?18|18 ?\+|for adults|erotic|\bsex|\bhot\b/i;
+my $CFR = qr/(^|[^a-z0-9])(fr|fra|fre|france|french|truefrench|vf|vff|vfq|vfi|vf2|vostfr|vost|stfr|subfrench|francais|francaises?)(?=$|[^a-z0-9])/;
+my $CFO = qr/(^|[^a-z0-9])(be|bel|belgique|belgium|ca|qc|quebec|ch|suisse|swiss|lu|luxembourg|afrique|africain|francophones?|maghreb|dom-?tom|antilles|reunion)(?=$|[^a-z0-9])/;
+my $CXX = qr/(^|[^a-z0-9])(en|eng|english|uk|gb|us|usa|american|de|ger|german|deutsch|deutschland|at|it|ita|italia|italian|italy|es|esp|spa|espana|spanish|latino|latam|mx|mexico|pt|por|portugal|portuguese|br|brasil|brazil|ar|arab|arabic|arabe|tr|tur|turk|turkish|turkiye|turkey|nl|dutch|nederland|pl|polska|polish|ru|rus|russia|russian|hindi|india|indian|pk|pakistan|urdu|punjabi|tamil|bangla|ex-?yu|yu|balkan|albania|greek|gr|ro|romania|swe|sweden|nordic|scandinavian|dk|denmark|norway|finland|kr|korea|korean|jp|japan|japanese|cn|china|chinese|filipino|pinoy|persian|iran|kurd|kurdish|hebrew|israel|afghan|somali|filme|serien|peliculas)(?=$|[^a-z0-9])/;
+sub cnrm { my ($s) = @_; $s = lc($s // ""); $s =~ tr/àâäáãåçéèêëíìîïñóòôöõúùûüýÿœæ/aaaaaaceeeeiiiinooooouuuuyyoa/; return $s }
+sub catok { my ($f) = @_; my $c = eval { JSON::PP->new->utf8->decode(slurp($f)) }; return undef unless ref $c eq "ARRAY" && @$c; my %ok;
+  for my $x (@$c) { next unless ref $x eq "HASH"; my $raw = "" . ($x->{category_name} // ""); next if $raw =~ $CADULT; my $n = cnrm($raw);
+    next if $n !~ $CFR && $n !~ $CFO && $n =~ $CXX; $ok{"" . ($x->{category_id} // "")} = 1 } return \%ok }
 sub enc { my ($s) = @_; utf8::encode($s) if utf8::is_utf8($s); $s =~ s/([^A-Za-z0-9\-_.~])/sprintf("%%%02X", ord $1)/ge; return $s }
 my $auth = "username=" . enc($N) . "&password=" . enc($P);
 # 4 requêtes à la fois, 150 par vague, une pause entre les vagues : le serveur n'est jamais bousculé
@@ -37,7 +47,8 @@ sub probe { my ($inf) = @_; return undef unless ref $inf eq "HASH"; my $v = ref 
 
 # --- films : une fiche par flux (stream_id), en cache tant que le flux ne change pas ---
 my $vs = eval { $J->decode(slurp("$dir/get_vod_streams.json")) }; $vs = [] unless ref $vs eq "ARRAY";
-my @V = sort { ($b->{added} || 0) <=> ($a->{added} || 0) } grep { ref $_ eq "HASH" && $_->{stream_id} && ($_->{name} // "") !~ /adult|xxx|porn|\+ ?18|18 ?\+|erotic/i } @$vs;
+my $okv = catok("$dir/get_vod_categories.json"); my $oks = catok("$dir/get_series_categories.json");
+my @V = sort { ($b->{added} || 0) <=> ($a->{added} || 0) } grep { ref $_ eq "HASH" && $_->{stream_id} && ($_->{name} // "") !~ /adult|xxx|porn|\+ ?18|18 ?\+|erotic/i && (!$okv || $okv->{"" . ($_->{category_id} // "")}) } @$vs;
 @V = @V[0 .. $MAXV - 1] if @V > $MAXV;
 my @need = grep { my $f = "$CACHE/v/$_->{stream_id}-" . ($_->{added} || 0) . ".json"; !-s $f } @V;
 print "Fiches techniques des films : ", scalar(@V), " flux (", scalar(@V) - scalar(@need), " déjà en cache)…\n";
@@ -47,7 +58,7 @@ my (%VOD, $nv); for my $x (@V) { my $d = eval { $J->decode(slurp("$CACHE/v/$x->{
 
 # --- séries : la fiche du 1er épisode de chaque série (même format), et le nombre d'épisodes ---
 my $ss = eval { $J->decode(slurp("$dir/get_series.json")) }; $ss = [] unless ref $ss eq "ARRAY";
-my @Sx = sort { ($b->{last_modified} || 0) <=> ($a->{last_modified} || 0) } grep { ref $_ eq "HASH" && $_->{series_id} && ($_->{name} // "") !~ /adult|xxx|porn/i } @$ss;
+my @Sx = sort { ($b->{last_modified} || 0) <=> ($a->{last_modified} || 0) } grep { ref $_ eq "HASH" && $_->{series_id} && ($_->{name} // "") !~ /adult|xxx|porn/i && (!$oks || $oks->{"" . ($_->{category_id} // "")}) } @$ss;
 @Sx = @Sx[0 .. $MAXS - 1] if @Sx > $MAXS;
 my @sneed = grep { !-s "$CACHE/s/$_->{series_id}-" . ($_->{last_modified} || 0) . ".json" } @Sx;
 print "Fiches techniques des séries : ", scalar(@Sx), " séries (", scalar(@Sx) - scalar(@sneed), " déjà en cache)…\n";

@@ -22,12 +22,12 @@ if(REAL){
 /* ---------- import : lecture des fichiers ---------- */
 const RI={
  ADULT:/adult|xxx|porn|\+ ?18|18 ?\+|for adults|erotic|\bsex|\bhot\b/i,
- FR:/(^|[^a-z])(fr|fra|france|french|vf|vff|vostfr|truefrench)([^a-z]|$)/i,
+ FR:{test:s=>RL.FR.test(RI.strip(s||""))},
  strip:s=>s.normalize("NFD").replace(/[̀-ͯ]/g,"").toLowerCase(),
- cleanCat(n){let c=(n||"").replace(/^\s*[\[(|]?\s*(fr|fra|france|french)\s*[\])|:\-–]*\s*/i,"").replace(/^[|:\-–\s]+/,"").trim()||n||"Divers";if(c===c.toUpperCase())c=c.toLowerCase().replace(/(^|[\s\-/&])([a-zà-ÿ])/g,(m,a,b)=>a+b.toUpperCase());return c},
+ cleanCat(n){let c=(n||"").replace(/^\s*[\[(|]?\s*(fr|fra|france|french)\s*[\])|:\-–]*\s*/i,"").replace(/^\s*[\[(|]?\s*(be|ca|ch|qc)\s*[\])|:\-–]+\s*/i,"").replace(/^[|:\-–\s]+/,"").trim()||n||"Divers";if(c===c.toUpperCase())c=c.toLowerCase().replace(/(^|[\s\-/&])([a-zà-ÿ])/g,(m,a,b)=>a+b.toUpperCase()).replace(/\b(Tnt|Sat|Hd|Fhd|Uhd|Vod|Ppv|Tv)\b/g,m=>m.toUpperCase());return c},
  q(n){return /\b(4k|uhd|2160p?)\b|⁴ᴷ|ᵁᴴᴰ/i.test(n)?"4K":/\b(fhd|1080p?|full ?hd)\b|ᶠᴴᴰ/i.test(n)?"1080p":/\b(hd|720p?)\b|ᴴᴰ/i.test(n)?"720p":/\b(sd|480p?|576p?)\b|ˢᴰ/i.test(n)?"SD":"1080p"},
  base(n){let s=(n||"").replace(/^\s*([\[(|]?\s*(fr|fra|france|be|ch|ca|qc)\s*[\])|:\-–]+\s*)+/i,"");
-  s=s.replace(/[ᴴᴰᶠᵁ⁴ᴷˢ]+/g," ").replace(/\b(4k|uhd|fhd|full ?hd|hd|sd|hevc|h\.?26[45]|x26[45]|1080p?|720p?|2160p?|hdr10?|dolby ?vision|50 ?fps|raw|backup|vip|multi|vostfr|vff|vf|truefrench|french)\b/gi," ");
+  s=s.replace(/[ᴴᴰᶠᵁ⁴ᴷˢ]+/g," ").replace(/\b(4k|uhd|fhd|full ?hd|hd|sd|hevc|h\.?26[45]|x26[45]|1080p?|720p?|2160p?|hdr10?|dolby ?vision|50 ?fps|60 ?fps|raw|backup|bk|secours|alt|vip|sat|tnt|multi|vostfr|vff|vf|truefrench|french)\b/gi," ");
   return s.replace(/[\[\]()|]+/g," ").replace(/\s*[-–:]\s*$/,"").replace(/^\s*[-–:]\s*/,"").replace(/\s{2,}/g," ").trim()||n},
  year(n){const m=(n||"").match(/\b(19[2-9]\d|20[0-3]\d)\b/);return m?+m[1]:0},
  /* titre propre : on retire, en partant de la fin, langue, qualité, source, son et année (« … Masters 2026 VOST » → « … Masters ») */
@@ -37,7 +37,9 @@ const RI={
  ent(s){return s.replace(/&amp;/g,"&").replace(/&lt;/g,"<").replace(/&gt;/g,">").replace(/&quot;/g,'"').replace(/&apos;|&#39;/g,"'").replace(/&#x([0-9a-f]+);/gi,(_,h)=>String.fromCodePoint(parseInt(h,16))).replace(/&#(\d+);/g,(_,d)=>String.fromCodePoint(+d))},
  t(v){const m=/^(\d{4})(\d\d)(\d\d)(\d\d)(\d\d)(\d\d)?\s*([+-]\d{4})?/.exec(v||"");if(!m)return null;let ms=Date.UTC(+m[1],+m[2]-1,+m[3],+m[4],+m[5],+(m[6]||0));if(m[7]){const sg=m[7][0]==="-"?-1:1;ms-=sg*(+m[7].slice(1,3)*60+ +m[7].slice(3,5))*60000}else ms+=new Date().getTimezoneOffset()*60000;return Math.round(ms/60000)}
 };
-async function rReadJson(f,optional){
+const RJC=new WeakMap();
+async function rReadJson(f,optional){if(RJC.has(f))return RJC.get(f);const r=await rReadJson0(f,optional);if(r!=null)RJC.set(f,r);return r}
+async function rReadJson0(f,optional){
  let buf=new Uint8Array(await f.arrayBuffer());
  if(buf[0]===0x1f&&buf[1]===0x8b&&typeof DecompressionStream!=="undefined"){buf=new Uint8Array(await new Response(new Blob([buf]).stream().pipeThrough(new DecompressionStream("gzip"))).arrayBuffer())}
  const t=new TextDecoder().decode(buf).replace(/^﻿/,"").trim();
@@ -47,6 +49,36 @@ async function rReadJson(f,optional){
  try{const j=JSON.parse(t);if(j&&!Array.isArray(j)&&typeof j==="object"){if(j.user_info&&String(j.user_info.auth)==="0")return fail("identifiants refusés par le serveur");const arr=Object.values(j).find(Array.isArray);if(arr)return arr;const vals=Object.values(j);if(vals.length&&vals.every(v=>v&&typeof v==="object"))return vals}return j}
  catch(e){return fail(`le contenu n'est pas du JSON valide. Début : « ${t.replace(/\s+/g," ").slice(0,90)} »`)}}
 const RWARN=[];
+/* ---------- langue d'une catégorie : la même règle à l'ajout d'un fournisseur, à l'import et dans les scripts du Mac ----------
+   1. adultes : jamais ; 2. repère français dans le nom (FR, VF, VFF, VFQ, VOSTFR, TRUEFRENCH…) ; 3. pays francophone (Belgique, Québec, Suisse, Afrique) ;
+   4. repère d'une autre langue (EN, UK, DE, AR…) ; 5. nom écrit en français ; 6. sinon : on regarde un échantillon de titres */
+const RL={
+ FR:/(^|[^a-z0-9])(fr|fra|fre|france|french|truefrench|vf|vff|vfq|vfi|vf2|vostfr|vost|stfr|subfrench|francais|francaises?)(?=$|[^a-z0-9])/i,
+ FO:/(^|[^a-z0-9])(be|bel|belgique|belgium|ca|qc|quebec|ch|suisse|swiss|lu|luxembourg|afrique|africain|francophones?|maghreb|dom-?tom|antilles|reunion)(?=$|[^a-z0-9])/i,
+ XX:/(^|[^a-z0-9])(en|eng|english|uk|gb|us|usa|american|de|ger|german|deutsch|deutschland|at|it|ita|italia|italian|italy|es|esp|spa|espana|spanish|latino|latam|mx|mexico|pt|por|portugal|portuguese|br|brasil|brazil|ar|arab|arabic|arabe|tr|tur|turk|turkish|turkiye|turkey|nl|dutch|nederland|pl|polska|polish|ru|rus|russia|russian|hindi|india|indian|pk|pakistan|urdu|punjabi|tamil|bangla|ex-?yu|yu|balkan|albania|greek|gr|ro|romania|swe|sweden|nordic|scandinavian|dk|denmark|norway|finland|kr|korea|korean|jp|japan|japanese|cn|china|chinese|filipino|pinoy|persian|iran|kurd|kurdish|hebrew|israel|afghan|somali|filme|serien|peliculas)(?=$|[^a-z0-9])/i,
+ WFR:/(^|[^a-z0-9])(jeunesse|enfants|cinema|chaines|dessins?|animes|documentaires?|policiers?|comedies|nouveautes|emissions|telefilms?|actualites|divertissements?|regions|regionales?|feuilletons|sagas|horreur|aventures|integrales?|nouveaux?)(?=$|[^a-z0-9])/i,
+ ACC:/[éèêàçùâîôûœ]/i,
+ MULTI:/(^|[^a-z0-9])(multi|multilang|multi-?langues?|multi-?audio|multi-?subs?)(?=$|[^a-z0-9])/i,
+ ADULT:/adult|xxx|porn|\+ ?18|18 ?\+|for adults|erotic|\bsex|\bhot\b/i,
+ /* chaînes françaises connues (catégories de TV sans langue dans le nom) */
+ CHFR:/(^|[^a-z0-9])(tf1|tmc|tfx|lci|m6|w9|6ter|gulli|c8|cstar|cnews|canal\+?|canal plus|arte|france ?[2345]|france ?o|franceinfo|bfm|rmc|nrj ?12|cherie ?25|l ?equipe|lcp|public senat|paris premiere|teva|ocs|cine\+?|comedie\+?|planete\+?|ushuaia|seasons|mcm|tv5|tv5monde|rtl ?9|novelas|game one|tiji|piwi|boing|toonami|infosport|equidia|nautical|trace|mangas|serieclub|13e ?rue|syfy france|polar\+?|action|warner tv france|tf1 series)(?=$|[^a-z0-9])/i,
+ /* mots courants des titres français */
+ TFR:/(^|[^a-z0-9'])(le|la|les|des|du|de|une|un|et|au|aux|pour|dans|sur|chez|avec|sans|qui|mon|ma|mes|ton|ta|nos|vos|est|pas|tout|toute|nous|vous|ou|quand|comme|plus|petit|petite|grand|grande|amour|vie|nuit|jour|monde|femme|homme|fille|fils|enfant|histoire|retour|dernier|derniere|rien|deux|trois|l|d)(?=$|[^a-z0-9])/i,
+ n:s=>RI.strip(s||""),
+ /* L : liste d'objets {name}, échantillon de la catégorie ; kind : live, vod, ser */
+ of(name,L,kind){const raw=name||"",n=RL.n(raw);let m;
+  if(RL.ADULT.test(raw))return {g:"adult",why:"jamais chargée"};
+  if((m=n.match(RL.FR)))return {g:"fr",why:/^vost|^stfr|^subfrench/.test(m[2])?"sous-titrée en français":"marquée « "+m[2].toUpperCase()+" »"};
+  if((m=n.match(RL.FO)))return {g:"fo",why:"pays francophone"};
+  if(RL.MULTI.test(n)&&!RL.XX.test(n))return {g:"fr",why:"MULTI : le français est souvent inclus"};
+  if((m=n.match(RL.XX)))return {g:"xx",why:"marquée « "+m[2].toUpperCase()+" »"};
+  if(RL.ACC.test(raw)||RL.WFR.test(n))return {g:"fr",why:"nom écrit en français"};
+  const S=(L||[]).slice(0,60),pct=S.length?Math.round(S.filter(x=>RL.frTitle(x.name||"",kind)).length*100/S.length):0;
+  return {g:"chk",pct,why:S.length?pct+" % de titres français repérés":"catégorie vide"}},
+ frTitle(t,kind){const n=RL.n(t);if(RL.FR.test(n)||RL.ACC.test(t)||(RL.MULTI.test(n)&&!RL.XX.test(n)))return true;if(kind==="live")return RL.CHFR.test(n);if(RL.XX.test(n))return false;return RL.TFR.test(n.replace(/'/g," "))},
+ /* sélection proposée par prisme */
+ on(c,name){return c.g==="fr"||(c.g==="fo"&&/belg|quebec|qc|(^|[^a-z])(be|ca)([^a-z]|$)/.test(RL.n(name)))||(c.g==="chk"&&c.pct>=50)}
+};
 async function rReadEpg(f,want,status){
  let stream=f.stream();const head=new Uint8Array(await f.slice(0,2).arrayBuffer());
  if(head[0]===0x1f&&head[1]===0x8b){if(typeof DecompressionStream==="undefined")throw new Error("Guide compressé non pris en charge par ce navigateur");stream=stream.pipeThrough(new DecompressionStream("gzip"))}
@@ -61,37 +93,39 @@ async function rReadEpg(f,want,status){
   if(n%2000<50)status(`Guide des programmes : ${n.toLocaleString("fr-FR")} programmes lus, ${kept.toLocaleString("fr-FR")} gardés…`);
   if(done)break}
  for(const k in out)out[k]=out[k].sort((a,b)=>a[0]-b[0]).slice(-140);return out}
-async function rImport(files,provName,status){
+async function rImport(files,provName,status,opt){
  const by={};for(const f of files){const n=f.name.toLowerCase();
   if(/xmltv|epg|\.xml|\.gz$/.test(n))by.epg=f;else for(const k of ["get_live_categories","get_live_streams","get_vod_categories","get_vod_streams","get_series_categories","get_series"])if(n.startsWith(k+".")||n===k+".json"||n.startsWith(k+" "))by[k]=f}
+ const ph=k=>{if(opt&&opt.ph)opt.ph(k)};
+ if(opt&&opt.sel){if(!opt.sel.live||!opt.sel.live.size)by.get_live_streams=null;if(!opt.sel.vod||!opt.sel.vod.size)by.get_vod_streams=null;if(!opt.sel.ser||!opt.sel.ser.size)by.get_series=null;if(!by.get_live_streams)by.epg=null}
  if(!by.get_live_streams&&!by.get_vod_streams&&!by.get_series)throw new Error("Je ne trouve pas les fichiers get_live_streams.json, get_vod_streams.json ou get_series.json. Choisis tous les fichiers du dossier créé par la commande.");
  const old=(()=>{try{return JSON.parse(localStorage.getItem("prisme-real")||"null")}catch(e){return null}})();
  const R=old&&old.pls?old:{pls:[],lcats:[],fcats:[],scats:[],chans:[],films:[],series:[],epg:{}};
- const pid="rp"+(R.pls.length+1);R.pls.push({id:pid,name:provName,at:Date.now()});
+ const pid="rp"+(R.pls.reduce((a,p)=>Math.max(a,+String(p.id).slice(2)||0),0)+1);R.pls.push({id:pid,name:provName,at:Date.now(),...((opt&&opt.info)||{})});
  const st={};
- const cats=async(file,pref,arr)=>{const m={};if(!file)return m;const L=await rReadJson(file,true);if(!Array.isArray(L))return m;const all=L.filter(c=>!RI.ADULT.test(c.category_name||""));const fr=all.filter(c=>RI.FR.test(c.category_name||""));
-  (fr.length?fr:all).forEach(c=>{const nm=RI.cleanCat(c.category_name),key=RI.id(pref,RI.strip(nm));m[String(c.category_id)]=key;if(!arr.some(x=>x[0]===key))arr.push([key,nm])});return m};
+ const cats=async(file,pref,arr,ty)=>{const m={};if(!file)return m;const L=await rReadJson(file,true);if(!Array.isArray(L))return m;const all=L.filter(c=>!RI.ADULT.test(c.category_name||""));const sel=opt&&opt.sel&&opt.sel[ty];const fr=sel?all.filter(c=>sel.has(String(c.category_id))):all.filter(c=>RL.on(RL.of(c.category_name,null,ty),c.category_name));
+  (fr.length||sel?fr:all).forEach(c=>{const nm=RI.cleanCat(c.category_name),key=RI.id(pref,RI.strip(nm));m[String(c.category_id)]=key;if(!arr.some(x=>x[0]===key))arr.push([key,nm])});return m};
  status("Lecture des catégories…");
- const lc=await cats(by.get_live_categories,"l",R.lcats),fc=await cats(by.get_vod_categories,"f",R.fcats),sc=await cats(by.get_series_categories,"s",R.scats);
+ const lc=await cats(by.get_live_categories,"l",R.lcats,"live"),fc=await cats(by.get_vod_categories,"f",R.fcats,"vod"),sc=await cats(by.get_series_categories,"s",R.scats,"ser");
  const merge=(arr,pref,key,make,add)=>{let it=arr.find(x=>x.k===key);if(!it){it=make();it.k=key;it.id=RI.id(pref,key);it.s=[];arr.push(it)}add(it);return it};
- if(by.get_live_streams){status("Lecture des chaînes…");const L=await rReadJson(by.get_live_streams);let n=0;
+ if(by.get_live_streams){ph("live");status("Lecture des chaînes…");const L=await rReadJson(by.get_live_streams);let n=0;
   const frOnly=!Object.keys(lc).length&&L.some(x=>RI.FR.test(x.name||""));for(const x of L){const ck=lc[String(x.category_id)];if(Object.keys(lc).length&&!ck)continue;if(frOnly&&!RI.FR.test(x.name||""))continue;if(RI.ADULT.test(x.name||""))continue;const nm=RI.base(x.name),key=RI.strip(nm);if(!key)continue;n++;
    merge(R.chans,"rc",key,()=>({n:nm,c:[],e:"",num:+x.num||0}),it=>{if(ck&&!it.c.includes(ck))it.c.push(ck);if(!it.e&&x.epg_channel_id)it.e=String(x.epg_channel_id);const ad=String(x.tv_archive)==="1"?Math.max(1,+x.tv_archive_duration||1):0;if(ad){it.ar=Math.max(it.ar||0,ad);st.arch=(st.arch||0)+1}if(it.s.length<8)it.s.push([pid,String(x.name).slice(0,60),RI.q(x.name),ad])})}
   st.chans=n}
- if(by.get_vod_streams){status("Lecture des films…");const L=await rReadJson(by.get_vod_streams);let n=0;
+ if(by.get_vod_streams){ph("vod");status("Lecture des films…");const L=await rReadJson(by.get_vod_streams);let n=0;
   const frOnly=!Object.keys(fc).length&&L.some(x=>RI.FR.test(x.name||""));for(const x of L){const ck=fc[String(x.category_id)];if(Object.keys(fc).length&&!ck)continue;if(frOnly&&!RI.FR.test(x.name||""))continue;if(RI.ADULT.test(x.name||""))continue;const t=RI.title(x.name),y=+x.year||RI.year(x.name),key=RI.strip(t)+"#"+(y||"");if(!t)continue;n++;
    merge(R.films,"rf",key,()=>({t,y,c:[],r:+x.rating||0,a:+x.added||0}),it=>{if(ck&&!it.c.includes(ck))it.c.push(ck);it.a=Math.max(it.a,+x.added||0);if(!it.r&&+x.rating)it.r=+x.rating;if(!it.tm&&/^\d+$/.test(String(x.tmdb||x.tmdb_id||""))&&+(x.tmdb||x.tmdb_id))it.tm=+(x.tmdb||x.tmdb_id);if(it.s.length<6)it.s.push([pid,String(x.name).slice(0,70),RI.q(x.name),x.container_extension||"mkv",String(x.stream_id||"")])})}
   st.films=n}
- if(by.get_series){status("Lecture des séries…");const L=await rReadJson(by.get_series);let n=0;
+ if(by.get_series){ph("ser");status("Lecture des séries…");const L=await rReadJson(by.get_series);let n=0;
   const frOnly=!Object.keys(sc).length&&L.some(x=>RI.FR.test(x.name||""));for(const x of L){const ck=sc[String(x.category_id)];if(Object.keys(sc).length&&!ck)continue;if(frOnly&&!RI.FR.test(x.name||""))continue;if(RI.ADULT.test(x.name||""))continue;const t=RI.title(x.name),y=RI.year(x.releaseDate||x.release_date||"")||RI.year(x.name),key=RI.strip(t);if(!t)continue;n++;
    merge(R.series,"rs",key,()=>({t,y,c:[],r:+x.rating||0,a:+x.last_modified||0,p:(x.plot||"").slice(0,400),cast:(x.cast||"").slice(0,200),dir:(x.director||"").slice(0,80),g:(x.genre||"").slice(0,60)}),it=>{if(ck&&!it.c.includes(ck))it.c.push(ck);if(!it.p&&x.plot)it.p=x.plot.slice(0,400);if(it.s.length<6)it.s.push([pid,String(x.name).slice(0,70),RI.q(x.name)])})}
   st.series=n}
  R.chans.sort((a,b)=>(a.num||9999)-(b.num||9999));R.chans=R.chans.slice(0,700);
  R.films.sort((a,b)=>b.a-a.a);R.series.sort((a,b)=>b.a-a.a);
- if(by.epg){const want=new Set(R.chans.map(c=>c.e).filter(Boolean));R.epg={...R.epg,...await rReadEpg(by.epg,want,status)};st.epg=Object.values(R.epg).reduce((a,l)=>a+l.length,0)}
+ if(by.epg){ph("epg");const want=new Set(R.chans.map(c=>c.e).filter(Boolean));R.epg={...R.epg,...await rReadEpg(by.epg,want,status)};st.epg=Object.values(R.epg).reduce((a,l)=>a+l.length,0)}
  // garde les catégories utilisées
  const used=new Set([...R.chans,...R.films,...R.series].flatMap(i=>i.c));["lcats","fcats","scats"].forEach(k=>R[k]=R[k].filter(c=>used.has(c[0])));
- status("Enregistrement dans ce navigateur…");
+ ph("save");status("Enregistrement dans ce navigateur…");
  let nf=Math.min(R.films.length,3000),ns=Math.min(R.series.length,1500),txt;
  for(let tries=0;tries<12;tries++){const out={...R,films:R.films.slice(0,nf),series:R.series.slice(0,ns),at:Date.now()};txt=JSON.stringify(out);
   if(txt.length<4.4e6){try{localStorage.setItem("prisme-real",txt);return {...st,keptF:nf,keptS:ns,totF:R.films.length,totS:R.series.length,pls:R.pls.length}}catch(e){}}
@@ -216,43 +250,31 @@ print "Terminé. Ajoute images.json dans le simulateur (bouton « Choisir les fi
 system("open", $dirs[0]) if -x "/usr/bin/open";
 PRISME_FIN
 perl /tmp/prisme-images.pl`;
-/* ---------- panneau sous la télécommande ---------- */
-const RCMD=`c(){ curl -sSLG --compressed -A "Mozilla/5.0" "$@"; }; printf "Nom de ce fournisseur (ex. IPTV1) : "; read -r F; printf "Adresse du serveur (ex. http://monserveur.com:8080) : "; read -r U; printf "Nom d'utilisateur : "; read -r N; printf "Mot de passe : "; read -rs P; echo; case "$U" in http*) ;; *) U="http://$U";; esac; U="\${U%%/get.php*}"; U="\${U%%/player_api.php*}"; U="\${U%/}"; R=$(c "$U/player_api.php" --data-urlencode "username=$N" --data-urlencode "password=$P"); case "$R" in *'"auth":1'*|*'"auth": 1'*|*'"auth":"1"'*) echo "✓ Connexion acceptée";; *) echo "⚠ Le serveur refuse la connexion ou répond autre chose. Début de la réponse :"; echo "\${R:0:200}";; esac; D=~/Desktop/prisme-"\${F// /-}"; mkdir -p "$D" && cd "$D" && for a in get_live_categories get_live_streams get_vod_categories get_vod_streams get_series_categories get_series; do c "$U/player_api.php" --data-urlencode "username=$N" --data-urlencode "password=$P" --data-urlencode "action=$a" -o "$a.json"; echo "✓ $a : $(wc -c < "$a.json" | tr -d ' ') octets, début : $(head -c 60 "$a.json")"; done; c "$U/xmltv.php" --data-urlencode "username=$N" --data-urlencode "password=$P" -o xmltv.xml; echo "✓ guide : $(wc -c < xmltv.xml | tr -d ' ') octets"; ${typeof RXFLUX!=="undefined"?RXFLUX:""}unset P R; open "$D"`;
+/* ---------- commande du Mac : remplie avec ce que tu as saisi sur la TV ; le mot de passe est demandé dans Terminal, jamais gardé ici ---------- */
+const shq=s=>"'"+String(s||"").replace(/'/g,"'\\''")+"'";
+function rCmd(o){o=o||{};return `F=${shq(o.name)}; U=${shq(o.url)}; N=${shq(o.user)}; `+RCMDSH+(typeof RXFLUX!=="undefined"?RXFLUX:"")+'unset P R; open "$D"'}
+/* liste des fournisseurs affichée dans prisme (Réglages › Fournisseurs) */
+function rPlaylists(R){return R.pls.map((p,i)=>({id:p.id,name:p.name,url:p.host||("Importé le "+new Date(p.at).toLocaleDateString("fr-FR")),user:p.user||"données réelles",pass:"",epg:true,on:p.on!==false,seed:i+1,real:true,col:p.col,exp:p.exp,maxc:p.max,at:p.at,n:p.n}))}
+/* ---------- panneau sous la télécommande : fiches et affiches TMDB (le fournisseur, lui, s'ajoute sur la TV) ---------- */
 document.querySelector(".ldemo").insertAdjacentHTML("afterend",`<section class="rimp">
  <h2>Mes données fournisseur <span class="rst" id="rst">${REAL?`Données réelles : ${REAL.pls.map(p=>esc(p.name)).join(" + ")} · ${REAL.chans.length} chaînes · ${REAL.films.length} films · ${REAL.series.length} séries`:"Données de démonstration"}</span></h2>
- <p>Tes chaînes, films, séries et ton guide des programmes, sans aucune lecture vidéo. Tes identifiants restent sur ton Mac : seules les listes sont lues ici, et elles restent dans ce navigateur.</p>
- <ol><li>Sur ton Mac, ouvre <b>Terminal</b>, colle cette commande et appuie sur Entrée. Elle te demande le nom du fournisseur, l'adresse du serveur, l'utilisateur et le mot de passe (qui ne s'affiche pas quand tu tapes), puis crée un dossier sur ton Bureau et l'ouvre. Elle demande aussi au serveur la <b>fiche technique de chaque flux</b> (qualité, HDR, codec, son, débit, taille) sans ouvrir aucun flux, et l'écrit dans <b>flux.json</b>, avec <b>tous les épisodes de chaque série</b> (saisons, titres, durées, résumés) dans <b>episodes.json</b> : la 1ʳᵉ fois, compte quelques minutes, ensuite seuls les nouveaux films sont demandés.</li></ol>
- <div class="rcmd"><code id="rcmd">${esc(RCMD)}</code><button type="button" id="rcopy">Copier</button></div>
- <ol start="2"><li>Choisis ici <b>tous les fichiers</b> de ce dossier (⌘A dans la fenêtre de choix les sélectionne tous). Pour un 2ᵉ fournisseur, refais les deux étapes : les catalogues sont fusionnés.</li></ol>
- <div class="rrow"><label for="rname">Nom du fournisseur</label><input id="rname" value="${REAL?"Fournisseur "+(REAL.pls.length+1):"Mon fournisseur"}" autocomplete="off"><label class="rbtn" for="rfiles">Choisir les fichiers…</label><input type="file" id="rfiles" multiple accept=".json,.xml,.gz,.txt,application/json,text/xml" hidden>${REAL?'<button type="button" id="rdemo">Revenir aux données de démo</button>':""}</div>
- <ol start="3"><li><b>Affiches et logos</b> (après les données) : dans Terminal, colle cette 2ᵉ commande. Elle te demande ta clé API TMDB (qui ne s'affiche pas), récupère les images des programmes depuis le guide public français (comme les applis TV), complète avec les affiches TMDB, récupère les logos des chaînes et crée <b>images.json</b> dans chaque dossier prisme-… Choisis ensuite les 8 fichiers du dossier (les 7 + images.json) avec le même bouton : ⌘A dans la fenêtre de choix les sélectionne tous.</li></ol>
+ <p><b>Ton fournisseur s'ajoute maintenant sur l'Apple TV</b>, comme dans la vraie application : au premier lancement, ou dans Réglages › Fournisseurs › Ajouter un fournisseur. La TV te donne la commande à coller dans Terminal (elle te demande seulement ton mot de passe), puis tu choisis les fichiers du dossier créé sur ton Bureau.</p>
+ <p>Ensuite, pour les affiches et les fiches complètes, colle ces commandes dans Terminal. Elles te demandent ta clé API TMDB (qui ne s'affiche pas) et créent un fichier dans chaque dossier prisme-… du Bureau. Choisis ces fichiers avec le bouton ci-dessous.</p>
+ <ol><li><b>Affiches et logos</b> des programmes et des chaînes : crée <b>images.json</b>.</li></ol>
  <div class="rcmd"><code id="ricmd">Script de récupération des affiches · ${RICMD.split("\n").length} lignes · utilise le bouton Copier</code><button type="button" id="ricopy">Copier</button></div>
- <ol start="4"><li><b>Fiches films complètes</b> (résumé, casting, sagas, recommandations, plateformes de streaming, affiches) : colle cette 3ᵉ commande dans Terminal. Elle te redemande ta clé TMDB et crée <b>films.json</b> dans chaque dossier prisme-… La 1ʳᵉ fois, compte 5 à 15 minutes ; ensuite seuls les nouveaux films sont téléchargés. Choisis enfin films.json avec le même bouton (seul ou avec les autres fichiers).</li></ol>
+ <ol start="2"><li><b>Fiches films complètes</b> (résumé, casting, sagas, recommandations, plateformes, affiches) : crée <b>films.json</b>. La 1ʳᵉ fois, compte 5 à 15 minutes.</li></ol>
  <div class="rcmd"><code id="rfcmd">Script des fiches films · ${RFCMD.split("\n").length} lignes · utilise le bouton Copier</code><button type="button" id="rfcopy">Copier</button></div>
- <ol start="5"><li><b>Fiches séries</b> (affiches, grandes images, résumé, casting, chaîne, note, top 10 de la semaine) : colle cette 4ᵉ commande dans Terminal. Elle te redemande ta clé TMDB et crée <b>series.json</b> dans chaque dossier prisme-… Quand TMDB ne connaît pas une série, elle prend l'affiche donnée par ton fournisseur. La 1ʳᵉ fois, compte 5 à 15 minutes. Choisis ensuite series.json avec le même bouton.</li></ol>
+ <ol start="3"><li><b>Fiches séries</b> (affiches, résumé, casting, chaîne, note, top 10) : crée <b>series.json</b>.</li></ol>
  <div class="rcmd"><code id="rscmd">Script des fiches séries · ${RSCMD.split("\n").length} lignes · utilise le bouton Copier</code><button type="button" id="rscopy">Copier</button></div>
+ <div class="rrow"><label class="rbtn" for="rfiles">Choisir les fichiers…</label><input type="file" id="rfiles" multiple accept=".json,.xml,.gz,.txt,application/json,text/xml" hidden>${REAL?'<button type="button" id="rdemo">Revenir aux données de démo</button>':""}</div>
  <div class="rlog" id="rlog" role="status"></div>
 </section>`);
-$("#rcopy").addEventListener("click",()=>{const done=()=>{$("#rcopy").textContent="Copié";setTimeout(()=>$("#rcopy").textContent="Copier",1600)};
- if(navigator.clipboard&&navigator.clipboard.writeText)navigator.clipboard.writeText(RCMD).then(done,()=>{const r=document.createRange();r.selectNodeContents($("#rcmd"));const s=getSelection();s.removeAllRanges();s.addRange(r)});
- else{const r=document.createRange();r.selectNodeContents($("#rcmd"));const s=getSelection();s.removeAllRanges();s.addRange(r)}});
-$("#rname").addEventListener("keydown",e=>e.stopPropagation());
-$("#rscopy").addEventListener("click",()=>{const b=$("#rscopy");const done=()=>{b.textContent="Copié";setTimeout(()=>b.textContent="Copier",1600)};const fb=()=>{const t=document.createElement("textarea");t.value=RSCMD;t.style.cssText="position:fixed;left:-9999px";document.body.appendChild(t);t.select();try{document.execCommand("copy");done()}catch(e){b.textContent="Copie impossible"}t.remove()};
- if(navigator.clipboard&&navigator.clipboard.writeText)navigator.clipboard.writeText(RSCMD).then(done,fb);else fb()});
-$("#rfcopy").addEventListener("click",()=>{const b=$("#rfcopy");const done=()=>{b.textContent="Copié";setTimeout(()=>b.textContent="Copier",1600)};const fb=()=>{const t=document.createElement("textarea");t.value=RFCMD;t.style.cssText="position:fixed;left:-9999px";document.body.appendChild(t);t.select();try{document.execCommand("copy");done()}catch(e){b.textContent="Copie impossible"}t.remove()};
- if(navigator.clipboard&&navigator.clipboard.writeText)navigator.clipboard.writeText(RFCMD).then(done,fb);else fb()});
-$("#ricopy").addEventListener("click",()=>{const b=$("#ricopy");const done=()=>{b.textContent="Copié";setTimeout(()=>b.textContent="Copier",1600)};const fb=()=>{const t=document.createElement("textarea");t.value=RICMD;t.style.cssText="position:fixed;left:-9999px";document.body.appendChild(t);t.select();try{document.execCommand("copy");done()}catch(e){b.textContent="Copie impossible"}t.remove()};
- if(navigator.clipboard&&navigator.clipboard.writeText)navigator.clipboard.writeText(RICMD).then(done,fb);else fb()});
-$("#rfiles").addEventListener("change",async e=>{const files=[...e.target.files];if(!files.length)return;const log=$("#rlog");const say=m=>{log.textContent=m};log.classList.remove("err");
- RWARN.length=0;try{const name=($("#rname").value||"Mon fournisseur").trim().slice(0,40);const r=await rImport(files,name,say);
-  const R=JSON.parse(localStorage.getItem("prisme-real"));
-  S.playlists=R.pls.map((p,i)=>({id:p.id,name:p.name,url:"Importé le "+new Date(p.at).toLocaleDateString("fr-FR"),user:"données réelles",pass:"",epg:true,on:true,seed:i+1,real:true}));S.adding=false;S.stack=[{t:"home"}];S.tab="live";save();
-  try{localStorage.removeItem("prisme-atv-live")}catch(_){}
-  say(`${r.arch?`Replay disponible : ${r.arch} flux de chaînes l'acceptent. `:r.chans?"Replay : ton fournisseur ne l'indique sur aucune chaîne. ":""}Import réussi : ${r.chans??0} flux de chaînes, ${r.films??0} films, ${r.series??0} séries${r.epg?`, ${r.epg.toLocaleString("fr-FR")} programmes`:""}.${r.keptF<r.totF?` ${r.keptF} films les plus récents gardés sur ${r.totF} (mémoire du navigateur).`:""} ${RWARN.length?" Attention : "+RWARN.join(" · "):""} Redémarrage du simulateur…`);
-  setTimeout(()=>location.reload(),RWARN.length?6000:1400)}
- catch(err){log.classList.add("err");say("Import impossible : "+err.message)}
- e.target.value=""});
-if($("#rdemo"))$("#rdemo").addEventListener("click",()=>{try{localStorage.removeItem("prisme-real");localStorage.removeItem("prisme-atv-live")}catch(_){}S.playlists=[];S.stack=[{t:"home"}];S.tab="films";save();location.reload()});
+function rCopy(btn,txt){const b=typeof btn==="string"?$(btn):btn;const done=()=>{if(!b)return;const o=b.textContent;b.textContent="Copié";setTimeout(()=>b.textContent=o,1600)};const fb=()=>{const t=document.createElement("textarea");t.value=txt;t.style.cssText="position:fixed;left:-9999px";document.body.appendChild(t);t.select();let ok=false;try{ok=document.execCommand("copy")}catch(e){}t.remove();if(ok)done();else if(b)b.textContent="Copie impossible";return ok};
+ if(navigator.clipboard&&navigator.clipboard.writeText)return navigator.clipboard.writeText(txt).then(()=>{done();return true},fb);return Promise.resolve(fb())}
+$("#rscopy").addEventListener("click",()=>rCopy("#rscopy",RSCMD));
+$("#rfcopy").addEventListener("click",()=>rCopy("#rfcopy",RFCMD));
+$("#ricopy").addEventListener("click",()=>rCopy("#ricopy",RICMD));
+if($("#rdemo"))$("#rdemo").addEventListener("click",()=>{idbSet("images",[]).catch(()=>{});idbSet("series",[]).catch(()=>{});idbSet("eps",null).catch(()=>{});try{localStorage.removeItem("prisme-real");localStorage.removeItem("prisme-atv-live")}catch(_){}S.playlists=[];S.stack=[{t:"home"}];S.tab="films";save();location.reload()});
 /* ---------- images : affiches TMDB et logos (stockés dans IndexedDB, données plus lourdes) ---------- */
 const IMG={l:{},n:{},p:{},count:0};
 function idb(){return new Promise((ok,ko)=>{try{const r=indexedDB.open("prisme",1);r.onupgradeneeded=()=>r.result.createObjectStore("kv");r.onsuccess=()=>ok(r.result);r.onerror=()=>ko(r.error)}catch(e){ko(e)}})}
@@ -270,15 +292,19 @@ if(REAL)idbGet("images").then(list=>{if(!list||!list.length)return;list.forEach(
 async function rImportImages(files,status){const out=[];for(const f of files){status(`Lecture de ${f.name}…`);let d=null;try{d=JSON.parse((await f.text()).replace(/^\uFEFF/,""))}catch(e){};if(!d||typeof d!=="object"||!d.progs)throw new Error(`${f.name} n'est pas un fichier d'images prisme`);out.push(d)}
  let list=[];try{list=(await idbGet("images"))||[]}catch(e){}list=list.concat(out).slice(-4);await idbSet("images",list);
  return out.reduce((a,d)=>[a[0]+Object.keys(d.progs).length,a[1]+(d.logos||[]).length],[0,0])}
-{const inp=$("#rfiles");inp.addEventListener("change",async e=>{const all=[...e.target.files];const im=all.filter(f=>/^images.*\.json$/i.test(f.name)),fj=all.filter(f=>/^films.*\.json$/i.test(f.name)),fl=all.filter(f=>/^flux.*\.json$/i.test(f.name)),sj=all.filter(f=>/^series.*\.json$/i.test(f.name)),ej=all.filter(f=>/^episodes.*\.json$/i.test(f.name));if(!im.length&&!fj.length&&!fl.length&&!sj.length&&!ej.length)return;
- e.stopImmediatePropagation();const rest=all.filter(f=>!im.includes(f)&&!fj.includes(f)&&!fl.includes(f)&&!sj.includes(f)&&!ej.includes(f));const log=$("#rlog");const say=m=>{log.textContent=m};log.classList.remove("err");
- try{if(rest.length){RWARN.length=0;const name=($("#rname").value||"Mon fournisseur").trim().slice(0,40);await rImport(rest,name,say);const R=JSON.parse(localStorage.getItem("prisme-real"));
-   S.playlists=R.pls.map((p,i)=>({id:p.id,name:p.name,url:"Importé le "+new Date(p.at).toLocaleDateString("fr-FR"),user:"données réelles",pass:"",epg:true,on:true,seed:i+1,real:true}));S.adding=false;S.stack=[{t:"home"}];S.tab="live";save()}
-  const [np,nl]=im.length?await rImportImages(im,say):[0,0];const nf=fj.length?await fxImportFilms(fj,say):0;const nx=fl.length?await fluxImport(fl,say):0;const nsx=sj.length?await sxImportSeries(sj,say):0;const nep=ej.length?await sxImportEps(ej,say):0;
-  if(!rest.length&&!REAL){say(`Fichiers enregistrés (${np} affiches, ${nl} logos, ${nf} fiches films, ${nsx} fiches séries), mais le simulateur ne trouve pas tes données fournisseur dans ce navigateur : il affiche encore les données de démo. Sélectionne en une seule fois les 7 fichiers du dossier prisme-… ET images.json (8 fichiers), avec la touche ⌘ pour en choisir plusieurs.`);return}
-  say(`${im.length?`Images importées : ${np} affiches de programmes, ${nl} logos de chaînes. `:""}${fj.length?`Fiches films importées : ${nf} films TMDB. `:""}${sj.length?`Fiches séries importées : ${nsx} séries. `:""}${ej.length?`Épisodes importés pour ${nep} séries. `:""}Redémarrage du simulateur…`);setTimeout(()=>location.reload(),1400)}
- catch(err){log.classList.add("err");say("Import impossible : "+err.message)}e.target.value=""},true)}
-if($("#rdemo"))$("#rdemo").addEventListener("click",()=>{idbSet("images",[]).catch(()=>{});idbSet("series",[]).catch(()=>{});idbSet("eps",null).catch(()=>{})},true);
+/* fichiers des scripts TMDB et du Mac (images, fiches films/séries, flux, épisodes) */
+const rExtraOf=all=>({im:all.filter(f=>/^images.*\.json$/i.test(f.name)),fj:all.filter(f=>/^films.*\.json$/i.test(f.name)),fl:all.filter(f=>/^flux.*\.json$/i.test(f.name)),sj:all.filter(f=>/^series.*\.json$/i.test(f.name)),ej:all.filter(f=>/^episodes.*\.json$/i.test(f.name))});
+async function rImportExtras(all,say){const X=rExtraOf(all);const [np,nl]=X.im.length?await rImportImages(X.im,say):[0,0];const nf=X.fj.length?await fxImportFilms(X.fj,say):0;const nx=X.fl.length?await fluxImport(X.fl,say):0;const nsx=X.sj.length?await sxImportSeries(X.sj,say):0;const nep=X.ej.length?await sxImportEps(X.ej,say):0;
+ return {np,nl,nf,nx,nsx,nep,any:X.im.length+X.fj.length+X.fl.length+X.sj.length+X.ej.length}}
+$("#rfiles").addEventListener("change",async e=>{const all=[...e.target.files];e.target.value="";if(!all.length)return;
+ if(window.pvFiles&&window.pvFiles(all))return;
+ const log=$("#rlog");const say=m=>{log.textContent=m};log.classList.remove("err");
+ const X=rExtraOf(all),known=new Set([...X.im,...X.fj,...X.fl,...X.sj,...X.ej]),rest=all.filter(f=>!known.has(f)&&!/^compte.*\.json$/i.test(f.name));
+ try{if(!known.size){log.classList.add("err");return say("Ces fichiers sont ceux d'un fournisseur : ajoute-le sur l'Apple TV (Réglages › Fournisseurs › Ajouter un fournisseur), la TV te demandera de les choisir.")}
+  const r=await rImportExtras(all,say);
+  if(!REAL){say(`Fichiers enregistrés (${r.np} affiches, ${r.nl} logos, ${r.nf} fiches films, ${r.nsx} fiches séries), mais aucun fournisseur n'est encore ajouté dans ce navigateur : ajoute-le d'abord sur l'Apple TV.`);return}
+  say(`${r.np||r.nl?`Images importées : ${r.np} affiches de programmes, ${r.nl} logos de chaînes. `:""}${r.nf?`Fiches films importées : ${r.nf} films TMDB. `:""}${r.nsx?`Fiches séries importées : ${r.nsx} séries. `:""}${r.nep?`Épisodes importés pour ${r.nep} séries. `:""}${rest.length?`(${rest.length} fichier${rest.length>1?"s":""} du fournisseur ignoré${rest.length>1?"s":""} ici.) `:""}Redémarrage du simulateur…`);setTimeout(()=>location.reload(),1400)}
+ catch(err){log.classList.add("err");say("Import impossible : "+err.message)}});
 /* titres déjà importés : on les nettoie aussi (sans réimport) */
 if(typeof REAL!=="undefined"&&REAL){for(const f of FILMS)if(f._real&&!f.tmd)f.t=RI.title(f.t)}
 /* ---------- fiche technique des flux (flux.json) : connue avant d'ouvrir le flux ---------- */

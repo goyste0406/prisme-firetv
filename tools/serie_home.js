@@ -99,9 +99,11 @@ const spNextEp=(it,s,e)=>{if(e+1<=EPS(it)[s-1])return {s,e:e+1};for(let t=s+1;t<
 function setSp(it,s,e,pos){const x=MX();x.done=x.done.filter(z=>z!==it.id);x.sp[it.id]={s,e,pos:pos||0,t:Date.now()};prSave()}
 
 /* ---------- goûts : genres des séries finies ou bien avancées ---------- */
-function taste2(){const g={};for(const it of SL())if(isDone(it)||sProg(it)>.3)(it.g||[]).forEach(x=>g[x]=(g[x]||0)+1);return g}
-function sFor(){const ck="fy|"+PR.cur+"|"+SERIES.length+"|"+JSON.stringify(MX().sp).length+MX().done.length+"|"+MX().no.length;if(X.cache[ck])return X.cache[ck];const g=taste2(),tot=Object.values(g).reduce((a,b)=>a+b,0)||1;
- return X.cache[ck]=SL().filter(it=>!MX().no.includes(it.id)).map(it=>{const m=(it.g||[]).reduce((a,k)=>a+(g[k]||0),0)/tot;return {c:it,pct:Math.max(40,Math.min(97,Math.round(55+m*40+(it.imdb-7.5)*8))),why:m>.5?`Tes genres : ${(it.g||[]).filter(k=>g[k]).join(", ")}`:`★ ${it.imdb} · très bien notée`}}).sort((a,b)=>b.pct-a.pct)}
+function taste2(){const g={};for(const it of SL())if(isDone(it)||sProg(it)>.3)(it.g||[]).forEach(x=>g[x]=(g[x]||0)+1);
+ /* goûts appris par le test (Réglages › Profils › Mes goûts) */
+ if(window.gtTaste){const t=gtTaste();for(const k in t)g[k]=(g[k]||0)+t[k]*.8}for(const k in g)if(g[k]<0)delete g[k];return g}
+function sFor(){const ck="fy|"+PR.cur+"|"+SERIES.length+"|"+JSON.stringify(MX().sp).length+MX().done.length+"|"+MX().no.length+"|"+((ME().taste||{}).at||0);if(X.cache[ck])return X.cache[ck];const g=taste2(),tot=Object.values(g).reduce((a,b)=>a+b,0)||1;
+ return X.cache[ck]=SL().filter(it=>!MX().no.includes(it.id)&&!(window.gtNever&&gtNever(it))).map(it=>{const m=(it.g||[]).reduce((a,k)=>a+(g[k]||0),0)/tot;return {c:it,pct:Math.max(40,Math.min(97,Math.round(55+m*40+(it.imdb-7.5)*8))),why:m>.5?`Tes genres : ${(it.g||[]).filter(k=>g[k]).join(", ")}`:`★ ${it.imdb} · très bien notée`}}).sort((a,b)=>b.pct-a.pct)}
 const pmap=()=>{const m={};sFor().forEach(o=>m[o.c.id]=o);return m};
 function sUp(){const x=MX(),av=new Set(series().map(i=>i.id));return Object.keys(x.sp).map(id=>ALL[id]).filter(it=>it&&av.has(it.id)&&!blk(it)&&!isDone(it)&&jOf(it)<30&&!(isWait(it)&&!WEEK().some(w=>w.id===it.id&&w.j<=0&&!w.seen&&!w.full&&w.e===nextEp(it).e))).sort((a,b)=>(spOf(b).t||0)-(spOf(a).t||0))}
 const sStale=()=>{const av=new Set(series().map(i=>i.id));return Object.keys(MX().sp).map(id=>ALL[id]).filter(it=>it&&av.has(it.id)&&!blk(it)&&!isDone(it)&&jOf(it)>=30)};
