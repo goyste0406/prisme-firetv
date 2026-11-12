@@ -32,7 +32,12 @@ const RI={
  year(n){const m=(n||"").match(/\b(19[2-9]\d|20[0-3]\d)\b/);return m?+m[1]:0},
  /* titre propre : on retire, en partant de la fin, langue, qualité, source, son et année (« … Masters 2026 VOST » → « … Masters ») */
  TRAIL:/(?:^|[\s\-–:_.,|])(?:vost(?:-?fr)?|vostfr|vo|vf2?|vff|vfq|vfi|stfr|subfrench|truefrench|french|multi|eng|subs?|hdlight|hdr10\+?|hdr|dv|dolby ?vision|imax|3d|remux|web(?:-?dl|rip)?|blu-?ray|bdrip|brrip|dvdrip|x26[45]|h\.?26[45]|hevc|10 ?bits?|atmos|dts|ac3|aac|5\.1|7\.1|extended|uncut|remastered|director'?s ?cut|version longue|4k|uhd|fhd|hd|sd|1080[pi]?|720p?|2160p?|19[2-9]\d|20[0-3]\d)[\s\-–:_.,|]*$/i,
- title(n){let s=RI.base(n),p;do{p=s;const t=s.replace(RI.TRAIL,"").replace(/\s*[-–:|,]\s*$/,"").trim();if(t.length<2)break;s=t}while(s!==p);return s},
+ /* code pays ou langue collé à la fin (« All's Fair 2025 _fr », « Paolo 2026 FR », « The Torment 2024 PL ») */
+ TRAILC:/(?:[\s_\-–|.(\[]+)(?:FR|FRA|KR|KOR|PL|POL|US|USA|UK|GB|EN|ENG|DE|GER|ES|ESP|IT|ITA|TR|TUR|JP|JAP|CN|CHN|IN|IND|BR|PT|NL|AR|ARA|RU|RUS|SE|NO|DK|FI|BE|CA|QC|MX|LAT|LATINO|SUB|DUB|VOSTA)[\])]*\s*$/,
+ TRAILL:/(?:[_|(\[\-–]\s*|\s+)(?:fr|fra|kr|kor|pl|tr|jp|cn|ru|nl|dk|fi|gb|usa|ger|esp|ita|latino)[\])]*\s*$/i,
+ TRAILS:/[\s_\-–|.]+(?:s\d{1,2}|saison\s*\d{1,2}|season\s*\d{1,2}|partie\s*\d{1,2})\s*$/i,
+ LEADC:/^\s*(?:AS|ASIA|AF|EU|EN|UK|US|KR|JP|CN|IN|AR|TR|DE|ES|IT|PT|PL|NL|RU|LAT)\s*[-|:]\s+/,
+ title(n){let s=RI.base(n).replace(RI.LEADC,""),p;do{p=s;const t=s.replace(RI.TRAIL,"").replace(RI.TRAILC,"").replace(RI.TRAILL,"").replace(RI.TRAILS,"").replace(/\s*[-–:|,]\s*$/,"").trim();if(t.length<2)break;s=t}while(s!==p);return s},
  id(p,k){return p+(hash(k)>>>0).toString(36)},
  ent(s){return s.replace(/&amp;/g,"&").replace(/&lt;/g,"<").replace(/&gt;/g,">").replace(/&quot;/g,'"').replace(/&apos;|&#39;/g,"'").replace(/&#x([0-9a-f]+);/gi,(_,h)=>String.fromCodePoint(parseInt(h,16))).replace(/&#(\d+);/g,(_,d)=>String.fromCodePoint(+d))},
  t(v){const m=/^(\d{4})(\d\d)(\d\d)(\d\d)(\d\d)(\d\d)?\s*([+-]\d{4})?/.exec(v||"");if(!m)return null;let ms=Date.UTC(+m[1],+m[2]-1,+m[3],+m[4],+m[5],+(m[6]||0));if(m[7]){const sg=m[7][0]==="-"?-1:1;ms-=sg*(+m[7].slice(1,3)*60+ +m[7].slice(3,5))*60000}else ms+=new Date().getTimezoneOffset()*60000;return Math.round(ms/60000)}

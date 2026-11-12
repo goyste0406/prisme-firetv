@@ -25,6 +25,7 @@ function allowed(){if(C.mode===2||E.paused)return false;if(C.mode===1&&!night())
 function build(){const F=FILMS.slice(),Sx=SERIES.slice(),week=7*864e5,now=Date.now();
  E.tot={f:F.length,s:Sx.length};const need=it=>{const k=kOf(it),d=C.done[k];if(C.fix[k])return false;if(isReal()&&hasFiche(it)&&!E.force)return false;if(!d)return true;if(!C.nouv&&now-d>week)return true;return false};
  const score=it=>(S.prog[it.id]?3e9:0)+(S.favs.includes(it.id)?2e9:0)+((it._real&&it._real.a)||it.y*1e5||0);
+ for(const k in C.unk)if(!itemOfK(k))delete C.unk[k];
  E.q=[...F,...Sx].filter(need).sort((a,b)=>score(b)-score(a)).map(kOf);
  E.ok={f:F.filter(it=>!need(it)).length,s:Sx.filter(it=>!need(it)).length}}
 const left=()=>E.q.length+E.prio.length;
@@ -50,7 +51,7 @@ async function fetchFilm(it){const r=it._real||{};let id=+r.tm||0,cands=[];
  const m={t:d.title,ot:d.original_title,y:+(d.release_date||"").slice(0,4)||it.y,d:d.runtime||0,g:(d.genres||[]).map(g=>g.name),ov:d.overview||"",tg:d.tagline||"",age,va:d.vote_average||0,vc:d.vote_count||0,dir,
   po:img(d.poster_path,C.hd?"w342":"w185"),bd:img(d.backdrop_path,"w780"),cast:((d.credits||{}).cast||[]).slice(0,8).map(c=>[c.name,c.character||""])};
  TMD.m[id]=m;for(const s of r.s||[]){if(s[1])TMD.names[s[1]]=id;if(s[4])TMD.sids[s[4]]=id}if(!r.tm)r.tmfc=1;r.tm=id;return {id}}
-async function fetchSerie(it){const r=it._real||{};const j=await tm(`/search/tv?query=${encodeURIComponent(it.t)}`);const w=simp(it.t);let id=0;
+async function fetchSerie(it){const r=it._real||{};let j=it.y?await tm(`/search/tv?query=${encodeURIComponent(it.t)}&first_air_date_year=${it.y}`):{results:[]};if(!(j.results||[]).length)j=await tm(`/search/tv?query=${encodeURIComponent(it.t)}`);const w=simp(it.t);let id=0;
  const cands=(j.results||[]).slice(0,3).map(m=>[m.id,m.name,(m.first_air_date||"").slice(0,4),m.poster_path||""]);
  for(const m of j.results||[]){if([m.name,m.original_name].some(x=>x&&(simp(x)===w||(w.length>=5&&simp(x).indexOf(w)===0)))){id=m.id;break}}
  if(!id&&(j.results||[]).length===1)id=j.results[0].id;if(!id)return {unk:cands};return applySerie(it,id)}
