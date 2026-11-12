@@ -180,7 +180,7 @@ async function runImport(){const p=PV();p.step=3;p.imp={};p.msg="";p.done=false;
  const tk=setInterval(()=>{if(cur&&p.imp[cur]<93){p.imp[cur]+=3+Math.random()*7;pvDraw()}},180);
  try{RWARN.length=0;const r=await rImport(p.files,pvName(p),m=>{p.msg=m;pvDraw()},{sel,ph,info});if(cur)p.imp[cur]=100;
   const x=await rImportExtras(p.files,m=>{p.msg=m;pvDraw()});
-  const R=JSON.parse(localStorage.getItem("prisme-real"));S.playlists=rPlaylists(R);S.adding=true;S.stack=[{t:"home"}];
+  const R=window.__RLAST||JSON.parse(localStorage.getItem("prisme-real"));S.playlists=rPlaylists(R);S.adding=true;S.stack=[{t:"home"}];
   try{localStorage.removeItem("prisme-atv-live")}catch(_){}
   p.res=r;p.done=true;p.msg=`${r.arch?`Replay : ${nf(r.arch)} flux de chaînes l'acceptent. `:""}${x.nx?`Fiche technique de ${nf(x.nx)} flux. `:""}${x.nep?`Épisodes de ${nf(x.nep)} séries. `:""}${RWARN.length?"Attention : "+RWARN.join(" · "):""}`}
  catch(e){p.err=e.message}

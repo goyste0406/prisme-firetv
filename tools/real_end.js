@@ -106,7 +106,7 @@ async function rImport(files,provName,status,opt){
  const ph=k=>{if(opt&&opt.ph)opt.ph(k)};
  if(opt&&opt.sel){if(!opt.sel.live||!opt.sel.live.size)by.get_live_streams=null;if(!opt.sel.vod||!opt.sel.vod.size)by.get_vod_streams=null;if(!opt.sel.ser||!opt.sel.ser.size)by.get_series=null;if(!by.get_live_streams)by.epg=null}
  if(!by.get_live_streams&&!by.get_vod_streams&&!by.get_series)throw new Error("Je ne trouve pas les fichiers get_live_streams.json, get_vod_streams.json ou get_series.json. Choisis tous les fichiers du dossier créé par la commande.");
- const old=(()=>{try{return JSON.parse(localStorage.getItem("prisme-real")||"null")}catch(e){return null}})();
+ const old=(()=>{try{if(REAL)return JSON.parse(JSON.stringify(REAL));return JSON.parse(localStorage.getItem("prisme-real")||"null")}catch(e){return null}})();
  const R=old&&old.pls?old:{pls:[],lcats:[],fcats:[],scats:[],chans:[],films:[],series:[],epg:{}};
  const pid="rp"+(R.pls.reduce((a,p)=>Math.max(a,+String(p.id).slice(2)||0),0)+1);R.pls.push({id:pid,name:provName,at:Date.now(),...((opt&&opt.info)||{})});
  const st={};
@@ -127,15 +127,18 @@ async function rImport(files,provName,status,opt){
   const frOnly=!Object.keys(sc).length&&L.some(x=>RI.FR.test(x.name||""));for(const x of L){const ck=sc[String(x.category_id)];if(Object.keys(sc).length&&!ck)continue;if(frOnly&&!RI.FR.test(x.name||""))continue;if(RI.ADULT.test(x.name||""))continue;const t=RI.title(x.name),y=RI.year(x.releaseDate||x.release_date||"")||RI.year(x.name),key=RI.strip(t);if(!t)continue;n++;
    merge(R.series,"rs",key,()=>({t,y,c:[],r:+x.rating||0,a:+x.last_modified||0,p:(x.plot||"").slice(0,400),cast:(x.cast||"").slice(0,200),dir:(x.director||"").slice(0,80),g:(x.genre||"").slice(0,60),ep:+x.episode_run_time||0}),it=>{const u=v=>/^https?:\/\/\S+$/.test(v||"")?String(v).slice(0,300):"";if(!it.po)it.po=u(x.cover);if(!it.bd)it.bd=u(Array.isArray(x.backdrop_path)?x.backdrop_path[0]:x.backdrop_path);if(ck&&!it.c.includes(ck))it.c.push(ck);if(!it.p&&x.plot)it.p=x.plot.slice(0,400);{const tmv=String(x.tmdb||x.tmdb_id||"");if(!it.tm&&/^\d+$/.test(tmv)&&+tmv)it.tm=+tmv}if(it.s.length<6)it.s.push([pid,String(x.name).slice(0,70),RI.q(x.name)])})}
   st.series=n}
- R.chans.sort((a,b)=>(a.num||9999)-(b.num||9999));R.chans=R.chans.slice(0,700);
+ R.chans.sort((a,b)=>(a.num||9999)-(b.num||9999));R.chans=R.chans.slice(0,30000);
  R.films.sort((a,b)=>b.a-a.a);R.series.sort((a,b)=>b.a-a.a);
  if(by.epg){ph("epg");const want=new Set(R.chans.map(c=>c.e).filter(Boolean));R.epg={...R.epg,...await rReadEpg(by.epg,want,status)};R.elg={...(R.elg||{}),...RELG};st.epg=Object.values(R.epg).reduce((a,l)=>a+l.length,0)}
  // garde les catégories utilisées
  const used=new Set([...R.chans,...R.films,...R.series].flatMap(i=>i.c));["lcats","fcats","scats"].forEach(k=>R[k]=R[k].filter(c=>used.has(c[0])));
  ph("save");status("Enregistrement dans ce navigateur…");
+ const out={...R,at:Date.now()};
+ /* IndexedDB : pas de limite de 5 Mo, tout le catalogue est gardé */
+ try{await idbSet("real",out);try{localStorage.removeItem("prisme-real")}catch(e){}window.__RLAST=out;return {...st,keptF:R.films.length,keptS:R.series.length,totF:R.films.length,totS:R.series.length,pls:R.pls.length}}catch(e){}
  let nf=Math.min(R.films.length,3000),ns=Math.min(R.series.length,1500),txt;
- for(let tries=0;tries<12;tries++){const out={...R,films:R.films.slice(0,nf),series:R.series.slice(0,ns),at:Date.now()};txt=JSON.stringify(out);
-  if(txt.length<4.4e6){try{localStorage.setItem("prisme-real",txt);return {...st,keptF:nf,keptS:ns,totF:R.films.length,totS:R.series.length,pls:R.pls.length}}catch(e){}}
+ for(let tries=0;tries<12;tries++){const o2={...R,chans:R.chans.slice(0,700),films:R.films.slice(0,nf),series:R.series.slice(0,ns),at:Date.now()};txt=JSON.stringify(o2);
+  if(txt.length<4.4e6){try{localStorage.setItem("prisme-real",txt);window.__RLAST=o2;return {...st,keptF:nf,keptS:ns,totF:R.films.length,totS:R.series.length,pls:R.pls.length}}catch(e){}}
   nf=Math.floor(nf*.7);ns=Math.floor(ns*.7);if(tries===6){for(const k in R.epg)R.epg[k]=R.epg[k].slice(0,25)}}
  throw new Error("Trop de données pour la mémoire du navigateur, même après réduction.")}
 const RICMD=`cat > /tmp/prisme-images.pl <<'PRISME_FIN'
@@ -281,7 +284,7 @@ function rCopy(btn,txt){const b=typeof btn==="string"?$(btn):btn;const done=()=>
 $("#rscopy").addEventListener("click",()=>rCopy("#rscopy",RSCMD));
 $("#rfcopy").addEventListener("click",()=>rCopy("#rfcopy",RFCMD));
 $("#ricopy").addEventListener("click",()=>rCopy("#ricopy",RICMD));
-if($("#rdemo"))$("#rdemo").addEventListener("click",()=>{idbSet("images",[]).catch(()=>{});idbSet("series",[]).catch(()=>{});idbSet("eps",null).catch(()=>{});try{localStorage.removeItem("prisme-real");localStorage.removeItem("prisme-atv-live")}catch(_){}S.playlists=[];S.stack=[{t:"home"}];S.tab="films";save();location.reload()});
+if($("#rdemo"))$("#rdemo").addEventListener("click",()=>{idbSet("images",[]).catch(()=>{});idbSet("series",[]).catch(()=>{});idbSet("eps",null).catch(()=>{});idbSet("real",null).catch(()=>{});try{localStorage.removeItem("prisme-real");localStorage.removeItem("prisme-atv-live")}catch(_){}S.playlists=[];S.stack=[{t:"home"}];S.tab="films";save();setTimeout(()=>location.reload(),400)});
 /* ---------- images : affiches TMDB et logos (stockés dans IndexedDB, données plus lourdes) ---------- */
 const IMG={l:{},n:{},p:{},count:0};
 function idb(){return new Promise((ok,ko)=>{try{const r=indexedDB.open("prisme",1);r.onupgradeneeded=()=>r.result.createObjectStore("kv");r.onsuccess=()=>ok(r.result);r.onerror=()=>ko(r.error)}catch(e){ko(e)}})}

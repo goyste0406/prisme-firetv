@@ -257,6 +257,9 @@ for a, b in [("Non compatible avec ton Fire Stick (1080p max)", "Non compatible 
 R("</style>", open(os.path.join(D, "live_a2c.css"), encoding="utf-8").read() + open(os.path.join(D, "live_plus.css"), encoding="utf-8").read() + "</style>")
 rd = lambda n: open(os.path.join(D, n), encoding="utf-8").read()
 R("const FILMS = [", rd("real_boot.js") + "const FILMS = [")
+R("C.filter(c=>c.cat===S.lcat)}", "C.filter(c=>inCatL(c,S.lcat))}")
+R(":C.filter(c=>c.cat===k).length;", ":C.filter(c=>inCatL(c,k)).length;")
+R('function catCount(pl,type,k){if(type==="l")return CHS.filter(c=>c.cat===k&&base(pl,"ch:"+c.id)).length;return (type==="f"?FILMS:SERIES).filter(i=>base(pl,i.id)&&provCat(pl,i)===k).length}', 'function catCount(pl,type,k){if(type==="l")return CHS.filter(c=>inCatL(c,k)&&base(pl,"ch:"+c.id)).length;return (type==="f"?FILMS:SERIES).filter(i=>base(pl,i.id)&&(i._real&&i._real.c?i._real.c.includes(k):provCat(pl,i)===k)).length}')
 R('FILMS.forEach(f=>f.type="f"); SERIES.forEach(s=>s.type="s");', rd("real_block1.js") + 'FILMS.forEach(f=>f.type="f"); SERIES.forEach(s=>s.type="s");')
 R("const CH={}; CHS.forEach(c=>CH[c.id]=c);", rd("real_block2.js") + "const CH={}; CHS.forEach(c=>CH[c.id]=c);")
 import json as _json, sys as _sys
@@ -283,6 +286,12 @@ R('setBg([CH[S.lch].col,"#08080c"])', 'setBg([(CH[S.lch]||{col:"#1a1a22"}).col,"
 R("<kbd>M</kbd> (ou maintenir le clic) ajouter/retirer des favoris", "<kbd>M</kbd> (ou maintenir le clic) favoris, ou options d'une chaîne dans la TV en direct")
 
 R('<div class="pkick">${it.type==="s"?"Série · "+esc(it.net):"Film · "+it.y}', '<div class="pkick">${it.rp?"Replay · "+esc(CH[it.rp.c].n)+" · diffusé "+lday(it.rp.s):it.type==="s"?"Série · "+esc(it.net):"Film · "+it.y}')
+# ---- données réelles dans IndexedDB (plus de limite de 5 Mo) : le script principal démarre une fois les données lues
+_i = src.index("<script>", src.index("</style>"))
+R_LOADER = """<script>(function(){var go=false;function run(){if(go)return;go=true;var s=document.createElement("script");s.textContent=document.getElementById("prmain").textContent;document.body.appendChild(s)}
+setTimeout(run,4000);try{var r=indexedDB.open("prisme",1);r.onupgradeneeded=function(){r.result.createObjectStore("kv")};r.onsuccess=function(){try{var q=r.result.transaction("kv","readonly").objectStore("kv").get("real");q.onsuccess=function(){window.__REAL=q.result||null;run()};q.onerror=run}catch(e){run()}};r.onerror=run}catch(e){run()}})();</script>"""
+_j = src.index("</script>", _i)
+src = src[:_i] + '<script type="text/x-prisme" id="prmain">' + src[_i+len("<script>"):_j] + "</script>" + R_LOADER + src[_j+len("</script>"):]
 assert "fire tv" not in src.lower().replace("prisme-firetv", ""), [m.start() for m in re.finditer("(?i)fire ?tv", src)]
 open(OUT, "w", encoding="utf-8").write(src)
 print("OK", OUT, len(src))
