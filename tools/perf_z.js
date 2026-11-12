@@ -97,3 +97,19 @@ let CPRT=0;function cpRerender(){clearTimeout(CPRT);CPRT=setTimeout(()=>{if(CPJ.
    const pid=pids[k++];scoredAllAsync(j.f,j.mode,pid,A=>{res[pid]=A;next()})};next()}
  crossPick=function(f,mode){const ck=ckOf(f,mode);if(FXS.cache[ck]||CPJ.sync||films().length<3000)return _cp(f,mode);
   if(!CPJ.q.some(j=>j.ck===ck))CPJ.q.push({ck,f,mode});setTimeout(pump,0);return CPJ.last[f.id+"|"+mode]||[]}}
+/* Retour d'une fiche vers l'accueil Films / Séries : l'accueil est gardé tel quel pendant que la fiche est ouverte,
+   puis remis à l'identique (même position, même sélection) au lieu d'être entièrement recalculé et redessiné.
+   S'il a pu changer entre-temps (liste, reprise, notes, goûts, fournisseurs, profil…), il est recalculé comme avant. */
+const HK={frag:null,key:"",tab:"",fid:null,sc:null};
+const homeKey=()=>{const p=ME()||{};return [S.tab,DV.s,PR.cur,(FXS.duo||[]).join("+"),S.favs.join(",").length,S.favs.length,JSON.stringify(S.prog).length,(p.seen||[]).length,Object.keys(p.fb||{}).length,(p.no||[]).length,Math.floor(nowMin()/10),typeof FH!=="undefined"?FH.h1i:0,typeof CPJ!=="undefined"?Object.keys(CPJ.last).length:0].join("|")};
+{const _r=render;render=function(fid){const t=topS();
+ if(view.dataset.vk==="home"&&t&&t.t==="detail"&&!S.modal&&inApp()&&(S.tab==="films"||S.tab==="series")&&!(typeof P!=="undefined"&&P)){
+  const sc=view.querySelector("#hscr");HK.sc=sc?{y:sc.scrollTop,x:[...sc.querySelectorAll(".sx,.lrow")].map(r=>r.scrollLeft)}:null;HK.fid=F&&F.dataset&&F.dataset.fid;
+  const fr=document.createDocumentFragment();while(view.firstChild)fr.appendChild(view.firstChild);HK.frag=fr;HK.key=homeKey();HK.tab=S.tab}
+ else if(t&&t.t==="home"&&HK.frag&&view.dataset.vk==="detail"&&!S.modal&&inApp()&&HK.tab===S.tab&&HK.key===homeKey()){
+  const fr=HK.frag;HK.frag=null;view.textContent="";view.appendChild(fr);view.dataset.vk="home";F=null;
+  const sc=view.querySelector("#hscr");if(sc&&HK.sc){const rows=[...sc.querySelectorAll(".sx,.lrow")],all=[sc,...rows];all.forEach(e=>e.style.scrollBehavior="auto");sc.scrollTop=HK.sc.y;sc._ty=HK.sc.y;if(rows.length===HK.sc.x.length)rows.forEach((r,i)=>{r.scrollLeft=HK.sc.x[i];r._tx=HK.sc.x[i]});requestAnimationFrame(()=>all.forEach(e=>e.style.scrollBehavior=""))}
+  {const l=S.tab==="films"?films():series();setBg(l[0]?l[0].c:["#2b3245","#0a0b10"])}
+  const el=(fid&&view.querySelector(`[data-fid="${CSS.escape(fid)}"]`))||(HK.fid&&view.querySelector(`[data-fid="${CSS.escape(HK.fid)}"]`))||view.querySelector("[data-default]")||view.querySelector("[data-f]");
+  if(el){el.classList.remove("foc");setFocus(el,true)}return}
+ const o=_r(fid);view.dataset.vk=(topS()||{}).t||"";if((topS()||{}).t==="home")HK.frag=null;return o}}
