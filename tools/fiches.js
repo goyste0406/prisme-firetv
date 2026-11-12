@@ -157,6 +157,8 @@ function refresh(){clearTimeout(refT);if(!inApp()||S.loading||S.modal||playing()
  if(!idleFor(3000)||Date.now()-E.lastRender<15000){refT=setTimeout(refresh,4000);return}E.lastRender=Date.now();render(F&&F.dataset.fid)}
 async function loop(){if(E.running)return;E.running=true;
  while(left()){if(!allowed()){await new Promise(z=>setTimeout(z,1000));paint();continue}
+  /* pendant que tu navigues, les fiches attendent : le traitement des réponses TMDB (30 à 80 ms) ne passe jamais entre deux appuis */
+  if(!idleFor(1200)&&!playing()){await new Promise(z=>setTimeout(z,300));continue}
   const slow=playing()&&C.pp;const n=slow?1:isReal()?4:1;const batch=[];
   while(batch.length<n&&left()){const k=E.prio.length?E.prio.shift():E.q.shift();if(k&&!C.done[k]&&!batch.includes(k))batch.push(k)}
   await Promise.all(batch.map(one));saveC();paint();if(slow)await new Promise(z=>setTimeout(z,1500))}
