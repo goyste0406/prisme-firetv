@@ -395,18 +395,28 @@ struct SeriesDetailView: View {
         }
     }
 
-    @ViewBuilder private var detTab: some View {
+    /// Lignes de l'onglet « Détails » : seulement ce qui est connu.
+    private var detailRows: [(String, String)] {
+        var rows: [(String, String)] = []
         let d = all.reduce(0) { $0 + mins($1) }
-        let rows: [(String, String)] = [
-            ("Créée par", info.director),
-            ("Genres", genres.joined(separator: ", ")),
-            ("Saisons", info.seasons.isEmpty ? "" : "\(info.seasons.count)"),
-            ("Épisodes", all.isEmpty ? "" : "\(all.count)" + (d > 0 ? " · " + runtimeText(d) : "")),
-            ("Versions", "\(max(1, versions.count))" + (versionTags.isEmpty ? "" : " · " + versionTags)),
-            ("Notes", [item.rating > 0 || info.rating > 0 ? "fournisseur " + String(format: "%.1f", item.rating > 0 ? item.rating : info.rating) : "", (fiche?.vote ?? 0) > 0 ? "TMDB \(Int(((fiche?.vote ?? 0) * 10).rounded())) %" : ""].filter { !$0.isEmpty }.joined(separator: " · ")),
-            ("Pays", info.country),
-            ("Fournisseur", store.provider(cur.pid)?.name ?? ""),
-        ].filter { !$0.1.isEmpty }
+        if !info.director.isEmpty { rows.append(("Créée par", info.director)) }
+        if !genres.isEmpty { rows.append(("Genres", genres.joined(separator: ", "))) }
+        if !info.seasons.isEmpty { rows.append(("Saisons", "\(info.seasons.count)")) }
+        if !all.isEmpty { rows.append(("Épisodes", "\(all.count)" + (d > 0 ? " · " + runtimeText(d) : ""))) }
+        rows.append(("Versions", "\(max(1, versions.count))" + (versionTags.isEmpty ? "" : " · " + versionTags)))
+        var notes: [String] = []
+        let pr = item.rating > 0 ? item.rating : info.rating
+        if pr > 0 { notes.append("fournisseur " + String(format: "%.1f", pr)) }
+        let tv = fiche?.vote ?? 0
+        if tv > 0 { notes.append("TMDB \(Int((tv * 10).rounded())) %") }
+        if !notes.isEmpty { rows.append(("Notes", notes.joined(separator: " · "))) }
+        if !info.country.isEmpty { rows.append(("Pays", info.country)) }
+        if let p = store.provider(cur.pid)?.name { rows.append(("Fournisseur", p)) }
+        return rows
+    }
+
+    @ViewBuilder private var detTab: some View {
+        let rows = detailRows
         SectionTitle(title: "Détails")
         LazyVGrid(columns: [GridItem(.flexible(), spacing: 24), GridItem(.flexible(), spacing: 24)], alignment: .leading, spacing: 22) {
             ForEach(0..<rows.count, id: \.self) { i in
@@ -464,8 +474,8 @@ struct SeriesDetailView: View {
 /// Ligne d'une saison dans la colonne de gauche.
 struct SeasonStyle: ButtonStyle {
     let selected: Bool
-    func makeBody(configuration c: Configuration) -> some View { Body(c: c, selected: selected) }
-    private struct Body: View {
+    func makeBody(configuration c: Configuration) -> some View { Inner(c: c, selected: selected) }
+    private struct Inner: View {
         let c: ButtonStyleConfiguration
         let selected: Bool
         @Environment(\.isFocused) var f
@@ -480,8 +490,8 @@ struct SeasonStyle: ButtonStyle {
 /// Ligne d'épisode dans le panneau : verre clair quand sélectionnée, liseré blanc à gauche pour l'épisode à suivre.
 struct EpisodeStyle: ButtonStyle {
     let current: Bool
-    func makeBody(configuration c: Configuration) -> some View { Body(c: c, current: current) }
-    private struct Body: View {
+    func makeBody(configuration c: Configuration) -> some View { Inner(c: c, current: current) }
+    private struct Inner: View {
         let c: ButtonStyleConfiguration
         let current: Bool
         @Environment(\.isFocused) var f

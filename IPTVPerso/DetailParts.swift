@@ -119,8 +119,8 @@ struct CastCircle: View {
 
 /// Bouton de la distribution : liseré blanc autour du cercle quand il est sélectionné (simulateur).
 struct CircleStyle: ButtonStyle {
-    func makeBody(configuration c: Configuration) -> some View { Body(c: c) }
-    private struct Body: View {
+    func makeBody(configuration c: Configuration) -> some View { Inner(c: c) }
+    private struct Inner: View {
         let c: ButtonStyleConfiguration
         @Environment(\.isFocused) var f
         var body: some View {
@@ -159,7 +159,8 @@ struct WhereSection: View {
             if showTitle { SectionTitle(title: "Où le regarder", sub: "ailleurs que dans prisme · OK sur une app pour l'ouvrir dessus") }
             HStack(spacing: 10) {
                 Image(systemName: "play.fill").foregroundStyle(P.gold)
-                (Text("Déjà dans prisme").foregroundColor(P.gold).bold() + Text(" · \(versions.count) version\(versions.count > 1 ? "s" : "")" + (tags.isEmpty ? "" : " (\(tags))") + " · sans frais en plus"))
+                Text("Déjà dans prisme").foregroundColor(P.gold).bold()
+                Text(inPrismeLine)
             }.font(P.font(23))
             if compact {
                 VStack(alignment: .leading, spacing: 22) {
@@ -179,6 +180,13 @@ struct WhereSection: View {
             }
             Text(sourceLine(empty: inc.isEmpty && loc.isEmpty && buy.isEmpty)).font(P.font(18)).foregroundStyle(P.faint)
         }
+    }
+
+    private var inPrismeLine: String {
+        let n = versions.count
+        var s = "· \(n) version" + (n > 1 ? "s" : "")
+        if !tags.isEmpty { s += " (" + tags + ")" }
+        return s + " · sans frais en plus"
     }
 
     private var tags: String { Array(Set(versions.flatMap { $0.clean.tags.filter { ["VF", "MULTI", "VOSTFR"].contains($0) } })).sorted().joined(separator: ", ") }
@@ -251,8 +259,8 @@ struct WhereSection: View {
 
 /// Carte « Où le regarder » : verre sombre, blanche quand elle est sélectionnée.
 struct WhereCardStyle: ButtonStyle {
-    func makeBody(configuration c: Configuration) -> some View { Body(c: c) }
-    private struct Body: View {
+    func makeBody(configuration c: Configuration) -> some View { Inner(c: c) }
+    private struct Inner: View {
         let c: ButtonStyleConfiguration
         @Environment(\.isFocused) var f
         var body: some View {

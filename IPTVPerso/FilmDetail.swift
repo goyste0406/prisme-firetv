@@ -187,10 +187,19 @@ struct FilmDetailView: View {
         }
     }
 
+    private var scoreLine: String {
+        var l: [String] = []
+        if providerRating > 0 { l.append("Note " + String(format: "%.1f", providerRating)) }
+        if tmdbVote > 0 { l.append("TMDB \(Int((tmdbVote * 10).rounded())) %") }
+        return l.joined(separator: " · ")
+    }
+
     /// Score prisme (sans goûts enregistrés, comme le simulateur : la moyenne des notes disponibles).
     private var scoreBox: some View {
-        let parts = [providerRating > 0 ? providerRating * 10 : nil, tmdbVote > 0 ? tmdbVote * 10 : nil].compactMap { $0 }
-        let sc = Int((parts.reduce(0, +) / Double(max(1, parts.count))).rounded())
+        var parts: [Double] = []
+        if providerRating > 0 { parts.append(providerRating * 10) }
+        if tmdbVote > 0 { parts.append(tmdbVote * 10) }
+        let sc = min(99, Int((parts.reduce(0, +) / Double(max(1, parts.count))).rounded()))
         return HStack(spacing: 20) {
             ZStack {
                 Ring(value: Double(sc) / 100, width: 9).frame(width: 92, height: 92)
@@ -199,8 +208,7 @@ struct FilmDetailView: View {
             }
             VStack(alignment: .leading, spacing: 4) {
                 Text("Score prisme").font(P.font(21, .bold)).foregroundStyle(P.gold)
-                Text([providerRating > 0 ? "Note " + String(format: "%.1f", providerRating) : nil, tmdbVote > 0 ? "TMDB \(Int((tmdbVote * 10).rounded())) %" : nil].compactMap { $0 }.joined(separator: " · "))
-                    .font(P.font(19)).foregroundStyle(P.dim)
+                Text(scoreLine).font(P.font(19)).foregroundStyle(P.dim)
                 Text("Tes goûts : à découvrir").font(P.font(19)).foregroundStyle(P.dim)
             }
         }
@@ -265,8 +273,7 @@ struct FilmDetailView: View {
                                     Text(p.year > 0 ? String(p.year) : "à venir").font(P.font(17)).opacity(0.7)
                                 }.foregroundStyle(.white).padding(14)
                                 VStack {
-                                    Pill(text: "\(i + 1)" + (isThis ? " · cette page" : here == nil ? " · pas chez tes fournisseurs" : watch.watched(here!.id) ? " · ✓ Vu" : ""),
-                                         bg: .black.opacity(0.65), stroke: nil).padding(10)
+                                    Pill(text: sagaTag(i, isThis: isThis, here: here), bg: .black.opacity(0.65), stroke: nil).padding(10)
                                     Spacer()
                                 }
                             }.frame(width: 210, height: 315)
@@ -275,6 +282,21 @@ struct FilmDetailView: View {
                 }.padding(.horizontal, 120).padding(.vertical, 34)
             }.scrollClipDisabled()
         }.focusSection()
+    }
+
+    private func sagaTag(_ i: Int, isThis: Bool, here: MediaItem?) -> String {
+        if isThis { return "\(i + 1) · cette page" }
+        guard let h = here else { return "\(i + 1) · pas chez tes fournisseurs" }
+        return watch.watched(h.id) ? "\(i + 1) · ✓ Vu" : "\(i + 1)"
+    }
+
+    private var creditLine: String {
+        var parts: [String] = []
+        if !info.director.isEmpty { parts.append("Réalisé par " + info.director) }
+        if year > 0 { parts.append(String(year)) }
+        if providerRating > 0 { parts.append("Note " + String(format: "%.1f", providerRating)) }
+        if tmdbVote > 0 { parts.append("TMDB \(Int((tmdbVote * 10).rounded())) %") }
+        return parts.joined(separator: " · ")
     }
 
     @ViewBuilder private var castSection: some View {
@@ -292,10 +314,7 @@ struct FilmDetailView: View {
                         }.padding(.horizontal, 120).padding(.vertical, 22)
                     }.scrollClipDisabled()
                 }
-                let parts: [String] = [director.isEmpty ? nil : "Réalisé par " + director, year > 0 ? String(year) : nil,
-                                       providerRating > 0 ? "Note " + String(format: "%.1f", providerRating) : nil,
-                                       tmdbVote > 0 ? "TMDB \(Int((tmdbVote * 10).rounded())) %" : nil].compactMap { $0 }
-                if !parts.isEmpty { Text(parts.joined(separator: " · ")).font(P.font(21)).foregroundStyle(P.dim).padding(.horizontal, 120) }
+                if !creditLine.isEmpty { Text(creditLine).font(P.font(21)).foregroundStyle(P.dim).padding(.horizontal, 120) }
             }.focusSection()
         }
     }
@@ -372,8 +391,8 @@ struct FilmDetailView: View {
 
 /// Bloc de texte sélectionnable (résumé) : léger voile quand il est sélectionné.
 struct TextBlockStyle: ButtonStyle {
-    func makeBody(configuration c: Configuration) -> some View { Body(c: c) }
-    private struct Body: View {
+    func makeBody(configuration c: Configuration) -> some View { Inner(c: c) }
+    private struct Inner: View {
         let c: ButtonStyleConfiguration
         @Environment(\.isFocused) var f
         var body: some View {

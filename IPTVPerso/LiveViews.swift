@@ -75,8 +75,8 @@ struct LiveHomeView: View {
 
 struct RailStyle: ButtonStyle {
     let selected: Bool
-    func makeBody(configuration c: Configuration) -> some View { Body(c: c, selected: selected) }
-    private struct Body: View {
+    func makeBody(configuration c: Configuration) -> some View { Inner(c: c, selected: selected) }
+    private struct Inner: View {
         let c: ButtonStyleConfiguration
         let selected: Bool
         @Environment(\.isFocused) var f
@@ -189,31 +189,53 @@ struct LiveFrontView: View {
 
     /// En-tête (simulateur) : la dernière chaîne regardée, son programme en cours et sa progression.
     private func header(_ ch: Channel) -> some View {
-        Button { if let i = recent.firstIndex(of: ch) { play(recent, i) } else { play([ch], 0) } } label: {
-            VStack(alignment: .leading, spacing: 12) {
-                HStack(spacing: 14) {
-                    if headNow != nil { LiveBadge() } else { LiveBadge(text: "DERNIÈRE CHAÎNE") }
-                    Text(ch.name.uppercased()).font(P.font(20, .bold)).tracking(1.5).opacity(0.75)
-                }
-                Text(headNow?.title ?? ch.name).font(P.font(54, .bold)).lineLimit(1)
-                if let p = headNow {
-                    let since = max(0, Int(Date().timeIntervalSince(p.startDate) / 60)), left = max(0, Int(p.stopDate.timeIntervalSinceNow / 60))
-                    Text(Fmt.hm(p.startDate) + " – " + Fmt.hm(p.stopDate) + " · depuis " + runtimeText(max(1, since)) + " · reste " + runtimeText(max(1, left)) + (headNext.map { " · ensuite " + $0.title } ?? ""))
-                        .font(P.font(22)).opacity(0.75).lineLimit(1)
-                    GeometryReader { g in
-                        ZStack(alignment: .leading) {
-                            Capsule().fill(.white.opacity(0.2))
-                            Capsule().fill(P.live).frame(width: g.size.width * p.progress())
-                        }
-                    }.frame(width: 620, height: 6)
-                } else {
-                    Text("Programme non communiqué · OK pour regarder").font(P.font(22)).opacity(0.75)
-                }
+        Button { playHead(ch) } label: { headerLabel(ch) }
+            .buttonStyle(TextBlockStyle())
+            .focusSection()
+    }
+
+    private func playHead(_ ch: Channel) {
+        if let i = recent.firstIndex(of: ch) { play(recent, i) } else { play([ch], 0) }
+    }
+
+    private func headerLine(_ p: Program) -> String {
+        let since = max(1, Int(Date().timeIntervalSince(p.startDate) / 60))
+        let left = max(1, Int(p.stopDate.timeIntervalSinceNow / 60))
+        var s = Fmt.hm(p.startDate) + " – " + Fmt.hm(p.stopDate)
+        s += " · depuis " + runtimeText(since) + " · reste " + runtimeText(left)
+        if let n = headNext { s += " · ensuite " + n.title }
+        return s
+    }
+
+    private func headerLabel(_ ch: Channel) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 14) {
+                if headNow != nil { LiveBadge() } else { LiveBadge(text: "DERNIÈRE CHAÎNE") }
+                Text(ch.name.uppercased()).font(P.font(20, .bold)).tracking(1.5).opacity(0.75)
             }
-            .padding(.vertical, 14).frame(maxWidth: .infinity, alignment: .leading)
+            Text(headNow?.title ?? ch.name).font(P.font(54, .bold)).lineLimit(1)
+            if let p = headNow {
+                Text(headerLine(p)).font(P.font(22)).opacity(0.75).lineLimit(1)
+                ProgressLine(value: p.progress()).frame(width: 620, height: 6)
+            } else {
+                Text("Programme non communiqué · OK pour regarder").font(P.font(22)).opacity(0.75)
+            }
         }
-        .buttonStyle(TextBlockStyle())
-        .focusSection()
+        .padding(.vertical, 14).frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+/// Barre de progression rouge (programme en direct).
+struct ProgressLine: View {
+    let value: Double
+    var color: Color = P.live
+    var body: some View {
+        GeometryReader { g in
+            ZStack(alignment: .leading) {
+                Capsule().fill(Color.white.opacity(0.22))
+                Capsule().fill(color).frame(width: g.size.width * max(0, min(1, value)))
+            }
+        }
     }
 }
 
@@ -235,6 +257,7 @@ struct UniverseCard: View {
     var count: Int? = nil
     let action: () -> Void
     @State private var now: Program?
+    private var countText: String { let n = count ?? channels.count; return "\(n) chaîne" + (n > 1 ? "s" : "") }
     var body: some View {
         let first = channels.first
         let hue = P.hue(name)
@@ -267,7 +290,7 @@ struct UniverseCard: View {
             HStack {
                 Text(name).font(P.font(20, .bold)).lineLimit(1)
                 Spacer()
-                Text("\(count ?? channels.count) chaîne\((count ?? channels.count) > 1 ? "s" : "")").font(P.font(17)).foregroundStyle(P.dim)
+                Text(countText).font(P.font(17)).foregroundStyle(P.dim)
             }.frame(width: 360)
             HStack(spacing: 6) {
                 ForEach(channels.prefix(3)) { c in
