@@ -70,12 +70,16 @@ struct ArtView: View {
     let poster: String
     var maxPixel: CGFloat = 1920
     var posterWidthRatio: CGFloat = 0.3
+    /// cartes : sans image de fond, l'affiche remplit toute la carte (cadrée au centre) au lieu d'être posée à droite
+    var fill = false
 
     var body: some View {
         GeometryReader { g in
             ZStack {
                 if !backdrop.isEmpty {
                     SharpImage(url: backdrop, maxPixel: maxPixel).frame(width: g.size.width, height: g.size.height).clipped()
+                } else if !poster.isEmpty && fill {
+                    SharpImage(url: poster, maxPixel: max(500, g.size.width * 1.1)).frame(width: g.size.width, height: g.size.height).clipped()
                 } else if !poster.isEmpty {
                     SharpImage(url: poster, maxPixel: 300).frame(width: g.size.width, height: g.size.height).clipped()
                         .blur(radius: 40).opacity(0.45)

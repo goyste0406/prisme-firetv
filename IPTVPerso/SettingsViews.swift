@@ -196,8 +196,8 @@ struct ProvidersSettingsView: View {
         if let c = p.counts["vod"] { parts.append("\(c) films") }
         if let c = p.counts["series"] { parts.append("\(c) séries") }
         if let c = p.counts["epg"] { parts.append(c > 0 ? "\(c) programmes au guide" : "pas de guide") }
-        if let d = p.lastImport { parts.append("mis à jour le " + d.formatted(.dateTime.day().month().hour().minute())) }
-        if let e = p.expires { parts.append("expire le " + e.formatted(.dateTime.day().month().year())) }
+        if let d = p.lastImport { parts.append("mis à jour le " + Fmt.dateTime(d)) }
+        if let e = p.expires { parts.append("expire le " + Fmt.date(e)) }
         return parts.isEmpty ? "Catalogue pas encore chargé" : parts.joined(separator: " · ")
     }
 }

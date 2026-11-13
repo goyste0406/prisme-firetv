@@ -1,6 +1,7 @@
 import SwiftUI
 
-// MARK: - TV en direct : catégories à gauche, chaînes à droite (en ce moment + ensuite)
+// MARK: - TV en direct (structure du simulateur) : colonne d'icônes à gauche, en-tête sur la dernière chaîne,
+// « Pour toi, maintenant », « Explorer par univers », « Commence bientôt ».
 
 struct LiveHomeView: View {
     @EnvironmentObject var store: ProviderStore
@@ -8,68 +9,82 @@ struct LiveHomeView: View {
     @State private var section: String = "home"
     @State private var playing: PlayRequest?
     @State private var guide: GuideRequest?
+    @State private var index: [LiveIndex.Entry] = []
 
     struct PlayRequest: Identifiable { let id = UUID(); let list: [Channel]; let index: Int }
     struct GuideRequest: Identifiable { let id = UUID(); let list: [Channel]; let title: String }
 
-    private static let rail: [(String, String, String)] = [
-        ("home", "house.fill", "Accueil"), ("guide", "tablecells", "Guide"), ("search", "magnifyingglass", "Rechercher"),
-        ("fav", "star.fill", "Favoris"), ("recent", "clock.arrow.circlepath", "Récentes"), ("all", "square.grid.2x2.fill", "Toutes les catégories"),
-    ]
+    private var rail: [(String, String, String)] {
+        var r: [(String, String, String)] = [("home", "house.fill", "Accueil"), ("guide", "tablecells", "Guide TV"), ("search", "magnifyingglass", "Rechercher")]
+        for u in Univers.allCases where index.contains(where: { $0.univers == u }) { r.append(("u:" + u.rawValue, u.icon, u.label)) }
+        r.append(("fav", "star.fill", "Favoris"))
+        r.append(("all", "square.grid.2x2", "Catégories du fournisseur"))
+        return r
+    }
 
     var body: some View {
         VStack(spacing: 0) {
             TopBar()
             HStack(alignment: .top, spacing: 34) {
                 railView
-                Group {
-                    switch section {
-                    case "search": ChannelSearchView(play: play)
-                    case "fav": ChannelListView(mode: .fav, play: play, guide: openGuide)
-                    case "recent": ChannelListView(mode: .recent, play: play, guide: openGuide)
-                    case "all": AllCategoriesView(play: play, guide: openGuide)
-                    default: LiveFrontView(play: play, guide: openGuide)
-                    }
-                }
-                .id(section)
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                content
+                    .id(section)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                    .clipped()
             }
             .padding(.leading, 60).padding(.trailing, 40)
         }
         .ignoresSafeArea(edges: .top)
         .fullScreenCover(item: $playing) { r in LivePlayerView(channels: r.list, start: r.index) }
         .fullScreenCover(item: $guide) { g in GuideView(channels: g.list, title: g.title) }
+        .task(id: store.catalogVersion) { index = await LiveIndex.all(pids: store.active.map(\.id), version: store.catalogVersion) }
+    }
+
+    @ViewBuilder private var content: some View {
+        if section.hasPrefix("u:"), let u = Univers(rawValue: String(section.dropFirst(2))) {
+            let list = index.filter { $0.univers == u }.map(\.ch)
+            ChannelGrid(title: u.label, channels: list, loaded: true, empty: "Aucune chaîne dans cet univers.", play: play, guide: openGuide, columns: 5)
+        } else {
+            switch section {
+            case "search": ChannelSearchView(play: play)
+            case "fav": ChannelListView(mode: .fav, play: play, guide: openGuide)
+            case "recent": ChannelListView(mode: .recent, play: play, guide: openGuide)
+            case "all": AllCategoriesView(play: play, guide: openGuide)
+            default: LiveFrontView(index: index, play: play, guide: openGuide, openSection: { section = $0 })
+            }
+        }
     }
 
     private func play(_ list: [Channel], _ i: Int) { playing = PlayRequest(list: list, index: i) }
     private func openGuide(_ list: [Channel], _ title: String) { guide = GuideRequest(list: list, title: title) }
 
-    /// Colonne d'icônes à gauche (simulateur) : chaque icône ouvre une partie de la TV en direct.
+    /// Colonne d'icônes à gauche (simulateur) : accueil, guide, recherche, un univers par icône, favoris, catégories.
     private var railView: some View {
-        VStack(spacing: 12) {
-            ForEach(0..<LiveHomeView.rail.count, id: \.self) { i in
-                let r = LiveHomeView.rail[i]
-                Button {
-                    if r.0 == "guide" { Task { await guideFromRail() } } else { section = r.0 }
-                } label: { Image(systemName: r.1).font(P.font(27, .semibold)).frame(width: 64, height: 64) }
-                .buttonStyle(RailStyle(selected: section == r.0))
-                .accessibilityLabel(r.2)
+        let items = rail
+        return ScrollView {
+            VStack(spacing: 10) {
+                ForEach(0..<items.count, id: \.self) { i in
+                    let r = items[i]
+                    Button {
+                        if r.0 == "guide" { Task { await guideFromRail() } } else { section = r.0 }
+                    } label: { Image(systemName: r.1).font(P.font(26, .semibold)).frame(width: 64, height: 58) }
+                    .buttonStyle(RailStyle(selected: section == r.0))
+                    .accessibilityLabel(r.2)
+                }
             }
-            Spacer(minLength: 0)
+            .padding(.vertical, 16).padding(.horizontal, 10)
         }
-        .padding(.vertical, 18).padding(.horizontal, 10)
         .frame(width: 104).frame(maxHeight: .infinity, alignment: .top)
         .glass(30)
         .padding(.bottom, 50)
         .focusSection()
     }
 
-    /// Guide depuis la colonne : tes favoris, sinon tes chaînes récentes, sinon la première catégorie.
+    /// Guide depuis la colonne : tes favoris, sinon tes chaînes récentes, sinon toutes les chaînes.
     private func guideFromRail() async {
-        if !prefs.favorites.isEmpty { openGuide(await LiveStore.channels(ids: prefs.favorites), "Favoris"); return }
-        if !prefs.recent.isEmpty { openGuide(await LiveStore.channels(ids: prefs.recent), "Récentes"); return }
-        let cats = await LiveStore.categories(providers: store.active.map(\.id))
-        if let c = cats.first { openGuide(await LiveStore.channels(pid: c.pid, cid: c.cid), c.name) }
+        if !prefs.favorites.isEmpty { openGuide(ChannelTools.dedupe(await LiveStore.channels(ids: prefs.favorites)), "Favoris"); return }
+        if !prefs.recent.isEmpty { openGuide(ChannelTools.dedupe(await LiveStore.channels(ids: prefs.recent)), "Récentes"); return }
+        openGuide(Array(index.prefix(200).map(\.ch)), "Toutes les chaînes")
     }
 }
 
@@ -88,67 +103,60 @@ struct RailStyle: ButtonStyle {
     }
 }
 
-// MARK: - Accueil de la TV en direct : en ce moment, tes chaînes récentes, univers, ce qui commence bientôt
+// MARK: - Accueil de la TV en direct
 
 struct LiveFrontView: View {
+    let index: [LiveIndex.Entry]
     let play: ([Channel], Int) -> Void
     let guide: ([Channel], String) -> Void
+    let openSection: (String) -> Void
     @EnvironmentObject var store: ProviderStore
     @ObservedObject var prefs = LivePrefs.shared
-    @State private var cats: [LiveCategory] = []
     @State private var recent: [Channel] = []
     @State private var favs: [Channel] = []
     @State private var soon: [LiveStore.Airing] = []
     @State private var headNow: Program?
     @State private var headNext: Program?
-    @State private var openCat: LiveCategory?
     @State private var openFav = false
+    @State private var openRecent = false
     @State private var loaded = false
 
     private var head: Channel? { recent.first ?? favs.first }
+    private func entry(_ c: Channel) -> LiveIndex.Entry? { index.first { ChannelTools.key($0.ch) == ChannelTools.key(c) } }
 
     var body: some View {
         ScrollView {
-            LazyVStack(alignment: .leading, spacing: 30) {
+            LazyVStack(alignment: .leading, spacing: 34) {
                 if let h = head { header(h) }
+                else if let a = soon.first { soonHeader(a) }
                 if !recent.isEmpty {
                     rowTitle("Pour toi, maintenant", "tes chaînes récentes, en ce moment")
-                    ScrollView(.horizontal) {
-                        LazyHStack(alignment: .top, spacing: 30) {
-                            ForEach(Array(recent.prefix(10).enumerated()), id: \.element.id) { i, ch in
-                                VStack(alignment: .leading, spacing: 10) {
-                                    ChannelCard(ch: ch, fav: prefs.favorites.contains(ch.id)) { play(recent, i) }
-                                        .contextMenu { favButton(ch) }
-                                    Text("Tu l'as regardée récemment").font(P.font(17)).foregroundStyle(P.faint)
-                                }
+                    row {
+                        ForEach(Array(recent.prefix(10).enumerated()), id: \.element.id) { i, ch in
+                            VStack(alignment: .leading, spacing: 10) {
+                                ChannelCard(ch: ch, fav: prefs.favorites.contains(ch.id)) { play(recent, i) }
+                                    .contextMenu { favButton(ch) }
+                                Text("Tu l'as regardée récemment").font(P.font(17)).foregroundStyle(P.faint)
                             }
-                        }.padding(.vertical, 24).padding(.horizontal, 18)
-                    }.scrollClipDisabled().focusSection()
+                        }
+                    }
                 }
-                if !cats.isEmpty || !favs.isEmpty {
+                if !index.isEmpty {
                     rowTitle("Explorer par univers", "OK pour voir toutes les chaînes")
-                    ScrollView(.horizontal) {
-                        LazyHStack(alignment: .top, spacing: 30) {
-                            if !favs.isEmpty {
-                                UniverseCard(name: "Favoris", tag: "FAVORIS", channels: favs) { openFav = true }
-                            }
-                            ForEach(cats) { c in
-                                UniverseCardLoader(cat: c) { openCat = c }
-                            }
-                        }.padding(.vertical, 24).padding(.horizontal, 18)
-                    }.scrollClipDisabled().focusSection()
+                    row {
+                        if !recent.isEmpty { UniverseCard(label: "Reprendre", icon: "arrow.counterclockwise", channels: recent, count: recent.count) { openRecent = true } }
+                        if !favs.isEmpty { UniverseCard(label: "Favoris", icon: "star.fill", channels: favs, count: favs.count) { openFav = true } }
+                        ForEach(Univers.allCases) { u in
+                            let L = index.filter { $0.univers == u }.map(\.ch)
+                            if !L.isEmpty { UniverseCard(label: u.label, icon: u.icon, channels: L, count: L.count) { openSection("u:" + u.rawValue) } }
+                        }
+                    }
                 }
                 if !soon.isEmpty {
                     rowTitle("Commence bientôt", "dans l'heure · OK pour regarder la chaîne")
-                    ScrollView(.horizontal) {
-                        LazyHStack(spacing: 30) {
-                            ForEach(soon) { a in
-                                SoonCard(a: a) { play([a.ch], 0) }
-                            }
-                        }.padding(.vertical, 24).padding(.horizontal, 18)
-                    }.scrollClipDisabled().focusSection()
+                    row { ForEach(soon) { a in SoonCard(a: a) { play([a.ch], 0) } } }
                 }
-                if loaded && cats.isEmpty && favs.isEmpty && recent.isEmpty {
+                if loaded && index.isEmpty {
                     VStack(spacing: 14) {
                         Image(systemName: "tv").font(P.font(64)).foregroundStyle(P.faint)
                         Text(store.importing != nil ? "Chargement du catalogue… \(Int(store.progress * 100)) %" : "Aucune chaîne pour le moment.").font(P.font(30, .semibold))
@@ -156,33 +164,42 @@ struct LiveFrontView: View {
                     }.frame(maxWidth: .infinity, minHeight: 500)
                 }
             }
-            .padding(.top, 16).padding(.bottom, 80)
+            .padding(.top, 12).padding(.bottom, 80)
         }
-        // la zone défile dans ses limites : rien ne passe sur la barre du haut ni sur la colonne d'icônes
         .clipped()
-        .navigationDestination(item: $openCat) { c in
-            CategoryChannelsView(title: c.name, loader: { await LiveStore.channels(pid: c.pid, cid: c.cid) }, play: play, guide: guide)
-        }
         .navigationDestination(isPresented: $openFav) {
-            CategoryChannelsView(title: "Favoris", loader: { await LiveStore.channels(ids: LivePrefs.shared.favorites) }, play: play, guide: guide)
+            CategoryChannelsView(title: "Favoris", loader: { ChannelTools.dedupe(await LiveStore.channels(ids: LivePrefs.shared.favorites)) }, play: play, guide: guide)
+        }
+        .navigationDestination(isPresented: $openRecent) {
+            CategoryChannelsView(title: "Reprendre", loader: { ChannelTools.dedupe(await LiveStore.channels(ids: LivePrefs.shared.recent)) }, play: play, guide: guide)
         }
         .task(id: "\(store.catalogVersion)|\(prefs.recent.first ?? "")|\(prefs.favorites.count)") { await load() }
+    }
+
+    private func row<C: View>(@ViewBuilder _ c: () -> C) -> some View {
+        ScrollView(.horizontal) {
+            LazyHStack(alignment: .top, spacing: 28) { c() }.padding(.vertical, 20).padding(.horizontal, 18)
+        }
+        .scrollClipDisabled()
+        .focusSection()
     }
 
     private func load() async {
         let pids = store.active.map(\.id)
         let active = Set(pids)
-        async let c = LiveStore.categories(providers: pids)
         async let r = LiveStore.channels(ids: prefs.recent)
         async let f = LiveStore.channels(ids: prefs.favorites)
         async let s = LiveStore.startingSoon(providers: pids)
-        let (c1, r1, f1, s1) = await (c, r, f, s)
-        cats = c1; recent = r1.filter { active.contains($0.pid) }; favs = f1.filter { active.contains($0.pid) }; soon = s1
+        let (r1, f1, s1) = await (r, f, s)
+        recent = ChannelTools.dedupe(r1.filter { active.contains($0.pid) })
+        favs = ChannelTools.dedupe(f1.filter { active.contains($0.pid) })
+        var seen = Set<String>()
+        soon = s1.filter { seen.insert(ChannelTools.key($0.ch) + "|\($0.p.start)").inserted }
         if let h = head { let nn = await LiveStore.nowNext(h); headNow = nn.0; headNext = nn.1 }
         loaded = true
     }
 
-    private func rowTitle(_ t: String, _ sub: String) -> some View { SectionTitle(title: t, sub: sub).padding(.leading, 8) }
+    private func rowTitle(_ t: String, _ sub: String) -> some View { SectionTitle(title: t, sub: sub).padding(.leading, 18) }
 
     private func favButton(_ ch: Channel) -> some View {
         Button(prefs.favorites.contains(ch.id) ? "Retirer des favoris" : "Ajouter aux favoris") { prefs.toggleFavorite(ch.id) }
@@ -195,15 +212,42 @@ struct LiveFrontView: View {
             .focusSection()
     }
 
+    private func soonHeader(_ a: LiveStore.Airing) -> some View {
+        Button { play([a.ch], 0) } label: {
+            VStack(alignment: .leading, spacing: 12) {
+                HStack(spacing: 14) {
+                    Text("À VENIR").font(P.font(18, .heavy)).foregroundStyle(.white).padding(.horizontal, 12).padding(.vertical, 6).background(Color(red: 0.04, green: 0.52, blue: 1), in: RoundedRectangle(cornerRadius: 8))
+                    Text(headKicker(a.ch)).font(P.font(20, .bold)).tracking(1.5).opacity(0.75)
+                }
+                Text(a.p.title).font(P.font(54, .bold)).lineLimit(1)
+                Text(Fmt.hm(a.p.startDate) + " – " + Fmt.hm(a.p.stopDate) + " · dans " + runtimeText(max(1, Int(a.p.startDate.timeIntervalSinceNow / 60))) + sourcesText(a.ch))
+                    .font(P.font(22)).opacity(0.75).lineLimit(1)
+            }
+            .padding(.vertical, 14).frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .buttonStyle(TextBlockStyle())
+        .focusSection()
+    }
+
     private func playHead(_ ch: Channel) {
         if let i = recent.firstIndex(of: ch) { play(recent, i) } else { play([ch], 0) }
     }
 
-    private func headerLine(_ p: Program) -> String {
+    private func headKicker(_ ch: Channel) -> String {
+        let e = entry(ch)
+        return ((e?.name ?? ChannelTools.clean(ch.name)) + (e.map { " · " + $0.univers.label } ?? "")).uppercased()
+    }
+
+    private func sourcesText(_ ch: Channel) -> String {
+        let n = entry(ch)?.sources ?? 1
+        return " · \(n) source" + (n > 1 ? "s" : "")
+    }
+
+    private func headerLine(_ p: Program, _ ch: Channel) -> String {
         let since = max(1, Int(Date().timeIntervalSince(p.startDate) / 60))
         let left = max(1, Int(p.stopDate.timeIntervalSinceNow / 60))
         var s = Fmt.hm(p.startDate) + " – " + Fmt.hm(p.stopDate)
-        s += " · depuis " + runtimeText(since) + " · reste " + runtimeText(left)
+        s += " · depuis " + runtimeText(since) + " · reste " + runtimeText(left) + sourcesText(ch)
         if let n = headNext { s += " · ensuite " + n.title }
         return s
     }
@@ -212,11 +256,11 @@ struct LiveFrontView: View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(spacing: 14) {
                 if headNow != nil { LiveBadge() } else { LiveBadge(text: "DERNIÈRE CHAÎNE") }
-                Text(ch.name.uppercased()).font(P.font(20, .bold)).tracking(1.5).opacity(0.75)
+                Text(headKicker(ch)).font(P.font(20, .bold)).tracking(1.5).opacity(0.75)
             }
-            Text(headNow?.title ?? ch.name).font(P.font(54, .bold)).lineLimit(1)
+            Text(headNow?.title ?? ChannelTools.clean(ch.name)).font(P.font(54, .bold)).lineLimit(1)
             if let p = headNow {
-                Text(headerLine(p)).font(P.font(22)).opacity(0.75).lineLimit(1)
+                Text(headerLine(p, ch)).font(P.font(22)).opacity(0.75).lineLimit(1)
                 ProgressLine(value: p.progress()).frame(width: 620, height: 6)
             } else {
                 Text("Programme non communiqué · OK pour regarder").font(P.font(22)).opacity(0.75)
@@ -240,95 +284,62 @@ struct ProgressLine: View {
     }
 }
 
-/// Carte « univers » : une catégorie, son programme du moment sur la première chaîne, le nombre de chaînes.
-struct UniverseCardLoader: View {
-    let cat: LiveCategory
-    let action: () -> Void
-    @State private var chans: [Channel] = []
-    var body: some View {
-        UniverseCard(name: cat.name, tag: "", channels: chans, count: cat.count, action: action)
-            .task(id: cat.id) { chans = await LiveStore.firstChannels(pid: cat.pid, cid: cat.cid, limit: 4) }
-    }
-}
-
+/// Carte « univers » (simulateur) : la tuile de sa première chaîne en direct, puis le nom de l'univers,
+/// le nombre de chaînes et leurs pastilles.
 struct UniverseCard: View {
-    let name: String
-    let tag: String
+    let label: String
+    let icon: String
     let channels: [Channel]
-    var count: Int? = nil
+    let count: Int
     let action: () -> Void
-    @State private var now: Program?
-    private var countText: String { let n = count ?? channels.count; return "\(n) chaîne" + (n > 1 ? "s" : "") }
     var body: some View {
-        let first = channels.first
-        let hue = P.hue(name)
         VStack(alignment: .leading, spacing: 10) {
-            Button(action: action) {
-                ZStack(alignment: .topLeading) {
-                    LinearGradient(colors: [Color(hue: hue, saturation: 0.5, brightness: 0.42), Color(hue: hue, saturation: 0.5, brightness: 0.15)], startPoint: .topLeading, endPoint: .bottomTrailing)
-                    if let first { Logo(url: first.icon, name: first.name, plain: true).frame(width: 150, height: 90).opacity(0.35).frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .trailing).padding(.trailing, 18) }
-                    LinearGradient(colors: [.clear, .black.opacity(0.7)], startPoint: .center, endPoint: .bottom)
-                    VStack(alignment: .leading, spacing: 6) {
-                        HStack {
-                            if let first { Text(first.name).font(P.font(17, .heavy)).lineLimit(1).padding(.horizontal, 10).padding(.vertical, 5).background(.black.opacity(0.45), in: RoundedRectangle(cornerRadius: 8)) }
-                            Spacer(minLength: 6)
-                            Text((tag.isEmpty ? name : tag).uppercased()).font(P.font(15, .heavy)).lineLimit(1)
-                                .padding(.horizontal, 9).padding(.vertical, 4).background(Color.white.opacity(0.88), in: RoundedRectangle(cornerRadius: 7)).foregroundStyle(.black)
-                        }
-                        Spacer(minLength: 0)
-                        Text(now?.title ?? first?.name ?? name).font(P.font(25, .bold)).lineLimit(1)
-                        if let first { Text(first.name).font(P.font(17)).opacity(0.7).lineLimit(1) }
-                        if let now {
-                            GeometryReader { g in
-                                ZStack(alignment: .leading) { Capsule().fill(.white.opacity(0.25)); Capsule().fill(P.live).frame(width: g.size.width * now.progress()) }
-                            }.frame(height: 4)
-                        }
-                    }.foregroundStyle(.white).padding(16)
-                }
-                .frame(width: 360, height: 202)
+            if let first = channels.first {
+                ChannelCard(ch: first, fav: false, action: action)
             }
-            .buttonStyle(TileStyle(radius: 20, zoom: 1.06))
-            HStack {
-                Text(name).font(P.font(20, .bold)).lineLimit(1)
+            HStack(spacing: 8) {
+                Image(systemName: icon).font(P.font(17, .semibold))
+                Text(label).font(P.font(20, .bold)).lineLimit(1)
                 Spacer()
-                Text(countText).font(P.font(17)).foregroundStyle(P.dim)
-            }.frame(width: 360)
-            HStack(spacing: 6) {
-                ForEach(channels.prefix(3)) { c in
-                    Text(String(c.name.prefix(5)).uppercased()).font(P.font(13, .heavy)).lineLimit(1)
-                        .padding(.horizontal, 7).padding(.vertical, 4).background(Color(hue: P.hue(c.name), saturation: 0.6, brightness: 0.5), in: RoundedRectangle(cornerRadius: 6))
-                }
+                Text("\(count) chaîne" + (count > 1 ? "s" : "")).font(P.font(17)).foregroundStyle(P.dim)
             }
+            .frame(width: ChannelCard.size.width)
+            HStack(spacing: 6) {
+                ForEach(channels.prefix(3)) { c in ChannelChip(name: ChannelTools.clean(c.name), icon: c.icon, height: 28) }
+                if count > 3 { Text("+\(count - 3)").font(P.font(15, .bold)).foregroundStyle(P.dim) }
+            }
+            .frame(width: ChannelCard.size.width, alignment: .leading)
         }
-        .task(id: first?.id ?? name) { if let first { now = await LiveStore.nowNext(first).0 } }
     }
 }
 
-/// « Commence bientôt » : chaîne, heure de début, titre, « dans 11 min ».
+/// « Commence bientôt » (simulateur) : pastille de la chaîne, heure de début en bleu, titre en filigrane ;
+/// sous la carte : le titre et « chaîne · dans 11 min ».
 struct SoonCard: View {
     let a: LiveStore.Airing
     let action: () -> Void
     var body: some View {
-        let hue = P.hue(a.ch.name)
-        Button(action: action) {
-            ZStack(alignment: .topLeading) {
-                LinearGradient(colors: [Color(hue: hue, saturation: 0.45, brightness: 0.4), Color(hue: hue, saturation: 0.5, brightness: 0.14)], startPoint: .topLeading, endPoint: .bottomTrailing)
-                LinearGradient(colors: [.clear, .black.opacity(0.7)], startPoint: .center, endPoint: .bottom)
-                VStack(alignment: .leading, spacing: 6) {
+        let name = ChannelTools.clean(a.ch.name)
+        let hue = P.hue(name)
+        VStack(alignment: .leading, spacing: 8) {
+            Button(action: action) {
+                ZStack(alignment: .topLeading) {
+                    LinearGradient(colors: [Color(hue: hue, saturation: 0.45, brightness: 0.4), Color(hue: hue, saturation: 0.5, brightness: 0.14)], startPoint: .topLeading, endPoint: .bottomTrailing)
+                    Text(a.p.title.uppercased()).font(P.font(26, .heavy)).foregroundStyle(.white.opacity(0.22)).lineLimit(2)
+                        .padding(.horizontal, 16).frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
                     HStack {
-                        Text(a.ch.name).font(P.font(17, .heavy)).lineLimit(1).padding(.horizontal, 10).padding(.vertical, 5).background(.black.opacity(0.45), in: RoundedRectangle(cornerRadius: 8))
+                        ChannelChip(name: name, icon: a.ch.icon, height: 36)
                         Spacer(minLength: 6)
-                        Text(Fmt.hm(a.p.startDate)).font(P.font(19, .heavy)).padding(.horizontal, 10).padding(.vertical, 5)
+                        Text(Fmt.hm(a.p.startDate)).font(P.font(19, .heavy)).foregroundStyle(.white).padding(.horizontal, 10).padding(.vertical, 5)
                             .background(Color(red: 0.04, green: 0.52, blue: 1), in: RoundedRectangle(cornerRadius: 8))
-                    }
-                    Spacer(minLength: 0)
-                    Text(a.p.title).font(P.font(25, .bold)).lineLimit(1)
-                    Text(a.ch.name + " · dans " + runtimeText(max(1, Int(a.p.startDate.timeIntervalSinceNow / 60)))).font(P.font(17)).opacity(0.75).lineLimit(1)
-                }.foregroundStyle(.white).padding(16)
+                    }.padding(14)
+                }
+                .frame(width: ChannelCard.size.width, height: ChannelCard.size.height)
             }
-            .frame(width: 360, height: 202)
+            .buttonStyle(TileStyle(radius: 18, zoom: 1.06))
+            Text(a.p.title).font(P.font(21, .bold)).lineLimit(1).frame(width: ChannelCard.size.width, alignment: .leading)
+            Text(name + " · dans " + runtimeText(max(1, Int(a.p.startDate.timeIntervalSinceNow / 60)))).font(P.font(17)).foregroundStyle(P.dim).lineLimit(1)
         }
-        .buttonStyle(TileStyle(radius: 20, zoom: 1.06))
     }
 }
 
@@ -440,16 +451,23 @@ struct AllCategoriesView: View {
 /// Grille de chaînes en cartes, avec en-tête (titre, nombre, bouton Guide).
 struct ChannelGrid: View {
     let title: String
-    let channels: [Channel]
+    /// sans doublon : une chaîne présente en FHD, HD et « secours » n'apparaît qu'une fois (la meilleure copie)
+    var channels: [Channel] { ChannelTools.dedupe(raw) }
+    let raw: [Channel]
     let loaded: Bool
     let empty: String
     let play: ([Channel], Int) -> Void
     let guide: (([Channel], String) -> Void)?
-    var columns = 4
+    var columns = 5
     @ObservedObject var prefs = LivePrefs.shared
 
+    init(title: String, channels: [Channel], loaded: Bool, empty: String, play: @escaping ([Channel], Int) -> Void, guide: (([Channel], String) -> Void)?, columns: Int = 5) {
+        self.title = title; self.raw = channels; self.loaded = loaded; self.empty = empty; self.play = play; self.guide = guide; self.columns = columns
+    }
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        let channels = self.channels
+        return VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .center, spacing: 18) {
                 VStack(alignment: .leading, spacing: 8) {
                     if loaded { Text("\(channels.count) CHAÎNE\(channels.count > 1 ? "S" : "")").font(P.font(19, .bold)).tracking(1.5).foregroundStyle(P.dim) }
@@ -467,7 +485,7 @@ struct ChannelGrid: View {
             else if channels.isEmpty { Text(empty).font(P.font(26)).foregroundStyle(P.dim).padding(.top, 60).frame(maxWidth: .infinity) }
             else {
                 ScrollView {
-                    LazyVGrid(columns: Array(repeating: GridItem(.fixed(360), spacing: 30), count: columns), alignment: .leading, spacing: 36) {
+                    LazyVGrid(columns: Array(repeating: GridItem(.fixed(ChannelCard.size.width), spacing: 28), count: columns), alignment: .leading, spacing: 36) {
                         ForEach(Array(channels.enumerated()), id: \.element.id) { i, ch in
                             ChannelCard(ch: ch, fav: prefs.favorites.contains(ch.id)) { play(channels, i) }
                                 .contextMenu {
@@ -526,8 +544,10 @@ struct SideButton: View {
     }
 }
 
-/// Une chaîne en carte (simulateur) : nom, DIRECT, programme en cours, temps restant.
+/// Une chaîne en carte (simulateur) : logo de la chaîne en haut à gauche, DIRECT en haut à droite,
+/// puis « vrai nom de la chaîne · reste 23 min » au-dessus du titre du programme, et la progression.
 struct ChannelCard: View {
+    static let size = CGSize(width: 300, height: 190)
     let ch: Channel
     let fav: Bool
     let action: () -> Void
@@ -535,46 +555,37 @@ struct ChannelCard: View {
     @State private var next: Program?
 
     var body: some View {
-        let hue = P.hue(ch.name)
+        let name = ChannelTools.clean(ch.name)
+        let hue = P.hue(name)
         Button(action: action) {
             ZStack(alignment: .topLeading) {
-                LinearGradient(colors: [Color(hue: hue, saturation: 0.55, brightness: 0.42), Color(hue: hue, saturation: 0.5, brightness: 0.16)], startPoint: .topLeading, endPoint: .bottomTrailing)
-                Logo(url: ch.icon, name: ch.name, plain: true).frame(width: 160, height: 96).opacity(0.9)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .trailing).padding(.trailing, 20).padding(.bottom, 40)
-                LinearGradient(colors: [.clear, .black.opacity(0.75)], startPoint: .center, endPoint: .bottom)
-                VStack(alignment: .leading, spacing: 6) {
-                    HStack(spacing: 10) {
-                        Text(ch.num > 0 ? "\(ch.num)  \(ch.name)" : ch.name).font(P.font(17, .heavy)).lineLimit(1)
-                            .padding(.horizontal, 10).padding(.vertical, 5).background(.black.opacity(0.45), in: RoundedRectangle(cornerRadius: 8))
-                        Spacer(minLength: 0)
-                        if fav { Image(systemName: "star.fill").font(P.font(18)).foregroundStyle(P.star) }
-                        if now != nil { LiveBadge(text: "DIRECT") }
+                LinearGradient(colors: [Color(hue: hue, saturation: 0.55, brightness: 0.44), Color(hue: hue, saturation: 0.5, brightness: 0.15)], startPoint: .topLeading, endPoint: .bottomTrailing)
+                Text((now?.title ?? name).uppercased()).font(P.font(26, .heavy)).foregroundStyle(.white.opacity(0.16)).lineLimit(2)
+                    .padding(.horizontal, 16).padding(.top, 54).frame(maxWidth: .infinity, alignment: .leading)
+                LinearGradient(colors: [.clear, .black.opacity(0.78)], startPoint: .center, endPoint: .bottom)
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack(spacing: 8) {
+                        ChannelChip(name: name, icon: ch.icon, height: 36)
+                        Spacer(minLength: 4)
+                        if fav { Image(systemName: "star.fill").font(P.font(17)).foregroundStyle(P.star) }
+                        LiveBadge(text: "DIRECT")
                     }
                     Spacer(minLength: 0)
-                    Text(now?.title ?? ch.name).font(P.font(26, .bold)).lineLimit(1)
-                    Text(sub).font(P.font(17)).opacity(0.75).lineLimit(1)
-                    if let now {
-                        GeometryReader { g in
-                            ZStack(alignment: .leading) {
-                                Capsule().fill(.white.opacity(0.25))
-                                Capsule().fill(P.live).frame(width: g.size.width * now.progress())
-                            }
-                        }.frame(height: 5).padding(.top, 4)
-                    }
-                }.foregroundStyle(.white).padding(16)
+                    Text(sub(name)).font(P.font(17, .semibold)).opacity(0.8).lineLimit(1)
+                    Text(now?.title ?? "Programme non communiqué").font(P.font(24, .bold)).lineLimit(1)
+                    if let now { ProgressLine(value: now.progress()).frame(height: 5).padding(.top, 4) }
+                }
+                .foregroundStyle(.white).padding(14)
             }
-            .frame(width: 360, height: 202)
+            .frame(width: ChannelCard.size.width, height: ChannelCard.size.height)
         }
-        .buttonStyle(TileStyle(radius: 20, zoom: 1.07))
+        .buttonStyle(TileStyle(radius: 18, zoom: 1.07))
         .task(id: ch.id) { let r = await LiveStore.nowNext(ch); now = r.0; next = r.1 }
     }
 
-    private var sub: String {
-        guard let now else { return "Programme non communiqué" }
-        let left = max(0, Int(now.stopDate.timeIntervalSinceNow / 60))
-        var s = ch.name + " · reste " + runtimeText(max(1, left))
-        if let next { s += " · ensuite " + next.title }
-        return s
+    private func sub(_ name: String) -> String {
+        guard let now else { return name }
+        return name + " · reste " + runtimeText(max(1, Int(now.stopDate.timeIntervalSinceNow / 60)))
     }
 }
 
@@ -598,6 +609,12 @@ struct Logo: View {
 enum Fmt {
     static let hmF: DateFormatter = { let f = DateFormatter(); f.locale = Locale(identifier: "fr_FR"); f.dateFormat = "HH:mm"; return f }()
     static func hm(_ d: Date) -> String { hmF.string(from: d) }
+    private static func fr(_ format: String) -> DateFormatter { let f = DateFormatter(); f.locale = Locale(identifier: "fr_FR"); f.dateFormat = format; return f }
+    private static let dayF = fr("EEEE"), dateF = fr("d MMMM yyyy"), dateTimeF = fr("d MMMM 'à' HH:mm")
+    /// Jour de la semaine, toujours en français et en minuscules (« samedi »), quelle que soit la langue de l'Apple TV.
+    static func day(_ d: Date) -> String { dayF.string(from: d).lowercased() }
+    static func date(_ d: Date) -> String { dateF.string(from: d) }
+    static func dateTime(_ d: Date) -> String { dateTimeF.string(from: d) }
 }
 
 // MARK: - Guide des programmes (grille : chaînes × heures)

@@ -42,7 +42,7 @@ struct WideCard: View {
 
     private var label: some View {
         ZStack(alignment: .bottomLeading) {
-            ArtView(backdrop: backdrop ?? item.backdropURL, poster: item.posterURL, maxPixel: 1000, posterWidthRatio: 0.26)
+            ArtView(backdrop: backdrop ?? item.backdropURL, poster: item.posterURL, maxPixel: 1000, fill: true)
             LinearGradient(colors: [.black.opacity(0.35), .clear, .black.opacity(0.88)], startPoint: .top, endPoint: .bottom)
             VStack(alignment: .leading, spacing: 0) {
                 HStack(spacing: 8) {
@@ -216,6 +216,8 @@ struct GlassBand<Head: View, Row: View>: View {
         .padding(.bottom, 8)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(RoundedRectangle(cornerRadius: 34, style: .continuous).fill(Color.white.opacity(0.035)))
+        // les affiches défilent à l'intérieur du cadre arrondi, sans jamais en déborder
+        .clipShape(RoundedRectangle(cornerRadius: 34, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: 34, style: .continuous).stroke(Color.white.opacity(0.1), lineWidth: 1.5))
         .padding(.horizontal, 64)
     }
@@ -376,5 +378,45 @@ enum Services {
     ]
     static func match(_ name: String) -> String? {
         list.first { name.range(of: $0.1, options: [.regularExpression, .caseInsensitive]) != nil }?.0
+    }
+}
+
+
+/// Carte « Nouveau sur prisme » (simulateur) : image sur toute la carte, « NOUVEAU · IL Y A 5 J » en haut,
+/// titre, « année · durée · genre », fournisseur. Sans fiche TMDB, l'image de fond et la durée viennent du fournisseur.
+struct NewCard: View {
+    let item: MediaItem
+    let chip: String?
+    let action: () -> Void
+    @State private var info = MediaInfo()
+    @State private var infoFor = ""
+
+    var body: some View {
+        WideCard(item: item, backdrop: art, tag: "NOUVEAU · " + (agoText(item.added) ?? "récent").uppercased(), title: item.displayTitle, sub: sub,
+                 chip: chip, width: 530, action: action)
+            .task(id: item.id) {
+                guard item.backdropURL.isEmpty || (item.kind == .film && (item.fiche?.runtime ?? 0) == 0) || item.fiche == nil else { return }
+                let id = item.id
+                let m = await InfoLoader.load(item)
+                if id == item.id { info = m; infoFor = id }
+            }
+    }
+
+    private var details: MediaInfo { infoFor == item.id ? info : MediaInfo() }
+    private var art: String { !item.backdropURL.isEmpty ? item.backdropURL : details.backdrop }
+
+    private var sub: String {
+        var p: [String] = []
+        let y = (item.fiche?.year ?? 0) > 0 ? item.fiche!.year : (item.clean.year > 0 ? item.clean.year : details.year)
+        if y > 0 { p.append(String(y)) }
+        if item.kind == .film {
+            let rt = (item.fiche?.runtime ?? 0) > 0 ? item.fiche!.runtime : details.minutes
+            if rt > 0 { p.append(runtimeText(rt)) }
+        } else if !details.seasons.isEmpty {
+            p.append("\(details.seasons.count) saison" + (details.seasons.count > 1 ? "s" : ""))
+        }
+        let g = (item.fiche?.genres.isEmpty == false) ? item.fiche!.genres : details.genre
+        if let first = g.components(separatedBy: CharacterSet(charactersIn: ",/")).first?.trimmingCharacters(in: .whitespaces), !first.isEmpty { p.append(first) }
+        return p.joined(separator: " · ")
     }
 }

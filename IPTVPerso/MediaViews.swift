@@ -9,6 +9,7 @@ private struct HomeSnap {
     var tonight: [MediaItem] = []
     var week: [MediaItem] = []
     var top: [TrendStore.Ranked] = []
+    var topSub = ""
     var colls: [CollInfo] = []
     var lics: [CollInfo] = []
     var genres: [CollInfo] = []
@@ -45,7 +46,8 @@ struct MediaHomeView: View {
     @State private var mood = ""
     @State private var askDur = false
     @State private var askMood = false
-    @State private var bandTab = "suivre"
+    @State private var because: MediaItem?
+    @State private var becauseList: [MediaItem] = []
     @State private var browseTab = ""
     @State private var showAllNew = false
     @FocusState private var heroFocus: Bool
@@ -66,14 +68,17 @@ struct MediaHomeView: View {
                     heroBlock
                     TopBar()
                 }
-                if kind == .film { tonightBand } else { seriesBand }
-                if kind == .film && !resume.isEmpty { resumeSection }
+                // ordre du simulateur — Films : Ce soir ? · Reprendre · Top 10 · Nouveau · Parce que tu as aimé · Ma liste · Explorer · Parcourir
+                //                       Séries : Ce soir ? · Reprendre · Top 10 · Nouveau · Ma liste · Parcourir
+                tonightBand
+                if !resume.isEmpty { resumeSection }
                 if !snap.top.isEmpty {
-                    Top10Row(title: kind == .film ? "Top 10 du moment" : "Top 10 séries",
-                             sub: kind == .film ? "films populaires en France cette semaine · chez ton fournisseur" : "séries populaires cette semaine · chez ton fournisseur",
-                             items: snap.top, open: { open = $0 })
+                    Top10Row(title: kind == .film ? "Top 10 du moment" : "Top 10 séries", sub: snap.topSub, items: snap.top, open: { open = $0 })
                 }
-                if kind == .film && !snap.newest.isEmpty { newSection }
+                if !snap.newest.isEmpty { newSection }
+                if kind == .film, let b = because, !becauseList.isEmpty {
+                    MediaRow(title: "Parce que tu as aimé " + b.displayTitle, sub: "mêmes genres (TMDB) · sans les films déjà proposés plus haut", items: becauseList, open: { open = $0 })
+                }
                 if !mine.isEmpty {
                     MediaRow(title: "Ma liste", sub: mineSub, items: mine, open: { open = $0 })
                 }
@@ -139,6 +144,7 @@ struct MediaHomeView: View {
             let rt = it.fiche?.runtime ?? 0
             if maxD > 0 && (rt == 0 || rt > maxD) { return false }
             if let rx, (it.fiche?.genres ?? "").lowercased().folding(options: .diacriticInsensitive, locale: nil).range(of: rx, options: .regularExpression) == nil { return false }
+            if it.kind == .series { return !watch.inProgress.contains { $0.item == it.id } }
             return watch.fraction(it.id) == nil
         }
     }
@@ -150,69 +156,22 @@ struct MediaHomeView: View {
                 HStack(spacing: 16) {
                     Image(systemName: "moon").font(P.font(28, .semibold))
                     Text("Ce soir ?").font(P.font(33, .bold))
-                    Text("\(L.count) films · il est " + Fmt.hm(Date())).font(P.font(19)).foregroundStyle(P.faint)
+                    Text("\(L.count) \(unit) · il est " + Fmt.hm(Date())).font(P.font(19)).foregroundStyle(P.faint)
                     Spacer(minLength: 20)
-                    BandChip(icon: "timer", text: Tonight.durations.first { $0.0 == dur }?.1 ?? "Peu importe", menu: true) { askDur = true }
+                    if kind == .film {
+                        BandChip(icon: "timer", text: Tonight.durations.first { $0.0 == dur }?.1 ?? "Peu importe", menu: true) { askDur = true }
+                    }
                     BandChip(icon: "sparkles", text: Tonight.moods.first { $0.0 == mood }?.1 ?? "Toutes les envies", menu: true) { askMood = true }
                     BandChip(icon: "dice", text: "Surprends-moi") { if let pick = L.prefix(6).randomElement() { open = pick } }
                 }
             }, row: {
                 LazyHStack(spacing: 30) {
-                    if L.isEmpty { Text("Aucun film avec ces choix · change la durée ou l'envie").font(P.font(22)).foregroundStyle(P.dim).frame(height: 300) }
+                    if L.isEmpty { Text("Aucun titre avec ces choix · change la durée ou l'envie").font(P.font(22)).foregroundStyle(P.dim).frame(height: 300) }
                     ForEach(L.prefix(24)) { it in PosterButton(item: it) { open = it } }
                 }
             })
         }
     }
-
-    // MARK: séries — bande « À suivre / Ce soir ? / Cette semaine »
-
-    private var followCards: [ResumeEntry] { resume }
-
-    @ViewBuilder private var seriesBand: some View {
-        let soir = snap.tonight.filter { it in !watch.inProgress.contains { $0.item == it.id } }
-        if !resume.isEmpty || !soir.isEmpty || !snap.week.isEmpty {
-            GlassBand(head: {
-                HStack(spacing: 10) {
-                    bandTabButton("suivre", "À suivre", icon: "arrow.counterclockwise", count: resume.count)
-                    bandTabButton("soir", "Ce soir ?", icon: "moon", count: nil)
-                    bandTabButton("cal", "Cette semaine", icon: "calendar", count: snap.week.count)
-                }
-            }, row: {
-                LazyHStack(spacing: 30) {
-                    switch bandTab {
-                    case "soir":
-                        if soir.isEmpty { emptyBand("Pas de série bien notée à commencer pour le moment.") }
-                        ForEach(soir.prefix(16)) { it in
-                            WideCard(item: it, corner: versionTag(it), badge: "S1 · É1", title: it.displayTitle, sub: tonightSub(it), chip: nil) { open = it }
-                        }
-                    case "cal":
-                        if snap.week.isEmpty { emptyBand("Aucune série mise à jour cette semaine chez " + providerNames + ".") }
-                        ForEach(snap.week) { it in
-                            WideCard(item: it, flag: "NOUVEAU", corner: versionTag(it), title: it.displayTitle, sub: "mise à jour · " + (agoText(it.added) ?? "cette semaine")) { open = it }
-                        }
-                    default:
-                        if resume.isEmpty { emptyBand("Les séries que tu commences apparaîtront ici.") }
-                        ForEach(resume) { r in resumeCard(r) }
-                    }
-                }
-            })
-            .onAppear { if resume.isEmpty && bandTab == "suivre" { bandTab = snap.week.isEmpty ? "soir" : "cal" } }
-        }
-    }
-
-    private func bandTabButton(_ k: String, _ title: String, icon: String, count: Int?) -> some View {
-        Button { bandTab = k } label: {
-            HStack(spacing: 10) {
-                Image(systemName: icon)
-                Text(title)
-                if let count, count > 0 { Text("\(count)").font(P.font(17, .bold)).padding(.horizontal, 8).padding(.vertical, 2).background(Color(red: 0.2, green: 0.4, blue: 0.75), in: Capsule()) }
-            }.font(P.font(23, .semibold))
-        }
-        .buttonStyle(TabPillStyle(selected: bandTab == k))
-    }
-
-    private func emptyBand(_ t: String) -> some View { Text(t).font(P.font(22)).foregroundStyle(P.dim).frame(height: 270) }
 
     private func tonightSub(_ it: MediaItem) -> String {
         guard let rt = it.fiche?.runtime, rt > 0 else { return it.fiche.map { "★ " + String(format: "%.1f", $0.vote) } ?? "" }
@@ -251,12 +210,11 @@ struct MediaHomeView: View {
 
     private var newSection: some View {
         VStack(alignment: .leading, spacing: 0) {
-            HomeHeader(icon: "sparkles", title: "Nouveau sur prisme", sub: "ajouts récents chez " + providerNames)
+            HomeHeader(icon: "sparkles", title: "Nouveau sur prisme", sub: (kind == .film ? "ajouts récents chez " : "ajouts et mises à jour récents chez ") + providerNames)
             ScrollView(.horizontal) {
                 LazyHStack(spacing: 30) {
                     ForEach(snap.newest.prefix(12)) { it in
-                        WideCard(item: it, tag: "NOUVEAU · " + (agoText(it.added) ?? "récent").uppercased(), title: it.displayTitle, sub: newSub(it),
-                                 chip: store.provider(it.pid)?.name, width: 530) { open = it }
+                        NewCard(item: it, chip: store.provider(it.pid)?.name) { open = it }
                     }
                     if snap.newest.count > 12 { AllCard(count: snap.newest.count, unit: unit, height: 298) { showAllNew = true } }
                 }
@@ -354,6 +312,16 @@ struct MediaHomeView: View {
             s.week = await MediaStore.list(.series, pids: p, where: "added > ?", args: [week], order: "added DESC", limit: 30)
         }
         s.top = await TrendStore.top(k, pids: p)
+        if !s.top.isEmpty {
+            s.topSub = k == .film ? "films populaires en France cette semaine · chez ton fournisseur" : "séries populaires cette semaine · chez ton fournisseur"
+        } else {
+            // sans TMDB : les mieux notés des ajouts des 3 derniers mois chez le fournisseur (données réelles, dites comme telles)
+            let since = Int(Date().timeIntervalSince1970) - 90 * 86400
+            var L = await MediaStore.list(k, pids: p, where: "rating>0 AND added > ?", args: [since], order: "rating DESC, added DESC", limit: 10)
+            if L.count < 5 { L = await MediaStore.list(k, pids: p, where: "rating>0", order: "rating DESC, added DESC", limit: 10) }
+            s.top = L.enumerated().map { TrendStore.Ranked(item: $0.element, rank: $0.offset + 1, move: nil) }
+            s.topSub = "les mieux notés des ajouts récents chez " + providerNames
+        }
         s.colls = await collections(k, p)
         s.lics = await licences(k, p)
         s.genres = await genreTiles(k, p)
@@ -440,6 +408,21 @@ struct MediaHomeView: View {
             return byID[e.item].map { ResumeEntry(item: $0, entry: e) }
         }
         mine = await MediaStore.items(ids: watch.favorites.filter { $0.hasPrefix(prefix) })
+        await loadBecause()
+    }
+
+    /// « Parce que tu as aimé » : le dernier film regardé presque en entier (85 % ou plus, comme le simulateur)
+    /// et les films qui partagent ses genres, sans ceux déjà proposés plus haut ni ceux déjà vus.
+    private func loadBecause() async {
+        guard kind == .film else { return }
+        let done = watch.entries.values.filter { $0.item.hasPrefix("film:") && $0.dur > 0 && $0.pos / $0.dur >= 0.85 }.sorted { $0.at > $1.at }
+        guard let last = done.first, let it = await MediaStore.items(ids: [last.item]).first else { because = nil; becauseList = []; return }
+        let genres = (it.fiche?.genres ?? "").components(separatedBy: ", ").filter { !$0.isEmpty }
+        var skip = Set(snap.top.map(\.item.clean.key)).union(snap.newest.prefix(12).map(\.clean.key)).union(tonightList.prefix(12).map(\.clean.key))
+        skip.insert(it.clean.key)
+        let L = await MediaStore.similar(of: it, genres: genres, pids: pids, limit: 30).map { $0.0 }
+        because = it
+        becauseList = Array(L.filter { !skip.contains($0.clean.key) && watch.fraction($0.id) == nil }.prefix(12))
     }
 
     /// « Lecture » sur la grande affiche : un film démarre (en reprenant s'il a été commencé),

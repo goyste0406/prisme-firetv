@@ -30,6 +30,8 @@ struct SeriesDetailView: View {
     @FocusState private var tabFocus: String?
     @FocusState private var playFocused: Bool
 
+    /// 1920 − marges (90 + 64) − colonne de gauche (700) − espace (56)
+    static let panelW: CGFloat = 1010
     private static let tabs: [(String, String)] = [("eps", "Épisodes"), ("cast", "Qui est qui ?"), ("sim", "Séries proches"), ("where", "Où regarder"), ("det", "Détails")]
 
     private var cur: MediaItem { chosen ?? item }
@@ -213,7 +215,7 @@ struct SeriesDetailView: View {
         if n <= 1 { return "ce soir" }
         if n == 2 { return "demain" }
         let d = Calendar.current.date(byAdding: .day, value: n - 1, to: Date()) ?? Date()
-        return d.formatted(.dateTime.weekday(.wide))
+        return Fmt.day(d)
     }
 
     // lignes des saisons : une case par épisode (vu, en cours, pas vu)
@@ -268,12 +270,15 @@ struct SeriesDetailView: View {
             Divider().overlay(Color.white.opacity(0.08))
             ScrollView {
                 VStack(alignment: .leading, spacing: 18) { tabBody }
-                    .padding(26).frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 30).padding(.vertical, 24)
+                    .frame(width: SeriesDetailView.panelW, alignment: .leading)
             }
-            .scrollClipDisabled(false)
+            .clipped()
             .focusSection()
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        // largeur fixe : le panneau ne s'élargit jamais au-delà de l'écran, son contenu reste dedans
+        .frame(width: SeriesDetailView.panelW, alignment: .top)
+        .frame(maxHeight: .infinity, alignment: .top)
         .glass(34)
     }
 
@@ -301,28 +306,28 @@ struct SeriesDetailView: View {
             let shown = essential ? eps.filter { $0.rating >= 8.2 || state($0) == 1 } : eps
             let d = eps.reduce(0) { $0 + mins($1) }
             let seasonSeen = !eps.isEmpty && eps.allSatisfy { watch.watched(key($0)) }
-            HStack(alignment: .center) {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Saison \(s.number)").font(P.font(32, .bold))
-                    Text("\(eps.count) ép." + (d > 0 ? " · " + runtimeText(d) : "") + (avg > 0 ? " · ★ " + String(format: "%.1f", avg).replacingOccurrences(of: ".", with: ",") : ""))
-                        .font(P.font(19)).foregroundStyle(P.dim)
-                }
-                Spacer()
-                HStack(spacing: 12) {
-                    if let t = trailer {
-                        Button { showTrailer = t } label: { Label("Bande-annonce", systemImage: "film").font(P.font(19, .semibold)) }
-                            .buttonStyle(GlassStyle(radius: 30, minH: 52))
-                    }
-                    Button {
-                        watch.setWatched(eps.map { key($0) }, watched: !seasonSeen, title: title, icon: item.posterURL, item: item.id)
-                    } label: { Label(seasonSeen ? "Saison non vue" : "Saison vue", systemImage: seasonSeen ? "arrow.uturn.backward" : "checkmark").font(P.font(19, .semibold)) }
-                        .buttonStyle(GlassStyle(radius: 30, minH: 52))
-                    if avg > 0 {
-                        Button { essential.toggle() } label: { Label(essential ? "L'essentiel · \(shown.count)/\(eps.count)" : "L'essentiel", systemImage: "star.fill").font(P.font(19, .semibold)) }
-                            .buttonStyle(GlassStyle(radius: 30, minH: 52, on: essential))
-                    }
-                }.focusSection()
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Saison \(s.number)").font(P.font(32, .bold))
+                Text("\(eps.count) ép." + (d > 0 ? " · " + runtimeText(d) : "") + (avg > 0 ? " · ★ " + String(format: "%.1f", avg).replacingOccurrences(of: ".", with: ",") : ""))
+                    .font(P.font(19)).foregroundStyle(P.dim)
             }
+            // les boutons de la saison sur leur propre ligne : rien ne dépasse du panneau
+            HStack(spacing: 12) {
+                if let t = trailer {
+                    Button { showTrailer = t } label: { Label("Bande-annonce", systemImage: "film").font(P.font(19, .semibold)) }
+                        .buttonStyle(GlassStyle(radius: 30, minH: 52))
+                }
+                Button {
+                    watch.setWatched(eps.map { key($0) }, watched: !seasonSeen, title: title, icon: item.posterURL, item: item.id)
+                } label: { Label(seasonSeen ? "Saison non vue" : "Saison vue", systemImage: seasonSeen ? "arrow.uturn.backward" : "checkmark").font(P.font(19, .semibold)) }
+                    .buttonStyle(GlassStyle(radius: 30, minH: 52))
+                if avg > 0 {
+                    Button { essential.toggle() } label: { Label(essential ? "L'essentiel · \(shown.count)/\(eps.count)" : "L'essentiel", systemImage: "star.fill").font(P.font(19, .semibold)) }
+                        .buttonStyle(GlassStyle(radius: 30, minH: 52, on: essential))
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .focusSection()
             ForEach(shown) { e in episodeRow(e) }
         } else if loading {
             ProgressView().tint(.white).frame(maxWidth: .infinity, minHeight: 300)
@@ -338,7 +343,7 @@ struct SeriesDetailView: View {
         return Button { playEpisode(e, from: watch.resume(key(e)) ?? 0) } label: {
             HStack(alignment: .top, spacing: 24) {
                 ZStack(alignment: .bottom) {
-                    Poster(url: e.image.isEmpty ? (info.backdrop.isEmpty ? item.posterURL : info.backdrop) : e.image).frame(width: 288, height: 162)
+                    Poster(url: e.image.isEmpty ? (info.backdrop.isEmpty ? item.posterURL : info.backdrop) : e.image).frame(width: 288, height: 162).clipped()
                     if let f, f > 0.02, f < 0.92 {
                         GeometryReader { g in
                             ZStack(alignment: .leading) {
@@ -358,8 +363,10 @@ struct SeriesDetailView: View {
                     }.font(P.font(18, .medium)).opacity(0.75)
                     if !e.plot.isEmpty { Text(e.plot).font(P.font(19)).opacity(0.7).lineLimit(2) }
                 }
-                Spacer(minLength: 0)
-            }.padding(12)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .padding(12)
+            .frame(width: SeriesDetailView.panelW - 60, alignment: .leading)
         }
         .buttonStyle(EpisodeStyle(current: st == 1))
     }

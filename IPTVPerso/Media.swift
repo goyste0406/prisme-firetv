@@ -200,9 +200,16 @@ enum MediaStore {
         return await Database.shared.read { db in
             var out: [Int: MediaItem] = [:]
             db.query(sql, [k.rawValue] + ids.map { $0 as Any? } + pids) { r in let it = row(k, r); out[r.int(11)] = it }
-            let withF = Array(out.values).withFiches()
+            // titres sans fiche téléchargée : l'identifiant TMDB donné par le fournisseur suffit
+            let missing = ids.filter { out[$0] == nil }
+            if !missing.isEmpty {
+                let sql2 = "SELECT \(cols(k)), tmdb FROM \(t) WHERE tmdb IN (" + missing.map { _ in "?" }.joined(separator: ",") + ") AND pid IN \(inList(pids))"
+                db.query(sql2, missing.map { String($0) as Any? } + pids.map { $0 as Any? }) { r in let id = r.int(11); if out[id] == nil { out[id] = row(k, r) } }
+            }
+            let withF = Array(out).map { ($0.key, $0.value) }
+            let filled = withF.map { $0.1 }.withFiches()
             var res: [Int: MediaItem] = [:]
-            for m in withF { if let f = m.fiche { res[f.tmdb] = m } }
+            for (i, m) in filled.enumerated() { res[m.fiche?.tmdb ?? withF[i].0] = m }
             return res
         }
     }

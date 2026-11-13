@@ -8,6 +8,9 @@ on:
     paths: ["IPTVPerso/**", "IPTVPersoUITests/**", "ci/**", "project.yml", "Podfile", ".github/workflows/visite-tvos.yml"]
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   visite:
     runs-on: macos-15-intel
@@ -53,17 +56,17 @@ jobs:
             CODE_SIGNING_ALLOWED=NO test 2>&1 | tee test.log | grep -E "error:|Test Case|passed|failed|TEST (SUCCEEDED|FAILED)" || true
           ls -la shots | head -80
 
-      - name: Réduire les captures
+      - name: Captures (publiées dans la release « visite-latest »)
         if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
-          cd shots 2>/dev/null && for f in *.png; do sips -Z 1920 "$f" >/dev/null 2>&1 || true; done; ls | head -80
-
-      - name: Captures
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: visite
-          path: |
-            shots
-            test.log
-            fake.log
+          cat shots/focus.txt || true
+          mkdir -p jpg
+          for f in shots/*.png; do n=$(basename "$f" .png); sips -s format jpeg -s formatOptions 72 -Z 1600 "$f" --out "jpg/$n.jpg" >/dev/null 2>&1 || true; done
+          cp shots/focus.txt jpg/ 2>/dev/null || true
+          grep -E "error:|Test Case|passed|failed" test.log > jpg/test-resume.txt 2>/dev/null || true
+          (cd jpg && zip -q ../visite.zip *)
+          ls -lh visite.zip
+          if gh release view visite-latest >/dev/null 2>&1; then gh release upload visite-latest visite.zip --clobber
+          else gh release create visite-latest visite.zip --target appletv --prerelease --title "Visite automatique (captures)" --notes "Captures de la visite automatique dans le simulateur Apple TV"; fi

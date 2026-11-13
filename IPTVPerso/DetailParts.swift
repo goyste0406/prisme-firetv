@@ -224,7 +224,7 @@ struct WhereSection: View {
         let now = Date()
         if a.p.startDate <= now && a.p.stopDate > now { return "en direct · jusqu'à " + Fmt.hm(a.p.stopDate) }
         let cal = Calendar.current
-        let day = cal.isDateInToday(a.p.startDate) ? "ce soir " : cal.isDateInTomorrow(a.p.startDate) ? "demain " : a.p.startDate.formatted(.dateTime.weekday(.wide)) + " "
+        let day = cal.isDateInToday(a.p.startDate) ? "ce soir " : cal.isDateInTomorrow(a.p.startDate) ? "demain " : Fmt.day(a.p.startDate) + " "
         return day + Fmt.hm(a.p.startDate)
     }
     private func tvTail(_ a: LiveStore.Airing) -> String { a.p.startDate <= Date() ? "Direct" : "Voir" }

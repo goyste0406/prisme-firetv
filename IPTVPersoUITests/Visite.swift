@@ -36,8 +36,15 @@ final class Visite: XCTestCase {
 
     func press(_ b: XCUIRemote.Button, _ n: Int = 1) { for _ in 0..<n { remote.press(b); Thread.sleep(forTimeInterval: 0.45) } }
 
+    /// Si un « Menu » de trop a renvoyé à l'écran d'accueil de l'Apple TV, on revient dans prisme.
+    func back() {
+        press(.menu); Thread.sleep(forTimeInterval: 2)
+        if app.state != .runningForeground { log += "(retour à l'accueil tvOS : prisme relancée)\n"; app.activate(); Thread.sleep(forTimeInterval: 3) }
+    }
+
     /// Va sur un onglet de la barre du haut (Films = 0, Séries = 1, TV = 2, Ma liste = 3, Recherche = 4, Réglages = 5).
     func tab(_ i: Int) {
+        if app.state != .runningForeground { app.activate(); Thread.sleep(forTimeInterval: 3) }
         press(.up, 8)
         press(.left, 7)
         press(.right, i)
@@ -60,7 +67,7 @@ final class Visite: XCTestCase {
         press(.down); press(.select); Thread.sleep(forTimeInterval: 3); shot("06-fiche-film")
         for i in 1...6 { press(.down); shot(String(format: "07-fiche-film-bas-%02d", i)) }
         press(.right, 3); shot("08-fiche-film-droite")
-        press(.menu); Thread.sleep(forTimeInterval: 2)
+        back(); shot("09-retour-accueil-films")
 
         tab(1); shot("10-series-ouverture")
         for i in 1...6 { press(.down); shot(String(format: "11-series-bas-%02d", i)) }
@@ -68,7 +75,7 @@ final class Visite: XCTestCase {
         press(.right, 2); shot("13-fiche-serie-panneau")
         press(.down, 3); shot("14-fiche-serie-episodes")
         press(.right, 2); shot("15-fiche-serie-episodes-droite")
-        press(.menu); Thread.sleep(forTimeInterval: 2)
+        back()
 
         tab(2); shot("20-tv-ouverture")
         for i in 1...4 { press(.down); shot(String(format: "21-tv-bas-%02d", i)) }
