@@ -473,6 +473,8 @@ struct SeriesDetailView: View {
         versions = v1
         if season == 0 { season = nextEp?.season ?? info.seasons.first?.number ?? 1 }
         loading = false
+        // le bouton Reprendre/Commencer n'est sélectionnable qu'une fois les épisodes chargés : on y pose le focus à ce moment-là
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { if !all.isEmpty && showRecap == nil && playing == nil { playFocused = true } }
         if fiche == nil, TmdbKey.value != nil { fiche = await FicheWorker.fetchNow(item, tmdbHint: info.tmdb) }
         airings = await LiveStore.airings(title: title, providers: pids)
         let y = (fiche?.year ?? 0) > 0 ? fiche!.year : (item.clean.year > 0 ? item.clean.year : info.year)
