@@ -240,6 +240,9 @@ def studios_for(i):
     if i in (0, 1, 6, 16): return [STUDIOS[3], STUDIOS[4]]
     return []
 
+# classifications françaises (format TMDB « release_dates ») : Léa (12 ans max) ne doit pas voir les « 16 »
+CERTS = {"Joker": "16", "Drive": "16", "Parasite": "12", "Le Parrain": "12", "La Haine": "12", "Barbie": "TP", "Vice-Versa": "TP", "Vice-Versa 2": "U"}
+
 def movie(i):
     t, y, rt, v, g, col, ago = FILMS[i]
     m = fid(i)
@@ -251,7 +254,8 @@ def movie(i):
             "production_countries": [{"iso_3166_1": "FR" if i in FRENCH else "US"}],
             "production_companies": [{"id": sid_, "name": n, "logo_path": tmdb_path("g", f"co{sid_}")} for sid_, n in studios_for(i)],
             "images": {"logos": [{"iso_639_1": "fr", "file_path": tmdb_path("g", f"m{m}")}] if i % 3 != 2 else []},
-            "watch/providers": providers_for(t)}
+            "watch/providers": providers_for(t),
+            "release_dates": {"results": ([{"iso_3166_1": "FR", "release_dates": [{"certification": CERTS[t], "type": 3}]}] if t in CERTS else [])}}
 
 def tv(i):
     t, y, v, g, ns, ne, rt, ago = SERIES[i]
