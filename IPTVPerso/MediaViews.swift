@@ -286,11 +286,15 @@ struct MediaHomeView: View {
 
     // MARK: données
 
+    /// Accueil en deux temps : les rangées principales (nouveautés, ce soir, top 10) s'affichent dès qu'elles sont prêtes,
+    /// puis Explorer, genres, catégories et Licences arrivent. Le dernier accueil calculé reste affiché pendant ce temps.
     private func load(_ key: String) async {
-        if let s = HomeCache.map[key] { snap = s; pickHero(s) }
+        let t0 = Date(), q0 = Database.queryCount
+        let cached = HomeCache.map[key]
+        if let c = cached { snap = c; pickHero(c) }
         let k = kind, p = pids
         let twoWeeks = Int(Date().timeIntervalSince1970) - 14 * 86400
-        var s = HomeSnap()
+        var s = cached ?? HomeSnap()
         var n = await MediaStore.list(k, pids: p, where: "added > ?", args: [twoWeeks], order: "added DESC", limit: 40)
         if n.isEmpty { n = await MediaStore.list(k, pids: p, order: "added DESC", limit: 20) }
         s.newest = n
@@ -312,14 +316,38 @@ struct MediaHomeView: View {
             s.top = L.enumerated().map { TrendStore.Ranked(item: $0.element, rank: $0.offset + 1, move: nil) }
             s.topSub = "les mieux notés des ajouts récents chez " + providerNames
         }
-        s.colls = await collections(k, p)
-        s.lics = await licences(k, p, top: s.top)
-        s.genres = await genreTiles(k, p)
-        s.cats = await MediaStore.categories(k, pids: p)
-        HomeCache.map[key] = s
+        guard !Task.isCancelled else { return }
         snap = s
         pickHero(s)
+        let t1 = Date(), q1 = Database.queryCount
         await loadResume()
+        s.colls = await collections(k, p)
+        let tg = Date(), qg = Database.queryCount
+        s.genres = await genreTiles(k, p)
+        PerfLog.newParts = (Date().timeIntervalSince(tg), Database.queryCount - qg)
+        s.cats = await MediaStore.categories(k, pids: p)
+        guard !Task.isCancelled else { return }
+        snap = s
+        s.lics = await licences(k, p, top: s.top)
+        guard !Task.isCancelled else { return }
+        HomeCache.map[key] = s
+        snap = s
+        if Debug.demoServer != nil {
+            let t2 = Date(), q2 = Database.queryCount
+            await PerfLog.home(kind: k, first: t1.timeIntervalSince(t0), full: t2.timeIntervalSince(t0), q1: q1 - q0, q2: q2 - q0,
+                               cached: cached != nil, old: { await oldMethodCost(k, p, lics: s.lics, top: s.top) })
+        }
+    }
+
+    /// Simulateur de test seulement : coût de l'ANCIENNE méthode (1.6 build 117) sur les mêmes données, pour la comparaison
+    /// avant / après — pastille 🔥 en chargeant chaque tuile (jusqu'à 300 titres chacune) et 18 comptages de genres.
+    private func oldMethodCost(_ k: MediaKind, _ p: [String], lics: [CollInfo], top: [TrendStore.Ranked]) async -> (Double, Int) {
+        let t = Date(), q = Database.queryCount
+        if !top.isEmpty { for c in lics { _ = await c.loader() } }
+        let G = k == .film ? ["Action", "Aventure", "Animation", "Comédie", "Crime", "Documentaire", "Drame", "Familial", "Fantastique", "Histoire", "Horreur", "Musique", "Mystère", "Romance", "Science-Fiction", "Thriller", "Guerre", "Western"]
+                           : ["Action & Adventure", "Animation", "Comédie", "Crime", "Documentaire", "Drame", "Familial", "Kids", "Mystère", "Science-Fiction & Fantastique", "War & Politics", "Western", "Reality", "Soap"]
+        for g in G { _ = await MediaStore.ficheCount(k, pids: p, cond: "f.genres LIKE ?", args: ["%" + g + "%"]) }
+        return (Date().timeIntervalSince(t), Database.queryCount - q)
     }
 
     private func pickHero(_ s: HomeSnap) {
@@ -392,12 +420,18 @@ struct MediaHomeView: View {
                                 count: st.count, preview: [], loader: { await MediaStore.ficheList(k, pids: p, cond: "(f.companies LIKE ? OR f.companies LIKE ?)", args: [like1, like2], order: "f.vote DESC", limit: 300) },
                                 kind: k == .film ? "Studio" : "Chaîne", logo: st.logo))
         }
-        // pastille 🔥 : seulement si un de ses titres est dans le Top 10 de la semaine (donnée réelle)
-        let rank = Dictionary(top.map { ($0.item.workKey, $0.rank) }, uniquingKeysWith: { min($0, $1) })
-        if !rank.isEmpty {
+        // pastille 🔥 : seulement si un de ses titres est dans le Top 10 de la semaine (donnée réelle).
+        // Calculée à partir des 10 titres du Top (leur saga, leurs studios, leurs catégories chez le fournisseur),
+        // sans charger le contenu de chaque tuile.
+        if !top.isEmpty {
+            let tt = Date(), qt = Database.queryCount
+            let tr = await MediaStore.topLinks(k, pids: p, top: top)
+            PerfLog.newParts.0 += Date().timeIntervalSince(tt); PerfLog.newParts.1 += Database.queryCount - qt
             for i in out.indices {
-                let items = await out[i].loader()
-                out[i].trend = items.compactMap { rank[$0.workKey] }.min() ?? 0
+                let id = out[i].id
+                if id.hasPrefix("col:"), let c = Int(id.dropFirst(4)) { out[i].trend = tr.coll[c] ?? 0 }
+                else if id.hasPrefix("co:"), let c = Int(id.dropFirst(3)) { out[i].trend = tr.company[c] ?? 0 }
+                else if id.hasPrefix("pf:"), let cats = plat[String(id.dropFirst(3))] { out[i].trend = cats.compactMap { tr.cat[$0.id] }.min() ?? 0 }
             }
         }
         let sorted = out.sorted { ($0.trend > 0 ? 100 - $0.trend : 0, $0.count) > ($1.trend > 0 ? 100 - $1.trend : 0, $1.count) }
@@ -409,9 +443,11 @@ struct MediaHomeView: View {
     private func genreTiles(_ k: MediaKind, _ p: [String]) async -> [CollInfo] {
         let G = k == .film ? ["Action", "Aventure", "Animation", "Comédie", "Crime", "Documentaire", "Drame", "Familial", "Fantastique", "Histoire", "Horreur", "Musique", "Mystère", "Romance", "Science-Fiction", "Thriller", "Guerre", "Western"]
                            : ["Action & Adventure", "Animation", "Comédie", "Crime", "Documentaire", "Drame", "Familial", "Kids", "Mystère", "Science-Fiction & Fantastique", "War & Politics", "Western", "Reality", "Soap"]
+        // une seule lecture des genres (au lieu d'un comptage complet du catalogue par genre)
+        let counts = await MediaStore.genreCounts(k, pids: p, genres: G)
         var out: [CollInfo] = []
         for g in G {
-            let n = await MediaStore.ficheCount(k, pids: p, cond: "f.genres LIKE ?", args: ["%" + g + "%"])
+            let n = counts[g] ?? 0
             guard n >= 2 else { continue }
             out.append(CollInfo(id: "g:" + g, icon: "square.grid.2x2", name: g, why: "Genre TMDB · les mieux notés d'abord", count: n, preview: [],
                                 loader: { await MediaStore.ficheList(k, pids: p, cond: "f.genres LIKE ?", args: ["%" + g + "%"], order: "f.vote DESC", limit: 300) }, kind: "Catégorie"))

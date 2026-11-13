@@ -69,7 +69,8 @@ struct FilmDetailView: View {
                         top(proxy).id("top")
                         if saga.count > 1 { sagaRow }
                         if !universe.isEmpty {
-                            MediaRow(title: saga.count > 1 ? "Dans le même univers" : "De la même saga", items: universe, open: { openOther = $0 })
+                            // (même franchise d'après TMDB, autres sagas : jamais d'après la ressemblance des titres)
+                            MediaRow(title: "Dans le même univers", sub: "\(universe.count) film\(universe.count > 1 ? "s" : "") chez tes fournisseurs · même franchise selon TMDB", items: universe, open: { openOther = $0 })
                         }
                         castSection
                         if !similar.isEmpty { similarRow }

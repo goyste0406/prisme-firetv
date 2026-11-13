@@ -51,7 +51,17 @@ FILMS = [
     ("Conjuring : Sous l'emprise du diable", 2021, 112, 6.6, ["Horreur", "Thriller"], None, 140),
     ("Le Roi Lion", 1994, 89, 8.3, ["Animation", "Familial"], None, 900),
     ("Projet dernière chance", 2026, 156, 8.1, ["Science-Fiction", "Aventure"], None, 2),
+    # sagas / univers : vrais liens (collection, mot-clé de franchise TMDB) et faux amis (titres proches, remake homonyme)
+    ("Wonder Woman", 2017, 141, 7.2, ["Action", "Aventure", "Fantastique"], (468552, "Wonder Woman - Saga"), 45),
+    ("Wonder", 2017, 113, 8.1, ["Drame", "Familial"], None, 46),
+    ("Aquaman", 2018, 143, 6.9, ["Action", "Aventure", "Fantastique"], (573693, "Aquaman - Saga"), 47),
+    ("Wonder Wheel", 2017, 101, 6.2, ["Drame", "Romance"], None, 48),
+    ("Dune", 1984, 137, 6.3, ["Science-Fiction", "Aventure"], None, 49),
 ]
+KW = {"Wonder Woman": [(229266, "dc extended universe (dceu)"), (9715, "superhero")], "Aquaman": [(229266, "dc extended universe (dceu)"), (9715, "superhero")],
+      "Spider-Man : No Way Home": [(180547, "marvel cinematic universe (mcu)"), (9715, "superhero")], "Spider-Man : Far From Home": [(180547, "marvel cinematic universe (mcu)"), (9715, "superhero")],
+      "Spider-Man : Homecoming": [(180547, "marvel cinematic universe (mcu)"), (9715, "superhero")], "Wonder": [(818, "based on novel or book")],
+      "Dune": [(3386, "space opera"), (818, "based on novel or book")], "Dune : Deuxième partie": [(3386, "space opera")]}
 # mêmes films sous d'autres noms chez le fournisseur (test du dédoublonnage par identifiant TMDB)
 EXTRA_VOD = [(1901, 16, "FR| Interstellaire (2014) MULTI"), (1902, 16, "EN| Interstellar 4K"), (1903, 16, "Interstellar 2014 VOSTFR")]
 ALIASES = {"interstellaire": 16}
@@ -288,7 +298,8 @@ def movie(i):
             "production_companies": [{"id": sid_, "name": n, "logo_path": tmdb_path("g", f"co{sid_}")} for sid_, n in studios_for(i)],
             "images": {"logos": [{"iso_639_1": "fr", "file_path": tmdb_path("g", f"m{m}")}] if i % 3 != 2 else []},
             "watch/providers": providers_for(t),
-            "release_dates": {"results": ([{"iso_3166_1": "FR", "release_dates": [{"certification": CERTS[t], "type": 3}]}] if t in CERTS else [])}}
+            "release_dates": {"results": ([{"iso_3166_1": "FR", "release_dates": [{"certification": CERTS[t], "type": 3}]}] if t in CERTS else [])},
+            "keywords": {"keywords": [{"id": a, "name": b} for a, b in KW.get(t, [])]}}
 
 def tv(i):
     t, y, v, g, ns, ne, rt, ago = SERIES[i]

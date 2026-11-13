@@ -79,6 +79,12 @@ final class Database: @unchecked Sendable {
             exec("ALTER TABLE epg ADD COLUMN cat TEXT")
             exec("PRAGMA user_version=5")
         }
+        if v < 6 {
+            // 1.6 : mots-clés TMDB des fiches (« marvel cinematic universe (mcu) », « space opera »…) pour « Dans le même
+            // univers » confirmé par TMDB et pour « Mes goûts ». NULL = pas encore téléchargés (complétés en arrière-plan).
+            exec("ALTER TABLE fiche ADD COLUMN keywords TEXT")
+            exec("PRAGMA user_version=6")
+        }
     }
 
     // MARK: Requêtes
@@ -95,7 +101,11 @@ final class Database: @unchecked Sendable {
     }
 
     /// Exécute une requête et appelle `row` pour chaque ligne.
+    /// nombre de requêtes lancées (mesures du simulateur de test)
+    nonisolated(unsafe) static var queryCount = 0
+
     func query(_ sql: String, _ args: [Any?] = [], row: (Statement) -> Void) {
+        Database.queryCount += 1
         var st: OpaquePointer?
         guard sqlite3_prepare_v2(db, sql, -1, &st, nil) == SQLITE_OK, let st else { return }
         defer { sqlite3_finalize(st) }

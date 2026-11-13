@@ -348,29 +348,40 @@ struct ProfilePickerModal: View {
             VStack(alignment: .leading, spacing: 14) {
                 Text("QUI REGARDE ?").font(P.font(21, .bold)).tracking(3).foregroundStyle(.white.opacity(0.7))
                 Text("Choisis un profil").font(P.font(42, .bold)).padding(.bottom, 14)
-                ForEach(ps.profiles) { p in
-                    let st = ps.stats(p.id)
-                    Button { ps.use(p.id); close() } label: {
-                        pickRow(AnyView(ProfileAvatar(p: p, size: 74)), p.name,
-                                (p.limit != nil ? "lock|" + Profile.ageLabel(p.limit) + " · " : "") + "\(st.seen) film\(st.seen > 1 ? "s" : "") vu\(st.seen > 1 ? "s" : "") · \(st.hist) dans l'historique",
-                                radio: p.id == ps.current)
+                // jusqu'à 6 profils + Invité + Ajouter : liste qui défile dans un cadre de hauteur fixe (simulateur),
+                // coupée au bord (sur Apple TV une zone de défilement ne coupe pas ce qui dépasse)
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 14) {
+                        ForEach(ps.profiles) { p in
+                            let st = ps.stats(p.id)
+                            Button { ps.use(p.id); close() } label: {
+                                pickRow(AnyView(ProfileAvatar(p: p, size: 74)), p.name,
+                                        (p.limit != nil ? "lock|" + Profile.ageLabel(p.limit) + " · " : "") + "\(st.seen) film\(st.seen > 1 ? "s" : "") vu\(st.seen > 1 ? "s" : "") · \(st.hist) dans l'historique",
+                                        radio: p.id == ps.current)
+                            }
+                            .buttonStyle(PickRowStyle())
+                            .focused($focus, equals: p.id)
+                            .contextMenu { Button("Modifier ce profil") { ProfileUI.shared.editProfile = p.id; manage() } }
+                        }
+                        Button { ps.use(ProfileStore.guestID); close() } label: {
+                            pickRow(AnyView(ZStack { Circle().fill(Color(hex: "#64748b")); Image(systemName: "person").font(.system(size: 32)) }.frame(width: 74, height: 74)),
+                                    "Invité", "Regarder sans rien changer : ni historique, ni reprises", radio: ps.isGuest)
+                        }
+                        .buttonStyle(PickRowStyle()).focused($focus, equals: "guest")
+                        if ps.profiles.count < 6 {
+                            Button { if let p = ps.add() { ProfileUI.shared.editProfile = p.id; manage() } } label: {
+                                pickRow(AnyView(ZStack { Circle().strokeBorder(style: StrokeStyle(lineWidth: 2.5, dash: [7, 6])).foregroundStyle(.white.opacity(0.45)); Image(systemName: "plus").font(.system(size: 30, weight: .light)) }.frame(width: 64, height: 64).frame(width: 74)),
+                                        "Ajouter un profil", "Nom, couleur, langue, limite d'âge…", radio: nil)
+                            }
+                            .buttonStyle(PickRowStyle()).focused($focus, equals: "add")
+                        }
                     }
-                    .buttonStyle(PickRowStyle())
-                    .focused($focus, equals: p.id)
-                    .contextMenu { Button("Modifier ce profil") { ProfileUI.shared.editProfile = p.id; manage() } }
+                    .padding(.horizontal, 12).padding(.vertical, 10)
                 }
-                Button { ps.use(ProfileStore.guestID); close() } label: {
-                    pickRow(AnyView(ZStack { Circle().fill(Color(hex: "#64748b")); Image(systemName: "person").font(.system(size: 32)) }.frame(width: 74, height: 74)),
-                            "Invité", "Regarder sans rien changer : ni historique, ni reprises", radio: ps.isGuest)
-                }
-                .buttonStyle(PickRowStyle()).focused($focus, equals: "guest")
-                if ps.profiles.count < 6 {
-                    Button { if let p = ps.add() { ProfileUI.shared.editProfile = p.id; manage() } } label: {
-                        pickRow(AnyView(ZStack { Circle().strokeBorder(style: StrokeStyle(lineWidth: 2.5, dash: [7, 6])).foregroundStyle(.white.opacity(0.45)); Image(systemName: "plus").font(.system(size: 30, weight: .light)) }.frame(width: 64, height: 64).frame(width: 74)),
-                                "Ajouter un profil", "Nom, couleur, langue, limite d'âge…", radio: nil)
-                    }
-                    .buttonStyle(PickRowStyle()).focused($focus, equals: "add")
-                }
+                .frame(maxHeight: 610)
+                .fixedSize(horizontal: false, vertical: ps.profiles.count < 4)
+                .padding(.horizontal, -12)
+                .clipShape(RoundedRectangle(cornerRadius: 26, style: .continuous))
                 Button(action: manage) { Label("Gérer les profils", systemImage: "gearshape").font(P.font(28, .semibold)).padding(.horizontal, 30).frame(height: 64) }
                     .buttonStyle(ChipGlassStyle()).padding(.top, 12)
                 Text("Maintiens le clic sur un profil pour le modifier").font(P.font(21)).foregroundStyle(.white.opacity(0.55)).frame(maxWidth: .infinity)
@@ -449,21 +460,21 @@ struct WhoIsWatchingScreen: View {
                          : "OK pour choisir · ▶︎ pour reprendre directement · maintiens pour modifier").font(P.font(28)).foregroundStyle(.white.opacity(0.75))
                 }
                 .padding(.top, 150)
-                HStack(alignment: .top, spacing: 80) {
+                HStack(alignment: .top, spacing: itemGap) {
                     ForEach(ps.profiles) { p in
                         Button { choose(p.id, play: false) } label: { person(p) }
-                            .buttonStyle(WhoStyle(ring: !(counting && p.id == guess)))
+                            .buttonStyle(WhoStyle(ring: !(counting && p.id == guess), size: avSize))
                             .focused($focus, equals: p.id)
                             .contextMenu { Button("Modifier ce profil") { ps.use(p.id); ProfileUI.shared.editProfile = p.id; manage() } }
                             .onPlayPauseCommand { choose(p.id, play: true) }
                     }
                     Button { choose(ProfileStore.guestID, play: false) } label: {
-                        whoItem(AnyView(ZStack { Circle().fill(Color(hex: "#64748b")); Image(systemName: "person").font(.system(size: 76, weight: .regular)) }), "Invité", "sans historique")
-                    }.buttonStyle(WhoStyle()).focused($focus, equals: ProfileStore.guestID)
+                        whoItem(AnyView(ZStack { Circle().fill(Color(hex: "#64748b")); Image(systemName: "person").font(.system(size: avSize * 0.4, weight: .regular)) }), "Invité", "sans historique")
+                    }.buttonStyle(WhoStyle(size: avSize)).focused($focus, equals: ProfileStore.guestID)
                     if ps.profiles.count < 6 {
                         Button { if let p = ps.add() { ps.use(p.id); ProfileUI.shared.editProfile = p.id; manage() } } label: {
-                            whoItem(AnyView(ZStack { Circle().fill(Color.white.opacity(0.05)); Circle().strokeBorder(style: StrokeStyle(lineWidth: 3, dash: [10, 8])).foregroundStyle(.white.opacity(0.4)); Image(systemName: "plus").font(.system(size: 80, weight: .ultraLight)) }), "Ajouter", "nom au clavier ou sur l'iPhone")
-                        }.buttonStyle(WhoStyle()).focused($focus, equals: "add")
+                            whoItem(AnyView(ZStack { Circle().fill(Color.white.opacity(0.05)); Circle().strokeBorder(style: StrokeStyle(lineWidth: 3, dash: [10, 8])).foregroundStyle(.white.opacity(0.4)); Image(systemName: "plus").font(.system(size: avSize * 0.42, weight: .ultraLight)) }), "Ajouter", "nom au clavier ou sur l'iPhone")
+                        }.buttonStyle(WhoStyle(size: avSize)).focused($focus, equals: "add")
                     }
                 }
                 .padding(.top, 80)
@@ -493,6 +504,12 @@ struct WhoIsWatchingScreen: View {
 
     private var counting: Bool { !moved && countdown > 0 }
 
+    /// Taille des avatars selon le nombre d'éléments de la rangée (jusqu'à 6 profils + Invité + Ajouter) :
+    /// la rangée tient toujours dans l'écran, sans rien couper.
+    private var itemCount: Int { ps.profiles.count + 1 + (ps.profiles.count < 6 ? 1 : 0) }
+    private var avSize: CGFloat { itemCount <= 6 ? 190 : itemCount == 7 ? 172 : 152 }
+    private var itemGap: CGFloat { itemCount <= 5 ? 80 : 40 }
+
     private var hello: String {
         let h = Calendar.current.component(.hour, from: Date())
         return h >= 5 && h < 12 ? "Bonjour" : h < 18 && h >= 12 ? "Bon après-midi" : "Bonsoir"
@@ -500,12 +517,12 @@ struct WhoIsWatchingScreen: View {
 
     private func person(_ p: Profile) -> some View {
         let n = news[p.id]?.count ?? 0
-        return whoItem(AnyView(ProfileAvatar(p: p, size: 190)
+        return whoItem(AnyView(ProfileAvatar(p: p, size: avSize)
             .overlay {
                 // décompte des 5 s : il remplace l'anneau de sélection (même cercle, qui se vide)
                 if counting && p.id == guess {
                     Circle().trim(from: 0, to: CGFloat(countdown) / 5).stroke(Color.white, style: StrokeStyle(lineWidth: 8, lineCap: .round))
-                        .rotationEffect(.degrees(-90)).frame(width: 206, height: 206)
+                        .rotationEffect(.degrees(-90)).frame(width: avSize + 16, height: avSize + 16)
                         .animation(.linear(duration: 1), value: countdown)
                 }
             }
@@ -520,11 +537,11 @@ struct WhoIsWatchingScreen: View {
 
     private func whoItem(_ av: AnyView, _ name: String, _ sub: String) -> some View {
         VStack(spacing: 16) {
-            av.frame(width: 190, height: 190)
-            Text(name).font(P.font(32, .bold)).lineLimit(1)
-            SubLabel(text: sub).font(P.font(22)).foregroundStyle(.white.opacity(0.65)).multilineTextAlignment(.center).lineLimit(2).frame(width: 230)
+            av.frame(width: avSize, height: avSize)
+            Text(name).font(P.font(32, .bold)).lineLimit(1).minimumScaleFactor(0.7)
+            SubLabel(text: sub).font(P.font(22)).foregroundStyle(.white.opacity(0.65)).multilineTextAlignment(.center).lineLimit(2).frame(width: avSize + 40)
         }
-        .frame(width: 230)
+        .frame(width: avSize + 40)
     }
 
     /// Carte « Steven regardait Lupin · 18 % vu » (vraies données du profil sélectionné).
@@ -590,14 +607,16 @@ struct WhoIsWatchingScreen: View {
 
 struct WhoStyle: ButtonStyle {
     var ring = true
-    func makeBody(configuration c: Configuration) -> some View { Inner(c: c, ring: ring) }
+    var size: CGFloat = 190
+    func makeBody(configuration c: Configuration) -> some View { Inner(c: c, ring: ring, size: size) }
     private struct Inner: View {
         let c: ButtonStyleConfiguration
         let ring: Bool
+        let size: CGFloat
         @Environment(\.isFocused) var f
         var body: some View {
             c.label.foregroundStyle(.white)
-                .overlay(alignment: .top) { Circle().stroke(Color.white, lineWidth: f && ring ? 8 : 0).frame(width: 206, height: 206).offset(y: -8) }
+                .overlay(alignment: .top) { Circle().stroke(Color.white, lineWidth: f && ring ? 8 : 0).frame(width: size + 16, height: size + 16).offset(y: -8) }
                 .scaleEffect(f ? 1.08 : (c.isPressed ? 0.96 : 1))
                 .shadow(color: .black.opacity(f ? 0.5 : 0), radius: 24, y: 12)
                 .animation(.easeOut(duration: 0.18), value: f)
