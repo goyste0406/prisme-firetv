@@ -28,6 +28,7 @@ struct FilmDetailView: View {
     @State private var showTrailer: Trailer?
     @State private var loaded = false
     @FocusState private var playFocused: Bool
+    @FocusState private var versionFocused: Bool
 
     private var cur: MediaItem { chosen ?? item }
     private var title: String { (fiche?.title.isEmpty == false) ? fiche!.title : item.clean.title }
@@ -80,7 +81,7 @@ struct FilmDetailView: View {
             if pickVersion {
                 VersionsModal(title: title, versions: versions, current: cur, label: { versionInfo($0) },
                               pick: { v in chosen = v; pickVersion = false; play(from: resumeAt ?? 0, item: v) },
-                              close: { pickVersion = false })
+                              close: { pickVersion = false; DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { versionFocused = true } })
                     .transition(.opacity.combined(with: .scale(scale: 0.97)))
             }
         }
@@ -205,6 +206,7 @@ struct FilmDetailView: View {
                     Text("\(max(1, versions.count)) VERSION\(versions.count > 1 ? "S" : "") ▾").font(P.font(19, .bold)).tracking(1.2).opacity(0.6)
                 }
             }.buttonStyle(FicheButtonStyle()).opacity(peek ? 0.22 : 1)
+            .focused($versionFocused)
             if let t = trailer {
                 // bouton « bande-annonce » du simulateur : sélectionné, la vidéo de fond passe devant le texte ; OK = plein écran
                 Button { showTrailer = t } label: { Image(systemName: "film").font(P.font(30, .semibold)) }
@@ -343,7 +345,8 @@ struct FilmDetailView: View {
 
     private var creditLine: String {
         var parts: [String] = []
-        if !info.director.isEmpty { parts.append("Réalisé par " + info.director) }
+        let dir = (fiche?.director.isEmpty == false) ? fiche!.director : info.director
+        if !dir.isEmpty { parts.append("Réalisé par " + dir) }
         if year > 0 { parts.append(String(year)) }
         if providerRating > 0 { parts.append("Note " + String(format: "%.1f", providerRating)) }
         if tmdbVote > 0 { parts.append("TMDB \(Int((tmdbVote * 10).rounded())) %") }

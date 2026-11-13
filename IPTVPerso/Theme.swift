@@ -317,34 +317,44 @@ struct BigTitle: View {
     var maxWidth: CGFloat = 1050
     var body: some View {
         let s = face.size(for: text) * scale
-        let lh = s * (face == .bebas ? 0.95 : 1.04)
+        let lh = (s * (face == .bebas ? 0.95 : 1.04)).rounded()
         let ui = face.uiFont(s)
-        // hauteur de deux lignes au plus, mesurée
-        let rect = (text as NSString).boundingRect(with: CGSize(width: maxWidth, height: .greatestFiniteMagnitude), options: [.usesLineFragmentOrigin],
-                                                    attributes: [.font: ui, .kern: face.tracking(s)], context: nil)
-        let lines = min(2, max(1, Int(ceil(rect.height / (ui.lineHeight * 0.98)))))
-        TitleLabel(text: text, font: ui, kern: face.tracking(s), lineHeight: lh, width: maxWidth)
-            .frame(width: maxWidth, height: lh * CGFloat(lines) + s * 0.12, alignment: .leading)
+        let attrs: [NSAttributedString.Key: Any] = [.font: ui, .kern: face.tracking(s)]
+        // largeur sur une ligne, et nombre de lignes (deux au plus) à la largeur disponible
+        let one = (text as NSString).size(withAttributes: attrs).width
+        let rect = (text as NSString).boundingRect(with: CGSize(width: maxWidth, height: .greatestFiniteMagnitude), options: [.usesLineFragmentOrigin], attributes: attrs, context: nil)
+        let lines = one <= maxWidth ? 1 : min(2, max(1, Int((rect.height / ui.lineHeight).rounded(.up))))
+        let w = one <= maxWidth ? ceil(one) + 4 : maxWidth
+        let pad = (s * 0.3).rounded()     // place pour les accents et les jambages (sinon coupés)
+        TitleLabel(text: text, font: ui, kern: face.tracking(s), lineHeight: lh, pad: pad)
+            .frame(width: w, height: lh * CGFloat(lines) + 2 * pad)
+            .padding(.vertical, -pad)
             .shadow(color: .black.opacity(0.4), radius: 30, y: 4)
     }
 }
 
+private final class PaddedLabel: UILabel {
+    var pad: CGFloat = 0
+    override func drawText(in rect: CGRect) { super.drawText(in: rect.insetBy(dx: 0, dy: pad)) }
+}
+
 private struct TitleLabel: UIViewRepresentable {
-    let text: String, font: UIFont, kern: CGFloat, lineHeight: CGFloat, width: CGFloat
-    func makeUIView(context: Context) -> UILabel {
-        let l = UILabel()
+    let text: String, font: UIFont, kern: CGFloat, lineHeight: CGFloat, pad: CGFloat
+    func makeUIView(context: Context) -> PaddedLabel {
+        let l = PaddedLabel()
         l.numberOfLines = 2
-        l.lineBreakMode = .byTruncatingTail
         l.textColor = .white
+        l.clipsToBounds = false
         l.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        l.setContentHuggingPriority(.defaultLow, for: .horizontal)
         return l
     }
-    func updateUIView(_ l: UILabel, context: Context) {
+    func updateUIView(_ l: PaddedLabel, context: Context) {
         let p = NSMutableParagraphStyle()
         p.minimumLineHeight = lineHeight; p.maximumLineHeight = lineHeight
-        p.lineBreakMode = .byWordWrapping
+        p.lineBreakMode = .byTruncatingTail
+        l.pad = pad
         l.attributedText = NSAttributedString(string: text, attributes: [.font: font, .kern: kern, .paragraphStyle: p, .foregroundColor: UIColor.white])
-        l.preferredMaxLayoutWidth = width
     }
 }
 

@@ -88,7 +88,7 @@ struct SeriesDetailView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 22) {
                 HStack(alignment: .center, spacing: 22) {
-                    BigTitle(text: title, face: TitleFace.of(genres: genres), scale: 0.55, maxWidth: 600).fixedSize(horizontal: true, vertical: false)
+                    BigTitle(text: title, face: TitleFace.of(genres: genres), scale: 0.55, maxWidth: 600)
                     Button { showSyn = true } label: { Image(systemName: "info").font(P.font(24, .bold)).frame(width: 30, height: 30) }
                         .buttonStyle(GlassStyle(radius: 30, minH: 54))
                 }
