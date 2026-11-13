@@ -72,7 +72,7 @@ struct ProvidersSettingsView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            TopBar()
+            TopBar(claimFocus: true)
             HStack(alignment: .top, spacing: 34) {
                 VStack(alignment: .leading, spacing: 8) {
                     ForEach(0..<ProvidersSettingsView.cats.count, id: \.self) { i in

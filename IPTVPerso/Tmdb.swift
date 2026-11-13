@@ -57,7 +57,9 @@ enum FicheStore {
                      runtime: r.int(6), vote: r.double(7), year: r.int(8), coll: r.int(9), collName: r.str(12), cast: cast, wp: wp,
                      pid: r.str(13), sid: r.str(14))
     }
-    static let cols = "tmdb,title,overview,poster,backdrop,genres,runtime,vote,year,coll,cast,wp,collname,pid,sid"
+    /// « cast » est un mot réservé de SQLite (CAST) : sans guillemets, la lecture des fiches échouait toujours
+    /// (elles étaient bien téléchargées et enregistrées, mais jamais relues → fiches, saga, « Où le regarder » vides).
+    static let cols = "tmdb,title,overview,poster,backdrop,genres,runtime,vote,year,coll,\"cast\",wp,collname,pid,sid"
 
     /// Fiches de plusieurs titres d'un coup (clé = titre propre + année).
     static func byKeys(_ kind: MediaKind, _ keys: [String]) -> [String: Fiche] {

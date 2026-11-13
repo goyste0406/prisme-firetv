@@ -52,7 +52,7 @@ struct MediaHomeView: View {
     @State private var showAllNew = false
     @FocusState private var heroFocus: Bool
 
-    private var loadKey: String { "\(kind.rawValue)|\(store.catalogVersion)|\(store.active.map(\.id).joined())|\(fiches.version / 25)" }
+    private var loadKey: String { "\(kind.rawValue)|\(store.catalogVersion)|\(store.active.map(\.id).joined())|\(fiches.running ? fiches.version / 25 : fiches.version)" }
     private var pids: [String] { store.active.map(\.id) }
     private var providerNames: String { store.active.map(\.name).joined(separator: ", ") }
     private var unit: String { kind == .film ? "films" : "séries" }
@@ -681,6 +681,7 @@ struct PosterButton: View {
 /// barre de progression si le titre est commencé. Sans image : le titre propre sur un dégradé.
 struct PosterTile: View {
     let item: MediaItem
+    var showNew = true
     @ObservedObject var watch = WatchStore.shared
     var body: some View {
         ZStack(alignment: .top) {
@@ -715,7 +716,7 @@ struct PosterTile: View {
 
     /// « NOUVEAU · AUJOURD'HUI » pendant 7 jours après l'ajout chez le fournisseur.
     private var newLabel: String? {
-        guard item.added > 0 else { return nil }
+        guard showNew, item.added > 0 else { return nil }
         let d = (Int(Date().timeIntervalSince1970) - item.added) / 86400
         guard d >= 0 && d <= 7 else { return nil }
         return "NOUVEAU · " + (agoText(item.added) ?? "").uppercased()
@@ -790,7 +791,7 @@ struct MineView: View {
     var body: some View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 30) {
-                TopBar()
+                TopBar(claimFocus: true)
                 VStack(alignment: .leading, spacing: 8) {
                     Text("Ma liste").font(P.font(64, .bold))
                     Text("Ce que tu as ajouté avec +, et ce que tu as commencé.").font(P.font(25)).foregroundStyle(P.dim)
@@ -834,7 +835,7 @@ struct SearchView: View {
     var body: some View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 30) {
-                TopBar()
+                TopBar(claimFocus: true)
                 VStack(alignment: .leading, spacing: 18) {
                     Text("Recherche").font(P.font(64, .bold))
                     TextField("Un film, une série…", text: $q).font(P.font(30)).frame(maxWidth: 1100)

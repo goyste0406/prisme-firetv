@@ -119,7 +119,7 @@ struct Top10Row: View {
                             OutlineNumber(n: r.rank).offset(y: 40)
                             Button { open(r.item) } label: {
                                 ZStack(alignment: .topTrailing) {
-                                    PosterTile(item: r.item).frame(width: 220, height: 330)
+                                    PosterTile(item: r.item, showNew: false).frame(width: 220, height: 330)
                                     if let m = r.move { MoveBadge(text: m).padding(10) }
                                 }
                             }

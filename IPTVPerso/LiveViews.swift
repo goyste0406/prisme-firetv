@@ -24,7 +24,7 @@ struct LiveHomeView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            TopBar()
+            TopBar(claimFocus: true)
             HStack(alignment: .top, spacing: 34) {
                 railView
                 content

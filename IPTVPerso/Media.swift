@@ -106,6 +106,23 @@ enum TitleTools {
         return CleanTitle(title: s, year: y, tags: tags)
     }
 
+    /// Nom de catégorie lisible (règle du simulateur) : « FR| FILMS NETFLIX » → « Films Netflix ».
+    static func category(_ n: String) -> String {
+        var c = n.replacingOccurrences(of: #"^\s*[\[(|]?\s*(france|french|fra|fr)\s*[\])|:\-–]+\s*"#, with: "", options: [.regularExpression, .caseInsensitive])
+        c = c.replacingOccurrences(of: #"^(fra|fr)\s+"#, with: "", options: [.regularExpression, .caseInsensitive])
+        c = c.replacingOccurrences(of: #"^\s*[\[(|]?\s*(be|ca|ch|qc)\s*[\])|:\-–]+\s*"#, with: "", options: [.regularExpression, .caseInsensitive])
+        c = c.replacingOccurrences(of: #"^[|:\-–\s]+"#, with: "", options: .regularExpression).trimmingCharacters(in: .whitespaces)
+        if c.isEmpty { c = n.isEmpty ? "Divers" : n }
+        if c == c.uppercased() {
+            c = c.lowercased().split(separator: " ", omittingEmptySubsequences: false).map { w -> String in
+                let u = String(w)
+                if ["tnt", "sat", "hd", "fhd", "uhd", "vod", "ppv", "tv", "hbo", "ocs"].contains(u) { return u.uppercased() }
+                return u.prefix(1).uppercased() + u.dropFirst()
+            }.joined(separator: " ")
+        }
+        return c
+    }
+
     static func fold(_ s: String) -> String {
         s.folding(options: [.diacriticInsensitive, .caseInsensitive], locale: Locale(identifier: "fr_FR"))
             .replacingOccurrences(of: #"[^a-z0-9]+"#, with: " ", options: .regularExpression).trimmingCharacters(in: .whitespaces)
@@ -297,7 +314,7 @@ enum MediaStore {
             """
         return await Database.shared.read { db in
             var out: [Cat] = []
-            db.query(sql, pids) { r in out.append(Cat(pid: r.str(0), cid: r.str(1), name: r.str(2), count: r.int(3))) }
+            db.query(sql, pids) { r in out.append(Cat(pid: r.str(0), cid: r.str(1), name: TitleTools.category(r.str(2)), count: r.int(3))) }
             return out
         }
     }

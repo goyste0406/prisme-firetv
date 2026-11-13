@@ -46,7 +46,7 @@ enum LiveStore {
             db.query("""
                 SELECT c.pid, c.cid, c.name, COUNT(l.sid) FROM category c JOIN live l ON l.pid=c.pid AND l.cid=c.cid
                 WHERE c.type='live' AND c.pid IN (\(ph)) GROUP BY c.pid, c.cid ORDER BY c.pid, c.pos
-                """, providers) { r in out.append(LiveCategory(pid: r.str(0), cid: r.str(1), name: r.str(2), count: r.int(3))) }
+                """, providers) { r in out.append(LiveCategory(pid: r.str(0), cid: r.str(1), name: TitleTools.category(r.str(2)), count: r.int(3))) }
             return out
         }
     }

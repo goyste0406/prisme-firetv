@@ -214,6 +214,9 @@ final class Nav: ObservableObject {
 struct TopBar: View {
     @ObservedObject var nav = Nav.shared
     @FocusState private var focus: AppTab?
+    /// pages sans grande affiche (TV en direct, Ma liste, Recherche, Réglages) : en arrivant sur la page,
+    /// la sélection reste sur l'onglet choisi au lieu de sauter sur « Films »
+    var claimFocus = false
 
     var body: some View {
         ZStack {
@@ -237,6 +240,11 @@ struct TopBar: View {
         .contentShape(Rectangle())
         .focusSection()
         .defaultFocus($focus, nav.tab, priority: .userInitiated)
+        .onAppear {
+            guard claimFocus else { return }
+            let t = nav.tab
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { focus = t }
+        }
     }
 
     private func tab(_ t: AppTab, _ label: String) -> some View {

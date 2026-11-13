@@ -259,8 +259,8 @@ struct SeriesDetailView: View {
             HStack(spacing: 8) {
                 ForEach(0..<SeriesDetailView.tabs.count, id: \.self) { i in
                     let k = SeriesDetailView.tabs[i].0
-                    Button { tab = k } label: { Text(SeriesDetailView.tabs[i].1).font(P.font(24, .semibold)) }
-                        .buttonStyle(TabPillStyle(selected: tab == k))
+                    Button { tab = k } label: { Text(SeriesDetailView.tabs[i].1).font(P.font(23, .semibold)).lineLimit(1).fixedSize() }
+                        .buttonStyle(PanelTabStyle(selected: tab == k))
                         .focused($tabFocus, equals: k)
                 }
             }
@@ -520,6 +520,24 @@ struct EpisodeStyle: ButtonStyle {
                 .overlay(alignment: .leading) { if current && !f { Capsule().fill(.white).frame(width: 4).padding(.vertical, 14) } }
                 .scaleEffect(f ? 1.02 : 1).shadow(color: .black.opacity(f ? 0.4 : 0), radius: 16, y: 8)
                 .animation(.easeOut(duration: 0.15), value: f)
+        }
+    }
+}
+
+
+/// Onglets du panneau d'une fiche série : plus compacts que la barre du haut, pour tenir sur une ligne.
+struct PanelTabStyle: ButtonStyle {
+    let selected: Bool
+    func makeBody(configuration c: Configuration) -> some View { Inner(c: c, selected: selected) }
+    private struct Inner: View {
+        let c: ButtonStyleConfiguration
+        let selected: Bool
+        @Environment(\.isFocused) var f
+        var body: some View {
+            c.label.foregroundStyle(f ? Color.black : (selected ? Color.white : Color.white.opacity(0.7)))
+                .padding(.horizontal, 20).frame(height: 58)
+                .background(Capsule().fill(f ? Color.white : (selected ? Color.white.opacity(0.18) : .clear)))
+                .scaleEffect(f ? 1.06 : 1).animation(.easeOut(duration: 0.15), value: f)
         }
     }
 }
