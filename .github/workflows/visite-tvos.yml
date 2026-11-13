@@ -65,6 +65,9 @@ jobs:
           mkdir -p jpg
           for f in shots/*.png; do n=$(basename "$f" .png); sips -s format jpeg -s formatOptions 72 -Z 1600 "$f" --out "jpg/$n.jpg" >/dev/null 2>&1 || true; done
           cp shots/focus.txt jpg/ 2>/dev/null || true
+          # classement de la TV en direct écrit par l'appli (simulateur de test seulement)
+          C=$(xcrun simctl get_app_container booted com.steven.iptvperso data 2>/dev/null || true)
+          [ -n "$C" ] && cp "$C/Documents/classement-tv.txt" jpg/ 2>/dev/null || true
           grep -E "error:|Test Case|passed|failed" test.log > jpg/test-resume.txt 2>/dev/null || true
           (cd jpg && zip -q ../visite.zip *)
           ls -lh visite.zip

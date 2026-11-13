@@ -73,6 +73,12 @@ final class Database: @unchecked Sendable {
             exec("ALTER TABLE fiche ADD COLUMN cert TEXT")
             exec("PRAGMA user_version=4")
         }
+        if v < 5 {
+            // 1.6 : genre de chaque programme du guide (catégorie XMLTV), pour la rangée « En ce moment »
+            // (colonne ajoutée : le guide existant est gardé, le genre arrive à la prochaine mise à jour du guide)
+            exec("ALTER TABLE epg ADD COLUMN cat TEXT")
+            exec("PRAGMA user_version=5")
+        }
     }
 
     // MARK: Requêtes

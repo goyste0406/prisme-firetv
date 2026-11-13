@@ -111,6 +111,24 @@ final class Visite: XCTestCase {
         press(.left, 12); shot("23-tv-gauche")
         press(.up, 10); shot("24-tv-retour-barre")
 
+        // TV en direct : catégories fixes (Explorer par univers), « En ce moment à la télé », colonne d'icônes
+        relaunch(["-prisme.debug.tab", "live"])
+        shot("25-tv-accueil")
+        downUntil(["Généraliste", "Info"], max: 8, prefix: "25b-tv-vers-univers")
+        for i in 1...10 { press(.right); shot(String(format: "26-univers-%02d", i)) }
+        press(.left, 12)
+        press(.down); shot("27-en-ce-moment")
+        for i in 1...4 { press(.right); shot(String(format: "27b-en-ce-moment-%02d", i)) }
+        press(.select); Thread.sleep(forTimeInterval: 2); shot("27c-en-ce-moment-chaines")
+        back(); shot("27d-retour")
+        press(.down, 3); shot("27e-tv-bas")
+        // colonne d'icônes : chaque catégorie ouvre sa grille
+        press(.left, 12); shot("28-colonne")
+        for i in 1...12 { press(.down); Thread.sleep(forTimeInterval: 0.6); shot(String(format: "28b-colonne-%02d", i)) }
+        press(.right); Thread.sleep(forTimeInterval: 1); shot("29-grille-categorie")
+        for i in 1...4 { press(.down); shot(String(format: "29b-grille-bas-%02d", i)) }
+        press(.up, 8); shot("29c-grille-haut")
+
         tab(3); shot("30-maliste")
         press(.down, 2); press(.up, 4); shot("31-maliste-retour-barre")
 

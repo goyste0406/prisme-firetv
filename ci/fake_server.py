@@ -84,9 +84,40 @@ CHANNELS = [
     ("FR| OCS Max", "5", "ocsmax.fr"), ("FR| Ciné+ Premier", "5", "cinepremier.fr"), ("FR| TCM Cinéma", "5", "tcm.fr"),
     ("FR| M6 HD", "6", "m6.fr"), ("FR| France 2 HD", "6", "france2.fr"),
 ]
-LIVE_CATS = [("1", "FR| TNT"), ("2", "FR| INFOS"), ("3", "FR| SPORT"), ("4", "FR| JEUNESSE"), ("5", "FR| CINÉMA"), ("6", "FR| TNT HD (SECOURS)")]
+# Liste réaliste (format des fournisseurs) pour vérifier la classification et les doublons de la TV en direct :
+# copies FHD/HD/HEVC/secours (parfois sans guide), +1, régions, autres pays, chaînes inconnues.
+def _x(cat, names, epg=True):
+    return [(n, cat, (re.sub(r"[^a-z0-9]", "", re.sub(r"^(FR|BE|UK)\| ", "", n).lower()) + ".x") if epg else "") for n in names]
+CHANNELS += _x("1", ["FR| TF1 HEVC", "FR| TF1 4K", "FR| TF1 +1", "FR| France 3 Alsace", "FR| France 3 Paris Île-de-France", "FR| France 4", "FR| RMC Story", "FR| RMC Découverte",
+                     "FR| Chérie 25", "FR| LCP", "FR| T18", "FR| Novo19", "FR| NRJ 12", "FR| CStar", "FR| Paris Première"])
+CHANNELS += _x("1", ["FR| TF1 (Backup)", "FR| France 2 SD", "|FR| M6 ᴴᴰ"], epg=False)
+CHANNELS += _x("2", ["FR| France 24", "FR| Euronews", "FR| i24NEWS", "FR| BFM Business", "FR| Public Sénat", "FR| TV5Monde Info", "FR| BFM Paris", "FR| LCI FHD"])
+CHANNELS += _x("7", ["FR| RMC Sport 1", "FR| RMC Sport 2", "FR| beIN SPORTS 2", "FR| beIN SPORTS 3", "FR| beIN SPORTS MAX 4", "FR| Eurosport 2", "FR| Canal+ Foot", "FR| Canal+ Sport 360",
+                     "FR| Equidia", "FR| Automoto", "FR| Golf+", "FR| Infosport+", "FR| Sport en France", "FR| Multisports 1", "FR| DAZN 1", "FR| Ligue 1+ 1", "FR| OL Play", "FR| Trace Sport Stars"])
+CHANNELS += _x("8", ["FR| Ciné+ Frisson", "FR| Ciné+ Émotion", "FR| Ciné+ Famiz", "FR| Ciné+ Classic", "FR| OCS City", "FR| OCS Choc", "FR| OCS Géants", "FR| Paramount Channel", "FR| Warner TV",
+                     "FR| Action", "FR| Polar+", "FR| RTL9", "FR| Canal+ Cinéma(s)", "FR| Canal+ Grand Écran", "FR| Série Club", "FR| 13ème Rue", "FR| Syfy", "FR| Téva", "FR| AB1",
+                     "FR| Novelas TV", "FR| Canal+ Séries", "FR| Comédie+", "FR| Sundance TV"])
+CHANNELS += _x("9", ["FR| Planète+", "FR| Planète+ Crime", "FR| Ushuaïa TV", "FR| National Geographic", "FR| Nat Geo Wild", "FR| Discovery Channel", "FR| Histoire TV", "FR| Toute l'Histoire",
+                     "FR| Animaux", "FR| Science & Vie TV", "FR| Voyage", "FR| Trek", "FR| Seasons", "FR| Chasse et Pêche", "FR| Museum TV", "FR| Canal+ Docs"])
+CHANNELS += _x("10", ["FR| MTV Hits", "FR| MCM", "FR| NRJ Hits", "FR| M6 Music", "FR| Trace Urban", "FR| Mezzo", "FR| Melody", "FR| RFM TV", "FR| Clubbing TV", "FR| Mezzo Live HD"])
+CHANNELS += _x("11", ["FR| Tiji", "FR| Disney Junior", "FR| Nickelodeon", "FR| Nickelodeon Junior", "FR| Cartoon Network", "FR| Cartoonito", "FR| Boomerang", "FR| Piwi+", "FR| Télétoon+",
+                      "FR| Boing", "FR| Mangas", "FR| Canal+ Kids", "FR| Okoo"])
+CHANNELS += _x("12", ["FR| Tébéo", "FR| TV Rennes", "FR| Vosges Télévision", "FR| Wéo", "FR| BFM Lyon", "FR| France 3 Bretagne", "FR| France 3 Corse ViaStella"])
+CHANNELS += _x("13", ["UK| BBC One", "UK| BBC Two", "UK| ITV 1", "UK| Sky Sports Main Event", "UK| Sky Cinema Premiere", "UK| Sky News", "UK| Discovery Channel"])
+CHANNELS += _x("14", ["BE| TF1", "BE| La Une", "BE| RTL TVI", "BE| Tipik", "BE| LN24", "BE| Club RTL"])
+CHANNELS += _x("15", ["FR| TF1 UHD", "FR| France 2 UHD", "FR| beIN SPORTS 1 4K", "FR| Canal+ 4K"])
+CHANNELS += _x("16", ["FR| Game One", "FR| J-One", "FR| RMC Life", "FR| Gong", "FR| TLC", "FR| Fashion TV", "FR| E! Entertainment", "FR| Comedy Central"])
+CHANNELS += _x("1", ["FR| Kombat Sport", "FR| Le Grand Show", "FR| Alpha TV"])
+LIVE_CATS = [("1", "FR| TNT"), ("2", "FR| INFOS"), ("3", "FR| SPORT"), ("4", "FR| JEUNESSE"), ("5", "FR| CINÉMA"), ("6", "FR| TNT HD (SECOURS)"),
+             ("7", "FR| SPORTS"), ("8", "FR| CINEMA & SERIES"), ("9", "FR| DOCUMENTAIRES"), ("10", "FR| MUSIQUE"), ("11", "FR| ENFANTS"), ("12", "FR| REGIONS"),
+             ("13", "UK| GENERAL"), ("14", "BE| BELGIQUE"), ("15", "FR| 4K UHD"), ("16", "FR| DIVERTISSEMENT")]
 VOD_CATS = [("10", "FR| NOUVEAUTÉS"), ("11", "FR| FILMS NETFLIX"), ("12", "FR| FILMS CLASSIQUES"), ("13", "FR| DISNEY+")]
 SER_CATS = [("20", "FR| SÉRIES FRANÇAISES"), ("21", "FR| SÉRIES NETFLIX"), ("22", "FR| SÉRIES HBO")]
+PROG_CAT = {"Le 20h": "Journal", "Journal de 13h": "Journal", "Météo": "Météo", "C dans l'air": "Magazine d'actualité", "Koh-Lanta": "Téléréalité",
+            "Des chiffres et des lettres": "Jeu", "Questions pour un champion": "Jeu", "Top Chef": "Divertissement", "Zone interdite": "Magazine", "Quotidien": "Talk-show",
+            "Le Grand Match": "Sport", "Ligue des champions": "Football", "Football : Ligue 1": "Football", "Rugby : Top 14": "Rugby", "Bob l'éponge": "Dessin animé",
+            "Les Simpson": "Dessin animé", "Capital": "Magazine", "Envoyé spécial": "Magazine d'information", "Thalassa": "Documentaire", "Cash Investigation": "Magazine d'information",
+            "Le Bureau des légendes": "Série dramatique", "Dune": "Film", "Inception": "Film"}
 PROGS = ["Le 20h", "Koh-Lanta", "Journal de 13h", "Des chiffres et des lettres", "Questions pour un champion", "Top Chef", "Zone interdite",
          "C dans l'air", "Quotidien", "Le Grand Match", "Ligue des champions", "Bob l'éponge", "Les Simpson", "Météo", "Capital",
          "Envoyé spécial", "Thalassa", "Cash Investigation", "Le Bureau des légendes", "Dune", "Inception", "Football : Ligue 1", "Rugby : Top 14"]
@@ -205,7 +236,7 @@ def xmltv():
     lines = ['<?xml version="1.0" encoding="UTF-8"?>', "<tv>"]
     seen = set()
     for n, c, e in CHANNELS:
-        if e in seen: continue
+        if not e or e in seen: continue
         seen.add(e)
         lines.append(f'<channel id="{e}"><display-name>{e}</display-name></channel>')
         r = random.Random(e)
@@ -214,7 +245,9 @@ def xmltv():
             d = r.choice([30, 45, 60, 90, 110])
             a = time.strftime("%Y%m%d%H%M%S +0000", time.gmtime(t)); b = time.strftime("%Y%m%d%H%M%S +0000", time.gmtime(t + d * 60))
             title = r.choice(PROGS)
-            lines.append(f'<programme start="{a}" stop="{b}" channel="{e}"><title>{title}</title><desc>{title} : description.</desc></programme>')
+            cat = PROG_CAT.get(title, "")
+            ct = f'<category lang="fr">{cat}</category>' if cat else ""
+            lines.append(f'<programme start="{a}" stop="{b}" channel="{e}"><title>{title}</title><desc>{title} : description.</desc>{ct}</programme>')
             t += d * 60
     lines.append("</tv>")
     return "\n".join(lines)

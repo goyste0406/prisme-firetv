@@ -161,8 +161,8 @@ final class EPGParser: NSObject, XMLParserDelegate {
     private let db: Database
     private var rows: [[Any?]] = []
     private var cur: (ch: String, start: Int, stop: Int)?
-    private var title = "", descr = "", text = ""
-    private var inTitle = false, inDesc = false
+    private var title = "", descr = "", text = "", cat = ""
+    private var inTitle = false, inDesc = false, inCat = false, catFr = false, curFr = false
     private var count = 0
     private var cleared = false
     private let from = Int(Date().timeIntervalSince1970) - 2 * 86400
@@ -191,7 +191,7 @@ final class EPGParser: NSObject, XMLParserDelegate {
             db.exec("COMMIT")
             cleared = true
         }
-        db.insertMany("INSERT INTO epg VALUES(?,?,?,?,?)", rows)
+        db.insertMany("INSERT INTO epg(ch,start,stop,title,descr,cat) VALUES(?,?,?,?,?,?)", rows)
         rows.removeAll(keepingCapacity: true)
     }
 
@@ -219,24 +219,28 @@ final class EPGParser: NSObject, XMLParserDelegate {
             guard keep.contains(ch) else { cur = nil; return }
             let st = Self.time(a["start"] ?? ""), sp = Self.time(a["stop"] ?? "")
             cur = (sp > from && st < to && sp > st) ? (ch, st, sp) : nil
-            title = ""; descr = ""
+            title = ""; descr = ""; cat = ""; catFr = false
         case "title": if cur != nil { inTitle = true; text = "" }
+        case "category": if cur != nil { inCat = true; text = ""; curFr = (a["lang"] ?? "").lowercased().hasPrefix("fr") }
         case "desc": if cur != nil { inDesc = true; text = "" }
         default: break
         }
     }
 
     func parser(_ parser: XMLParser, foundCharacters string: String) {
-        if inTitle || inDesc { text += string }
+        if inTitle || inDesc || inCat { text += string }
     }
 
     func parser(_ parser: XMLParser, didEndElement name: String, namespaceURI: String?, qualifiedName: String?) {
         switch name {
         case "title": if inTitle { if title.isEmpty { title = text }; inTitle = false }
         case "desc": if inDesc { if descr.isEmpty { descr = String(text.prefix(400)) }; inDesc = false }
+        case "category":
+            // le premier genre, ou le premier en français s'il y en a un
+            if inCat { let t = text.trimmingCharacters(in: .whitespacesAndNewlines); if !t.isEmpty, cat.isEmpty || (curFr && !catFr) { cat = String(t.prefix(60)); catFr = curFr } ; inCat = false }
         case "programme":
             if let c = cur {
-                rows.append([c.ch, c.start, c.stop, title, descr]); count += 1
+                rows.append([c.ch, c.start, c.stop, title, descr, cat.isEmpty ? nil : cat]); count += 1
                 if rows.count >= 5000 { flush() }
             }
             cur = nil

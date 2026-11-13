@@ -4,23 +4,33 @@ import UIKit
 // Chaînes telles que le simulateur les présente : vrai nom (sans « FR| » ni « FHD »), une seule fois chacune
 // (les copies HD / SD / secours deviennent des sources de la même chaîne), et rangées par univers.
 
-/// Univers de la TV en direct (colonne d'icônes et « Explorer par univers » du simulateur).
+/// Catégorie FIXE d'une chaîne (TF1 = Généraliste, quel que soit le programme du moment).
+/// Ordre de décision, du plus fiable au moins fiable — jamais de « ressemblance » de nom :
+///  1. liste explicite des chaînes connues (nom exact, ou famille explicite : « beIN Sports 1, 2, 3 »…) ;
+///  2. groupe de la chaîne chez le fournisseur, s'il désigne UNE seule catégorie (« FR | SPORTS », « FR | ENFANTS ») ;
+///  3. un mot entier sans ambiguïté dans le nom (« … Sport », « … Kids », « … News ») ;
+///  4. sinon « Autres » (plutôt qu'une catégorie fausse).
+/// (Le regroupement selon le programme EN CE MOMENT, celui du simulateur, est une rangée à part : « En ce moment ».)
 enum Univers: String, CaseIterable, Identifiable {
-    case cinema, series, sport, info, divert, jeunesse, decouverte
+    case generaliste, info, sport, cinema, series, divert, jeunesse, decouverte, musique, autres
     var id: String { rawValue }
     var label: String {
         switch self {
+        case .generaliste: return "Généraliste"
+        case .info: return "Info"
+        case .sport: return "Sport"
         case .cinema: return "Cinéma"
         case .series: return "Séries"
-        case .sport: return "Sport"
-        case .info: return "Info"
         case .divert: return "Divertissement"
         case .jeunesse: return "Jeunesse"
         case .decouverte: return "Découverte"
+        case .musique: return "Musique"
+        case .autres: return "Autres"
         }
     }
     var icon: String {
         switch self {
+        case .generaliste: return "tv"
         case .cinema: return "film"
         case .series: return "play.tv"
         case .sport: return "sportscourt"
@@ -28,27 +38,90 @@ enum Univers: String, CaseIterable, Identifiable {
         case .divert: return "star"
         case .jeunesse: return "face.smiling"
         case .decouverte: return "globe.europe.africa"
+        case .musique: return "music.note"
+        case .autres: return "ellipsis.circle"
         }
     }
-    /// Mots repérés dans le nom de la chaîne (puis dans celui de sa catégorie chez le fournisseur).
-    var pattern: String {
-        switch self {
-        case .sport: return #"sport|bein|eurosport|equipe|rmc sport|foot|golf|tennis|rugby|f1\b|moto|infosport|automoto|dazn"#
-        case .info: return #"info|news|bfm|cnews|lci\b|euronews|lcp|public s|france 24|tv5|i24|bloomberg|cnn"#
-        case .jeunesse: return #"jeunesse|enfant|kids|junior|gulli|disney|canal j|tiji|nickelodeon|nick|cartoon|boomerang|piwi|teletoon|baby|boing|mangas"#
-        case .decouverte: return #"docu|decouverte|discovery|national geo|nat geo|histoire|planete|ushuaia|science|animaux|voyage|trek|chasse|peche|france 5|arte|toute l.histoire|seasons|museum|explore"#
-        case .cinema: return #"cine|cinema|film|ocs|tcm|paramount|action\b|polar|warner|sundance|frisson|emotion|premier|famiz|club"#
-        case .series: return #"serie|series|syfy|13e rue|tmc|tfx|w9|6ter|serieclub|novelas|comedie\+|rtl9|ab1|teva|chérie|cherie"#
-        case .divert: return #"."#
-        }
-    }
-    /// Ordre de reconnaissance : le plus précis d'abord, « Divertissement » quand rien ne correspond.
-    static let detection: [Univers] = [.sport, .info, .jeunesse, .decouverte, .cinema, .series, .divert]
+
     static func of(name: String, category: String) -> Univers {
-        let n = ChannelTools.fold(name), c = ChannelTools.fold(category)
-        for u in detection where u != .divert { if n.range(of: u.pattern, options: .regularExpression) != nil { return u } }
-        for u in detection where u != .divert { if c.range(of: u.pattern, options: .regularExpression) != nil { return u } }
-        return .divert
+        let k = ChannelTools.nkey(ChannelTools.clean(name))
+        if let u = known(k) { return u }
+        if let u = fromWords(ChannelTools.fold(category), group: true) { return u }
+        if let u = fromWords(ChannelTools.fold(ChannelTools.clean(name)), group: false) { return u }
+        return .autres
+    }
+
+    // MARK: 1. Chaînes connues (clé normalisée : minuscules, sans accents ni espaces, « + » → « plus »)
+
+    /// Familles : la clé commence par ce préfixe (le plus long d'abord). Un préfixe qui finit par un chiffre
+    /// n'accepte pas un chiffre juste après (« france2 » ne prend pas « france24 »).
+    private static let families: [(String, Univers)] = {
+        let g: [(Univers, [String])] = [
+            (.generaliste, ["tf1", "france2", "france3", "m6", "canalplus", "tmc", "w9", "tfx", "6ter", "rmcstory", "cherie25", "nrj12", "c8", "cstar", "t18", "novo19",
+                            "tv5monde", "tv5", "rtltvi", "latrois", "laune", "rtbf", "rts1", "rtsun", "rts2", "rtsdeux", "tvaplus", "tva", "noovo", "icitele", "radiocanada", "paris premiere", "parispremiere",
+                            "france o", "franceo", "la1ere", "guadeloupe1ere", "martinique1ere", "reunion1ere", "guyane1ere", "mayotte1ere", "polynesie1ere", "nouvellecaledonie1ere",
+                            "bfmparis", "bfmlyon", "bfmmarseille", "bfmgrandlille", "bfmnice", "bfmalsace", "bfmtoulon", "bfmgrandlittoral", "bfmdici", "tebeo", "tvrennes", "tl7", "8montblanc", "tlm", "vialocale", "canal32", "ktotv", "kto"]),
+            (.info, ["bfmtv", "bfmbusiness", "bfm2", "cnews", "lci", "franceinfo", "franceinformation", "france24", "euronews", "i24news", "lcp", "publicsenat", "lcppublicsenat", "tf1info",
+                     "bloomberg", "cnn", "bbcworldnews", "bbcnews", "skynews", "aljazeera", "cnbc", "lcn", "rdi", "rtsinfo", "lequipeinfo", "africa24", "trtfrancais"]),
+            (.sport, ["lequipe", "beinsports", "bein", "rmcsport", "eurosport", "canalplussport", "canalplusfoot", "canalplussport360", "canalplussportmax", "canalplusmotors", "canalplusmotogp", "canalplusformula1",
+                      "infosportplus", "infosport", "equidia", "automotolachaine", "automoto", "golfplus", "golfchannel", "sportenfrance", "multisports", "dazn", "ligue1plus", "olplay", "omtv", "pstv", "tvsport",
+                      "skysport", "tsn", "rds", "polsat sport", "extremesports", "fightnetwork", "trace sport", "tracesportstars", "eleven", "elevensports", "motorsporttv", "motorvision", "ufcfightpass", "nbatv", "nfl", "mlbnetwork"]),
+            (.cinema, ["tf1seriesfilms", "canalpluscinema", "canalpluscinemas", "canalplusgrandecran", "canalpluspremier", "canalplusbox", "cineplus", "ocs", "tcmcinema", "tcm", "paramountchannel", "paramountnetwork",
+                       "warnertv", "actionmax", "action", "polarplus", "polar", "rtl9", "cinefx", "cinema", "studiocanal", "sundancetv", "amc", "mgm", "hbo", "showtime", "starz", "cinemax", "filmo", "sonymovies", "goldmovie"]),
+            (.series, ["canalplusseries", "serieclub", "13emerue", "13erue", "treizemerue", "syfy", "teva", "ab1", "abxplore", "novelas", "novelastv", "seriesplus", "serieplus", "foxlife", "universal", "tf1series",
+                       "crimedistrict", "investigationdiscovery", "polarseries", "comedycentral"]),
+            (.divert, ["comedieplus", "gameone", "j one", "jone", "mcm", "rmc life", "rmclife", "m6boutique", "tfouboutique", "gongtv", "gong", "e!", "eentertainment", "tlc", "fashiontv", "ftv", "luxetv",
+                       "elleplus", "bblack", "rtl2", "canalplusdivertissement", "slip", "melodytv", "museum"]),
+            (.jeunesse, ["gulli", "canalj", "tiji", "disneychannel", "disneyjunior", "disneyxd", "nickelodeon", "nickjr", "nickjunior", "nickteen", "cartoonnetwork", "cartoonito", "boomerang", "piwiplus", "piwi",
+                         "teletoonplus", "teletoon", "boing", "mangas", "okoo", "babytv", "babyfirst", "canalpluskids", "france4", "ludikids", "toonami", "duckTV", "ducktv", "tfou", "lucky jack", "luckyjack", "mangasplus", "ginx", "kidsandme", "discoverykids"]),
+            (.decouverte, ["france5", "arte", "rmcdecouverte", "planeteplus", "planete", "ushuaiatv", "ushuaia", "nationalgeographic", "natgeo", "natgeowild", "discovery", "discoveryscience", "histoiretv", "histoire",
+                           "toutelhistoire", "animaux", "scienceetvie", "scienceetvietv", "voyage", "trek", "seasons", "chasseetpeche", "chasseetpechetv", "museumtv", "canalplusdocs", "canalplusdocumentaires",
+                           "mytf1xtra", "lcpdocs", "warnerbrostv", "explore", "travelchannel", "historychannel", "history", "animalplanet", "zone3", "uptv"]),
+            (.musique, ["mtv", "mtvhits", "mtvlive", "mcmtop", "nrjhits", "m6music", "tracelatina", "traceurban", "tracetropical", "traceafrica", "tracetv", "trace", "mezzo", "mezzolive", "melody", "rfmtv", "clubbingtv",
+                        "stingray", "muzzik", "virgintv", "funradio", "nostalgie", "cherieFM", "cheriefm", "skyrock", "radio", "djazz", "bestof80", "vh1", "deluxemusic", "qmusic", "cstarhits", "rtl2musique"]),
+        ]
+        var out: [(String, Univers)] = []
+        for (u, L) in g { for x in L { let k = ChannelTools.nkey(x); if !k.isEmpty { out.append((k, u)) } } }
+        // le plus long d'abord : « tf1seriesfilms » avant « tf1 », « canalplussport » avant « canalplus »
+        return out.sorted { $0.0.count > $1.0.count }
+    }()
+
+    static func known(_ k: String) -> Univers? {
+        guard !k.isEmpty else { return nil }
+        for (p, u) in families where k.hasPrefix(p) {
+            if k.count > p.count, p.last?.isNumber == true, k[k.index(k.startIndex, offsetBy: p.count)].isNumber { continue }
+            // un préfixe très court (« m6 », « w9 », « tcm ») ne vaut que suivi d'un chiffre, de « plus » ou d'une variante courante
+            if p.count <= 3 && k.count > p.count {
+                let rest = String(k.dropFirst(p.count))
+                let family = ["ocs", "mtv"].contains(p)   // familles connues : OCS Max, OCS City…, MTV Dance…
+                if !(family || rest.first?.isNumber == true || rest.hasPrefix("plus") || ["hd", "fhd", "uhd", "4k", "sd", "music", "boutique", "cinema"].contains(where: { rest.hasPrefix($0) })) { continue }
+            }
+            return u
+        }
+        return nil
+    }
+
+    // MARK: 2–3. Mots entiers (groupe du fournisseur, puis nom) — seulement si UNE catégorie ressort
+
+    private static let words: [(Univers, String)] = [
+        (.sport, #"\b(sports?|foot|football|soccer|rugby|tennis|golf|basket|nba|nfl|ufc|boxe|boxing|cyclisme|motorsport)\b"#),
+        (.info, #"\b(info|infos|news|actualites?|journal)\b"#),
+        (.cinema, #"\b(cinema|cine|films?|movies?)\b"#),
+        (.series, #"\b(series?|feuilletons?|novelas?)\b"#),
+        (.jeunesse, #"\b(enfants?|kids|jeunesse|junior|cartoons?|dessins? animes?|anime)\b"#),
+        (.decouverte, #"\b(docu|docus|documentaires?|documentary|documentaries|decouvertes?|discovery|nature|histoire|history)\b"#),
+        (.musique, #"\b(musiques?|music|musik|clips?|radios?|hits)\b"#),
+        (.divert, #"\b(divertissements?|entertainment|varietes?|humour|comedy)\b"#),
+        (.generaliste, #"\b(generalistes?|tnt|nationales?|regionales?|regions|locales?)\b"#),
+    ]
+
+    static func fromWords(_ s: String, group: Bool) -> Univers? {
+        guard !s.isEmpty else { return nil }
+        let hits = Set(words.filter { s.range(of: $0.1, options: .regularExpression) != nil }.map(\.0))
+        // « Films & Séries » : deux catégories → on ne décide pas d'après ce groupe
+        if hits.count == 1 { return hits.first }
+        if group, hits == [.cinema, .series] { return nil }
+        return nil
     }
 }
 
@@ -56,8 +129,13 @@ enum ChannelTools {
     static func fold(_ s: String) -> String {
         s.folding(options: [.diacriticInsensitive, .caseInsensitive], locale: Locale(identifier: "fr_FR"))
     }
+    /// Clé de comparaison : minuscules, sans accents, « + » → « plus », « & » → « et », rien que lettres et chiffres.
+    static func nkey(_ s: String) -> String {
+        fold(s).replacingOccurrences(of: "+", with: "plus").replacingOccurrences(of: "&", with: "et")
+            .replacingOccurrences(of: #"[^a-z0-9]+"#, with: "", options: .regularExpression)
+    }
     private static let lead = try! NSRegularExpression(pattern: #"^\s*(?:[\[(|]?\s*(?:fr|fra|france|be|ch|ca|qc|uk|us|vip|4k|hd|fhd|uhd)\s*[\])|:\-–]+\s*)+"#, options: [.caseInsensitive])
-    private static let tail = try! NSRegularExpression(pattern: #"(?:\s*[\[(|\-–]?\s*(?:fhd|uhd|hd|sd|4k|hevc|h\.?26[45]|1080p?|720p?|2160p?|50 ?fps|60 ?fps|raw|backup|secours|alt|vip|low|multi|\+1)\s*[\])]?)+\s*$"#, options: [.caseInsensitive])
+    private static let tail = try! NSRegularExpression(pattern: #"(?:\s*[\[(|\-–]?\s*(?:fhd|uhd|hd|sd|4k|hevc|h\.?26[45]|1080p?|720p?|2160p?|50 ?fps|60 ?fps|raw|backup|secours|alt|vip|low|multi)\s*[\])]?)+\s*$"#, options: [.caseInsensitive])
     private static let supers = try! NSRegularExpression(pattern: "[ᴴᴰᶠᵁ⁴ᴷˢ³⁴]+")
 
     /// Vrai nom de la chaîne : « FR| TF1 FHD » → « TF1 ».
@@ -81,20 +159,35 @@ enum ChannelTools {
         return 1
     }
 
-    /// Identité fiable d'une chaîne : son vrai nom ET son identifiant de guide.
-    /// Deux chaînes aux noms proches mais différents (France 3 Alsace / France 3 Paris) restent séparées.
+    /// Pays indiqué devant le nom (« BE| », « CH: », « UK - ») ; rien (ou FR) = France.
+    private static let leadCountry = try! NSRegularExpression(pattern: #"^\s*[\[(|]?\s*(fr|fra|france|be|ch|ca|qc|uk|us)\s*[\])|:\-–]"#, options: [.caseInsensitive])
+    static func country(_ raw: String) -> String {
+        guard let m = leadCountry.firstMatch(in: raw, range: NSRange(raw.startIndex..., in: raw)), let r = Range(m.range(at: 1), in: raw) else { return "fr" }
+        let c = raw[r].lowercased()
+        return c == "fra" || c == "france" ? "fr" : (c == "qc" ? "ca" : c)
+    }
+
+    /// Identité d'une chaîne : pays + vrai nom (« FR| TF1 FHD », « TF1 HEVC » et « TF1 (secours) » = la même chaîne,
+    /// même si l'une n'a pas d'identifiant de guide). Restent distinctes : les régions (France 3 Alsace / Paris),
+    /// les « +1 », les autres pays (BE| TF1), les chaînes aux noms différents (TF1 / TF1 Séries Films).
     static func key(_ ch: Channel) -> String {
-        fold(clean(ch.name)).replacingOccurrences(of: #"[^a-z0-9+]+"#, with: "", options: .regularExpression) + "|" + ch.epg.lowercased()
+        country(ch.name) + "|" + nkey(clean(ch.name))
     }
 
     /// Une chaîne par identité, la meilleure qualité d'abord ; l'ordre d'arrivée est conservé.
+    /// Si la meilleure copie n'a pas d'identifiant de guide, elle reprend celui d'une autre copie de la même chaîne.
     static func dedupe(_ list: [Channel]) -> [Channel] {
-        var best: [String: Channel] = [:], order: [String] = []
+        var best: [String: Channel] = [:], guide: [String: String] = [:], order: [String] = []
         for c in list {
             let k = key(c)
+            if guide[k] == nil, !c.epg.isEmpty { guide[k] = c.epg }
             if let b = best[k] { if quality(c.name) > quality(b.name) { best[k] = c } } else { best[k] = c; order.append(k) }
         }
-        return order.compactMap { best[$0] }
+        return order.compactMap { k in
+            guard let c = best[k] else { return nil }
+            if c.epg.isEmpty, let g = guide[k] { return Channel(pid: c.pid, sid: c.sid, name: c.name, num: c.num, icon: c.icon, cid: c.cid, epg: g, archive: c.archive) }
+            return c
+        }
     }
 
     /// Nombre de sources (copies) d'une chaîne dans une liste.
@@ -128,7 +221,21 @@ enum LiveIndex {
             }
         }
         memo = (mk, res)
+        if Debug.demoServer != nil { dump(res) }
         return res
+    }
+}
+
+extension LiveIndex {
+    /// Simulateur de test seulement : écrit le classement obtenu (catégorie, copies, identité, nom chez le fournisseur)
+    /// dans Documents/classement-tv.txt, récupéré par la visite automatique pour vérification ligne par ligne.
+    static func dump(_ L: [Entry]) {
+        let lines = L.sorted { ($0.univers.label, $0.name) < ($1.univers.label, $1.name) }
+            .map { "\($0.univers.label)\t\($0.sources) copie(s)\t\(ChannelTools.key($0.ch))\t\($0.ch.name)\tguide=\($0.ch.epg)" }
+        let txt = "\(L.count) chaînes après dédoublonnage\n" + lines.joined(separator: "\n") + "\n"
+        if let d = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first {
+            try? txt.write(to: d.appendingPathComponent("classement-tv.txt"), atomically: true, encoding: .utf8)
+        }
     }
 }
 

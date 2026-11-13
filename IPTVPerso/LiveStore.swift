@@ -126,6 +126,41 @@ enum LiveStore {
         }
     }
 
+    /// Genre d'un programme d'après la catégorie du guide (règle « pgen » du simulateur ; « dessin animé »
+    /// et « animation » vont en Jeunesse, « animaux » reste en Découverte).
+    static func genre(ofGuideCategory g0: String) -> Univers? {
+        let g = ChannelTools.fold(g0)
+        guard !g.trimmingCharacters(in: .whitespaces).isEmpty else { return nil }
+        func has(_ p: String) -> Bool { g.range(of: p, options: .regularExpression) != nil }
+        if has(#"film|cinema|telefilm|movie"#) { return .cinema }
+        if has(#"serie|feuilleton|fiction|drama|soap|sitcom"#) { return .series }
+        if has(#"sport|foot|rugby|tennis|cyclisme|match|basket|golf|moteur|\bf1\b"#) { return .sport }
+        if has(#"info|journal|politique|debat|actualite|news|meteo"#) { return .info }
+        if has(#"dessin|animation|\banime\b|jeunesse|enfant|kids|children|cartoon"#) { return .jeunesse }
+        if has(#"docu|decouverte|nature|histoire|science|voyage|animaux"#) { return .decouverte }
+        if has(#"musique|music|concert|clip"#) { return .musique }
+        return .divert
+    }
+
+    /// « En ce moment » : les chaînes dont le programme EN COURS est de ce genre, d'après le guide
+    /// (seulement les programmes dont le guide donne un genre ; une chaîne une seule fois par genre).
+    static func airingNowByGenre(providers: [String]) async -> [(Univers, [Channel])] {
+        guard !providers.isEmpty else { return [] }
+        let now = Int(Date().timeIntervalSince1970)
+        let ph = providers.map { _ in "?" }.joined(separator: ",")
+        let rows = await Database.shared.read { db -> [(Channel, String)] in
+            var out: [(Channel, String)] = []
+            db.query("""
+                SELECT l.pid,l.sid,l.name,l.num,l.icon,l.cid,l.epg,l.archive,e.cat FROM epg e JOIN live l ON l.epg=e.ch
+                WHERE e.start<=? AND e.stop>? AND e.cat IS NOT NULL AND e.cat!='' AND l.pid IN (\(ph)) ORDER BY l.num
+                """, ([now, now] as [Any?]) + providers.map { $0 as Any? }) { r in out.append((row(r), r.str(8))) }
+            return out
+        }
+        var by: [Univers: [Channel]] = [:]
+        for (c, g) in rows { if let u = genre(ofGuideCategory: g) { by[u, default: []].append(c) } }
+        return Univers.allCases.compactMap { u in by[u].map { (u, ChannelTools.dedupe($0)) } }.filter { !$0.1.isEmpty }
+    }
+
     /// « Commence bientôt » : ce qui démarre dans l'heure (gardé 5 minutes en mémoire).
     static func startingSoon(providers: [String]) async -> [Airing] {
         guard !providers.isEmpty else { return [] }

@@ -123,6 +123,9 @@ struct LiveFrontView: View {
     @State private var openFav = false
     @State private var openRecent = false
     @State private var loaded = false
+    @State private var nowGenres: [(Univers, [Channel])] = []
+    @State private var nowOpen: Univers?
+    @State private var nowShown = false
 
     private var head: Channel? { recent.first ?? favs.first }
     private func entry(_ c: Channel) -> LiveIndex.Entry? { index.first { ChannelTools.key($0.ch) == ChannelTools.key(c) } }
@@ -155,6 +158,16 @@ struct LiveFrontView: View {
                         }
                     }
                 }
+                if !nowGenres.isEmpty {
+                    // regroupement du simulateur : selon le programme diffusé maintenant (TF1 pendant un match → Sport),
+                    // à part des catégories fixes ci-dessus
+                    rowTitle("En ce moment à la télé", "selon le guide des programmes · OK pour voir les chaînes")
+                    row {
+                        ForEach(nowGenres, id: \.0) { g in
+                            UniverseCard(label: g.0.label, icon: g.0.icon, channels: g.1, count: g.1.count) { nowOpen = g.0; nowShown = true }
+                        }
+                    }
+                }
                 if !soon.isEmpty {
                     rowTitle("Commence bientôt", "dans l'heure · OK pour regarder la chaîne")
                     row { ForEach(soon) { a in SoonCard(a: a) { play([a.ch], 0) } } }
@@ -172,6 +185,10 @@ struct LiveFrontView: View {
         .clipped()
         .navigationDestination(isPresented: $openFav) {
             CategoryChannelsView(title: "Favoris", loader: { ChannelTools.dedupe(await LiveStore.channels(ids: LivePrefs.shared.favorites)) }, play: play, guide: guide)
+        }
+        .navigationDestination(isPresented: $nowShown) {
+            let u = nowOpen ?? .divert
+            CategoryChannelsView(title: u.label + " en ce moment", loader: { nowGenres.first { $0.0 == u }?.1 ?? [] }, play: play, guide: guide)
         }
         .navigationDestination(isPresented: $openRecent) {
             CategoryChannelsView(title: "Reprendre", loader: { ChannelTools.dedupe(await LiveStore.channels(ids: LivePrefs.shared.recent)) }, play: play, guide: guide)
@@ -193,7 +210,9 @@ struct LiveFrontView: View {
         async let r = LiveStore.channels(ids: prefs.recent)
         async let f = LiveStore.channels(ids: prefs.favorites)
         async let s = LiveStore.startingSoon(providers: pids)
-        let (r1, f1, s1) = await (r, f, s)
+        async let g = LiveStore.airingNowByGenre(providers: pids)
+        let (r1, f1, s1, g1) = await (r, f, s, g)
+        nowGenres = g1
         recent = ChannelTools.dedupe(r1.filter { active.contains($0.pid) })
         favs = ChannelTools.dedupe(f1.filter { active.contains($0.pid) })
         var seen = Set<String>()
