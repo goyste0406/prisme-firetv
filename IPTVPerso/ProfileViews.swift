@@ -122,14 +122,21 @@ struct ProfileDetail: View {
 
     @ViewBuilder private var rows: some View {
         // Nom : clavier de l'Apple TV
-        HStack {
+        // (toute la ligne s'éclaire comme les autres ; le nom et le crayon à droite, sans cadre gris — comme le simulateur)
+        let nf = focus == "name"
+        HStack(spacing: 14) {
             Text("Nom").font(P.font(32, .semibold))
             Spacer()
-            TextField("Nom", text: $name).font(P.font(28)).multilineTextAlignment(.trailing).frame(width: 420)
+            TextField("Nom", text: $name).textFieldStyle(.plain).font(P.font(28)).multilineTextAlignment(.trailing).frame(width: 420)
                 .focused($focus, equals: "name")
                 .onSubmit { var x = p; let n = name.trimmingCharacters(in: .whitespaces); if !n.isEmpty { x.name = String(n.prefix(20)); ps.update(x) } }
+            Image(systemName: "pencil").font(.system(size: 24, weight: .medium)).opacity(0.7)
         }
+        .foregroundStyle(nf ? Color.black : Color.white)
         .padding(.horizontal, 24).frame(height: 108)
+        .background(RoundedRectangle(cornerRadius: 22, style: .continuous).fill(nf ? Color.white : Color.clear))
+        .scaleEffect(nf ? 1.015 : 1).shadow(color: .black.opacity(nf ? 0.4 : 0), radius: 18, y: 10)
+        .animation(.easeOut(duration: 0.15), value: nf)
         .onChange(of: focus) { _, f in if f == "name" { desc = "OK pour changer le nom avec le clavier à l'écran (ou celui de l'iPhone)." } }
 
         row("pcol", "Couleur", AnyView(HStack(spacing: 10) { Circle().fill(p.tint).frame(width: 22, height: 22); Text(open == "pcol" ? "⌄" : "›") }),
