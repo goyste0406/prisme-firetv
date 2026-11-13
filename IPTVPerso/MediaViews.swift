@@ -17,6 +17,8 @@ private struct HomeSnap {
 }
 /// Les accueils déjà calculés : changer d'onglet ne relance pas les requêtes.
 private enum HomeCache { static var map: [String: HomeSnap] = [:] }
+/// Vide les accueils gardés en mémoire au changement de profil (ils dépendent de sa liste et de sa limite d'âge).
+enum HomeCacheHook { static func install() { HomeCacheReset.run = { HomeCache.map = [:] } } }
 
 /// Envies et durées de « Ce soir ? » (simulateur).
 enum Tonight {

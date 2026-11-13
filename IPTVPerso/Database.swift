@@ -67,6 +67,12 @@ final class Database: @unchecked Sendable {
             exec("ALTER TABLE fiche ADD COLUMN companies TEXT")
             exec("PRAGMA user_version=3")
         }
+        if v < 4 {
+            // 1.6 : classification d'âge française (TMDB) pour la limite d'âge des profils
+            // (NULL = pas encore vérifiée ; '' = inconnue ; '0' = tous publics ; '10', '12', '16', '18')
+            exec("ALTER TABLE fiche ADD COLUMN cert TEXT")
+            exec("PRAGMA user_version=4")
+        }
     }
 
     // MARK: Requêtes

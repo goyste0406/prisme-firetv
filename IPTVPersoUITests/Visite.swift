@@ -142,5 +142,37 @@ final class Visite: XCTestCase {
         for i in 1...3 { press(.down); shot(String(format: "71-replay-bas-%02d", i)) }
         press(.select); Thread.sleep(forTimeInterval: 3); shot("72-replay-lecture")
         back()
+
+        // PROFILS — « Qui regarde ? » à l'ouverture (2 profils : Steven, Léa 12 ans max)
+        relaunch(["-prisme.debug.profiles", "2"], wait: 4)
+        shot("80-qui-regarde")
+        press(.right); shot("81-qui-regarde-lea")
+        press(.left); Thread.sleep(forTimeInterval: 1); shot("81b-qui-regarde-steven")
+        press(.select); Thread.sleep(forTimeInterval: 3); shot("82-accueil-steven")
+        // Réglages › Profils
+        relaunch(["-prisme.debug.tab", "settings"])
+        shot("83-reglages-profils")
+        press(.right); Thread.sleep(forTimeInterval: 1); shot("84-profils-focus")
+        press(.select); Thread.sleep(forTimeInterval: 1.5); shot("85-fiche-profil")
+        for i in 1...4 { press(.down); shot(String(format: "86-fiche-profil-bas-%02d", i)) }
+        press(.select); Thread.sleep(forTimeInterval: 1); shot("87-limite-age-choix")
+        back(); Thread.sleep(forTimeInterval: 1); shot("88-limite-age-ferme")
+        press(.down, 6); shot("89-fiche-profil-fin")
+        back(); Thread.sleep(forTimeInterval: 1); shot("90-retour-liste-profils")
+        // pastille du profil dans la barre du haut → fenêtre « Choisis un profil » → Léa
+        press(.up, 6); press(.right, 8); Thread.sleep(forTimeInterval: 1); shot("91-pastille-barre")
+        press(.select); Thread.sleep(forTimeInterval: 1.5); shot("92-fenetre-profils")
+        press(.down); shot("93-fenetre-lea")
+        press(.select); Thread.sleep(forTimeInterval: 3); shot("94-profil-lea-actif")
+        tab(3); shot("95-ma-liste-lea")
+        tab(0); Thread.sleep(forTimeInterval: 3); shot("96-films-lea")
+        // retour à Steven : son historique et Ma liste d'avant les profils doivent être là
+        press(.up, 8); press(.right, 8); press(.select); Thread.sleep(forTimeInterval: 1.5); press(.select); Thread.sleep(forTimeInterval: 3)
+        shot("97-retour-steven")
+        tab(3); shot("98-ma-liste-steven")
+        tab(5); press(.down, 9); Thread.sleep(forTimeInterval: 1); shot("99-a-propos")
+        // fiche film : pastille du profil en haut à gauche
+        relaunch(["-prisme.debug.open", "film:demo:1006"])
+        press(.up, 4); Thread.sleep(forTimeInterval: 1); shot("99b-fiche-pastille-profil")
     }
 }

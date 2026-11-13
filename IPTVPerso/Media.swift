@@ -29,6 +29,25 @@ struct MediaItem: Identifiable, Hashable {
 }
 
 extension MediaItem {
+    /// Limite d'âge du profil actif : un titre classé au-dessus est caché ; un titre sans classification connue reste
+    /// visible. Profil enfant : en plus, seulement l'animation, le familial et les programmes jeunesse (genres TMDB).
+    var allowedForProfile: Bool {
+        guard let lim = ProfileStore.ageLimit else { return true }
+        if let c = fiche?.cert, let a = Int(c), a > lim { return false }
+        if ProfileStore.kidsOnly {
+            guard let g = fiche?.genres, g.contains("Animation") || g.contains("Familial") || g.contains("Kids") else { return false }
+        }
+        return true
+    }
+
+    /// Condition SQL équivalente, pour les requêtes sur les fiches (alias « f »).
+    static var ageSQL: String {
+        guard let lim = ProfileStore.ageLimit else { return "1" }
+        var s = "(f.cert IS NULL OR f.cert='' OR CAST(f.cert AS INTEGER)<=\(lim))"
+        if ProfileStore.kidsOnly { s += " AND (f.genres LIKE '%Animation%' OR f.genres LIKE '%Familial%' OR f.genres LIKE '%Kids%')" }
+        return s
+    }
+
     /// Clé d'une œuvre : l'identifiant TMDB quand il est connu (fiche, sinon celui du fournisseur), sinon titre + année.
     /// Deux versions du même film (titre anglais/français, qualités, fournisseurs) ont la même clé ; deux films
     /// différents au titre proche restent distincts.
@@ -50,10 +69,12 @@ extension Array where Element == MediaItem {
 
 extension Array where Element == MediaItem {
     /// Ajoute les fiches TMDB connues (une requête pour toute la liste). À appeler sur la file de la base.
-    func withFiches() -> [MediaItem] {
+    /// `filter` : retire ce que la limite d'âge du profil actif interdit (âge inconnu = affiché, choix de Steven).
+    func withFiches(filter: Bool = true) -> [MediaItem] {
         guard let k = first?.kind else { return self }
         let f = FicheStore.byKeys(k, map { $0.clean.key })
-        return map { var m = $0; m.fiche = f[m.clean.key]; return m }
+        let all = map { var m = $0; m.fiche = f[m.clean.key]; return m }
+        return filter ? all.filter(\.allowedForProfile) : all
     }
 }
 
@@ -195,7 +216,7 @@ enum MediaStore {
     static func ficheCount(_ k: MediaKind, pids: [String], cond: String, args: [Any?] = []) async -> Int {
         guard !pids.isEmpty else { return 0 }
         let t = table(k)
-        let sql = "SELECT COUNT(DISTINCT f.ckey) FROM fiche f JOIN \(t) m ON m.pid=f.pid AND m.sid=f.sid WHERE f.kind=? AND (\(cond)) AND m.pid IN \(inList(pids))"
+        let sql = "SELECT COUNT(DISTINCT f.ckey) FROM fiche f JOIN \(t) m ON m.pid=f.pid AND m.sid=f.sid WHERE f.kind=? AND (\(cond)) AND \(MediaItem.ageSQL) AND m.pid IN \(inList(pids))"
         let all: [Any?] = [k.rawValue] + args + pids.map { $0 as Any? }
         return await Database.shared.read { db in
             var n = 0
@@ -295,9 +316,9 @@ enum MediaStore {
                 db.query(sql2, missing.map { String($0) as Any? } + pids.map { $0 as Any? }) { r in let id = r.int(11); if out[id] == nil { out[id] = row(k, r) } }
             }
             let withF = Array(out).map { ($0.key, $0.value) }
-            let filled = withF.map { $0.1 }.withFiches()
+            let filled = withF.map { $0.1 }.withFiches(filter: false)
             var res: [Int: MediaItem] = [:]
-            for (i, m) in filled.enumerated() { res[m.fiche?.tmdb ?? withF[i].0] = m }
+            for (i, m) in filled.enumerated() where m.allowedForProfile { res[m.fiche?.tmdb ?? withF[i].0] = m }
             return res
         }
     }
@@ -355,11 +376,11 @@ enum MediaStore {
                 out.append((m, common, i)); i += 1
             }
             let best = Array(out.sorted { $0.1.count != $1.1.count ? $0.1.count > $1.1.count : $0.2 < $1.2 }.prefix(limit * 3))
-            let withF = best.map { $0.0 }.withFiches()
+            let withF = best.map { $0.0 }.withFiches(filter: false)
             // une seule affiche par œuvre (identifiant TMDB), jamais le film de la fiche lui-même
             var keys = Set<String>([it.workKey])
             var res: [(MediaItem, [String])] = []
-            for (m, b) in zip(withF, best) where keys.insert(m.workKey).inserted { res.append((m, b.1)); if res.count >= limit { break } }
+            for (m, b) in zip(withF, best) where m.allowedForProfile && keys.insert(m.workKey).inserted { res.append((m, b.1)); if res.count >= limit { break } }
             return res
         }
     }
@@ -442,13 +463,23 @@ enum MediaStore {
                 let t = table(it.kind), cc = cols(it.kind).split(separator: ",").map { $0.hasPrefix("'") ? String($0) : "m." + $0 }.joined(separator: ",")
                 db.query("SELECT \(cc) FROM fiche f JOIN \(t) m ON m.pid=f.pid AND m.sid=f.sid WHERE f.kind=? AND f.tmdb=? AND m.pid IN \(inList(pids)) LIMIT 50", ([it.kind.rawValue, Int(tm)] as [Any?]) + pids.map { $0 as Any? }) { r in let m = row(it.kind, r); if ids.insert(m.id).inserted { out.append(m) } }
             }
-            return out.withFiches()
+            return out.withFiches(filter: false)
         }
         var same = found.filter { $0.clean.key == c.key || (!tm.isEmpty && $0.workKey == it.workKey) }.map { var x = $0; x.fiche = x.fiche ?? it.fiche; return x }
         if !same.contains(where: { $0.id == it.id }) { same.insert(it, at: 0) }
+        // version préférée du profil actif (VF, VFF, VFQ, VOSTFR) en premier ; « Automatique » : MULTI puis VF
+        let pref = ProfileStore.langPref
         func score(_ m: MediaItem) -> Int {
-            let t = m.clean.tags
-            return (t.contains("MULTI") ? 30 : t.contains("VF") ? 25 : t.contains("VOSTFR") ? 5 : 15) + (t.contains("4K") ? 6 : t.contains("1080p") ? 4 : 2)
+            let t = m.clean.tags, raw = m.name.uppercased()
+            var s = (t.contains("MULTI") ? 30 : t.contains("VF") ? 25 : t.contains("VOSTFR") ? 5 : 15) + (t.contains("4K") ? 6 : t.contains("1080p") ? 4 : 2)
+            switch pref {
+            case "VF": if t.contains("VF") || t.contains("VFF") || t.contains("VFQ") || t.contains("MULTI") { s += 100 }
+            case "VFF": if raw.contains("VFF") || raw.contains("TRUEFRENCH") { s += 100 } else if t.contains("VF") || t.contains("MULTI") { s += 50 }
+            case "VFQ": if raw.contains("VFQ") { s += 100 } else if t.contains("VF") || t.contains("MULTI") { s += 50 }
+            case "VOSTFR": if t.contains("VOSTFR") { s += 100 } else if t.contains("MULTI") { s += 50 }
+            default: break
+            }
+            return s
         }
         return same.sorted { score($0) > score($1) }
     }
@@ -461,24 +492,43 @@ final class WatchStore: ObservableObject {
     static let shared = WatchStore()
     struct Entry: Codable { var pos: Double; var dur: Double; var at: Date; var title: String; var icon: String; var item: String; var ep: String? }
     @Published private(set) var entries: [String: Entry] = [:]   // clé : id du film ou de l'épisode
-    @Published var favorites: [String] = [] { didSet { UserDefaults.standard.set(favorites, forKey: "prisme.media.favs") } }
+    /// Ma liste du profil actif (clé d'origine pour le profil de Steven)
+    @Published var favorites: [String] = [] { didSet { if !loading { UserDefaults.standard.set(favorites, forKey: ProfileStore.shared.key("prisme.media.favs")) } } }
+    private var loading = false
+
+    /// Recharge l'historique et Ma liste du profil actif (changement de profil).
+    func reload() {
+        loading = true
+        entries = WatchStore.entries(for: ProfileStore.shared.current)
+        favorites = UserDefaults.standard.stringArray(forKey: ProfileStore.shared.key("prisme.media.favs")) ?? []
+        loading = false
+    }
+
+    /// Historique d'un profil (lecture seule, pour les chiffres de « Qui regarde ? »).
+    static func entries(for id: String) -> [String: Entry] {
+        guard let d = UserDefaults.standard.data(forKey: ProfileStore.storageKey("prisme.watch", for: id)),
+              let e = try? JSONDecoder().decode([String: Entry].self, from: d) else { return [:] }
+        return e
+    }
+
+    private func persist() {
+        if let d = try? JSONEncoder().encode(entries) { UserDefaults.standard.set(d, forKey: ProfileStore.shared.key("prisme.watch")) }
+    }
 
     /// Test du simulateur uniquement (argument de lancement) : historique de visionnage factice pour voir « Reprendre ».
     func debugSeed(_ list: [(String, Entry)]) { for (k, e) in list { entries[k] = e } }
 
-    private init() {
-        if let d = UserDefaults.standard.data(forKey: "prisme.watch"), let e = try? JSONDecoder().decode([String: Entry].self, from: d) { entries = e }
-        favorites = UserDefaults.standard.stringArray(forKey: "prisme.media.favs") ?? []
-    }
+    private init() { reload() }
 
     func save(key: String, pos: Double, dur: Double, title: String, icon: String, item: String, ep: String? = nil) {
         guard dur > 0 else { return }
+        if entries[key] == nil { ProfileStore.shared.noteUse() }
         entries[key] = Entry(pos: pos, dur: dur, at: Date(), title: title, icon: icon, item: item, ep: ep)
         if entries.count > 600 {
             let old = entries.sorted { $0.value.at < $1.value.at }.prefix(entries.count - 600).map(\.key)
             old.forEach { entries.removeValue(forKey: $0) }
         }
-        if let d = try? JSONEncoder().encode(entries) { UserDefaults.standard.set(d, forKey: "prisme.watch") }
+        persist()
     }
 
     func resume(_ key: String) -> Double? {
@@ -508,7 +558,7 @@ final class WatchStore: ObservableObject {
             if watched { entries[k] = Entry(pos: 1, dur: 1, at: Date(), title: title, icon: icon, item: item, ep: nil) }
             else { entries.removeValue(forKey: k) }
         }
-        if let d = try? JSONEncoder().encode(entries) { UserDefaults.standard.set(d, forKey: "prisme.watch") }
+        persist()
     }
 }
 

@@ -51,6 +51,8 @@ struct Fiche: Hashable {
     var director = ""
     var logo = ""
     var companies = ""
+    /// classification d'âge française : '' inconnue, '0' tous publics, '10', '12', '16', '18'
+    var cert = ""
     /// Pays en toutes lettres (« France »), le premier seulement.
     var countryName: String {
         guard let c = country.split(separator: ",").first.map(String.init), !c.isEmpty else { return "" }
@@ -65,11 +67,11 @@ enum FicheStore {
         let wp = (try? JSONDecoder().decode(WatchProviders.self, from: Data(r.str(11).utf8))) ?? WatchProviders()
         return Fiche(tmdb: r.int(0), title: r.str(1), overview: r.str(2), poster: r.str(3), backdrop: r.str(4), genres: r.str(5),
                      runtime: r.int(6), vote: r.double(7), year: r.int(8), coll: r.int(9), collName: r.str(12), cast: cast, wp: wp,
-                     pid: r.str(13), sid: r.str(14), country: r.str(15), director: r.str(16), logo: r.str(17), companies: r.str(18))
+                     pid: r.str(13), sid: r.str(14), country: r.str(15), director: r.str(16), logo: r.str(17), companies: r.str(18), cert: r.str(19))
     }
     /// « cast » est un mot réservé de SQLite (CAST) : sans guillemets, la lecture des fiches échouait toujours
     /// (elles étaient bien téléchargées et enregistrées, mais jamais relues → fiches, saga, « Où le regarder » vides).
-    static let cols = "tmdb,title,overview,poster,backdrop,genres,runtime,vote,year,coll,\"cast\",wp,collname,pid,sid,country,director,logo,companies"
+    static let cols = "tmdb,title,overview,poster,backdrop,genres,runtime,vote,year,coll,\"cast\",wp,collname,pid,sid,country,director,logo,companies,cert"
 
     /// Fiches de plusieurs titres d'un coup (clé = titre propre + année).
     static func byKeys(_ kind: MediaKind, _ keys: [String]) -> [String: Fiche] {
@@ -79,7 +81,7 @@ enum FicheStore {
         for chunk in stride(from: 0, to: keys.count, by: 400) {
             let part = Array(keys[chunk..<min(keys.count, chunk + 400)])
             db.query("SELECT \(cols),ckey FROM fiche WHERE kind=? AND ckey IN (" + part.map { _ in "?" }.joined(separator: ",") + ")",
-                     [kind.rawValue] + part) { r in out[r.str(19)] = row(r) }
+                     [kind.rawValue] + part) { r in out[r.str(20)] = row(r) }
         }
         return out
     }
@@ -142,9 +144,68 @@ struct FicheWorker {
                 await MainActor.run { FicheService.shared.done += n; FicheService.shared.version += 1 }
             }
         }
+        await fillCerts(api)
+        await MainActor.run { FicheService.shared.version += 1 }
     }
 
-    static let insertSQL = "INSERT OR REPLACE INTO fiche(kind,ckey,pid,sid,\(FicheStore.cols.replacingOccurrences(of: ",pid,sid", with: ""))) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)"
+    /// Classification française officielle (TMDB : release_dates pour un film, content_ratings pour une série).
+    /// Rien d'inventé : sans classification française, la valeur est '' (inconnue).
+    static func frCert(_ d: [String: Any], tv: Bool) -> String {
+        var raw: [String] = []
+        if tv {
+            for r in ((d["content_ratings"] as? [String: Any])?["results"] as? [[String: Any]]) ?? [] where (r["iso_3166_1"] as? String) == "FR" {
+                if let x = r["rating"] as? String { raw.append(x) }
+            }
+        } else {
+            for r in ((d["release_dates"] as? [String: Any])?["results"] as? [[String: Any]]) ?? [] where (r["iso_3166_1"] as? String) == "FR" {
+                for x in (r["release_dates"] as? [[String: Any]]) ?? [] { if let c = x["certification"] as? String, !c.isEmpty { raw.append(c) } }
+            }
+        }
+        for c in raw {
+            let u = c.uppercased().trimmingCharacters(in: .whitespaces)
+            if u.contains("18") { return "18" }
+            if u.contains("16") { return "16" }
+            if u.contains("12") { return "12" }
+            if u.contains("10") { return "10" }
+            if u == "U" || u == "TP" || u == "0" || u == "ALL" || u.contains("TOUS") { return "0" }
+        }
+        return ""
+    }
+
+    /// Classifications manquantes des fiches téléchargées avant la 1.6 (un petit appel TMDB par titre, en arrière-plan).
+    func fillCerts(_ api: TmdbAPI) async {
+        for kind in [MediaKind.film, .series] {
+            let todo: [(String, Int)] = await Database.shared.read { db in
+                var out: [(String, Int)] = []
+                db.query("SELECT ckey, tmdb FROM fiche WHERE kind=? AND cert IS NULL AND tmdb>0", [kind.rawValue]) { r in out.append((r.str(0), r.int(1))) }
+                return out
+            }
+            var i = 0
+            while i < todo.count {
+                if Task.isCancelled { return }
+                let batch = Array(todo[i..<min(todo.count, i + 24)]); i += batch.count
+                var rows: [[Any?]] = []
+                await withTaskGroup(of: (String, String?).self) { g in
+                    var it = batch.makeIterator()
+                    func add(_ x: (String, Int)) {
+                        g.addTask {
+                            let tv = kind == .series
+                            guard let d = await api.get((tv ? "/tv/" : "/movie/") + String(x.1) + (tv ? "/content_ratings" : "/release_dates")) else { return (x.0, nil) }
+                            return (x.0, FicheWorker.frCert(tv ? ["content_ratings": d] : ["release_dates": d], tv: tv))
+                        }
+                    }
+                    for _ in 0..<4 { if let x = it.next() { add(x) } }
+                    while let r = await g.next() {
+                        if let c = r.1 { rows.append([c, kind.rawValue, r.0]) }
+                        if let x = it.next() { add(x) }
+                    }
+                }
+                await Database.shared.read { db in for r in rows { db.run("UPDATE fiche SET cert=? WHERE kind=? AND ckey=?", r) } }
+            }
+        }
+    }
+
+    static let insertSQL = "INSERT OR REPLACE INTO fiche(kind,ckey,pid,sid,\(FicheStore.cols.replacingOccurrences(of: ",pid,sid", with: ""))) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)"
 
     /// Fiche d'un seul titre, tout de suite : quand on ouvre sa page et qu'elle n'a pas encore été téléchargée en arrière-plan.
     /// `tmdbHint` : identifiant TMDB donné par le fournisseur (get_vod_info), plus sûr que la recherche par titre.
@@ -211,7 +272,7 @@ struct FicheWorker {
             guard best.1 >= 0.62 else { return nil }
             id = best.0
         }
-        let append = tv ? "aggregate_credits,watch/providers,images" : "credits,watch/providers,images"
+        let append = tv ? "aggregate_credits,watch/providers,images,content_ratings" : "credits,watch/providers,images,release_dates"
         guard let d = await api.get((tv ? "/tv/" : "/movie/") + String(id), [("language", "fr-FR"), ("append_to_response", append), ("include_image_language", "fr,en,null")]),
               (d["adult"] as? Bool) != true else { return nil }
         let title = (d[tv ? "name" : "title"] as? String) ?? c.title
@@ -246,7 +307,7 @@ struct FicheWorker {
         // kind,ckey,pid,sid,tmdb,title,overview,poster,backdrop,genres,runtime,vote,year,coll,cast,wp,collname
         return [m.kind.rawValue, c.key, m.pid, m.sid, id, title, (d["overview"] as? String) ?? "", (d["poster_path"] as? String) ?? "",
                 (d["backdrop_path"] as? String) ?? "", genres, runtime, (d["vote_average"] as? Double) ?? 0, Int(date.prefix(4)) ?? c.year,
-                (coll?["id"] as? Int) ?? 0, castJ, wpJ, (coll?["name"] as? String) ?? "", countries, director, logo, compJ]
+                (coll?["id"] as? Int) ?? 0, castJ, wpJ, (coll?["name"] as? String) ?? "", countries, director, logo, compJ, FicheWorker.frCert(d, tv: tv)]
     }
 }
 

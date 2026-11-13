@@ -184,14 +184,21 @@ enum LiveStore {
 @MainActor
 final class LivePrefs: ObservableObject {
     static let shared = LivePrefs()
-    @Published var favorites: [String] { didSet { UserDefaults.standard.set(favorites, forKey: "prisme.live.favs") } }
-    @Published var recent: [String] { didSet { UserDefaults.standard.set(recent, forKey: "prisme.live.recent") } }
-    @Published var lastCategory: String? { didSet { UserDefaults.standard.set(lastCategory, forKey: "prisme.live.lastcat") } }
+    private var loading = false
+    private func k(_ b: String) -> String { ProfileStore.shared.key(b) }
+    @Published var favorites: [String] = [] { didSet { if !loading { UserDefaults.standard.set(favorites, forKey: k("prisme.live.favs")) } } }
+    @Published var recent: [String] = [] { didSet { if !loading { UserDefaults.standard.set(recent, forKey: k("prisme.live.recent")) } } }
+    @Published var lastCategory: String? { didSet { if !loading { UserDefaults.standard.set(lastCategory, forKey: k("prisme.live.lastcat")) } } }
 
-    private init() {
-        favorites = UserDefaults.standard.stringArray(forKey: "prisme.live.favs") ?? []
-        recent = UserDefaults.standard.stringArray(forKey: "prisme.live.recent") ?? []
-        lastCategory = UserDefaults.standard.string(forKey: "prisme.live.lastcat")
+    private init() { reload() }
+
+    /// Chaînes favorites et récentes du profil actif (clés d'origine pour le profil de Steven).
+    func reload() {
+        loading = true
+        favorites = UserDefaults.standard.stringArray(forKey: k("prisme.live.favs")) ?? []
+        recent = UserDefaults.standard.stringArray(forKey: k("prisme.live.recent")) ?? []
+        lastCategory = UserDefaults.standard.string(forKey: k("prisme.live.lastcat"))
+        loading = false
     }
 
     func toggleFavorite(_ id: String) {

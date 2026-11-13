@@ -230,6 +230,7 @@ struct TopBar: View {
             HStack(spacing: 6) {
                 tab(.films, "Films"); tab(.series, "Séries"); tab(.live, "TV en direct"); tab(.mine, "Ma liste")
                 icon(.search, "magnifyingglass"); icon(.settings, "gearshape.fill")
+                TopBarProfile()
             }
             .padding(9)
             .glass(40)

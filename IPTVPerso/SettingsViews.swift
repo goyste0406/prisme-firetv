@@ -61,12 +61,13 @@ struct ProvidersSettingsView: View {
     @State private var confirmDelete: Provider?
     @State private var dbSize: Int64 = 0
     @State private var tmdbKey = TmdbKey.value ?? ""
-    @State private var section = "prov"
+    @State private var section = "prof"
+    @ObservedObject var pui = ProfileUI.shared
     @ObservedObject var fiches = FicheService.shared
     @FocusState private var catFocus: String?
 
     private static let cats: [(String, String, String)] = [
-        ("prov", "rectangle.stack", "Fournisseurs"), ("tmdb", "star.square", "Fiches et notes (TMDB)"),
+        ("prof", "person", "Profils"), ("prov", "rectangle.stack", "Fournisseurs"), ("tmdb", "star.square", "Fiches et notes (TMDB)"),
         ("store", "internaldrive", "Stockage"), ("about", "info.circle", "À propos"),
     ]
 
@@ -106,6 +107,7 @@ struct ProvidersSettingsView: View {
                   primaryButton: .destructive(Text("Supprimer")) { store.remove(p.id) }, secondaryButton: .cancel(Text("Annuler")))
         }
         .task(id: store.catalogVersion) { dbSize = await Database.shared.read { $0.fileSize } }
+        .onChange(of: pui.editProfile) { _, e in if e != nil { section = "prof" } }
     }
 
     @ViewBuilder private var panel: some View {
@@ -113,6 +115,7 @@ struct ProvidersSettingsView: View {
         case "tmdb": tmdbPanel
         case "store": storePanel
         case "about": aboutPanel
+        case "prof": ProfilesPanel()
         default: providersPanel
         }
     }
@@ -168,6 +171,8 @@ struct ProvidersSettingsView: View {
         line("Version", (Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "?") + " (" + (Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "?") + ")")
         line("Identifiant", Bundle.main.bundleIdentifier ?? "?")
         line("Fournisseurs", "\(store.providers.count)")
+        line("Profils", "\(ProfileStore.shared.profiles.count) · données d'avant les profils rattachées à « \(ProfileStore.shared.profiles.first?.name ?? "Steven") »")
+        if let d = UserDefaults.standard.object(forKey: "prisme.backup.1-5-3.done") as? Date { line("Copie de sécurité (avant les profils)", "faite le " + Fmt.date(d)) }
         settingRow("Revenir aux catégories", value: "", icon: "chevron.left") { catFocus = section }
     }
 

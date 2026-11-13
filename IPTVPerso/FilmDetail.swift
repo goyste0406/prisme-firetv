@@ -143,6 +143,8 @@ struct FilmDetailView: View {
         .padding(.leading, 120)
         .padding(.bottom, 18)
         .frame(width: 1920, height: 1002, alignment: .bottomLeading)
+        // pastille du profil en haut à gauche (simulateur « who ») : OK pour changer de profil
+        .overlay(alignment: .topLeading) { ProfileChip().padding(.leading, 120).padding(.top, 45).opacity(peek ? 0.14 : 1).focusSection() }
         .padding(.bottom, -60)
         .focusSection()
     }
@@ -453,8 +455,9 @@ struct FilmDetailView: View {
         let t = v.clean.tags
         let q = t.first { ["4K", "1080p", "720p", "SD"].contains($0) } ?? (t.contains("HD") ? "HD" : "")
         var lang: [String] = []
-        if t.contains("VFF") { lang.append("Français (France) · VFF") }
-        else if t.contains("VFQ") { lang.append("Français (Québec) · VFQ") }
+        let raw = v.name.uppercased()
+        if raw.contains("VFF") || raw.contains("TRUEFRENCH") { lang.append("Français (France) · VFF") }
+        else if raw.contains("VFQ") { lang.append("Français (Québec) · VFQ") }
         else if t.contains("VF") { lang.append("Français · VF") }
         if t.contains("MULTI") { lang.append("Plusieurs langues · MULTI") }
         if t.contains("VOSTFR") { lang.append("VO sous-titrée français") }
