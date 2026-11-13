@@ -16,7 +16,8 @@ struct EveningPlan {
         let c = Calendar.current.dateComponents([.hour, .minute], from: date)
         let n = (c.hour ?? 0) * 60 + (c.minute ?? 0)
         // entre minuit et 5 h, le coucher « de ce soir » est déjà passé : on le ramène sur la même journée (comme le simulateur)
-        let b = n < 300 ? bed - 1440 : bed
+        // (et un coucher noté « 00:38 » au lieu de « 24:38 » est ramené après minuit quand il est encore la soirée)
+        let b = n < 300 ? (bed >= 1440 ? bed - 1440 : bed) : (bed < 300 ? bed + 1440 : bed)
         return EveningPlan(now: n, end: n + r, bed: b)
     }
 
@@ -142,23 +143,29 @@ struct SplitModal: View {
                 GeometryReader { g in
                     ZStack(alignment: .leading) {
                         Capsule().fill(Color.white.opacity(0.16)).frame(height: 10)
+                        // repères verticaux comme le simulateur (le choisi en or, lumineux)
                         ForEach(C.indices, id: \.self) { i in
-                            Circle().fill(i == sel ? P.gold : Color.white.opacity(0.6)).frame(width: i == sel ? 26 : 18, height: i == sel ? 26 : 18)
-                                .offset(x: g.size.width * CGFloat(C[i]) / CGFloat(max(1, minutes)) - (i == sel ? 13 : 9))
+                            Capsule().fill(i == sel ? P.gold : Color.white.opacity(0.55)).frame(width: i == sel ? 9 : 6, height: 40)
+                                .shadow(color: i == sel ? P.gold.opacity(0.7) : .clear, radius: 8)
+                                .offset(x: g.size.width * CGFloat(C[i]) / CGFloat(max(1, minutes)) - (i == sel ? 4.5 : 3))
                         }
                     }
-                }.frame(height: 30)
+                }.frame(height: 42)
                 HStack { Text("0"); Spacer(); Text(EveningPlan.dur(minutes)) }.font(P.font(21)).foregroundStyle(.white.opacity(0.6)).padding(.bottom, 8)
                 ForEach(C.indices, id: \.self) { i in
                     Button { sel = i } label: {
-                        HStack {
+                        HStack(spacing: 24) {
+                            // bouton radio à gauche (simulateur)
+                            ZStack {
+                                Circle().stroke(.foreground, lineWidth: 3).opacity(0.55).frame(width: 40, height: 40)
+                                if i == sel { Circle().fill(.foreground).frame(width: 20, height: 20) }
+                            }
                             VStack(alignment: .leading, spacing: 4) {
                                 Text("Arrêt vers " + EveningPlan.dur(C[i]) + " · vers " + EveningPlan.hm(n + C[i])).font(P.font(30, .semibold))
                                 Text((i == 1 ? "à la moitié" : i == 0 ? "un peu avant la moitié" : "un peu après la moitié") + " · partie 2 : " + EveningPlan.dur(minutes - C[i])).font(P.font(23)).opacity(0.7)
                             }
                             Spacer()
-                            if i == sel { Image(systemName: "checkmark").font(P.font(26, .bold)) }
-                        }.padding(.horizontal, 28).frame(height: 96)
+                        }.padding(.horizontal, 28).frame(height: 100)
                     }
                     .buttonStyle(SourceRowStyle())
                     .focused($focus, equals: i)
@@ -168,7 +175,7 @@ struct SplitModal: View {
                     Button(action: close) { Text("Annuler").font(P.font(30, .semibold)) }.buttonStyle(FicheButtonStyle())
                 }.padding(.top, 8)
             }
-            .padding(50).frame(width: 1240, alignment: .leading)
+            .padding(50).frame(width: 1140, alignment: .leading)
             .background(Color(red: 36 / 255, green: 36 / 255, blue: 44 / 255).opacity(0.8), in: RoundedRectangle(cornerRadius: 46, style: .continuous))
             .overlay(RoundedRectangle(cornerRadius: 46, style: .continuous).stroke(Color.white.opacity(0.16), lineWidth: 1.5))
             .focusSection()

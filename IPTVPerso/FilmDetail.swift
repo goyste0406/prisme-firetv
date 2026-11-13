@@ -34,6 +34,7 @@ struct FilmDetailView: View {
     private let minuteTimer = Timer.publish(every: 30, on: .main, in: .common).autoconnect()
     @FocusState private var playFocused: Bool
     @FocusState private var versionFocused: Bool
+    @FocusState private var splitFocused: Bool
 
     private var cur: MediaItem { chosen ?? item }
     private var title: String { (fiche?.title.isEmpty == false) ? fiche!.title : item.clean.title }
@@ -88,7 +89,7 @@ struct FilmDetailView: View {
                     splitOpen = false
                     SplitStore.set(item.id, Double(m * 60))
                     play(from: 0, stopAt: Double(m * 60))
-                }, close: { splitOpen = false })
+                }, close: { splitOpen = false; DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { splitFocused = true } })
                 .transition(.opacity)
             }
             if pickVersion {
@@ -217,7 +218,7 @@ struct FilmDetailView: View {
             if resumeAt == nil, plan?.needSplit == true {
                 // le film finit trop tard pour le profil actif : le couper en deux soirées
                 Button { splitOpen = true } label: { Label("En 2 soirées", systemImage: "moon").font(P.font(30, .semibold)) }
-                    .buttonStyle(FicheButtonStyle()).opacity(peek ? 0.22 : 1)
+                    .buttonStyle(FicheButtonStyle()).opacity(peek ? 0.22 : 1).focused($splitFocused)
             }
             Button { watch.toggleFavorite(item.id) } label: {
                 Image(systemName: watch.favorites.contains(item.id) ? "checkmark" : "plus").font(P.font(32, .bold))
