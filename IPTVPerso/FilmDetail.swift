@@ -27,6 +27,11 @@ struct FilmDetailView: View {
     @State private var trailer: Trailer?
     @State private var showTrailer: Trailer?
     @State private var loaded = false
+    @State private var why: [WhyReason] = []
+    @State private var splitOpen = false
+    @State private var clock = Date()
+    @ObservedObject private var profiles = ProfileStore.shared
+    private let minuteTimer = Timer.publish(every: 30, on: .main, in: .common).autoconnect()
     @FocusState private var playFocused: Bool
     @FocusState private var versionFocused: Bool
 
@@ -76,8 +81,16 @@ struct FilmDetailView: View {
                 }
                 .scrollClipDisabled()
             }
-            .disabled(pickVersion)
+            .disabled(pickVersion || splitOpen)
             .defaultFocus($playFocused, true, priority: .userInitiated)
+            if splitOpen {
+                SplitModal(title: title, minutes: minutes, start: { m in
+                    splitOpen = false
+                    SplitStore.set(item.id, Double(m * 60))
+                    play(from: 0, stopAt: Double(m * 60))
+                }, close: { splitOpen = false })
+                .transition(.opacity)
+            }
             if pickVersion {
                 VersionsModal(title: title, versions: versions, current: cur, label: { versionInfo($0) },
                               pick: { v in chosen = v; pickVersion = false; play(from: resumeAt ?? 0, item: v) },
@@ -86,6 +99,8 @@ struct FilmDetailView: View {
             }
         }
         .animation(.easeOut(duration: 0.2), value: pickVersion)
+        .animation(.easeOut(duration: 0.2), value: splitOpen)
+        .onReceive(minuteTimer) { clock = $0 }
         .background(alignment: .top) {
             let hasBd = fiche?.backdrop.isEmpty == false
             ZStack {
@@ -126,7 +141,7 @@ struct FilmDetailView: View {
                     .padding(.bottom, 15).opacity(peek ? 0.14 : 1)
                 BigTitle(text: title, face: face).padding(.bottom, 18).opacity(peek ? 0.14 : 1)
                 meta.padding(.bottom, 19)
-                if shownRating >= 7.5 { whyChip.padding(.bottom, 17) }
+                if let w = why.first { whyChip(w).padding(.bottom, 17) }
                 if !plot.isEmpty {
                     Button { showSyn = true } label: {
                         Text(plot).font(P.font(31)).lineSpacing(9).lineLimit(2).multilineTextAlignment(.leading)
@@ -170,12 +185,12 @@ struct FilmDetailView: View {
         .opacity(peek ? 0.14 : 1)
     }
 
-    /// Puce « pourquoi ce film » du simulateur (ici : la note, quand elle est vraiment bonne).
-    private var whyChip: some View {
+    /// Puce « pourquoi ce film » (simulateur whyc) : la première raison réelle (saga vue, acteur, genre préféré, note).
+    private func whyChip(_ w: WhyReason) -> some View {
         HStack(spacing: 15) {
-            Image(systemName: "trophy.fill").font(P.font(19)).frame(width: 36, height: 36)
+            Image(systemName: w.icon).font(P.font(19)).frame(width: 36, height: 36)
                 .background(Color.white.opacity(0.14), in: RoundedRectangle(cornerRadius: 13, style: .continuous))
-            Text("★ " + String(format: "%.1f", shownRating) + " · " + ratingWord(shownRating)).font(P.font(26))
+            Text(w.text).font(P.font(26))
         }
         .padding(.leading, 14).padding(.trailing, 22).padding(.vertical, 12)
         .background(Color(red: 10 / 255, green: 11 / 255, blue: 15 / 255).opacity(0.6), in: RoundedRectangle(cornerRadius: 22, style: .continuous))
@@ -197,6 +212,11 @@ struct FilmDetailView: View {
             .opacity(peek ? 0.22 : 1)
             if resumeAt != nil {
                 Button { play(from: 0) } label: { Label("Début", systemImage: "gobackward").font(P.font(30, .semibold)) }
+                    .buttonStyle(FicheButtonStyle()).opacity(peek ? 0.22 : 1)
+            }
+            if resumeAt == nil, plan?.needSplit == true {
+                // le film finit trop tard pour le profil actif : le couper en deux soirées
+                Button { splitOpen = true } label: { Label("En 2 soirées", systemImage: "moon").font(P.font(30, .semibold)) }
                     .buttonStyle(FicheButtonStyle()).opacity(peek ? 0.22 : 1)
             }
             Button { watch.toggleFavorite(item.id) } label: {
@@ -222,10 +242,10 @@ struct FilmDetailView: View {
 
     @ViewBuilder private func panel(_ proxy: ScrollViewProxy) -> some View {
         let hasScore = providerRating > 0 || tmdbVote > 0
-        if hasScore || minutes > 0 || !alsoParts.isEmpty {
+        if true {
             VStack(alignment: .leading, spacing: 26) {
                 if hasScore { scoreBox }
-                if minutes > 0 { evening }
+                evening
                 if !alsoParts.isEmpty {
                     Button { withAnimation { proxy.scrollTo("where", anchor: .top) } } label: {
                         HStack(spacing: 18) {
@@ -271,24 +291,38 @@ struct FilmDetailView: View {
         }
     }
 
+    /// minutes restantes (durée réelle moins la reprise) ; nil si la durée est inconnue
+    private var remainingMin: Int? {
+        guard minutes > 0 else { return nil }
+        return max(1, Int((Double(minutes * 60) - (resumeAt ?? 0)) / 60))
+    }
+    /// heure du coucher du profil actif (en test seulement : remplacée par « maintenant + N min »)
+    private var bedMinutes: Int {
+        if let n = Debug.bedInMinutes {
+            let c = Calendar.current.dateComponents([.hour, .minute], from: clock.addingTimeInterval(Double(n) * 60))
+            return (c.hour ?? 0) * 60 + (c.minute ?? 0)
+        }
+        return profiles.me.bed
+    }
+    private var plan: EveningPlan? { EveningPlan.make(remaining: remainingMin, bed: bedMinutes, at: clock) }
+
+    /// « TA SOIRÉE » (simulateur planHtml) : frise maintenant → fin, trait bleu du coucher du profil actif, message.
     private var evening: some View {
-        let now = Date()
-        let left = max(60, Double(minutes * 60) - (resumeAt ?? 0))
-        let end = now.addingTimeInterval(left)
-        let span = max(left + 1800, 3 * 3600)
-        let a = 0.02, b = min(0.94, a + left / span)
-        return VStack(alignment: .leading, spacing: 18) {
-            Text("TA SOIRÉE").font(P.font(20, .bold)).tracking(3).foregroundStyle(P.faint)
-            GeometryReader { g in
-                let w = g.size.width
-                ZStack(alignment: .leading) {
-                    Capsule().fill(Color.white.opacity(0.14)).frame(height: 8)
-                    Capsule().fill(LinearGradient(colors: [P.gold, Color(red: 1, green: 0.55, blue: 0.22)], startPoint: .leading, endPoint: .trailing))
-                        .frame(width: max(16, w * (b - a)), height: 18).offset(x: w * a)
-                }.frame(height: 34)
-            }.frame(height: 34)
-            HStack { Text("maintenant"); Spacer(); Text("fin " + Fmt.hm(end)) }.font(P.font(19)).foregroundStyle(P.faint)
-            (Text("Fin à " + Fmt.hm(end)).foregroundColor(P.gold).bold() + Text(" · dans " + runtimeText(Int(left / 60))).foregroundColor(P.dim)).font(P.font(25))
+        VStack(alignment: .leading, spacing: 6) {
+            Text("TA SOIRÉE").font(P.font(21, .bold)).tracking(2.6).foregroundStyle(.white.opacity(0.55))
+            if let p = plan {
+                EveningTimeline(p: p)
+                Group {
+                    if let cut = SplitStore.get(item.id), resumeAt != nil, minutes > 0 {
+                        Text("Partie 1 vue").foregroundColor(.white.opacity(0.86)) + Text(" · ") + Text("partie 2 : " + EveningPlan.dur(max(1, minutes - Int(cut / 60)))).bold().foregroundColor(P.gold)
+                    } else {
+                        Text(p.message.bold).bold().foregroundColor(P.gold) + Text(p.message.rest).foregroundColor(.white.opacity(0.86))
+                    }
+                }
+                .font(P.font(27)).lineSpacing(4).padding(.top, 16)
+            } else {
+                Text("Durée inconnue chez ton fournisseur et sur TMDB : l'heure de fin ne peut pas être calculée.").font(P.font(23)).foregroundStyle(.white.opacity(0.7)).padding(.top, 10)
+            }
         }
         .padding(26).frame(maxWidth: .infinity, minHeight: 280, alignment: .topLeading)
         .background(Color.black.opacity(0.3), in: RoundedRectangle(cornerRadius: 30, style: .continuous))
@@ -425,6 +459,7 @@ struct FilmDetailView: View {
         universe = await MediaStore.universe(of: it, pids: pids, exclude: exclude)
         let skip = Set(universe.map(\.workKey)).union(sagaAvail.values.map(\.workKey)).union(exclude.map { "t\($0)" })
         similar = await MediaStore.similar(of: it, genres: genres, pids: pids, limit: 16).filter { !skip.contains($0.0.workKey) }.map { SimilarItem(item: $0.0, common: $0.1) }
+        why = await WhyBuilder.reasons(fiche: fiche, rating: shownRating, item: item, pids: pids)
         loaded = true
     }
 
@@ -443,11 +478,14 @@ struct FilmDetailView: View {
 
     private var trailerPlay: (() -> Void)? { { play(from: resumeAt ?? 0) } }
 
-    private func play(from: Double, item v: MediaItem? = nil) {
+    private func play(from: Double, item v: MediaItem? = nil, stopAt: Double? = nil) {
         let src = v ?? cur
         guard let p = store.provider(src.pid), let url = p.movieURL(src) else { return }
         bg.stop()
-        playing = VodRequest(url: url, key: item.id, item: item.id, title: title, subtitle: "", icon: item.posterURL, startAt: from)
+        var r = VodRequest(url: url, key: item.id, item: item.id, title: title, subtitle: "", icon: item.posterURL, startAt: from)
+        // partie 1 d'un film coupé en deux soirées : arrêt prévu (encore à venir)
+        if let s = stopAt ?? SplitStore.get(item.id), from < s - 60 { r.stopAt = s }
+        playing = r
     }
 
     /// Ligne de détail d'une version (fenêtre « Choisis la version ») : uniquement ce que dit le nom chez le fournisseur.

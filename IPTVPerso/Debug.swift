@@ -27,6 +27,8 @@ enum Debug {
 extension Debug {
     /// nombre de profils de test (« 2 » : ajoute Léa, 12 ans max)
     static var profiles: String? { arg("prisme.debug.profiles") }
+    /// heure du coucher simulée « dans N minutes » (pour voir « Fin à … · après ton coucher » à toute heure)
+    static var bedInMinutes: Int? { arg("prisme.debug.bedIn").flatMap { Int($0) } }
 
     /// Simule une installation 1.5.3 (avant les profils) : historique et Ma liste écrits dans les clés d'origine,
     /// AVANT le chargement des profils. Sert à vérifier que la migration les rattache bien au profil de Steven.
