@@ -101,6 +101,74 @@ enum LiveStore {
         return list
     }
 
+    /// Un programme du guide, avec sa chaîne.
+    struct Airing: Identifiable, Hashable { let ch: Channel; let p: Program; var id: String { ch.id + "|" + p.id } }
+
+    private static let soonCache = NSCache<NSString, AiringBox>()
+    final class AiringBox { let list: [Airing]; let at: Date; init(_ l: [Airing]) { list = l; at = Date() } }
+
+    /// Les diffusions d'un titre au guide (en cours ou dans les 2 jours) : « À la TV » sur la fiche d'un film.
+    static func airings(title: String, providers: [String]) async -> [Airing] {
+        let t = title.trimmingCharacters(in: .whitespaces)
+        guard t.count >= 2, !providers.isEmpty else { return [] }
+        let now = Int(Date().timeIntervalSince1970)
+        let ph = providers.map { _ in "?" }.joined(separator: ",")
+        return await Database.shared.read { db in
+            var out: [Airing] = [], seen = Set<String>()
+            db.query("""
+                SELECT l.pid,l.sid,l.name,l.num,l.icon,l.cid,l.epg,l.archive,e.start,e.stop,e.title,e.descr FROM epg e JOIN live l ON l.epg=e.ch
+                WHERE e.title=? COLLATE NOCASE AND e.stop>? AND l.pid IN (\(ph)) ORDER BY e.start LIMIT 12
+                """, ([t, now] as [Any?]) + providers.map { $0 as Any? }) { r in
+                let a = Airing(ch: row(r), p: Program(start: r.int(8), stop: r.int(9), title: r.str(10), descr: r.str(11)))
+                if seen.insert(a.ch.name + "|\(a.p.start)").inserted { out.append(a) }
+            }
+            return Array(out.prefix(6))
+        }
+    }
+
+    /// « Commence bientôt » : ce qui démarre dans l'heure (gardé 5 minutes en mémoire).
+    static func startingSoon(providers: [String]) async -> [Airing] {
+        guard !providers.isEmpty else { return [] }
+        let key = providers.joined(separator: ",") as NSString
+        if let b = soonCache.object(forKey: key), Date().timeIntervalSince(b.at) < 300 { return b.list }
+        let now = Int(Date().timeIntervalSince1970)
+        let ph = providers.map { _ in "?" }.joined(separator: ",")
+        let list = await Database.shared.read { db -> [Airing] in
+            var out: [Airing] = [], seen = Set<String>()
+            db.query("""
+                SELECT l.pid,l.sid,l.name,l.num,l.icon,l.cid,l.epg,l.archive,e.start,e.stop,e.title,e.descr FROM epg e JOIN live l ON l.epg=e.ch
+                WHERE e.start>? AND e.start<=? AND l.pid IN (\(ph)) ORDER BY e.start, l.num LIMIT 80
+                """, ([now, now + 3600] as [Any?]) + providers.map { $0 as Any? }) { r in
+                let a = Airing(ch: row(r), p: Program(start: r.int(8), stop: r.int(9), title: r.str(10), descr: r.str(11)))
+                if seen.insert(a.ch.epg + "|\(a.p.start)").inserted { out.append(a) }
+            }
+            return Array(out.prefix(20))
+        }
+        soonCache.setObject(AiringBox(list), forKey: key)
+        return list
+    }
+
+    /// Recherche d'une chaîne par son nom.
+    static func search(_ q: String, providers: [String]) async -> [Channel] {
+        guard !providers.isEmpty else { return [] }
+        let ph = providers.map { _ in "?" }.joined(separator: ",")
+        return await Database.shared.read { db in
+            var out: [Channel] = []
+            db.query("SELECT pid,sid,name,num,icon,cid,epg,archive FROM live WHERE name LIKE ? AND pid IN (\(ph)) ORDER BY num, name LIMIT 120",
+                     (["%" + q + "%"] as [Any?]) + providers.map { $0 as Any? }) { r in out.append(row(r)) }
+            return out
+        }
+    }
+
+    /// Première chaîne d'une catégorie (image de la carte « univers »).
+    static func firstChannels(pid: String, cid: String, limit: Int) async -> [Channel] {
+        await Database.shared.read { db in
+            var out: [Channel] = []
+            db.query("SELECT pid,sid,name,num,icon,cid,epg,archive FROM live WHERE pid=? AND cid=? ORDER BY num, name LIMIT \(limit)", [pid, cid]) { r in out.append(row(r)) }
+            return out
+        }
+    }
+
     /// En ce moment + ensuite.
     static func nowNext(_ ch: Channel) async -> (Program?, Program?) {
         let now = Date()

@@ -160,6 +160,56 @@ enum MediaStore {
         }
     }
 
+    /// « Si tu hésites encore » / « Séries proches » : titres qui partagent le plus de genres TMDB, les mieux notés d'abord.
+    /// Sans fiche TMDB : les mieux notés de la même catégorie chez le fournisseur. Renvoie aussi les genres en commun.
+    static func similar(of it: MediaItem, genres: [String], pids: [String], limit: Int) async -> [(MediaItem, [String])] {
+        guard !pids.isEmpty else { return [] }
+        let k = it.kind, t = table(k)
+        if genres.isEmpty {
+            let list = await Database.shared.read { db -> [MediaItem] in
+                var out: [MediaItem] = [], seen = Set<String>([it.clean.key])
+                db.query("SELECT \(cols(k)) FROM \(t) WHERE pid=? AND cid=? ORDER BY rating DESC, added DESC LIMIT \(limit * 3)", [it.pid, it.cid]) { r in
+                    let m = row(k, r); if seen.insert(m.clean.key).inserted { out.append(m) }
+                }
+                return Array(out.prefix(limit)).withFiches()
+            }
+            return list.map { ($0, []) }
+        }
+        let c = cols(k).split(separator: ",").map { $0.hasPrefix("'") ? String($0) : "m." + $0 }.joined(separator: ",")
+        let G = Array(genres.prefix(3))
+        let cond = G.map { _ in "f.genres LIKE ?" }.joined(separator: " OR ")
+        let sql = "SELECT \(c), f.genres FROM fiche f JOIN \(t) m ON m.pid=f.pid AND m.sid=f.sid WHERE f.kind=? AND (\(cond)) AND m.pid IN \(inList(pids)) ORDER BY f.vote DESC LIMIT 240"
+        let args: [Any?] = [k.rawValue] + G.map { ("%" + $0 + "%") as Any? } + pids.map { $0 as Any? }
+        return await Database.shared.read { db in
+            var out: [(MediaItem, [String], Int)] = [], seen = Set<String>([it.clean.key])
+            var i = 0
+            db.query(sql, args) { r in
+                let m = row(k, r)
+                guard seen.insert(m.clean.key).inserted else { return }
+                let theirs = r.str(11).components(separatedBy: ", ")
+                let common = genres.filter { theirs.contains($0) }
+                out.append((m, common, i)); i += 1
+            }
+            let best = out.sorted { $0.1.count != $1.1.count ? $0.1.count > $1.1.count : $0.2 < $1.2 }.prefix(limit)
+            let withF = best.map { $0.0 }.withFiches()
+            return Array(zip(withF, best.map { $0.1 }))
+        }
+    }
+
+    /// Les autres films / séries d'un acteur dans tes abonnements (d'après la distribution des fiches TMDB).
+    static func withActor(_ name: String, kind k: MediaKind, pids: [String], excluding key: String) async -> [MediaItem] {
+        guard !pids.isEmpty, !name.isEmpty else { return [] }
+        let enc = String(data: (try? JSONEncoder().encode(name)) ?? Data(), encoding: .utf8) ?? "\"\(name)\""
+        let t = table(k), c = cols(k).split(separator: ",").map { $0.hasPrefix("'") ? String($0) : "m." + $0 }.joined(separator: ",")
+        let sql = "SELECT \(c) FROM fiche f JOIN \(t) m ON m.pid=f.pid AND m.sid=f.sid WHERE f.kind=? AND f.cast LIKE ? AND m.pid IN \(inList(pids)) ORDER BY f.year DESC LIMIT 80"
+        let args: [Any?] = [k.rawValue, "%\"n\":" + enc + "%"] + pids.map { $0 as Any? }
+        return await Database.shared.read { db in
+            var out: [MediaItem] = [], seen = Set<String>([key])
+            db.query(sql, args) { r in let m = row(k, r); if seen.insert(m.clean.key).inserted { out.append(m) } }
+            return Array(out.prefix(30)).withFiches()
+        }
+    }
+
     struct Cat: Identifiable, Hashable { let pid: String; let cid: String; let name: String; let count: Int; var id: String { pid + ":" + cid } }
 
     static func categories(_ k: MediaKind, pids: [String]) async -> [Cat] {
@@ -273,6 +323,15 @@ final class WatchStore: ObservableObject {
     func toggleFavorite(_ id: String) {
         if let i = favorites.firstIndex(of: id) { favorites.remove(at: i) } else { favorites.insert(id, at: 0) }
     }
+
+    /// « Saison vue » / « Saison non vue » sur la fiche d'une série.
+    func setWatched(_ keys: [String], watched: Bool, title: String, icon: String, item: String) {
+        for k in keys {
+            if watched { entries[k] = Entry(pos: 1, dur: 1, at: Date(), title: title, icon: icon, item: item, ep: nil) }
+            else { entries.removeValue(forKey: k) }
+        }
+        if let d = try? JSONEncoder().encode(entries) { UserDefaults.standard.set(d, forKey: "prisme.watch") }
+    }
 }
 
 // MARK: - Infos détaillées chez le fournisseur (résumé, distribution, durée, image de fond, épisodes)
@@ -280,10 +339,33 @@ final class WatchStore: ObservableObject {
 struct MediaInfo {
     var plot = "", cast = "", director = "", genre = "", duration = "", backdrop = "", rating = 0.0, year = 0
     var seasons: [Season] = []
+    var seconds = 0          // durée exacte donnée par le fournisseur (0 = inconnue)
+    var trailer = ""         // identifiant YouTube de la bande-annonce (fournisseur)
+    var age = ""             // classification (« 12+ »…) si le fournisseur la donne
+    var country = ""
+    var tmdb = 0             // identifiant TMDB donné par le fournisseur
+    /// Durée en minutes : la valeur exacte, sinon « 01:52:00 » / « 112 min » lu dans le texte.
+    var minutes: Int {
+        if seconds > 0 { return Int((Double(seconds) / 60).rounded()) }
+        return MediaInfo.parseMinutes(duration)
+    }
+    static func parseMinutes(_ d: String) -> Int {
+        let t = d.trimmingCharacters(in: .whitespaces)
+        if t.isEmpty { return 0 }
+        let parts = t.split(separator: ":").compactMap { Int($0.trimmingCharacters(in: .whitespaces)) }
+        if parts.count == 3 { return parts[0] * 60 + parts[1] + (parts[2] >= 30 ? 1 : 0) }
+        if parts.count == 2 { return parts[0] * 60 + parts[1] }
+        let digits = t.prefix { $0.isNumber }
+        if let n = Int(digits), n > 0 { return t.lowercased().contains("h") && !t.lowercased().contains("min") ? n * 60 : n }
+        return 0
+    }
 }
 struct Season: Identifiable { let number: Int; let episodes: [EpisodeInfo]; var id: Int { number } }
 struct EpisodeInfo: Identifiable, Hashable {
     let id: String; let season: Int; let number: Int; let title: String; let ext: String; let plot: String; let image: String; let duration: String
+    var seconds = 0
+    var rating = 0.0
+    var minutes: Int { seconds > 0 ? Int((Double(seconds) / 60).rounded()) : MediaInfo.parseMinutes(duration) }
 }
 
 enum InfoLoader {
@@ -314,6 +396,12 @@ enum InfoLoader {
         if let bd = info["backdrop_path"] as? [String], let f = bd.first { m.backdrop = f } else { m.backdrop = s("backdrop_path") }
         m.rating = Double(s("rating")) ?? 0
         m.year = Int((s("releasedate").isEmpty ? s("releaseDate") : s("releasedate")).prefix(4)) ?? 0
+        m.seconds = Int(s("duration_secs")) ?? 0
+        if m.seconds == 0, let rt = Int(s("episode_run_time")), rt > 0, it.kind == .series { m.seconds = rt * 60 }
+        m.trailer = s("youtube_trailer")
+        m.age = s("mpaa_rating").isEmpty ? s("age") : s("mpaa_rating")
+        m.country = s("country")
+        m.tmdb = Int(s("tmdb_id").isEmpty ? s("tmdb") : s("tmdb_id")) ?? 0
         if it.kind == .series {
             var seasons: [Int: [EpisodeInfo]] = [:]
             func add(_ arr: [[String: Any]], season: Int) {
@@ -324,7 +412,8 @@ enum InfoLoader {
                     let sn = Int(es("season")) ?? season
                     seasons[sn, default: []].append(EpisodeInfo(id: es("id"), season: sn, number: Int(es("episode_num")) ?? (seasons[sn]?.count ?? 0) + 1,
                         title: es("title"), ext: es("container_extension").isEmpty ? "mp4" : es("container_extension"),
-                        plot: isf("plot"), image: isf("movie_image"), duration: isf("duration")))
+                        plot: isf("plot"), image: isf("movie_image"), duration: isf("duration"),
+                        seconds: Int(isf("duration_secs")) ?? 0, rating: Double(isf("rating")) ?? 0))
                 }
             }
             if let d = root["episodes"] as? [String: Any] {

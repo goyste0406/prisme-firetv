@@ -13,7 +13,7 @@ struct MediaHomeView: View {
     @State private var hero: [MediaItem] = []
     @State private var newest: [MediaItem] = []
     @State private var best: [MediaItem] = []
-    @State private var resume: [MediaItem] = []
+    @State private var resume: [ResumeEntry] = []
     @State private var mine: [MediaItem] = []
     @State private var cats: [MediaStore.Cat] = []
     @State private var genres: [GenreRow] = []
@@ -22,26 +22,34 @@ struct MediaHomeView: View {
     @State private var openCat: MediaStore.Cat?
     @State private var heroIndex = 0
     @State private var playing: VodRequest?
+    @FocusState private var heroFocus: Bool
 
     private var loadKey: String { "\(kind.rawValue)|\(store.catalogVersion)|\(store.active.map(\.id).joined())|\(fiches.version / 25)" }
 
     var body: some View {
         ScrollView {
-            LazyVStack(alignment: .leading, spacing: 30) {
-                if !hero.isEmpty {
-                    let h = hero[heroIndex % hero.count]
-                    HeroView(item: h, index: heroIndex % hero.count, count: hero.count, provider: store.provider(h.pid)?.name ?? "",
-                             play: { play(h) }, info: { open = h })
-                } else {
-                    Color.clear.frame(height: 200)
+            LazyVStack(alignment: .leading, spacing: 34) {
+                ZStack(alignment: .top) {
+                    if !hero.isEmpty {
+                        let h = hero[heroIndex % hero.count]
+                        HeroView(item: h, index: heroIndex % hero.count, count: hero.count, provider: store.provider(h.pid)?.name ?? "",
+                                 focus: $heroFocus,
+                                 play: { info in play(h, info) }, info: { open = h },
+                                 step: { d in withAnimation(.easeInOut(duration: 0.45)) { heroIndex = (heroIndex + d + hero.count) % hero.count } })
+                    } else {
+                        Color.clear.frame(height: 240)
+                    }
+                    TopBar()
                 }
                 if store.importing != nil && newest.isEmpty {
                     Text("Chargement du catalogue… \(Int(store.progress * 100)) %").font(P.font(30, .semibold)).foregroundStyle(P.dim).padding(.horizontal, 120)
                 }
-                if !resume.isEmpty { MediaRow(title: "Reprendre", sub: "là où tu t'es arrêté", items: resume, open: { open = $0 }) }
-                if !mine.isEmpty { MediaRow(title: "Ma liste", items: mine, open: { open = $0 }) }
-                if !newest.isEmpty { MediaRow(title: "Nouveautés", sub: "ajoutés récemment", items: newest, open: { open = $0 }) }
-                if !best.isEmpty { MediaRow(title: "Les mieux notés", items: best, open: { open = $0 }) }
+                if !resume.isEmpty { ResumeRow(entries: resume, open: { open = $0 }) }
+                if !mine.isEmpty { MediaRow(title: "Ma liste", sub: "\(mine.count)", items: mine, open: { open = $0 }) }
+                if !newest.isEmpty {
+                    MediaRow(title: "Nouveau sur prisme", sub: "ajouts récents chez " + providerNames, items: newest, open: { open = $0 }, showAdded: true)
+                }
+                if !best.isEmpty { MediaRow(title: "Les mieux notés", sub: "selon les notes du fournisseur", items: best, open: { open = $0 }) }
                 ForEach(genres) { g in MediaRow(title: g.name, items: g.items, open: { open = $0 }) }
                 ForEach(cats) { c in
                     CategoryRow(kind: kind, cat: c, open: { open = $0 }, more: { openCat = c })
@@ -57,15 +65,16 @@ struct MediaHomeView: View {
         .task(id: loadKey) { await load(loadKey) }
         .task(id: watch.entries.count) { await loadResume() }
         .task {
-            // la grande affiche change toutes les 8 s
+            // la grande affiche change toutes les 8 s, sauf quand le bouton Lecture est sélectionné
             while !Task.isCancelled {
                 try? await Task.sleep(nanoseconds: 8_000_000_000)
-                if hero.count > 1 { withAnimation(.easeInOut(duration: 0.7)) { heroIndex += 1 } }
+                if hero.count > 1 && !heroFocus { withAnimation(.easeInOut(duration: 0.7)) { heroIndex += 1 } }
             }
         }
     }
 
     private var pids: [String] { store.active.map(\.id) }
+    private var providerNames: String { store.active.map(\.name).joined(separator: ", ") }
 
     private func apply(_ s: HomeSnap) {
         newest = s.newest; best = s.best; cats = s.cats; genres = s.genres
@@ -91,85 +100,141 @@ struct MediaHomeView: View {
 
     private func loadResume() async {
         let prefix = kind.rawValue + ":"
-        let ids = watch.inProgress.map(\.item).filter { $0.hasPrefix(prefix) }
-        resume = await MediaStore.items(ids: Array(ids.prefix(20)))
+        let list = watch.inProgress.filter { $0.item.hasPrefix(prefix) }.prefix(20)
+        let items = await MediaStore.items(ids: list.map(\.item))
+        let byID = Dictionary(items.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
+        resume = list.compactMap { e in byID[e.item].map { ResumeEntry(item: $0, entry: e) } }
         mine = await MediaStore.items(ids: watch.favorites.filter { $0.hasPrefix(prefix) })
     }
 
-    /// « Lecture » sur la grande affiche : un film démarre (en reprenant s'il a été commencé), une série ouvre sa fiche.
-    private func play(_ it: MediaItem) {
-        guard it.kind == .film, let p = store.provider(it.pid), let url = p.movieURL(it) else { open = it; return }
-        playing = VodRequest(url: url, key: it.id, item: it.id, title: it.displayTitle, subtitle: "", icon: it.posterURL, startAt: watch.resume(it.id) ?? 0)
+    /// « Lecture » sur la grande affiche : un film démarre (en reprenant s'il a été commencé),
+    /// une série démarre à l'épisode à suivre ; sans épisodes connus, la fiche s'ouvre.
+    private func play(_ it: MediaItem, _ info: MediaInfo) {
+        guard let p = store.provider(it.pid) else { open = it; return }
+        if it.kind == .film {
+            guard let url = p.movieURL(it) else { open = it; return }
+            playing = VodRequest(url: url, key: it.id, item: it.id, title: it.displayTitle, subtitle: "", icon: it.posterURL, startAt: watch.resume(it.id) ?? 0)
+        } else {
+            guard let e = EpisodeLogic.next(it, info, watch),
+                  let r = EpisodeLogic.request(it, title: it.displayTitle, info: info, provider: p, episode: e, from: watch.resume(EpisodeLogic.key(it, e)) ?? 0) else { open = it; return }
+            playing = r
+        }
     }
 }
 
 struct GenreRow: Identifiable { let name: String; let items: [MediaItem]; var id: String { name } }
 
-func runtimeText(_ m: Int) -> String { m >= 60 ? "\(m / 60) h \(String(format: "%02d", m % 60))" : "\(m) min" }
-
-/// Grande affiche en haut de l'accueil : image plein écran, badge doré, titre, infos, Lecture.
+/// Grande affiche en haut de l'accueil : image plein écran, badge doré, titre, infos, Lecture (avec l'heure de fin).
 struct HeroView: View {
     let item: MediaItem
     let index: Int
     let count: Int
     let provider: String
-    let play: () -> Void
+    var focus: FocusState<Bool>.Binding
+    let play: (MediaInfo) -> Void
     let info: () -> Void
+    let step: (Int) -> Void
     @ObservedObject var watch = WatchStore.shared
+    @State private var mi = MediaInfo()
+    @State private var miFor = ""
+
+    private var details: MediaInfo { miFor == item.id ? mi : MediaInfo() }
+    /// Durée : TMDB, sinon le fournisseur. 0 = inconnue → pas d'heure de fin.
+    private var minutes: Int { (item.fiche?.runtime ?? 0) > 0 ? item.fiche!.runtime : details.minutes }
 
     var body: some View {
         let c = item.clean
         let f = item.fiche
         ZStack(alignment: .bottomLeading) {
-            Group {
+            ZStack {
                 if item.backdropURL.isEmpty { Poster(url: item.posterURL).blur(radius: 50).opacity(0.6) }
                 else { Poster(url: item.backdropURL) }
             }
-            .frame(width: 1920, height: 840).clipped()
-            LinearGradient(colors: [P.room.opacity(0.92), P.room.opacity(0.55), .clear], startPoint: .leading, endPoint: .trailing)
-            LinearGradient(colors: [.black.opacity(0.55), .clear, .clear, P.room], startPoint: .top, endPoint: .bottom)
+            .frame(width: 1920, height: 860).clipped()
+            .id(item.id).transition(.opacity)
+            LinearGradient(colors: [P.room.opacity(0.92), P.room.opacity(0.5), .clear], startPoint: .leading, endPoint: .trailing)
+            LinearGradient(colors: [.black.opacity(0.6), .clear, .clear, P.room], startPoint: .top, endPoint: .bottom)
 
-            VStack(alignment: .leading, spacing: 18) {
-                Kicker(text: item.kind == .film ? "Nouveau dans prisme" : "Nouvelle série")
-                Text(item.displayTitle).font(P.font(72, .bold)).lineLimit(2).minimumScaleFactor(0.7).frame(maxWidth: 1150, alignment: .leading)
+            VStack(alignment: .leading, spacing: 16) {
+                Kicker(text: (agoDays ?? 99) <= 7 ? "L'arrivée de la semaine" : (item.kind == .film ? "Nouveau dans prisme" : "Nouvelle série"))
+                Text(item.displayTitle).font(P.font(74, .bold)).lineLimit(2).minimumScaleFactor(0.7).frame(maxWidth: 1150, alignment: .leading)
                 HStack(spacing: 18) {
                     if !provider.isEmpty { Pill(text: provider, bg: P.chip.opacity(0.45), stroke: P.chip) }
+                    if let a = agoText(item.added) { Text(a) }
                     let y = (f?.year ?? 0) > 0 ? f!.year : c.year
                     if y > 0 { Text(String(y)) }
-                    if let rt = f?.runtime, rt > 0 { Text(runtimeText(rt)) }
+                    if item.kind == .film, minutes > 0 { Text(runtimeText(minutes)) }
+                    if item.kind == .series, !details.seasons.isEmpty {
+                        let n = details.seasons.flatMap(\.episodes).count
+                        Text("\(details.seasons.count) saison\(details.seasons.count > 1 ? "s" : "") · \(n) ép.")
+                    }
                     let r = (f?.vote ?? 0) > 0 ? f!.vote : item.rating
                     if r > 0 { Stars(value: r) }
                     if !c.tags.isEmpty { Pill(text: c.tags.joined(separator: " · "), bg: .clear) }
                 }
                 .font(P.font(25, .medium)).foregroundStyle(P.dim)
-                let plot = (f?.overview.isEmpty == false) ? f!.overview : item.plot
+                let plot = (f?.overview.isEmpty == false) ? f!.overview : (item.plot.isEmpty ? details.plot : item.plot)
                 if !plot.isEmpty { Text(plot).font(P.font(26)).foregroundStyle(.white.opacity(0.8)).lineLimit(2).frame(maxWidth: 980, alignment: .leading) }
-                HStack(spacing: 22) {
-                    Button(action: play) { PlayLabel(title: watch.resume(item.id) != nil ? "Reprendre" : "Lecture", sub: endLine(f?.runtime ?? 0)) }
-                        .buttonStyle(PrimaryStyle())
-                    Button(action: info) { Label("Fiche", systemImage: "info.circle").font(P.font(27, .semibold)) }
-                        .buttonStyle(GlassStyle())
-                }
-                .padding(.top, 10)
+                Button { play(details) } label: { PlayLabel(title: playTitle, sub: playSub) }
+                    .buttonStyle(PrimaryStyle())
+                    .focused(focus)
+                    .contextMenu {
+                        Button { info() } label: { Label("Voir la fiche", systemImage: "info.circle") }
+                        Button { watch.toggleFavorite(item.id) } label: {
+                            Label(watch.favorites.contains(item.id) ? "Retirer de ma liste" : "Ajouter à ma liste", systemImage: watch.favorites.contains(item.id) ? "checkmark" : "plus")
+                        }
+                    }
+                    .onMoveCommand { d in
+                        if d == .left { step(-1) } else if d == .right { step(1) }
+                    }
+                    .padding(.top, 8)
+                Text("OK maintenu : voir la fiche · " + (watch.favorites.contains(item.id) ? "retirer de ma liste" : "ajouter à ma liste") + (count > 1 ? " · ‹ › autre titre" : ""))
+                    .font(P.font(19)).foregroundStyle(P.faint)
             }
-            .padding(.leading, 120).padding(.bottom, 70)
+            .padding(.leading, 120).padding(.bottom, 64)
 
-            HStack(spacing: 8) {
-                ForEach(0..<count, id: \.self) { i in Capsule().fill(.white.opacity(i == index ? 1 : 0.35)).frame(width: i == index ? 34 : 10, height: 10) }
-                Text("\(index + 1)/\(count)").font(P.font(20, .semibold)).foregroundStyle(P.dim).padding(.leading, 8)
+            if count > 1 {
+                HStack(spacing: 8) {
+                    ForEach(0..<count, id: \.self) { i in Capsule().fill(.white.opacity(i == index ? 1 : 0.35)).frame(width: i == index ? 34 : 10, height: 10) }
+                    Text("\(index + 1) / \(count)").font(P.font(20, .semibold)).foregroundStyle(P.dim).padding(.leading, 8)
+                }
+                .frame(maxWidth: .infinity, alignment: .trailing).padding(.trailing, 120).padding(.bottom, 150)
             }
-            .frame(maxWidth: .infinity, alignment: .trailing).padding(.trailing, 120).padding(.bottom, 90)
         }
-        .frame(width: 1920, height: 840)
-        .id(item.id)
-        .transition(.opacity)
+        .frame(width: 1920, height: 860)
         .focusSection()
+        .task(id: item.id) {
+            let id = item.id
+            let m = await InfoLoader.load(item)
+            if id == item.id { mi = m; miFor = id }
+        }
     }
 
-    private func endLine(_ runtime: Int) -> String? {
-        guard item.kind == .film, runtime > 0 else { return nil }
-        let left = Double(runtime * 60) - (watch.resume(item.id) ?? 0)
-        return "FINIT À " + Fmt.hm(Date().addingTimeInterval(max(60, left)))
+    private var agoDays: Int? { item.added > 0 ? (Int(Date().timeIntervalSince1970) - item.added) / 86400 : nil }
+
+    private var nextEp: EpisodeInfo? { item.kind == .series ? EpisodeLogic.next(item, details, watch) : nil }
+
+    private var playTitle: String {
+        if item.kind == .film { return watch.resume(item.id) != nil ? "Reprendre" : "Lecture" }
+        guard let e = nextEp else { return "Lecture" }
+        let started = details.seasons.flatMap(\.episodes).contains { watch.fraction(EpisodeLogic.key(item, $0)) != nil }
+        return (watch.resume(EpisodeLogic.key(item, e)) != nil ? "Reprendre" : started ? "Regarder" : "Commencer") + " S\(e.season) · É\(e.number)"
+    }
+
+    /// Petite ligne du bouton blanc : heure de fin (seulement si la durée est connue).
+    private var playSub: String? {
+        if item.kind == .film {
+            guard minutes > 0 else { return nil }
+            let r = watch.resume(item.id) ?? 0
+            let left = max(60, Double(minutes * 60) - r)
+            return (r > 0 ? "RESTE " + runtimeText(Int(left / 60)).uppercased() + " · FIN " : "FINIT À ") + Fmt.hm(Date().addingTimeInterval(left))
+        }
+        guard let e = nextEp else { return nil }
+        let m = EpisodeLogic.minutes(e, info: details, fiche: item.fiche)
+        guard m > 0 else { return nil }
+        let r = watch.resume(EpisodeLogic.key(item, e)) ?? 0
+        let left = max(60, Double(m * 60) - r)
+        return ((r > 0 ? "RESTE " : "") + runtimeText(Int(left / 60)) + " · FIN " + Fmt.hm(Date().addingTimeInterval(left))).uppercased()
     }
 }
 
@@ -194,6 +259,7 @@ struct MediaRow: View {
     let items: [MediaItem]
     let open: (MediaItem) -> Void
     var more: (() -> Void)? = nil
+    var showAdded = false
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             HStack(alignment: .firstTextBaseline, spacing: 24) {
@@ -203,8 +269,15 @@ struct MediaRow: View {
                 }
             }.padding(.horizontal, 120)
             ScrollView(.horizontal) {
-                LazyHStack(spacing: 34) {
-                    ForEach(items) { it in PosterButton(item: it) { open(it) } }
+                LazyHStack(alignment: .top, spacing: 34) {
+                    ForEach(items) { it in
+                        VStack(alignment: .leading, spacing: 10) {
+                            PosterButton(item: it) { open(it) }
+                            if showAdded, let a = agoText(it.added) {
+                                Text("NOUVEAU · " + a.uppercased()).font(P.font(15, .bold)).tracking(1).foregroundStyle(Color(red: 0.4, green: 0.7, blue: 1))
+                            }
+                        }
+                    }
                 }.padding(.horizontal, 120).padding(.vertical, 34)
             }
             .scrollClipDisabled()
@@ -222,9 +295,58 @@ struct CategoryRow: View {
     var body: some View {
         Group {
             if items.isEmpty { Color.clear.frame(height: 1) }
-            else { MediaRow(title: cat.name, items: items, open: open, more: cat.count > items.count ? more : nil) }
+            else { MediaRow(title: cat.name, sub: "\(cat.count)", items: items, open: open, more: cat.count > items.count ? more : nil) }
         }
         .task(id: cat.id) { items = await MediaStore.page(kind, cat: cat, offset: 0, limit: 20) }
+    }
+}
+
+// MARK: - « Reprendre » : cartes larges avec le temps restant (simulateur)
+
+struct ResumeEntry: Identifiable { let item: MediaItem; let entry: WatchStore.Entry; var id: String { item.id } }
+
+struct ResumeRow: View {
+    let entries: [ResumeEntry]
+    let open: (MediaItem) -> Void
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            SectionTitle(title: "Reprendre", sub: "\(entries.count) en cours").padding(.horizontal, 120)
+            ScrollView(.horizontal) {
+                LazyHStack(spacing: 34) {
+                    ForEach(entries) { r in
+                        Button { open(r.item) } label: { card(r) }.buttonStyle(TileStyle(radius: 20, zoom: 1.06))
+                    }
+                }.padding(.horizontal, 120).padding(.vertical, 34)
+            }.scrollClipDisabled()
+        }.focusSection()
+    }
+
+    private func card(_ r: ResumeEntry) -> some View {
+        let e = r.entry
+        let left = max(60, e.dur - e.pos)
+        let ep = episodeTag(e.ep)
+        return ZStack(alignment: .bottomLeading) {
+            Poster(url: r.item.backdropURL.isEmpty ? r.item.posterURL : r.item.backdropURL).blur(radius: r.item.backdropURL.isEmpty ? 30 : 0)
+            LinearGradient(colors: [.clear, .black.opacity(0.85)], startPoint: .center, endPoint: .bottom)
+            VStack(alignment: .leading, spacing: 4) {
+                Text(r.item.displayTitle).font(P.font(25, .bold)).lineLimit(1)
+                Text((ep.map { $0 + " · " } ?? "") + "reste " + runtimeText(Int(left / 60))).font(P.font(18)).opacity(0.75)
+                GeometryReader { g in
+                    ZStack(alignment: .leading) {
+                        Capsule().fill(.white.opacity(0.25))
+                        Capsule().fill(.white).frame(width: g.size.width * min(1, e.pos / max(1, e.dur)))
+                    }
+                }.frame(height: 5).padding(.top, 6)
+            }.foregroundStyle(.white).padding(18)
+        }
+        .frame(width: 420, height: 236)
+    }
+
+    /// « Saison 2 · Épisode 3 · … » → « S2 · É3 ».
+    private func episodeTag(_ s: String?) -> String? {
+        guard let s, let m = s.range(of: #"Saison (\d+) · Épisode (\d+)"#, options: .regularExpression) else { return nil }
+        let nums = s[m].split(whereSeparator: { !$0.isNumber }).map(String.init)
+        return nums.count >= 2 ? "S\(nums[0]) · É\(nums[1])" : nil
     }
 }
 
@@ -239,27 +361,37 @@ struct PosterButton: View {
     }
 }
 
-/// Affiche d'une rangée : titre et année apparaissent en bas quand elle est sélectionnée, barre de progression si commencé.
+/// Affiche d'une rangée (simulateur) : titre et année en bas, « fin hh:mm » en haut si la durée est connue,
+/// barre de progression si le titre est commencé.
 struct PosterTile: View {
     let item: MediaItem
-    @Environment(\.isFocused) private var focused
     @ObservedObject var watch = WatchStore.shared
     var body: some View {
         ZStack(alignment: .bottomLeading) {
-            Poster(url: item.posterURL, title: item.displayTitle)
-            if focused {
-                LinearGradient(colors: [.clear, .black.opacity(0.85)], startPoint: .center, endPoint: .bottom)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(item.displayTitle).font(P.font(23, .bold)).lineLimit(2)
-                    let y = (item.fiche?.year ?? 0) > 0 ? item.fiche!.year : item.clean.year
-                    if y > 0 { Text(String(y)).font(P.font(18)).foregroundStyle(P.dim) }
-                }.foregroundStyle(.white).padding(14).padding(.bottom, 6)
+            Poster(url: item.posterURL, title: item.posterURL.isEmpty ? item.displayTitle : "")
+            LinearGradient(colors: [.clear, .clear, .black.opacity(0.88)], startPoint: .top, endPoint: .bottom)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(item.displayTitle).font(P.font(22, .bold)).lineLimit(3).minimumScaleFactor(0.8)
+                let y = (item.fiche?.year ?? 0) > 0 ? item.fiche!.year : item.clean.year
+                if y > 0 { Text(String(y)).font(P.font(16, .bold)).opacity(0.7) }
+            }
+            .foregroundStyle(.white).padding(14).padding(.bottom, 4)
+            if item.kind == .film, let rt = item.fiche?.runtime, rt > 0 {
+                VStack {
+                    HStack {
+                        Spacer()
+                        let left = max(60, Double(rt * 60) - (watch.resume(item.id) ?? 0))
+                        Text("fin " + Fmt.hm(Date().addingTimeInterval(left))).font(P.font(15, .bold)).foregroundStyle(.white)
+                            .padding(.horizontal, 8).padding(.vertical, 4).background(.black.opacity(0.6), in: RoundedRectangle(cornerRadius: 7))
+                    }
+                    Spacer()
+                }.padding(10)
             }
             if let f = watch.fraction(item.id), f > 0.02, f < 0.92 {
                 GeometryReader { g in
                     ZStack(alignment: .leading) {
                         Rectangle().fill(.white.opacity(0.25))
-                        Rectangle().fill(P.live).frame(width: g.size.width * f)
+                        Rectangle().fill(.white).frame(width: g.size.width * f)
                     }.frame(height: 6).frame(maxHeight: .infinity, alignment: .bottom)
                 }
             }
@@ -324,370 +456,33 @@ struct CategoryGridView: View {
     }
 }
 
-// MARK: - Fiche (image plein écran, titre, boutons, panneau « Ta soirée »)
-
-struct WhereGroup: Identifiable { let name: String; let list: [WP]; var id: String { name } }
-
-struct DetailView: View {
-    let item: MediaItem
-    @EnvironmentObject var store: ProviderStore
-    @ObservedObject var watch = WatchStore.shared
-    @State private var fiche: Fiche?
-    @State private var info = MediaInfo()
-    @State private var versions: [MediaItem] = []
-    @State private var chosen: MediaItem?
-    @State private var season = 1
-    @State private var playing: VodRequest?
-    @State private var pickVersion = false
-    @State private var sagaName = ""
-    @State private var saga: [SagaPart] = []
-    @State private var sagaAvail: [Int: MediaItem] = [:]
-    @State private var universe: [MediaItem] = []
-    @State private var openOther: MediaItem?
-    @State private var launchMsg: String?
-
-    private var cur: MediaItem { chosen ?? item }
-    private var title: String { (fiche?.title.isEmpty == false) ? fiche!.title : item.clean.title }
-    private var runtime: Int { (fiche?.runtime ?? 0) > 0 ? fiche!.runtime : 0 }
-
-    var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 46) {
-                header
-                if item.kind == .series && !info.seasons.isEmpty { episodes.padding(.horizontal, 120) }
-                if let f = fiche, !f.cast.isEmpty { castRow(f.cast) }
-                if saga.count > 1 { sagaRow }
-                if !universe.isEmpty { MediaRow(title: saga.count > 1 ? "Dans le même univers" : "Si tu hésites encore", items: universe, open: { openOther = $0 }) }
-                if let f = fiche { whereRow(f).padding(.horizontal, 120) }
-            }
-            .padding(.bottom, 100)
-        }
-        .scrollClipDisabled()
-        .background(alignment: .top) { backdrop }
-        .background(P.room)
-        .ignoresSafeArea()
-        .navigationDestination(item: $openOther) { it in DetailView(item: it) }
-        .task(id: item.id) { await load() }
-        .fullScreenCover(item: $playing) { r in VodPlayerView(request: r) }
-        .confirmationDialog("Choisir la version", isPresented: $pickVersion) {
-            ForEach(versions) { v in Button(versionLabel(v)) { chosen = v; if item.kind == .series { Task { info = await InfoLoader.load(v) } } } }
-        }
-        .alert(launchMsg ?? "", isPresented: Binding(get: { launchMsg != nil }, set: { if !$0 { launchMsg = nil } })) { Button("OK") {} }
-    }
-
-    // ---- image de fond plein écran
-    private var backdrop: some View {
-        let hasBd = fiche?.backdrop.isEmpty == false
-        let bd = hasBd ? Fiche.img(fiche!.backdrop, "w1280") : (info.backdrop.isEmpty ? item.icon : info.backdrop)
-        return ZStack {
-            Poster(url: bd).frame(width: 1920, height: 1080).clipped().blur(radius: hasBd || !info.backdrop.isEmpty ? 0 : 60).opacity(hasBd ? 0.9 : 0.55)
-            LinearGradient(colors: [P.room.opacity(0.95), P.room.opacity(0.6), .clear], startPoint: .leading, endPoint: .trailing)
-            LinearGradient(colors: [.clear, .clear, P.room], startPoint: .top, endPoint: .bottom)
-        }
-        .frame(width: 1920, height: 1080)
-    }
-
-    // ---- haut de la fiche
-    private var header: some View {
-        let c = item.clean
-        return HStack(alignment: .bottom, spacing: 50) {
-            VStack(alignment: .leading, spacing: 18) {
-                Text(item.kind == .film ? "FILM" : "SÉRIE").font(P.font(21, .bold)).tracking(2.5).foregroundStyle(P.dim)
-                Text(title).font(P.font(84, .bold)).lineLimit(2).minimumScaleFactor(0.6)
-                HStack(spacing: 20) {
-                    let y = (fiche?.year ?? 0) > 0 ? fiche!.year : (c.year > 0 ? c.year : info.year)
-                    if y > 0 { Text(String(y)) }
-                    if runtime > 0 { Text(runtimeText(runtime)) } else if !info.duration.isEmpty { Text(info.duration) }
-                    let g = (fiche?.genres.isEmpty == false) ? fiche!.genres : info.genre
-                    if !g.isEmpty { Text(g).lineLimit(1) }
-                    if !c.tags.isEmpty { Pill(text: c.tags.joined(separator: " · "), bg: .clear) }
-                }.font(P.font(26, .medium)).foregroundStyle(P.dim)
-                let r = (fiche?.vote ?? 0) > 0 ? fiche!.vote : (item.rating > 0 ? item.rating : info.rating)
-                if r > 0 {
-                    HStack(spacing: 10) { Image(systemName: "star.fill").foregroundStyle(P.star); Text(String(format: "%.1f", r) + " · " + ratingWord(r)) }
-                        .font(P.font(22, .semibold)).padding(.horizontal, 16).padding(.vertical, 10).glass(14)
-                }
-                let plot = (fiche?.overview.isEmpty == false) ? fiche!.overview : (info.plot.isEmpty ? item.plot : info.plot)
-                if !plot.isEmpty { Text(plot).font(P.font(27)).foregroundStyle(.white.opacity(0.85)).lineLimit(3).frame(maxWidth: 1050, alignment: .leading) }
-                if fiche?.cast.isEmpty ?? true, !info.cast.isEmpty { Text("Avec " + info.cast).font(P.font(22)).foregroundStyle(P.dim).lineLimit(1).frame(maxWidth: 1050, alignment: .leading) }
-                if !info.director.isEmpty { Text("Réalisation : " + info.director).font(P.font(22)).foregroundStyle(P.dim).lineLimit(1) }
-                HStack(spacing: 22) {
-                    if item.kind == .film { filmButtons } else { seriesButtons }
-                    Button { watch.toggleFavorite(item.id) } label: {
-                        Image(systemName: watch.favorites.contains(item.id) ? "checkmark" : "plus").font(P.font(30, .bold)).frame(width: 30)
-                    }.buttonStyle(GlassStyle())
-                    if versions.count > 1 {
-                        Button { pickVersion = true } label: { Text(versionLabel(cur)).font(P.font(24, .semibold)).lineLimit(1) }.buttonStyle(GlassStyle())
-                    }
-                }.padding(.top, 12).focusSection()
-            }
-            Spacer(minLength: 0)
-            if item.kind == .film, runtime > 0 { eveningPanel }
-        }
-        .padding(.horizontal, 120)
-        .frame(minHeight: 960, alignment: .bottom)
-    }
-
-    private func ratingWord(_ r: Double) -> String { r >= 8 ? "excellent" : r >= 7 ? "très bien noté" : r >= 6 ? "bien noté" : "avis partagés" }
-
-    // ---- panneau « Ta soirée » : à quelle heure le film se termine
-    private var eveningPanel: some View {
-        let left = max(60, Double(runtime * 60) - (watch.resume(cur.id) ?? watch.resume(item.id) ?? 0))
-        let end = Date().addingTimeInterval(left)
-        let frac = min(1, left / (4 * 3600))
-        let elsewhere = fiche.map { Array(Set(($0.wp.f + $0.wp.g).map(\.n))).sorted() } ?? []
-        return VStack(alignment: .leading, spacing: 20) {
-            Text("TA SOIRÉE").font(P.font(19, .bold)).tracking(2).foregroundStyle(P.faint)
-            GeometryReader { g in
-                ZStack(alignment: .leading) {
-                    Capsule().fill(.white.opacity(0.15))
-                    Capsule().fill(LinearGradient(colors: [P.gold, Color(red: 1, green: 0.55, blue: 0.2)], startPoint: .leading, endPoint: .trailing)).frame(width: max(14, g.size.width * frac))
-                }
-            }.frame(height: 12)
-            HStack { Text("maintenant"); Spacer(); Text("fin " + Fmt.hm(end)) }.font(P.font(18)).foregroundStyle(P.faint)
-            (Text("Fin à " + Fmt.hm(end)).foregroundColor(P.gold).bold() + Text(" · dans " + runtimeText(Int(left / 60))).foregroundColor(P.dim))
-                .font(P.font(24))
-            if !elsewhere.isEmpty {
-                HStack(spacing: 14) {
-                    Text("AUSSI").font(P.font(17, .bold)).tracking(2).foregroundStyle(P.faint)
-                    Text(elsewhere.joined(separator: " · ")).font(P.font(20, .semibold)).lineLimit(1)
-                }.padding(.horizontal, 18).padding(.vertical, 12).frame(maxWidth: .infinity, alignment: .leading)
-                .background(Color.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 16))
-            }
-        }
-        .padding(30).frame(width: 600).glass(30)
-    }
-
-    private func load() async {
-        let pids = store.active.map(\.id)
-        if item.fiche != nil { fiche = item.fiche }
-        else { let k = item.kind, key = item.clean.key; fiche = await Database.shared.read { _ in FicheStore.byKeys(k, [key])[key] } }
-        async let i = InfoLoader.load(item)
-        async let v = MediaStore.versions(of: item, pids: pids)
-        let (i1, v1) = await (i, v)
-        info = i1; versions = v1
-        if chosen == nil { chosen = v1.first }
-        if item.kind == .series, let first = nextEpisode()?.season ?? i1.seasons.first?.number { season = first }
-        var exclude = Set<Int>()
-        if let f = fiche, f.coll > 0 {
-            let (n, parts) = await SagaStore.parts(f.coll)
-            sagaName = n; saga = parts
-            sagaAvail = await MediaStore.items(kind: item.kind, tmdb: parts.map(\.tmdb), pids: pids)
-            exclude = Set(parts.map(\.tmdb))
-        }
-        if let f = fiche { exclude.insert(f.tmdb) }
-        var it = item; it.fiche = fiche
-        universe = await MediaStore.universe(of: it, pids: pids, exclude: exclude)
-    }
-
-    // ---- distribution
-    private func castRow(_ cast: [CastMember]) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            SectionTitle(title: "Distribution").padding(.horizontal, 120)
-            ScrollView(.horizontal) {
-                LazyHStack(spacing: 40) {
-                    ForEach(cast, id: \.self) { a in
-                        Button {} label: {
-                            VStack(spacing: 12) {
-                                ZStack {
-                                    Circle().fill(LinearGradient(colors: [Color(hue: P.hue(a.n), saturation: 0.45, brightness: 0.55), P.room2], startPoint: .top, endPoint: .bottom))
-                                    Text(String(a.n.prefix(1))).font(P.font(46, .bold)).foregroundStyle(.white.opacity(0.8))
-                                    if !a.p.isEmpty {
-                                        AsyncImage(url: URL(string: Fiche.img(a.p, "w185"))) { ph in if let img = ph.image { img.resizable().scaledToFill() } }
-                                    }
-                                }.frame(width: 160, height: 160).clipShape(Circle())
-                                Text(a.n).font(P.font(22, .semibold)).lineLimit(1)
-                                if !a.c.isEmpty { Text(a.c).font(P.font(18)).foregroundStyle(P.dim).lineLimit(1) }
-                            }.frame(width: 200).padding(.vertical, 12)
-                        }.buttonStyle(TileStyle(radius: 24, zoom: 1.06))
-                    }
-                }.padding(.horizontal, 120).padding(.vertical, 26)
-            }.scrollClipDisabled()
-        }.focusSection()
-    }
-
-    // ---- saga complète (films absents grisés)
-    private var sagaRow: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            let n = saga.filter { sagaAvail[$0.tmdb] != nil }.count
-            SectionTitle(title: sagaName.isEmpty ? "La saga" : sagaName, sub: "\(saga.count) films" + (n < saga.count ? " · \(n) chez tes fournisseurs" : "")).padding(.horizontal, 120)
-            ScrollView(.horizontal) {
-                LazyHStack(spacing: 34) {
-                    ForEach(Array(saga.enumerated()), id: \.element.tmdb) { i, p in
-                        Button {
-                            if let m = sagaAvail[p.tmdb] { if m.clean.key != item.clean.key { openOther = m } }
-                            else { launchMsg = "« \(p.title) » n'est chez aucun de tes fournisseurs pour le moment." }
-                        } label: {
-                            ZStack(alignment: .topLeading) {
-                                Poster(url: Fiche.img(p.poster), title: p.title).frame(width: 210, height: 315)
-                                    .saturation(sagaAvail[p.tmdb] == nil ? 0 : 1).opacity(sagaAvail[p.tmdb] == nil ? 0.45 : 1)
-                                Pill(text: "\(i + 1)" + (sagaAvail[p.tmdb] == nil ? " · absent" : ""), bg: .black.opacity(0.65), stroke: nil).padding(10)
-                            }
-                        }.buttonStyle(TileStyle())
-                    }
-                }.padding(.horizontal, 120).padding(.vertical, 34)
-            }.scrollClipDisabled()
-        }.focusSection()
-    }
-
-    // ---- où le regarder ailleurs
-    @ViewBuilder private func whereRow(_ f: Fiche) -> some View {
-        let groups: [WhereGroup] = [WhereGroup(name: "Inclus ou gratuit", list: f.wp.f + f.wp.g), WhereGroup(name: "Location", list: f.wp.r), WhereGroup(name: "Achat", list: f.wp.b)].filter { !$0.list.isEmpty }
-        VStack(alignment: .leading, spacing: 16) {
-            SectionTitle(title: "Où le regarder")
-            HStack(spacing: 12) {
-                Image(systemName: "play.fill").foregroundStyle(P.gold)
-                Text("Déjà dans prisme · \(versions.count) version\(versions.count > 1 ? "s" : "") · sans frais en plus")
-            }.font(P.font(23, .semibold)).padding(.horizontal, 20).padding(.vertical, 14).glass(18)
-            if groups.isEmpty { Text("Pas disponible ailleurs en France pour le moment (TMDB).").font(P.font(22)).foregroundStyle(P.dim) }
-            ForEach(groups) { g in
-                Text(g.name.uppercased()).font(P.font(18, .bold)).tracking(2).foregroundStyle(P.faint).padding(.top, 8)
-                ScrollView(.horizontal) {
-                    HStack(spacing: 24) {
-                        ForEach(Array(Set(g.list.map(\.n))).sorted(), id: \.self) { name in
-                            let wp = g.list.first(where: { $0.n == name })!
-                            Button {
-                                Task { launchMsg = await AppLauncher.open(providerName: name, tmdb: f.tmdb, tv: item.kind == .series) }
-                            } label: {
-                                HStack(spacing: 14) {
-                                    AsyncImage(url: URL(string: Fiche.img(wp.l, "w92"))) { ph in if let img = ph.image { img.resizable().scaledToFit() } else { Color.white.opacity(0.1) } }
-                                        .frame(width: 54, height: 54).clipShape(RoundedRectangle(cornerRadius: 12))
-                                    Text(name).font(P.font(24, .semibold))
-                                }
-                            }.buttonStyle(GlassStyle(radius: 20, minH: 80))
-                        }
-                    }.padding(.vertical, 16)
-                }.scrollClipDisabled()
-            }
-            Text("Disponibilités en France : TMDB (source JustWatch). OK sur une app pour l'ouvrir sur ce titre.").font(P.font(18)).foregroundStyle(P.faint)
-        }.focusSection()
-    }
-
-    private func versionLabel(_ v: MediaItem) -> String {
-        let t = v.clean.tags
-        let prov = store.provider(v.pid)?.name ?? ""
-        return ([t.isEmpty ? "Version standard" : t.joined(separator: " · ")] + (Set(versions.map(\.pid)).count > 1 ? [prov] : [])).joined(separator: " · ")
-    }
-
-    // ---- films
-    @ViewBuilder private var filmButtons: some View {
-        let r = watch.resume(cur.id) ?? watch.resume(item.id)
-        Button { play(from: r ?? 0) } label: {
-            if let r { PlayLabel(title: "Reprendre", sub: runtime > 0 ? "RESTE " + runtimeText(max(1, (runtime * 60 - Int(r)) / 60)).uppercased() : "À " + hms(r).uppercased()) }
-            else { PlayLabel(title: "Lecture", sub: runtime > 0 ? "FINIT À " + Fmt.hm(Date().addingTimeInterval(Double(runtime * 60))) : nil) }
-        }.buttonStyle(PrimaryStyle())
-        if r != nil {
-            Button { play(from: 0) } label: { Label("Début", systemImage: "gobackward").font(P.font(27, .semibold)) }.buttonStyle(GlassStyle())
-        }
-    }
-
-    private func play(from: Double) {
-        guard let p = store.provider(cur.pid), let url = p.movieURL(cur) else { return }
-        playing = VodRequest(url: url, key: item.id, item: item.id, title: title, subtitle: "", icon: item.posterURL, startAt: from)
-    }
-
-    // ---- séries
-    private func nextEpisode() -> EpisodeInfo? {
-        let all = info.seasons.flatMap(\.episodes)
-        if let last = all.filter({ watch.fraction(epKey($0)) != nil }).max(by: { (watch.entries[epKey($0)]?.at ?? .distantPast) < (watch.entries[epKey($1)]?.at ?? .distantPast) }) {
-            if !watch.watched(epKey(last)) { return last }
-            if let i = all.firstIndex(of: last), i + 1 < all.count { return all[i + 1] }
-            return last
-        }
-        return all.first
-    }
-    private func epKey(_ e: EpisodeInfo) -> String { item.id + ":e" + e.id }
-
-    @ViewBuilder private var seriesButtons: some View {
-        if let e = nextEpisode() {
-            let r = watch.resume(epKey(e))
-            Button { playEpisode(e, from: r ?? 0) } label: {
-                PlayLabel(title: r != nil ? "Reprendre" : "Lecture", sub: "SAISON \(e.season) · ÉPISODE \(e.number)")
-            }.buttonStyle(PrimaryStyle())
-        }
-    }
-
-    private func playEpisode(_ e: EpisodeInfo, from: Double) { playing = request(for: e, from: from) }
-
-    private func request(for e: EpisodeInfo, from: Double) -> VodRequest? {
-        guard let p = store.provider(cur.pid), let url = p.episodeURL(e) else { return nil }
-        let all = info.seasons.flatMap(\.episodes)
-        var r = VodRequest(url: url, key: epKey(e), item: item.id, title: title,
-                           subtitle: "Saison \(e.season) · Épisode \(e.number)" + (e.title.isEmpty ? "" : " · " + e.title), icon: item.posterURL, startAt: from)
-        if let i = all.firstIndex(of: e), i + 1 < all.count {
-            let n = all[i + 1]
-            r.next = { self.request(for: n, from: 0) }
-        }
-        return r
-    }
-
-    private var episodes: some View {
-        VStack(alignment: .leading, spacing: 18) {
-            SectionTitle(title: "Épisodes")
-            ScrollView(.horizontal) {
-                HStack(spacing: 16) {
-                    ForEach(info.seasons) { s in
-                        Button { season = s.number } label: { Text("Saison \(s.number)").font(P.font(24, .semibold)) }
-                            .buttonStyle(GlassStyle(radius: 40, minH: 60, on: season == s.number))
-                    }
-                }.padding(.vertical, 14)
-            }.scrollClipDisabled().focusSection()
-            LazyVStack(alignment: .leading, spacing: 18) {
-                ForEach(info.seasons.first { $0.number == season }?.episodes ?? []) { e in
-                    Button { playEpisode(e, from: watch.resume(epKey(e)) ?? 0) } label: {
-                        HStack(spacing: 28) {
-                            ZStack(alignment: .bottom) {
-                                Poster(url: e.image.isEmpty ? item.posterURL : e.image).frame(width: 300, height: 168).clipShape(RoundedRectangle(cornerRadius: 14))
-                                if let f = watch.fraction(epKey(e)), f < 0.92 {
-                                    GeometryReader { g in Rectangle().fill(P.live).frame(width: g.size.width * f, height: 6).frame(maxHeight: .infinity, alignment: .bottom) }
-                                        .frame(width: 300, height: 168).clipShape(RoundedRectangle(cornerRadius: 14))
-                                }
-                            }
-                            VStack(alignment: .leading, spacing: 8) {
-                                Text("\(e.number). " + (e.title.isEmpty ? "Épisode \(e.number)" : e.title)).font(P.font(27, .semibold)).lineLimit(1)
-                                if !e.plot.isEmpty { Text(e.plot).font(P.font(21)).opacity(0.7).lineLimit(2) }
-                                if watch.watched(epKey(e)) { Label("Vu", systemImage: "checkmark").font(P.font(19, .semibold)).opacity(0.7) }
-                            }
-                            Spacer(minLength: 0)
-                        }.padding(16)
-                    }
-                    .buttonStyle(RowStyle())
-                }
-            }
-        }.focusSection()
-    }
-
-    private func hms(_ t: Double) -> String {
-        let s = Int(t), h = s / 3600, m = (s % 3600) / 60
-        return h > 0 ? "\(h) h \(String(format: "%02d", m))" : "\(m) min"
-    }
-}
-
 // MARK: - Ma liste (films et séries ajoutés avec +, et ceux commencés)
 
 struct MineView: View {
     @EnvironmentObject var store: ProviderStore
     @ObservedObject var watch = WatchStore.shared
-    @State private var resume: [MediaItem] = []
+    @State private var resume: [ResumeEntry] = []
     @State private var films: [MediaItem] = []
     @State private var series: [MediaItem] = []
     @State private var open: MediaItem?
+    @State private var loaded = false
 
     var body: some View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 30) {
+                TopBar()
                 VStack(alignment: .leading, spacing: 8) {
                     Text("Ma liste").font(P.font(64, .bold))
                     Text("Ce que tu as ajouté avec +, et ce que tu as commencé.").font(P.font(25)).foregroundStyle(P.dim)
-                }.padding(.horizontal, 120).padding(.top, 200)
-                if resume.isEmpty && films.isEmpty && series.isEmpty {
+                }.padding(.horizontal, 120)
+                if loaded && resume.isEmpty && films.isEmpty && series.isEmpty {
                     VStack(spacing: 14) {
                         Image(systemName: "plus.circle").font(P.font(70)).foregroundStyle(P.faint)
                         Text("Ta liste est vide").font(P.font(34, .bold))
                         Text("Sur la fiche d'un film ou d'une série, choisis + pour l'ajouter ici.").font(P.font(24)).foregroundStyle(P.dim)
-                    }.frame(maxWidth: .infinity).padding(.top, 120)
+                    }.frame(maxWidth: .infinity).padding(.top, 100)
                 }
-                if !resume.isEmpty { MediaRow(title: "Reprendre", items: resume, open: { open = $0 }) }
+                if !resume.isEmpty { ResumeRow(entries: resume, open: { open = $0 }) }
                 if !films.isEmpty { MediaRow(title: "Films", sub: "\(films.count)", items: films, open: { open = $0 }) }
                 if !series.isEmpty { MediaRow(title: "Séries", sub: "\(series.count)", items: series, open: { open = $0 }) }
             }.padding(.bottom, 100)
@@ -696,9 +491,13 @@ struct MineView: View {
         .ignoresSafeArea()
         .navigationDestination(item: $open) { it in DetailView(item: it) }
         .task(id: "\(watch.favorites.count)|\(watch.entries.count)|\(store.catalogVersion)") {
-            resume = await MediaStore.items(ids: Array(watch.inProgress.map(\.item).prefix(20)))
+            let list = Array(watch.inProgress.prefix(20))
+            let items = await MediaStore.items(ids: list.map(\.item))
+            let byID = Dictionary(items.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
+            resume = list.compactMap { e in byID[e.item].map { ResumeEntry(item: $0, entry: e) } }
             films = await MediaStore.items(ids: watch.favorites.filter { $0.hasPrefix("film:") })
             series = await MediaStore.items(ids: watch.favorites.filter { $0.hasPrefix("series:") })
+            loaded = true
         }
     }
 }
@@ -715,10 +514,14 @@ struct SearchView: View {
     var body: some View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 30) {
+                TopBar()
                 VStack(alignment: .leading, spacing: 18) {
                     Text("Recherche").font(P.font(64, .bold))
                     TextField("Un film, une série…", text: $q).font(P.font(30)).frame(maxWidth: 1100)
-                }.padding(.horizontal, 120).padding(.top, 200)
+                }
+                .padding(.horizontal, 120)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .focusSection()
                 if !films.isEmpty { MediaRow(title: "Films", sub: "\(films.count)", items: films, open: { open = $0 }) }
                 if !series.isEmpty { MediaRow(title: "Séries", sub: "\(series.count)", items: series, open: { open = $0 }) }
                 if q.count >= 2 && films.isEmpty && series.isEmpty {

@@ -208,34 +208,64 @@ final class Nav: ObservableObject {
     }() { didSet { UserDefaults.standard.set(tab.rawValue, forKey: "prisme.tab") } }
 }
 
+/// Barre du haut, en haut de chaque page (comme le simulateur : elle défile avec la page).
+/// Toute la largeur de l'écran est une zone de focus : depuis n'importe quel endroit de la page (même tout à gauche
+/// ou tout à droite), « haut » ramène à la barre, et on arrive sur l'onglet de la page affichée.
 struct TopBar: View {
     @ObservedObject var nav = Nav.shared
-    @EnvironmentObject var store: ProviderStore
     @FocusState private var focus: AppTab?
 
     var body: some View {
         ZStack {
-            HStack { Brand(); Spacer(); VStack(alignment: .trailing, spacing: 8) { Clock(); ImportBadge() } }
-                .padding(.horizontal, 84)
+            HStack(alignment: .top) {
+                Brand().padding(.top, 22)
+                Spacer()
+                VStack(alignment: .trailing, spacing: 8) { Clock().padding(.top, 16); ImportBadge() }
+            }
+            .padding(.horizontal, 84)
             HStack(spacing: 6) {
                 tab(.films, "Films"); tab(.series, "Séries"); tab(.live, "TV en direct"); tab(.mine, "Ma liste")
                 icon(.search, "magnifyingglass"); icon(.settings, "gearshape.fill")
             }
             .padding(9)
             .glass(40)
-            .focusSection()
+            .frame(maxHeight: .infinity, alignment: .top)
         }
+        .frame(maxWidth: .infinity)
+        .frame(height: 140, alignment: .top)
         .padding(.top, 39)
+        .contentShape(Rectangle())
+        .focusSection()
+        .defaultFocus($focus, nav.tab, priority: .userInitiated)
     }
 
     private func tab(_ t: AppTab, _ label: String) -> some View {
-        Button { nav.tab = t } label: { Text(label) }
+        Button { if nav.tab != t { nav.tab = t } } label: { Text(label) }
             .buttonStyle(TabPillStyle(selected: nav.tab == t))
             .focused($focus, equals: t)
     }
     private func icon(_ t: AppTab, _ sys: String) -> some View {
-        Button { nav.tab = t } label: { Image(systemName: sys).font(P.font(26, .semibold)).frame(width: 30) }
+        Button { if nav.tab != t { nav.tab = t } } label: { Image(systemName: sys).font(P.font(26, .semibold)).frame(width: 30) }
             .buttonStyle(TabPillStyle(selected: nav.tab == t))
             .focused($focus, equals: t)
+    }
+}
+
+/// Titre de fiche : grand, en police à empattements (la police « Playfair Display » du simulateur n'existe pas
+/// sur l'Apple TV : la plus proche intégrée à tvOS est « New York », la police à empattements d'Apple).
+extension P {
+    static func serif(_ size: CGFloat) -> Font { .system(size: size, weight: .black, design: .serif) }
+}
+
+/// Anneau de progression (score prisme, avancement d'une série).
+struct Ring: View {
+    let value: Double          // 0…1
+    var color: Color = P.gold
+    var width: CGFloat = 8
+    var body: some View {
+        ZStack {
+            Circle().stroke(Color.white.opacity(0.14), lineWidth: width)
+            Circle().trim(from: 0, to: max(0.001, min(1, value))).stroke(color, style: StrokeStyle(lineWidth: width, lineCap: .round)).rotationEffect(.degrees(-90))
+        }
     }
 }

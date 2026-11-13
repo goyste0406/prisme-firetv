@@ -26,7 +26,7 @@ struct IPTVPersoApp: App {
     }
 }
 
-/// Racine : fond prisme, page de l'onglet choisi, barre du haut en verre (comme le simulateur).
+/// Racine : fond prisme et page de l'onglet choisi. Chaque page porte la barre du haut (comme dans le simulateur).
 /// Les fiches s'ouvrent par-dessus, en plein écran, sans la barre.
 struct MainTabView: View {
     @EnvironmentObject var store: ProviderStore
@@ -48,9 +48,6 @@ struct MainTabView: View {
                 }
                 .id(nav.tab)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-                LinearGradient(colors: [.black.opacity(0.7), .black.opacity(0.35), .clear], startPoint: .top, endPoint: .bottom)
-                    .frame(height: 230).ignoresSafeArea().allowsHitTesting(false)
-                TopBar()
             }
             .ignoresSafeArea()
         }

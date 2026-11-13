@@ -122,13 +122,35 @@ struct FicheWorker {
                     }
                 }
                 await Database.shared.read { db in
-                    db.insertMany("INSERT OR REPLACE INTO fiche(kind,ckey,pid,sid,\(FicheStore.cols.replacingOccurrences(of: ",pid,sid", with: ""))) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)", rows)
+                    db.insertMany(FicheWorker.insertSQL, rows)
                     db.insertMany("INSERT OR REPLACE INTO fmiss VALUES(?,?,?)", misses)
                 }
                 let n = batch.count
                 await MainActor.run { FicheService.shared.done += n; FicheService.shared.version += 1 }
             }
         }
+    }
+
+    static let insertSQL = "INSERT OR REPLACE INTO fiche(kind,ckey,pid,sid,\(FicheStore.cols.replacingOccurrences(of: ",pid,sid", with: ""))) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)"
+
+    /// Fiche d'un seul titre, tout de suite : quand on ouvre sa page et qu'elle n'a pas encore été téléchargée en arrière-plan.
+    /// `tmdbHint` : identifiant TMDB donné par le fournisseur (get_vod_info), plus sûr que la recherche par titre.
+    static func fetchNow(_ m: MediaItem, tmdbHint: Int) async -> Fiche? {
+        guard let key = TmdbKey.value else { return nil }
+        var item = m
+        if (Int(m.tmdb) ?? 0) == 0, tmdbHint > 0 {
+            item = MediaItem(kind: m.kind, pid: m.pid, sid: m.sid, name: m.name, year: m.year, icon: m.icon, cid: m.cid, ext: m.ext,
+                             rating: m.rating, added: m.added, tmdb: String(tmdbHint), plot: m.plot)
+        }
+        guard let row = await FicheWorker().fetch(TmdbAPI(key: key), item) else { return nil }
+        let k = m.kind, ck = m.clean.key
+        let f = await Database.shared.read { db -> Fiche? in
+            db.insertMany(FicheWorker.insertSQL, [row])
+            db.run("DELETE FROM fmiss WHERE kind=? AND ckey=?", [k.rawValue, ck])
+            return FicheStore.byKeys(k, [ck])[ck]
+        }
+        await MainActor.run { FicheService.shared.version += 1 }
+        return f
     }
 
     /// Titres sans fiche (une seule fois par titre, même s'il existe en plusieurs versions).
@@ -153,7 +175,7 @@ struct FicheWorker {
     }
 
     /// Une fiche : l'identifiant TMDB du fournisseur s'il existe, sinon recherche par titre et année.
-    private func fetch(_ api: TmdbAPI, _ m: MediaItem) async -> [Any?]? {
+    func fetch(_ api: TmdbAPI, _ m: MediaItem) async -> [Any?]? {
         let tv = m.kind == .series
         let c = m.clean
         var id = Int(m.tmdb) ?? 0
