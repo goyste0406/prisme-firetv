@@ -27,6 +27,8 @@ enum Debug {
 extension Debug {
     /// nombre de profils de test (« 2 » : ajoute Léa, 12 ans max)
     static var profiles: String? { arg("prisme.debug.profiles") }
+    /// « Qui regarde ? » : pas de choix automatique au bout de 5 s (la visite de test met plus de 5 s à prendre sa capture)
+    static var whoHold: Bool { arg("prisme.debug.whoHold") == "1" }
 
     /// Simule une installation 1.5.3 (avant les profils) : historique et Ma liste écrits dans les clés d'origine,
     /// AVANT le chargement des profils. Sert à vérifier que la migration les rattache bien au profil de Steven.

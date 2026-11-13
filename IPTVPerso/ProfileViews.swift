@@ -472,7 +472,7 @@ struct WhoIsWatchingScreen: View {
         // Retour : on garde le profil proposé (sans quitter prisme)
         .onExitCommand { choose(guess.isEmpty ? ps.current : guess, play: false) }
         .onReceive(timer) { _ in
-            guard !moved else { return }
+            guard !moved, !Debug.whoHold else { return }
             if countdown > 0 { countdown -= 1 }
             if countdown == 0 { moved = true; choose(guess, play: false) }
         }
