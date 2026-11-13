@@ -122,7 +122,7 @@ struct LiveFrontView: View {
                                     Text("Tu l'as regardée récemment").font(P.font(17)).foregroundStyle(P.faint)
                                 }
                             }
-                        }.padding(.vertical, 24).padding(.horizontal, 8)
+                        }.padding(.vertical, 24).padding(.horizontal, 18)
                     }.scrollClipDisabled().focusSection()
                 }
                 if !cats.isEmpty || !favs.isEmpty {
@@ -135,7 +135,7 @@ struct LiveFrontView: View {
                             ForEach(cats) { c in
                                 UniverseCardLoader(cat: c) { openCat = c }
                             }
-                        }.padding(.vertical, 24).padding(.horizontal, 8)
+                        }.padding(.vertical, 24).padding(.horizontal, 18)
                     }.scrollClipDisabled().focusSection()
                 }
                 if !soon.isEmpty {
@@ -145,7 +145,7 @@ struct LiveFrontView: View {
                             ForEach(soon) { a in
                                 SoonCard(a: a) { play([a.ch], 0) }
                             }
-                        }.padding(.vertical, 24).padding(.horizontal, 8)
+                        }.padding(.vertical, 24).padding(.horizontal, 18)
                     }.scrollClipDisabled().focusSection()
                 }
                 if loaded && cats.isEmpty && favs.isEmpty && recent.isEmpty {
@@ -156,9 +156,10 @@ struct LiveFrontView: View {
                     }.frame(maxWidth: .infinity, minHeight: 500)
                 }
             }
-            .padding(.bottom, 80)
+            .padding(.top, 16).padding(.bottom, 80)
         }
-        .scrollClipDisabled()
+        // la zone défile dans ses limites : rien ne passe sur la barre du haut ni sur la colonne d'icônes
+        .clipped()
         .navigationDestination(item: $openCat) { c in
             CategoryChannelsView(title: c.name, loader: { await LiveStore.channels(pid: c.pid, cid: c.cid) }, play: play, guide: guide)
         }
@@ -416,7 +417,7 @@ struct AllCategoriesView: View {
                     }
                 }.padding(14)
             }
-            .scrollClipDisabled()
+            .clipped()
             .frame(width: 420).glass(30).padding(.bottom, 50)
             .focusSection()
             ChannelGrid(title: cats.first { $0.id == selection }?.name ?? "Catégories", channels: channels, loaded: loaded, empty: "Aucune chaîne dans cette catégorie.",
@@ -473,9 +474,9 @@ struct ChannelGrid: View {
                                     Button(prefs.favorites.contains(ch.id) ? "Retirer des favoris" : "Ajouter aux favoris") { prefs.toggleFavorite(ch.id) }
                                 }
                         }
-                    }.padding(.vertical, 24).padding(.horizontal, 8).padding(.bottom, 60)
+                    }.padding(.vertical, 24).padding(.horizontal, 18).padding(.bottom, 60)
                 }
-                .scrollClipDisabled()
+                .clipped()
             }
         }
     }

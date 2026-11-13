@@ -1,71 +1,114 @@
 import SwiftUI
 
-// MARK: - Accueil Films / Séries (apparence du simulateur)
+// MARK: - Accueil Films / Séries (structure et ordre du simulateur)
+// Films  : grande affiche · bande « Ce soir ? » · Reprendre · Top 10 du moment · Nouveau sur prisme · Ma liste · Explorer · Parcourir
+// Séries : grande affiche · bande « À suivre / Ce soir ? / Cette semaine » · Top 10 séries · Ma liste · Parcourir
 
-private struct HomeSnap { var newest: [MediaItem]; var best: [MediaItem]; var cats: [MediaStore.Cat]; var genres: [GenreRow] }
+private struct HomeSnap {
+    var newest: [MediaItem] = []
+    var tonight: [MediaItem] = []
+    var week: [MediaItem] = []
+    var top: [TrendStore.Ranked] = []
+    var colls: [CollInfo] = []
+    var lics: [CollInfo] = []
+    var genres: [CollInfo] = []
+    var cats: [MediaStore.Cat] = []
+}
 /// Les accueils déjà calculés : changer d'onglet ne relance pas les requêtes.
 private enum HomeCache { static var map: [String: HomeSnap] = [:] }
+
+/// Envies et durées de « Ce soir ? » (simulateur).
+enum Tonight {
+    static let durations: [(String, String, Int)] = [("all", "Peu importe", 0), ("105", "Moins de 1 h 45", 105), ("150", "Moins de 2 h 30", 150)]
+    static let moods: [(String, String, String)] = [
+        ("rire", "Rire", "comed|anim|famil"), ("frisson", "Frisson", "thriller|horreur|horror|crime|polic|myst"),
+        ("evasion", "Évasion", "aventure|science|fantas|action"), ("reflechir", "Réfléchir", "docu|histo|guerre|biograph"),
+        ("emotion", "Émotion", "drame|romance|musi"),
+    ]
+}
 
 struct MediaHomeView: View {
     let kind: MediaKind
     @EnvironmentObject var store: ProviderStore
     @ObservedObject var watch = WatchStore.shared
+    @ObservedObject var fiches = FicheService.shared
+    @State private var snap = HomeSnap()
     @State private var hero: [MediaItem] = []
-    @State private var newest: [MediaItem] = []
-    @State private var best: [MediaItem] = []
     @State private var resume: [ResumeEntry] = []
     @State private var mine: [MediaItem] = []
-    @State private var cats: [MediaStore.Cat] = []
-    @State private var genres: [GenreRow] = []
-    @ObservedObject var fiches = FicheService.shared
     @State private var open: MediaItem?
     @State private var openCat: MediaStore.Cat?
+    @State private var openColl: CollInfo?
     @State private var heroIndex = 0
     @State private var playing: VodRequest?
+    @State private var dur = "all"
+    @State private var mood = ""
+    @State private var askDur = false
+    @State private var askMood = false
+    @State private var bandTab = "suivre"
+    @State private var browseTab = ""
+    @State private var showAllNew = false
     @FocusState private var heroFocus: Bool
 
     private var loadKey: String { "\(kind.rawValue)|\(store.catalogVersion)|\(store.active.map(\.id).joined())|\(fiches.version / 25)" }
+    private var pids: [String] { store.active.map(\.id) }
+    private var providerNames: String { store.active.map(\.name).joined(separator: ", ") }
+    private var unit: String { kind == .film ? "films" : "séries" }
+    private var mineSub: String {
+        let n = mine.count, pl = n > 1 ? "s" : ""
+        return kind == .film ? "\(n) film\(pl) mis de côté" : "\(n) série\(pl) mise\(pl) de côté"
+    }
 
     var body: some View {
         ScrollView {
-            LazyVStack(alignment: .leading, spacing: 34) {
+            LazyVStack(alignment: .leading, spacing: 44) {
                 ZStack(alignment: .top) {
-                    if !hero.isEmpty {
-                        let h = hero[heroIndex % hero.count]
-                        HeroView(item: h, index: heroIndex % hero.count, count: hero.count, provider: store.provider(h.pid)?.name ?? "",
-                                 focus: $heroFocus,
-                                 play: { info in play(h, info) }, info: { open = h },
-                                 step: { d in withAnimation(.easeInOut(duration: 0.45)) { heroIndex = (heroIndex + d + hero.count) % hero.count } })
-                    } else {
-                        Color.clear.frame(height: 240)
-                    }
+                    heroBlock
                     TopBar()
                 }
-                if store.importing != nil && newest.isEmpty {
-                    Text("Chargement du catalogue… \(Int(store.progress * 100)) %").font(P.font(30, .semibold)).foregroundStyle(P.dim).padding(.horizontal, 120)
+                if kind == .film { tonightBand } else { seriesBand }
+                if kind == .film && !resume.isEmpty { resumeSection }
+                if !snap.top.isEmpty {
+                    Top10Row(title: kind == .film ? "Top 10 du moment" : "Top 10 séries",
+                             sub: kind == .film ? "films populaires en France cette semaine · chez ton fournisseur" : "séries populaires cette semaine · chez ton fournisseur",
+                             items: snap.top, open: { open = $0 })
                 }
-                if !resume.isEmpty { ResumeRow(entries: resume, open: { open = $0 }) }
-                if !mine.isEmpty { MediaRow(title: "Ma liste", sub: "\(mine.count)", items: mine, open: { open = $0 }) }
-                if !newest.isEmpty {
-                    MediaRow(title: "Nouveau sur prisme", sub: "ajouts récents chez " + providerNames, items: newest, open: { open = $0 }, showAdded: true)
+                if kind == .film && !snap.newest.isEmpty { newSection }
+                if !mine.isEmpty {
+                    MediaRow(title: "Ma liste", sub: mineSub, items: mine, open: { open = $0 })
                 }
-                if !best.isEmpty { MediaRow(title: "Les mieux notés", sub: "selon les notes du fournisseur", items: best, open: { open = $0 }) }
-                ForEach(genres) { g in MediaRow(title: g.name, items: g.items, open: { open = $0 }) }
-                ForEach(cats) { c in
-                    CategoryRow(kind: kind, cat: c, open: { open = $0 }, more: { openCat = c })
+                if kind == .film && !snap.colls.isEmpty { exploreSection }
+                browseSection
+                if store.importing != nil && snap.newest.isEmpty {
+                    Text("Chargement du catalogue… \(Int(store.progress * 100)) %").font(P.font(28, .semibold)).foregroundStyle(P.dim).padding(.horizontal, 120)
                 }
             }
             .padding(.bottom, 100)
         }
         .scrollClipDisabled()
         .ignoresSafeArea()
+        // à l'ouverture de la page, et en descendant depuis la barre : la grande affiche et son bouton
+        .defaultFocus($heroFocus, true)
         .navigationDestination(item: $open) { it in DetailView(item: it) }
         .navigationDestination(item: $openCat) { c in CategoryGridView(kind: kind, cat: c) }
+        .navigationDestination(item: $openColl) { c in
+            CollectionGridView(kicker: (kind == .film ? "FILMS · " : "SÉRIES · ") + c.kind.uppercased(), title: c.name, why: c.why, loader: c.loader)
+        }
+        .navigationDestination(isPresented: $showAllNew) {
+            CollectionGridView(kicker: kind == .film ? "FILMS" : "SÉRIES", title: "Nouveau sur prisme", why: "Les ajouts des deux dernières semaines chez " + providerNames, loader: { snap.newest })
+        }
         .fullScreenCover(item: $playing) { r in VodPlayerView(request: r) }
+        .confirmationDialog("Durée", isPresented: $askDur) {
+            ForEach(0..<Tonight.durations.count, id: \.self) { i in Button(Tonight.durations[i].1) { dur = Tonight.durations[i].0 } }
+        }
+        .confirmationDialog("Envie", isPresented: $askMood) {
+            Button("Toutes les envies") { mood = "" }
+            ForEach(0..<Tonight.moods.count, id: \.self) { i in Button(Tonight.moods[i].1) { mood = Tonight.moods[i].0 } }
+        }
         .task(id: loadKey) { await load(loadKey) }
         .task(id: watch.entries.count) { await loadResume() }
         .task {
-            // la grande affiche change toutes les 8 s, sauf quand le bouton Lecture est sélectionné
+            // la grande affiche change toutes les 8 s, sauf quand son bouton est sélectionné
             while !Task.isCancelled {
                 try? await Task.sleep(nanoseconds: 8_000_000_000)
                 if hero.count > 1 && !heroFocus { withAnimation(.easeInOut(duration: 0.7)) { heroIndex += 1 } }
@@ -73,29 +116,317 @@ struct MediaHomeView: View {
         }
     }
 
-    private var pids: [String] { store.active.map(\.id) }
-    private var providerNames: String { store.active.map(\.name).joined(separator: ", ") }
+    // MARK: grande affiche
 
-    private func apply(_ s: HomeSnap) {
-        newest = s.newest; best = s.best; cats = s.cats; genres = s.genres
-        let withArt = s.newest.filter { !$0.backdropURL.isEmpty }
-        hero = Array((withArt.count >= 3 ? withArt : s.newest.filter { !$0.posterURL.isEmpty }).prefix(6))
+    @ViewBuilder private var heroBlock: some View {
+        if !hero.isEmpty {
+            let h = hero[heroIndex % hero.count]
+            HeroView(item: h, index: heroIndex % hero.count, count: hero.count, provider: store.provider(h.pid)?.name ?? "",
+                     focus: $heroFocus,
+                     play: { info in play(h, info) }, info: { open = h },
+                     step: { d in withAnimation(.easeInOut(duration: 0.45)) { heroIndex = (heroIndex + d + hero.count) % hero.count } })
+        } else {
+            Color.clear.frame(height: 260)
+        }
     }
 
+    // MARK: films — bande « Ce soir ? »
+
+    private var tonightList: [MediaItem] {
+        let maxD = Tonight.durations.first { $0.0 == dur }?.2 ?? 0
+        let rx = Tonight.moods.first { $0.0 == mood }?.2
+        return snap.tonight.filter { it in
+            let rt = it.fiche?.runtime ?? 0
+            if maxD > 0 && (rt == 0 || rt > maxD) { return false }
+            if let rx, (it.fiche?.genres ?? "").lowercased().folding(options: .diacriticInsensitive, locale: nil).range(of: rx, options: .regularExpression) == nil { return false }
+            return watch.fraction(it.id) == nil
+        }
+    }
+
+    @ViewBuilder private var tonightBand: some View {
+        let L = tonightList
+        if !snap.tonight.isEmpty {
+            GlassBand(head: {
+                HStack(spacing: 16) {
+                    Image(systemName: "moon").font(P.font(28, .semibold))
+                    Text("Ce soir ?").font(P.font(33, .bold))
+                    Text("\(L.count) films · il est " + Fmt.hm(Date())).font(P.font(19)).foregroundStyle(P.faint)
+                    Spacer(minLength: 20)
+                    BandChip(icon: "timer", text: Tonight.durations.first { $0.0 == dur }?.1 ?? "Peu importe", menu: true) { askDur = true }
+                    BandChip(icon: "sparkles", text: Tonight.moods.first { $0.0 == mood }?.1 ?? "Toutes les envies", menu: true) { askMood = true }
+                    BandChip(icon: "dice", text: "Surprends-moi") { if let pick = L.prefix(6).randomElement() { open = pick } }
+                }
+            }, row: {
+                LazyHStack(spacing: 30) {
+                    if L.isEmpty { Text("Aucun film avec ces choix · change la durée ou l'envie").font(P.font(22)).foregroundStyle(P.dim).frame(height: 300) }
+                    ForEach(L.prefix(24)) { it in PosterButton(item: it) { open = it } }
+                }
+            })
+        }
+    }
+
+    // MARK: séries — bande « À suivre / Ce soir ? / Cette semaine »
+
+    private var followCards: [ResumeEntry] { resume }
+
+    @ViewBuilder private var seriesBand: some View {
+        let soir = snap.tonight.filter { it in !watch.inProgress.contains { $0.item == it.id } }
+        if !resume.isEmpty || !soir.isEmpty || !snap.week.isEmpty {
+            GlassBand(head: {
+                HStack(spacing: 10) {
+                    bandTabButton("suivre", "À suivre", icon: "arrow.counterclockwise", count: resume.count)
+                    bandTabButton("soir", "Ce soir ?", icon: "moon", count: nil)
+                    bandTabButton("cal", "Cette semaine", icon: "calendar", count: snap.week.count)
+                }
+            }, row: {
+                LazyHStack(spacing: 30) {
+                    switch bandTab {
+                    case "soir":
+                        if soir.isEmpty { emptyBand("Pas de série bien notée à commencer pour le moment.") }
+                        ForEach(soir.prefix(16)) { it in
+                            WideCard(item: it, corner: versionTag(it), badge: "S1 · É1", title: it.displayTitle, sub: tonightSub(it), chip: nil) { open = it }
+                        }
+                    case "cal":
+                        if snap.week.isEmpty { emptyBand("Aucune série mise à jour cette semaine chez " + providerNames + ".") }
+                        ForEach(snap.week) { it in
+                            WideCard(item: it, flag: "NOUVEAU", corner: versionTag(it), title: it.displayTitle, sub: "mise à jour · " + (agoText(it.added) ?? "cette semaine")) { open = it }
+                        }
+                    default:
+                        if resume.isEmpty { emptyBand("Les séries que tu commences apparaîtront ici.") }
+                        ForEach(resume) { r in resumeCard(r) }
+                    }
+                }
+            })
+            .onAppear { if resume.isEmpty && bandTab == "suivre" { bandTab = snap.week.isEmpty ? "soir" : "cal" } }
+        }
+    }
+
+    private func bandTabButton(_ k: String, _ title: String, icon: String, count: Int?) -> some View {
+        Button { bandTab = k } label: {
+            HStack(spacing: 10) {
+                Image(systemName: icon)
+                Text(title)
+                if let count, count > 0 { Text("\(count)").font(P.font(17, .bold)).padding(.horizontal, 8).padding(.vertical, 2).background(Color(red: 0.2, green: 0.4, blue: 0.75), in: Capsule()) }
+            }.font(P.font(23, .semibold))
+        }
+        .buttonStyle(TabPillStyle(selected: bandTab == k))
+    }
+
+    private func emptyBand(_ t: String) -> some View { Text(t).font(P.font(22)).foregroundStyle(P.dim).frame(height: 270) }
+
+    private func tonightSub(_ it: MediaItem) -> String {
+        guard let rt = it.fiche?.runtime, rt > 0 else { return it.fiche.map { "★ " + String(format: "%.1f", $0.vote) } ?? "" }
+        return runtimeText(rt) + " · fin " + Fmt.hm(Date().addingTimeInterval(Double(rt * 60)))
+    }
+
+    private func versionTag(_ it: MediaItem) -> String? {
+        let t = it.clean.tags
+        guard !t.isEmpty else { return nil }
+        return t.joined(separator: " · ")
+    }
+
+    // MARK: Reprendre (cartes larges)
+
+    private var resumeSection: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HomeHeader(title: "Reprendre", sub: "\(resume.count) en cours")
+            ScrollView(.horizontal) {
+                LazyHStack(spacing: 30) { ForEach(resume) { r in resumeCard(r) } }
+                    .padding(.horizontal, 120).padding(.vertical, 30)
+            }.scrollClipDisabled()
+        }.focusSection()
+    }
+
+    private func resumeCard(_ r: ResumeEntry) -> some View {
+        let e = r.entry
+        let left = max(60, e.dur - e.pos)
+        let done = e.dur > 0 && e.pos / e.dur >= 0.92
+        let ep = ResumeEntry.episodeTag(e.ep)
+        return WideCard(item: r.item, corner: versionTag(r.item), badge: ep, title: r.item.displayTitle,
+                        sub: done ? "épisode suivant" : "reste " + runtimeText(Int(left / 60)),
+                        progress: done ? nil : min(1, e.pos / max(1, e.dur))) { open = r.item }
+    }
+
+    // MARK: Nouveau sur prisme (cartes larges, « NOUVEAU · IL Y A 5 J »)
+
+    private var newSection: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HomeHeader(icon: "sparkles", title: "Nouveau sur prisme", sub: "ajouts récents chez " + providerNames)
+            ScrollView(.horizontal) {
+                LazyHStack(spacing: 30) {
+                    ForEach(snap.newest.prefix(12)) { it in
+                        WideCard(item: it, tag: "NOUVEAU · " + (agoText(it.added) ?? "récent").uppercased(), title: it.displayTitle, sub: newSub(it),
+                                 chip: store.provider(it.pid)?.name, width: 530) { open = it }
+                    }
+                    if snap.newest.count > 12 { AllCard(count: snap.newest.count, unit: unit, height: 298) { showAllNew = true } }
+                }
+                .padding(.horizontal, 120).padding(.vertical, 30)
+            }.scrollClipDisabled()
+        }.focusSection()
+    }
+
+    private func newSub(_ it: MediaItem) -> String {
+        var p: [String] = []
+        let y = (it.fiche?.year ?? 0) > 0 ? it.fiche!.year : it.clean.year
+        if y > 0 { p.append(String(y)) }
+        if let rt = it.fiche?.runtime, rt > 0 { p.append(runtimeText(rt)) }
+        if let g = it.fiche?.genres.components(separatedBy: ", ").first, !g.isEmpty { p.append(g) }
+        return p.joined(separator: " · ")
+    }
+
+    // MARK: Explorer
+
+    private var exploreSection: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HomeHeader(title: "Explorer", sub: "des collections faites à partir de ton fournisseur")
+            ScrollView(.horizontal) {
+                LazyHStack(spacing: 30) { ForEach(snap.colls) { c in CollTile(c: c, unit: unit) { openColl = c } } }
+                    .padding(.horizontal, 120).padding(.vertical, 30)
+            }.scrollClipDisabled()
+        }.focusSection()
+    }
+
+    // MARK: Parcourir (Catégories · Licences et sagas / Collections · Catégories · Chaînes)
+
+    private var browseTabs: [(String, String, Int)] {
+        if kind == .film { return [("cat", "Catégories", snap.genres.count + snap.cats.count), ("lic", "Licences et sagas", snap.lics.count)] }
+        return [("col", "Collections", snap.colls.count), ("cat", "Catégories", snap.genres.count + snap.cats.count), ("lic", "Chaînes", snap.lics.count)].filter { $0.2 > 0 }
+    }
+
+    @ViewBuilder private var browseSection: some View {
+        let tabs = browseTabs.filter { $0.2 > 0 }
+        if !tabs.isEmpty {
+            let cur = tabs.contains(where: { $0.0 == browseTab }) ? browseTab : tabs[0].0
+            VStack(alignment: .leading, spacing: 18) {
+                HomeHeader(title: "Parcourir")
+                HStack(spacing: 10) {
+                    ForEach(0..<tabs.count, id: \.self) { i in
+                        Button { browseTab = tabs[i].0 } label: {
+                            HStack(spacing: 8) { Text(tabs[i].1); Text("\(tabs[i].2)").font(P.font(17)).opacity(0.55) }.font(P.font(23, .semibold))
+                        }
+                        .buttonStyle(TabPillStyle(selected: cur == tabs[i].0))
+                    }
+                }
+                .padding(.horizontal, 120)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .focusSection()
+                ScrollView(.horizontal) {
+                    LazyHStack(spacing: 26) { browseRow(cur) }
+                        .padding(.horizontal, 120).padding(.vertical, 26)
+                }
+                .scrollClipDisabled()
+                .focusSection()
+            }
+        }
+    }
+
+    @ViewBuilder private func browseRow(_ t: String) -> some View {
+        switch t {
+        case "lic":
+            ForEach(Array(snap.lics.enumerated()), id: \.element.id) { i, c in
+                WordTile(title: c.name, sub: "\(c.kind) · \(c.count) \(unit)", rank: i + 1) { openColl = c }
+            }
+        case "col":
+            ForEach(snap.colls) { c in CollTile(c: c, unit: unit) { openColl = c } }
+        default:
+            ForEach(snap.genres) { g in WordTile(title: g.name, sub: "\(g.count) \(unit)") { openColl = g } }
+            ForEach(snap.cats) { c in
+                WordTile(title: c.name, sub: "catégorie · \(c.count) \(unit)" + (store.active.count > 1 ? " · " + (store.provider(c.pid)?.name ?? "") : "")) { openCat = c }
+            }
+        }
+    }
+
+    // MARK: données
+
     private func load(_ key: String) async {
-        if let s = HomeCache.map[key] { apply(s) }
-        async let n = MediaStore.list(kind, pids: pids, order: "added DESC", limit: 30)
-        async let b = MediaStore.list(kind, pids: pids, where: "rating>0", order: "rating DESC, added DESC", limit: 30)
-        async let c = MediaStore.categories(kind, pids: pids)
-        let (n1, b1, c1) = await (n, b, c)
-        let G = kind == .film ? ["Action", "Comédie", "Drame", "Thriller", "Science-Fiction", "Animation", "Aventure", "Horreur", "Familial", "Romance", "Crime", "Documentaire"]
-                              : ["Drame", "Comédie", "Crime", "Action & Adventure", "Science-Fiction & Fantastique", "Mystère", "Animation", "Familial", "Documentaire"]
-        var gr: [GenreRow] = []
-        for g in G { let L = await MediaStore.byGenre(kind, pids: pids, genre: g, limit: 20); if L.count >= 5 { gr.append(GenreRow(name: g, items: L)) } }
-        let snap = HomeSnap(newest: n1, best: b1, cats: c1, genres: gr)
-        HomeCache.map[key] = snap
-        apply(snap)
+        if let s = HomeCache.map[key] { snap = s; pickHero(s) }
+        let k = kind, p = pids
+        let twoWeeks = Int(Date().timeIntervalSince1970) - 14 * 86400
+        var s = HomeSnap()
+        var n = await MediaStore.list(k, pids: p, where: "added > ?", args: [twoWeeks], order: "added DESC", limit: 40)
+        if n.isEmpty { n = await MediaStore.list(k, pids: p, order: "added DESC", limit: 20) }
+        s.newest = n
+        if k == .film {
+            s.tonight = await MediaStore.ficheList(.film, pids: p, cond: "f.vote>=6.5", order: "f.vote DESC", limit: 160)
+        } else {
+            s.tonight = await MediaStore.ficheList(.series, pids: p, cond: "f.vote>=7.5", order: "f.vote DESC", limit: 40)
+            let week = Int(Date().timeIntervalSince1970) - 7 * 86400
+            s.week = await MediaStore.list(.series, pids: p, where: "added > ?", args: [week], order: "added DESC", limit: 30)
+        }
+        s.top = await TrendStore.top(k, pids: p)
+        s.colls = await collections(k, p)
+        s.lics = await licences(k, p)
+        s.genres = await genreTiles(k, p)
+        s.cats = await MediaStore.categories(k, pids: p)
+        HomeCache.map[key] = s
+        snap = s
+        pickHero(s)
         await loadResume()
+    }
+
+    private func pickHero(_ s: HomeSnap) {
+        let withArt = s.newest.filter { !$0.backdropURL.isEmpty }
+        let base = withArt.count >= 3 ? withArt : (s.newest.isEmpty ? s.tonight : s.newest)
+        hero = Array(base.filter { !$0.posterURL.isEmpty || !$0.backdropURL.isEmpty }.prefix(6))
+    }
+
+    private func collections(_ k: MediaKind, _ p: [String]) async -> [CollInfo] {
+        var out: [CollInfo] = []
+        let defs: [(String, String, String, String, String)] = k == .film ? [
+            ("court", "timer", "Moins de 2 h", "Pour un film qui ne finit pas trop tard", "f.runtime>0 AND f.runtime<120"),
+            ("top", "trophy", "★ 8 et plus", "Les mieux notés de ton abonnement (TMDB)", "f.vote>=8"),
+        ] : [
+            ("top", "trophy", "★ 8,5 et plus", "Les séries les mieux notées de ton abonnement (TMDB)", "f.vote>=8.5"),
+        ]
+        for d in defs {
+            let n = await MediaStore.ficheCount(k, pids: p, cond: d.4)
+            guard n >= 2 else { continue }
+            let prev = await MediaStore.ficheList(k, pids: p, cond: d.4, order: "f.vote DESC", limit: 3)
+            let cond = d.4
+            out.append(CollInfo(id: d.0, icon: d.1, name: d.2, why: d.3, count: n, preview: prev,
+                                loader: { await MediaStore.ficheList(k, pids: p, cond: cond, order: "f.vote DESC", limit: 300) }))
+        }
+        return out
+    }
+
+    private func licences(_ k: MediaKind, _ p: [String]) async -> [CollInfo] {
+        var out: [CollInfo] = []
+        if k == .film {
+            for sg in await MediaStore.sagas(pids: p) {
+                let id = sg.id
+                out.append(CollInfo(id: "col:\(id)", icon: "square.stack.3d.up", name: sg.name.isEmpty ? "Saga" : sg.name.replacingOccurrences(of: " - Saga", with: ""),
+                                    why: "Saga complète (collection TMDB), dans l'ordre", count: sg.count, preview: [],
+                                    loader: { await MediaStore.ficheList(.film, pids: p, cond: "f.coll=?", args: [id], order: "f.year", limit: 60) }, kind: "Saga"))
+            }
+        }
+        // plateformes : catégories du fournisseur qui portent le nom d'un service
+        var plat: [String: [MediaStore.Cat]] = [:]
+        for c in await MediaStore.categories(k, pids: p) { if let sv = Services.match(c.name) { plat[sv, default: []].append(c) } }
+        for (name, cats) in plat {
+            var total = 0
+            for c in cats { total += c.count }
+            guard total >= 2 else { continue }
+            out.append(CollInfo(id: "pf:" + name, icon: "tv", name: name, why: "Les titres de ton fournisseur rangés dans sa catégorie " + name,
+                                count: total, preview: [], loader: {
+                var all: [MediaItem] = []
+                for c in cats { all += await MediaStore.page(k, cat: c, offset: 0, limit: 300) }
+                return all
+            }, kind: "Plateforme"))
+        }
+        return out.sorted { $0.count > $1.count }
+    }
+
+    private func genreTiles(_ k: MediaKind, _ p: [String]) async -> [CollInfo] {
+        let G = k == .film ? ["Action", "Aventure", "Animation", "Comédie", "Crime", "Documentaire", "Drame", "Familial", "Fantastique", "Histoire", "Horreur", "Musique", "Mystère", "Romance", "Science-Fiction", "Thriller", "Guerre", "Western"]
+                           : ["Action & Adventure", "Animation", "Comédie", "Crime", "Documentaire", "Drame", "Familial", "Kids", "Mystère", "Science-Fiction & Fantastique", "War & Politics", "Western", "Reality", "Soap"]
+        var out: [CollInfo] = []
+        for g in G {
+            let n = await MediaStore.ficheCount(k, pids: p, cond: "f.genres LIKE ?", args: ["%" + g + "%"])
+            guard n >= 2 else { continue }
+            out.append(CollInfo(id: "g:" + g, icon: "square.grid.2x2", name: g, why: "Genre TMDB · les mieux notés d'abord", count: n, preview: [],
+                                loader: { await MediaStore.ficheList(k, pids: p, cond: "f.genres LIKE ?", args: ["%" + g + "%"], order: "f.vote DESC", limit: 300) }, kind: "Catégorie"))
+        }
+        return out.sorted { $0.count > $1.count }
     }
 
     private func loadResume() async {
@@ -103,7 +434,11 @@ struct MediaHomeView: View {
         let list = watch.inProgress.filter { $0.item.hasPrefix(prefix) }.prefix(20)
         let items = await MediaStore.items(ids: list.map(\.item))
         let byID = Dictionary(items.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
-        resume = list.compactMap { e in byID[e.item].map { ResumeEntry(item: $0, entry: e) } }
+        var seen = Set<String>()
+        resume = list.compactMap { e in
+            guard seen.insert(e.item).inserted else { return nil }
+            return byID[e.item].map { ResumeEntry(item: $0, entry: e) }
+        }
         mine = await MediaStore.items(ids: watch.favorites.filter { $0.hasPrefix(prefix) })
     }
 
@@ -122,9 +457,12 @@ struct MediaHomeView: View {
     }
 }
 
-struct GenreRow: Identifiable { let name: String; let items: [MediaItem]; var id: String { name } }
+extension CollInfo: Hashable {
+    static func == (a: CollInfo, b: CollInfo) -> Bool { a.id == b.id }
+    func hash(into h: inout Hasher) { h.combine(id) }
+}
 
-/// Grande affiche en haut de l'accueil : image plein écran, badge doré, titre, infos, Lecture (avec l'heure de fin).
+/// Grande affiche en haut de l'accueil : image nette plein écran, badge doré, titre, infos, bouton blanc avec l'heure de fin.
 struct HeroView: View {
     let item: MediaItem
     let index: Int
@@ -141,73 +479,90 @@ struct HeroView: View {
     private var details: MediaInfo { miFor == item.id ? mi : MediaInfo() }
     /// Durée : TMDB, sinon le fournisseur. 0 = inconnue → pas d'heure de fin.
     private var minutes: Int { (item.fiche?.runtime ?? 0) > 0 ? item.fiche!.runtime : details.minutes }
+    /// Image de fond : TMDB (version d'origine), sinon celle du fournisseur.
+    private var art: String { !item.backdropHD.isEmpty ? item.backdropHD : details.backdrop }
 
     var body: some View {
-        let c = item.clean
-        let f = item.fiche
-        ZStack(alignment: .bottomLeading) {
-            ZStack {
-                if item.backdropURL.isEmpty { Poster(url: item.posterURL).blur(radius: 50).opacity(0.6) }
-                else { Poster(url: item.backdropURL) }
-            }
-            .frame(width: 1920, height: 860).clipped()
-            .id(item.id).transition(.opacity)
+        ZStack(alignment: .topLeading) {
+            ArtView(backdrop: art, poster: item.posterURL, maxPixel: 1920, posterWidthRatio: 0.2)
+                .frame(width: 1920, height: 880).clipped()
+                .id(item.id).transition(.opacity)
             LinearGradient(colors: [P.room.opacity(0.92), P.room.opacity(0.5), .clear], startPoint: .leading, endPoint: .trailing)
             LinearGradient(colors: [.black.opacity(0.6), .clear, .clear, P.room], startPoint: .top, endPoint: .bottom)
-
-            VStack(alignment: .leading, spacing: 16) {
-                Kicker(text: (agoDays ?? 99) <= 7 ? "L'arrivée de la semaine" : (item.kind == .film ? "Nouveau dans prisme" : "Nouvelle série"))
-                Text(item.displayTitle).font(P.font(74, .bold)).lineLimit(2).minimumScaleFactor(0.7).frame(maxWidth: 1150, alignment: .leading)
-                HStack(spacing: 18) {
-                    if !provider.isEmpty { Pill(text: provider, bg: P.chip.opacity(0.45), stroke: P.chip) }
-                    if let a = agoText(item.added) { Text(a) }
-                    let y = (f?.year ?? 0) > 0 ? f!.year : c.year
-                    if y > 0 { Text(String(y)) }
-                    if item.kind == .film, minutes > 0 { Text(runtimeText(minutes)) }
-                    if item.kind == .series, !details.seasons.isEmpty {
-                        let n = details.seasons.flatMap(\.episodes).count
-                        Text("\(details.seasons.count) saison\(details.seasons.count > 1 ? "s" : "") · \(n) ép.")
-                    }
-                    let r = (f?.vote ?? 0) > 0 ? f!.vote : item.rating
-                    if r > 0 { Stars(value: r) }
-                    if !c.tags.isEmpty { Pill(text: c.tags.joined(separator: " · "), bg: .clear) }
-                }
-                .font(P.font(25, .medium)).foregroundStyle(P.dim)
-                let plot = (f?.overview.isEmpty == false) ? f!.overview : (item.plot.isEmpty ? details.plot : item.plot)
-                if !plot.isEmpty { Text(plot).font(P.font(26)).foregroundStyle(.white.opacity(0.8)).lineLimit(2).frame(maxWidth: 980, alignment: .leading) }
-                Button { play(details) } label: { PlayLabel(title: playTitle, sub: playSub) }
-                    .buttonStyle(PrimaryStyle())
-                    .focused(focus)
-                    .contextMenu {
-                        Button { info() } label: { Label("Voir la fiche", systemImage: "info.circle") }
-                        Button { watch.toggleFavorite(item.id) } label: {
-                            Label(watch.favorites.contains(item.id) ? "Retirer de ma liste" : "Ajouter à ma liste", systemImage: watch.favorites.contains(item.id) ? "checkmark" : "plus")
-                        }
-                    }
-                    .onMoveCommand { d in
-                        if d == .left { step(-1) } else if d == .right { step(1) }
-                    }
-                    .padding(.top, 8)
-                Text("OK maintenu : voir la fiche · " + (watch.favorites.contains(item.id) ? "retirer de ma liste" : "ajouter à ma liste") + (count > 1 ? " · ‹ › autre titre" : ""))
-                    .font(P.font(19)).foregroundStyle(P.faint)
-            }
-            .padding(.leading, 120).padding(.bottom, 64)
-
+            content
+                .padding(.leading, 120).padding(.trailing, 120).padding(.top, 220)
+                // toute la largeur sous la barre : en descendant depuis n'importe quel onglet, on arrive sur le bouton
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .focusSection()
             if count > 1 {
                 HStack(spacing: 8) {
                     ForEach(0..<count, id: \.self) { i in Capsule().fill(.white.opacity(i == index ? 1 : 0.35)).frame(width: i == index ? 34 : 10, height: 10) }
                     Text("\(index + 1) / \(count)").font(P.font(20, .semibold)).foregroundStyle(P.dim).padding(.leading, 8)
                 }
-                .frame(maxWidth: .infinity, alignment: .trailing).padding(.trailing, 120).padding(.bottom, 150)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing).padding(.trailing, 120).padding(.bottom, 190)
+                .allowsHitTesting(false)
             }
         }
-        .frame(width: 1920, height: 860)
-        .focusSection()
+        .frame(width: 1920, height: 880)
         .task(id: item.id) {
             let id = item.id
             let m = await InfoLoader.load(item)
             if id == item.id { mi = m; miFor = id }
         }
+    }
+
+    private var content: some View {
+        let c = item.clean
+        let f = item.fiche
+        return VStack(alignment: .leading, spacing: 16) {
+            Kicker(text: (agoDays ?? 99) <= 7 ? "L'arrivée de la semaine" : (item.kind == .film ? "Nouveau dans prisme" : "Nouvelle série"))
+            Text(item.displayTitle).font(P.font(item.kind == .series ? 84 : 72, item.kind == .series ? .heavy : .bold)).lineLimit(2).minimumScaleFactor(0.7).frame(maxWidth: 1150, alignment: .leading)
+            HStack(spacing: 18) {
+                if !provider.isEmpty { Pill(text: provider, bg: P.chip.opacity(0.45), stroke: P.chip) }
+                if let a = agoText(item.added) { Text(a) }
+                let y = (f?.year ?? 0) > 0 ? f!.year : c.year
+                if y > 0 && item.kind == .film { Text(String(y)) }
+                if item.kind == .film, minutes > 0 { Text(runtimeText(minutes)) }
+                if item.kind == .series, !details.seasons.isEmpty { Text(seasonLine) }
+                let r = (f?.vote ?? 0) > 0 ? f!.vote : item.rating
+                if r > 0 { Stars(value: r) }
+                if !c.tags.isEmpty { Pill(text: c.tags.joined(separator: " · "), bg: .clear) }
+            }
+            .font(P.font(25, .medium)).foregroundStyle(P.dim)
+            Text(subLine).font(P.font(25)).foregroundStyle(.white.opacity(0.8)).lineLimit(2).frame(maxWidth: 980, alignment: .leading)
+            Button { play(details) } label: { PlayLabel(title: playTitle, sub: playSub) }
+                .buttonStyle(PrimaryStyle())
+                .focused(focus)
+                .contextMenu {
+                    Button { info() } label: { Label("Voir la fiche", systemImage: "info.circle") }
+                    Button { watch.toggleFavorite(item.id) } label: {
+                        Label(watch.favorites.contains(item.id) ? "Retirer de ma liste" : "Ajouter à ma liste", systemImage: watch.favorites.contains(item.id) ? "checkmark" : "plus")
+                    }
+                }
+                .onMoveCommand { d in
+                    if d == .left { step(-1) } else if d == .right { step(1) }
+                }
+                .padding(.top, 8)
+            Text("OK maintenu : voir la fiche · " + (watch.favorites.contains(item.id) ? "retirer de ma liste" : "ajouter à ma liste") + (count > 1 ? " · ‹ › autre titre" : ""))
+                .font(P.font(19)).foregroundStyle(P.faint)
+        }
+    }
+
+    private var seasonLine: String {
+        let n = details.seasons.flatMap(\.episodes).count
+        return "\(details.seasons.count) saison\(details.seasons.count > 1 ? "s" : "") · \(n) ép."
+    }
+
+    /// Ligne sous les infos : le résumé pour un film ; pour une série, comme le simulateur, où tu en es.
+    private var subLine: String {
+        let f = item.fiche
+        let plot = (f?.overview.isEmpty == false) ? f!.overview : (item.plot.isEmpty ? details.plot : item.plot)
+        if item.kind == .series, !details.seasons.isEmpty {
+            let all = details.seasons.flatMap(\.episodes)
+            let started = all.contains { watch.fraction(EpisodeLogic.key(item, $0)) != nil }
+            if !started { return "Toute la série est disponible, tu peux commencer ce soir" }
+        }
+        return plot
     }
 
     private var agoDays: Int? { item.added > 0 ? (Int(Date().timeIntervalSince1970) - item.added) / 86400 : nil }
@@ -259,25 +614,16 @@ struct MediaRow: View {
     let items: [MediaItem]
     let open: (MediaItem) -> Void
     var more: (() -> Void)? = nil
-    var showAdded = false
+    var moreCount: Int? = nil
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
-            HStack(alignment: .firstTextBaseline, spacing: 24) {
-                SectionTitle(title: title, sub: sub)
-                if let more {
-                    Button(action: more) { Text("Tout voir").font(P.font(21, .semibold)) }.buttonStyle(GlassStyle(radius: 14, minH: 48))
-                }
-            }.padding(.horizontal, 120)
+            HomeHeader(title: title, sub: sub)
             ScrollView(.horizontal) {
                 LazyHStack(alignment: .top, spacing: 34) {
                     ForEach(items) { it in
-                        VStack(alignment: .leading, spacing: 10) {
-                            PosterButton(item: it) { open(it) }
-                            if showAdded, let a = agoText(it.added) {
-                                Text("NOUVEAU · " + a.uppercased()).font(P.font(15, .bold)).tracking(1).foregroundStyle(Color(red: 0.4, green: 0.7, blue: 1))
-                            }
-                        }
+                        PosterButton(item: it) { open(it) }
                     }
+                    if let more { AllCard(count: moreCount ?? items.count, unit: "titres", height: 330, action: more) }
                 }.padding(.horizontal, 120).padding(.vertical, 34)
             }
             .scrollClipDisabled()
@@ -295,64 +641,50 @@ struct CategoryRow: View {
     var body: some View {
         Group {
             if items.isEmpty { Color.clear.frame(height: 1) }
-            else { MediaRow(title: cat.name, sub: "\(cat.count)", items: items, open: open, more: cat.count > items.count ? more : nil) }
+            else { MediaRow(title: cat.name, sub: "\(cat.count)", items: items, open: open, more: cat.count > items.count ? more : nil, moreCount: cat.count) }
         }
         .task(id: cat.id) { items = await MediaStore.page(kind, cat: cat, offset: 0, limit: 20) }
     }
 }
 
-// MARK: - « Reprendre » : cartes larges avec le temps restant (simulateur)
+// MARK: - « Reprendre » (Ma liste) et affiches
 
-struct ResumeEntry: Identifiable { let item: MediaItem; let entry: WatchStore.Entry; var id: String { item.id } }
-
-struct ResumeRow: View {
-    let entries: [ResumeEntry]
-    let open: (MediaItem) -> Void
-    var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            SectionTitle(title: "Reprendre", sub: "\(entries.count) en cours").padding(.horizontal, 120)
-            ScrollView(.horizontal) {
-                LazyHStack(spacing: 34) {
-                    ForEach(entries) { r in
-                        Button { open(r.item) } label: { card(r) }.buttonStyle(TileStyle(radius: 20, zoom: 1.06))
-                    }
-                }.padding(.horizontal, 120).padding(.vertical, 34)
-            }.scrollClipDisabled()
-        }.focusSection()
-    }
-
-    private func card(_ r: ResumeEntry) -> some View {
-        let e = r.entry
-        let left = max(60, e.dur - e.pos)
-        let ep = episodeTag(e.ep)
-        return ZStack(alignment: .bottomLeading) {
-            Poster(url: r.item.backdropURL.isEmpty ? r.item.posterURL : r.item.backdropURL).blur(radius: r.item.backdropURL.isEmpty ? 30 : 0)
-            LinearGradient(colors: [.clear, .black.opacity(0.85)], startPoint: .center, endPoint: .bottom)
-            VStack(alignment: .leading, spacing: 4) {
-                Text(r.item.displayTitle).font(P.font(25, .bold)).lineLimit(1)
-                Text((ep.map { $0 + " · " } ?? "") + "reste " + runtimeText(Int(left / 60))).font(P.font(18)).opacity(0.75)
-                GeometryReader { g in
-                    ZStack(alignment: .leading) {
-                        Capsule().fill(.white.opacity(0.25))
-                        Capsule().fill(.white).frame(width: g.size.width * min(1, e.pos / max(1, e.dur)))
-                    }
-                }.frame(height: 5).padding(.top, 6)
-            }.foregroundStyle(.white).padding(18)
-        }
-        .frame(width: 420, height: 236)
-    }
-
+struct ResumeEntry: Identifiable {
+    let item: MediaItem
+    let entry: WatchStore.Entry
+    var id: String { item.id }
     /// « Saison 2 · Épisode 3 · … » → « S2 · É3 ».
-    private func episodeTag(_ s: String?) -> String? {
+    static func episodeTag(_ s: String?) -> String? {
         guard let s, let m = s.range(of: #"Saison (\d+) · Épisode (\d+)"#, options: .regularExpression) else { return nil }
         let nums = s[m].split(whereSeparator: { !$0.isNumber }).map(String.init)
         return nums.count >= 2 ? "S\(nums[0]) · É\(nums[1])" : nil
     }
 }
 
+struct ResumeRow: View {
+    let entries: [ResumeEntry]
+    let open: (MediaItem) -> Void
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HomeHeader(title: "Reprendre", sub: "\(entries.count) en cours")
+            ScrollView(.horizontal) {
+                LazyHStack(spacing: 30) {
+                    ForEach(entries) { r in
+                        let e = r.entry
+                        let done = e.dur > 0 && e.pos / e.dur >= 0.92
+                        WideCard(item: r.item, badge: ResumeEntry.episodeTag(e.ep), title: r.item.displayTitle,
+                                 sub: done ? "épisode suivant" : "reste " + runtimeText(Int(max(60, e.dur - e.pos) / 60)),
+                                 progress: done ? nil : min(1, e.pos / max(1, e.dur))) { open(r.item) }
+                    }
+                }.padding(.horizontal, 120).padding(.vertical, 30)
+            }.scrollClipDisabled()
+        }.focusSection()
+    }
+}
+
 struct PosterButton: View {
     let item: MediaItem
-    var width: CGFloat = 210
+    var width: CGFloat = 220
     let action: () -> Void
     var body: some View {
         Button(action: action) { PosterTile(item: item).frame(width: width, height: width * 1.5) }
@@ -361,31 +693,31 @@ struct PosterButton: View {
     }
 }
 
-/// Affiche d'une rangée (simulateur) : titre et année en bas, « fin hh:mm » en haut si la durée est connue,
-/// barre de progression si le titre est commencé.
+/// Affiche d'une rangée, comme le simulateur avec de vraies affiches : l'image seule (le titre est déjà dessus),
+/// bandeau bleu « NOUVEAU » en haut si le titre vient d'arriver, « fin hh:mm » si la durée est connue,
+/// barre de progression si le titre est commencé. Sans image : le titre propre sur un dégradé.
 struct PosterTile: View {
     let item: MediaItem
     @ObservedObject var watch = WatchStore.shared
     var body: some View {
-        ZStack(alignment: .bottomLeading) {
+        ZStack(alignment: .top) {
             Poster(url: item.posterURL, title: item.posterURL.isEmpty ? item.displayTitle : "")
-            LinearGradient(colors: [.clear, .clear, .black.opacity(0.88)], startPoint: .top, endPoint: .bottom)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(item.displayTitle).font(P.font(22, .bold)).lineLimit(3).minimumScaleFactor(0.8)
-                let y = (item.fiche?.year ?? 0) > 0 ? item.fiche!.year : item.clean.year
-                if y > 0 { Text(String(y)).font(P.font(16, .bold)).opacity(0.7) }
+            if let n = newLabel {
+                Text(n).font(P.font(15, .heavy)).tracking(0.9).foregroundStyle(.white).lineLimit(1)
+                    .padding(.vertical, 7).frame(maxWidth: .infinity)
+                    .background(Color(red: 0.04, green: 0.52, blue: 1))
+                    .shadow(color: .black.opacity(0.35), radius: 5, y: 2)
             }
-            .foregroundStyle(.white).padding(14).padding(.bottom, 4)
             if item.kind == .film, let rt = item.fiche?.runtime, rt > 0 {
-                VStack {
-                    HStack {
-                        Spacer()
-                        let left = max(60, Double(rt * 60) - (watch.resume(item.id) ?? 0))
-                        Text("fin " + Fmt.hm(Date().addingTimeInterval(left))).font(P.font(15, .bold)).foregroundStyle(.white)
-                            .padding(.horizontal, 8).padding(.vertical, 4).background(.black.opacity(0.6), in: RoundedRectangle(cornerRadius: 7))
-                    }
-                    Spacer()
-                }.padding(10)
+                let left = max(60, Double(rt * 60) - (watch.resume(item.id) ?? 0))
+                HStack(spacing: 5) {
+                    Text("fin " + Fmt.hm(Date().addingTimeInterval(left)))
+                    Image(systemName: "moon.fill").font(P.font(12))
+                }
+                .font(P.font(15, .bold)).foregroundStyle(P.gold)
+                .padding(.horizontal, 8).padding(.vertical, 4).background(.black.opacity(0.65), in: RoundedRectangle(cornerRadius: 7))
+                .padding(10).padding(.top, newLabel == nil ? 0 : 30)
+                .frame(maxWidth: .infinity, alignment: .trailing)
             }
             if let f = watch.fraction(item.id), f > 0.02, f < 0.92 {
                 GeometryReader { g in
@@ -397,21 +729,26 @@ struct PosterTile: View {
             }
         }
     }
+
+    /// « NOUVEAU · AUJOURD'HUI » pendant 7 jours après l'ajout chez le fournisseur.
+    private var newLabel: String? {
+        guard item.added > 0 else { return nil }
+        let d = (Int(Date().timeIntervalSince1970) - item.added) / 86400
+        guard d >= 0 && d <= 7 else { return nil }
+        return "NOUVEAU · " + (agoText(item.added) ?? "").uppercased()
+    }
 }
 
-/// Affiche : image du fournisseur, sinon le titre sur un dégradé.
+/// Affiche : image du fournisseur ou de TMDB (décodée à la bonne taille), sinon le titre sur un dégradé.
 struct Poster: View {
     let url: String
     var title: String = ""
+    var maxPixel: CGFloat = 500
     var body: some View {
         ZStack {
             LinearGradient(colors: [Color(white: 0.2), Color(white: 0.09)], startPoint: .top, endPoint: .bottom)
             if !title.isEmpty { Text(title).font(P.font(22, .bold)).multilineTextAlignment(.center).padding(14).foregroundStyle(P.dim) }
-            if let u = URL(string: url), !url.isEmpty {
-                AsyncImage(url: u, transaction: Transaction(animation: .easeIn(duration: 0.2))) { ph in
-                    if let img = ph.image { img.resizable().scaledToFill() }
-                }
-            }
+            if !url.isEmpty { SharpImage(url: url, maxPixel: maxPixel) }
         }
         .clipped()
     }

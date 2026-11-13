@@ -78,11 +78,11 @@ enum EpisodeLogic {
 // MARK: - Image de fond plein écran
 
 struct DetailBackdrop: View {
-    let url: String
-    var sharp = true
+    let backdrop: String
+    let poster: String
     var body: some View {
         ZStack {
-            Poster(url: url).frame(width: 1920, height: 1080).clipped().blur(radius: sharp ? 0 : 60).opacity(sharp ? 0.92 : 0.55)
+            ArtView(backdrop: backdrop, poster: poster, maxPixel: 1920, posterWidthRatio: 0.24).frame(width: 1920, height: 1080).clipped()
             LinearGradient(colors: [P.room.opacity(0.96), P.room.opacity(0.62), .clear], startPoint: .leading, endPoint: .trailing)
             LinearGradient(colors: [.black.opacity(0.35), .clear, P.room.opacity(0.85), P.room], startPoint: .top, endPoint: .bottom)
         }
@@ -178,8 +178,27 @@ struct WhereSection: View {
                 }
                 .focusSection()
             }
-            Text(sourceLine(empty: inc.isEmpty && loc.isEmpty && buy.isEmpty)).font(P.font(18)).foregroundStyle(P.faint)
+            if inc.isEmpty && loc.isEmpty && buy.isEmpty && airings.isEmpty {
+                // rien à montrer : on dit pourquoi, au lieu d'une section vide
+                HStack(spacing: 18) {
+                    Image(systemName: fiche == nil ? (TmdbKey.value == nil ? "key" : "questionmark.circle") : "mappin.slash").font(P.font(30, .semibold)).foregroundStyle(P.gold)
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(emptyTitle).font(P.font(24, .bold))
+                        Text(sourceLine(empty: true)).font(P.font(19)).foregroundStyle(P.dim)
+                    }
+                }
+                .padding(.horizontal, 24).padding(.vertical, 20).frame(maxWidth: compact ? .infinity : 900, alignment: .leading)
+                .background(Color.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 20))
+                .overlay(RoundedRectangle(cornerRadius: 20).stroke(Color.white.opacity(0.1), lineWidth: 1.5))
+            } else {
+                Text(sourceLine(empty: inc.isEmpty && loc.isEmpty && buy.isEmpty)).font(P.font(18)).foregroundStyle(P.faint)
+            }
         }
+    }
+
+    private var emptyTitle: String {
+        if fiche == nil { return TmdbKey.value == nil ? "Clé TMDB manquante" : "Fiche TMDB introuvable pour ce titre" }
+        return "Disponible seulement dans prisme pour le moment"
     }
 
     private var inPrismeLine: String {
@@ -197,7 +216,7 @@ struct WhereSection: View {
     }
 
     private func sourceLine(empty: Bool) -> String {
-        if fiche == nil { return TmdbKey.value == nil ? "Les autres services apparaissent avec une clé TMDB (Réglages › Fiches TMDB)." : "Pas de fiche TMDB trouvée pour ce titre : autres services inconnus." }
+        if fiche == nil { return TmdbKey.value == nil ? "Les autres services (Netflix, Disney+…) viennent de TMDB : tape ta clé dans Réglages › Fiches et notes." : "TMDB n'a pas reconnu ce titre : les autres services sont inconnus." }
         return empty ? "Pas disponible ailleurs en France pour le moment (TMDB)." : "Disponibilités en France (données TMDB, source JustWatch)"
     }
 
@@ -308,3 +327,80 @@ func openTrailer(_ id: String) async -> String? {
 
 /// Lancer une chaîne depuis « À la TV ».
 struct LiveLaunch: Identifiable { let id = UUID(); let ch: Channel }
+
+// MARK: - Bande-annonce (simulateur : bouton rond « film », écran BANDE-ANNONCE VF · titre)
+
+struct Trailer: Identifiable, Hashable { let key: String; let lang: String; var id: String { key } }
+
+enum TrailerStore {
+    private static var memo: [String: Trailer?] = [:]
+    /// Bande-annonce TMDB : en français d'abord (VF), sinon en version originale. Sinon celle du fournisseur.
+    static func find(tmdb: Int, tv: Bool, providerKey: String) async -> Trailer? {
+        let mk = (tv ? "t" : "m") + String(tmdb) + "|" + providerKey
+        if let m = memo[mk] { return m }
+        var out: Trailer? = nil
+        if tmdb > 0, let key = TmdbKey.value {
+            let api = TmdbAPI(key: key)
+            let path = (tv ? "/tv/" : "/movie/") + String(tmdb) + "/videos"
+            for (lang, tag) in [("fr-FR", "VF"), ("en-US", "VO")] {
+                guard let d = await api.get(path, [("language", lang)]), let res = d["results"] as? [[String: Any]] else { continue }
+                let yt = res.filter { ($0["site"] as? String) == "YouTube" && (($0["type"] as? String) == "Trailer" || ($0["type"] as? String) == "Teaser") }
+                if let best = yt.first(where: { ($0["type"] as? String) == "Trailer" }) ?? yt.first, let k = best["key"] as? String {
+                    out = Trailer(key: k, lang: tag); break
+                }
+            }
+        }
+        if out == nil, !providerKey.trimmingCharacters(in: .whitespaces).isEmpty { out = Trailer(key: providerKey.trimmingCharacters(in: .whitespaces), lang: "") }
+        memo[mk] = out
+        return out
+    }
+}
+
+/// Écran de la bande-annonce (mise en page du simulateur).
+/// tvOS n'a pas de lecteur YouTube intégré : la vidéo s'ouvre dans l'app YouTube de l'Apple TV.
+struct TrailerScreen: View {
+    let trailer: Trailer
+    let title: String
+    let backdrop: String
+    let poster: String
+    let playFilm: (() -> Void)?
+    var playTitle = "Regarder le film"
+    @Environment(\.dismiss) private var dismiss
+    @State private var msg: String?
+    @FocusState private var first: Bool
+
+    var body: some View {
+        ZStack(alignment: .topLeading) {
+            Color.black
+            ArtView(backdrop: backdrop, poster: poster, maxPixel: 1920, posterWidthRatio: 0.22).opacity(0.85)
+            LinearGradient(colors: [.black.opacity(0.5), .clear, .black.opacity(0.85)], startPoint: .top, endPoint: .bottom)
+            Text("BANDE-ANNONCE" + (trailer.lang.isEmpty ? "" : " " + trailer.lang) + " · " + title.uppercased())
+                .font(P.font(21, .bold)).tracking(2).padding(.horizontal, 20).padding(.vertical, 12).glass(18)
+                .padding(.leading, 105).padding(.top, 70)
+            VStack(alignment: .trailing, spacing: 14) {
+                Text(langText).font(P.font(20)).foregroundStyle(P.dim)
+                if let msg { Text(msg).font(P.font(20, .semibold)).foregroundStyle(P.gold) }
+                HStack(spacing: 20) {
+                    Button { Task { msg = await openTrailer(trailer.key) } } label: { Label("Lire la bande-annonce", systemImage: "play.rectangle.fill").font(P.font(26, .bold)) }
+                        .buttonStyle(GlassStyle()).focused($first)
+                    if let playFilm {
+                        Button { dismiss(); playFilm() } label: { PlayLabel(title: playTitle) }.buttonStyle(PrimaryStyle())
+                    }
+                }
+                Text("La vidéo s'ouvre dans l'app YouTube de l'Apple TV · Menu pour revenir").font(P.font(18)).foregroundStyle(P.faint)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
+            .padding(.trailing, 105).padding(.bottom, 90)
+        }
+        .ignoresSafeArea()
+        .defaultFocus($first, true)
+    }
+
+    private var langText: String {
+        switch trailer.lang {
+        case "VF": return "Bande-annonce en version française (choisie automatiquement quand elle existe)"
+        case "VO": return "Pas de version française sur TMDB : bande-annonce en version originale"
+        default: return "Bande-annonce donnée par ton fournisseur"
+        }
+    }
+}

@@ -182,7 +182,9 @@ struct FicheWorker {
         if id == 0 {
             var q = [("query", c.title), ("language", "fr-FR")]
             if c.year > 0 { q.append((tv ? "first_air_date_year" : "year", String(c.year))) }
-            guard let res = await api.get(tv ? "/search/tv" : "/search/movie", q)?["results"] as? [[String: Any]] else { return nil }
+            guard var res = await api.get(tv ? "/search/tv" : "/search/movie", q)?["results"] as? [[String: Any]] else { return nil }
+            // année du fournisseur parfois fausse : sans résultat, on cherche aussi sans l'année
+            if res.isEmpty, c.year > 0, let r2 = await api.get(tv ? "/search/tv" : "/search/movie", [("query", c.title), ("language", "fr-FR")])?["results"] as? [[String: Any]] { res = r2 }
             var best: (Int, Double) = (0, 0)
             for r in res.prefix(8) {
                 let names = [r["title"], r["name"], r["original_title"], r["original_name"]].compactMap { $0 as? String }

@@ -22,8 +22,10 @@ struct MediaItem: Identifiable, Hashable {
     var clean: CleanTitle { TitleTools.clean(name, year: year) }
     /// Titre affiché : celui de TMDB (en français) s'il est connu.
     var displayTitle: String { fiche?.title.isEmpty == false ? fiche!.title : clean.title }
-    var posterURL: String { (fiche?.poster.isEmpty == false) ? Fiche.img(fiche!.poster) : icon }
-    var backdropURL: String { (fiche?.backdrop.isEmpty == false) ? Fiche.img(fiche!.backdrop, "w1280") : "" }
+    var posterURL: String { (fiche?.poster.isEmpty == false) ? Fiche.img(fiche!.poster, "w500") : icon }
+    var backdropURL: String { (fiche?.backdrop.isEmpty == false) ? Fiche.img(fiche!.backdrop, "w780") : "" }
+    /// Image de fond plein écran : version d'origine TMDB (réduite à 1920 px au décodage, voir SharpImage).
+    var backdropHD: String { (fiche?.backdrop.isEmpty == false) ? Fiche.img(fiche!.backdrop, "original") : "" }
 }
 
 extension Array where Element == MediaItem {
@@ -48,6 +50,20 @@ enum TitleTools {
     private static let tagRx = try! NSRegularExpression(pattern: #"\b(4K|UHD|2160p|FHD|1080p|HD|720p|SD|MULTI|VOSTFR|VOST|VFF|VFQ|VF|TRUEFRENCH|FRENCH|HEVC|H265|x265|HDR|DV)\b"#, options: [.caseInsensitive])
     private static let yearRx = try! NSRegularExpression(pattern: #"[\(\[]?\b(19[2-9]\d|20[0-4]\d)\b[\)\]]?"#)
 
+    // Règles reprises du simulateur (RI.title) : on retire, en partant de la fin, langue, qualité, source, son, année,
+    // code pays et numéro de saison (« Brothers 2026 US » → « Brothers », « Lupin S01 » → « Lupin »).
+    private static let leadLang = try! NSRegularExpression(pattern: #"^\s*([\[(|]?\s*(fr|fra|france|be|ch|ca|qc)\s*[\])|:\-–]+\s*)+"#, options: [.caseInsensitive])
+    private static let leadCode = try! NSRegularExpression(pattern: #"^\s*(?:AS|ASIA|AF|EU|EN|UK|US|KR|JP|CN|IN|AR|TR|DE|ES|IT|PT|PL|NL|RU|LAT)\s*[-|:]\s+"#)
+    private static let supers = try! NSRegularExpression(pattern: "[ᴴᴰᶠᵁ⁴ᴷˢ]+")
+    private static let trail = try! NSRegularExpression(pattern: #"(?:^|[\s\-–:_.,|])(?:vost(?:-?fr)?|vostfr|vo|vf2?|vff|vfq|vfi|stfr|subfrench|truefrench|french|multi|eng|subs?|hdlight|hdr10\+?|hdr|dv|dolby ?vision|imax|3d|remux|web(?:-?dl|rip)?|blu-?ray|bdrip|brrip|dvdrip|x26[45]|h\.?26[45]|hevc|10 ?bits?|atmos|dts|ac3|aac|5\.1|7\.1|extended|uncut|remastered|director'?s ?cut|version longue|4k|uhd|fhd|hd|sd|1080[pi]?|720p?|2160p?|19[2-9]\d|20[0-3]\d)[\s\-–:_.,|]*$"#, options: [.caseInsensitive])
+    private static let trailCode = try! NSRegularExpression(pattern: #"(?:[\s_\-–|.(\[]+)(?:FR|FRA|KR|KOR|PL|POL|US|USA|UK|GB|EN|ENG|DE|GER|ES|ESP|IT|ITA|TR|TUR|JP|JAP|CN|CHN|IN|IND|BR|PT|NL|AR|ARA|RU|RUS|SE|NO|DK|FI|BE|CA|QC|MX|LAT|LATINO|SUB|DUB|VOSTA)[\])]*\s*$"#)
+    private static let trailLang = try! NSRegularExpression(pattern: #"(?:[_|(\[\-–]\s*|\s+)(?:fr|fra|kr|kor|pl|tr|jp|cn|ru|nl|dk|fi|gb|usa|ger|esp|ita|latino)[\])]*\s*$"#, options: [.caseInsensitive])
+    private static let trailSeason = try! NSRegularExpression(pattern: #"[\s_\-–|.]+(?:s\d{1,2}|saison\s*\d{1,2}|season\s*\d{1,2}|partie\s*\d{1,2})\s*$"#, options: [.caseInsensitive])
+
+    private static func sub(_ rx: NSRegularExpression, _ s: String, _ t: String = "") -> String {
+        rx.stringByReplacingMatches(in: s, range: NSRange(s.startIndex..., in: s), withTemplate: t)
+    }
+
     static func clean(_ raw: String, year: Int) -> CleanTitle {
         var s = raw
         s = lead.stringByReplacingMatches(in: s, range: NSRange(s.startIndex..., in: s), withTemplate: "")
@@ -64,15 +80,29 @@ enum TitleTools {
                 if !tags.contains(label) { tags.append(label) }
             }
         }
-        s = tagRx.stringByReplacingMatches(in: s, range: NSRange(s.startIndex..., in: s), withTemplate: "")
         var y = year
-        if let m = yearRx.matches(in: s, range: NSRange(s.startIndex..., in: s)).last, let r = Range(m.range(at: 1), in: s) {
-            if y == 0 { y = Int(s[r]) ?? 0 }
-            if let full = Range(m.range, in: s) { s.removeSubrange(full) }
-        }
-        s = s.replacingOccurrences(of: #"[\s\-–|:_.]+$"#, with: "", options: .regularExpression)
+        if y == 0, let m = yearRx.matches(in: s, range: NSRange(s.startIndex..., in: s)).last, let r = Range(m.range(at: 1), in: s) { y = Int(s[r]) ?? 0 }
+        // titre propre (règles du simulateur)
+        s = sub(leadLang, s)
+        s = sub(supers, s, " ")
+        s = tagRx.stringByReplacingMatches(in: s, range: NSRange(s.startIndex..., in: s), withTemplate: " ")
+        s = s.replacingOccurrences(of: #"[\[\]()|]+"#, with: " ", options: .regularExpression)
         s = s.replacingOccurrences(of: #"\s{2,}"#, with: " ", options: .regularExpression).trimmingCharacters(in: .whitespaces)
-        if s.isEmpty { s = raw }
+        s = s.replacingOccurrences(of: #"^[\s|:\-–]+"#, with: "", options: .regularExpression)
+        s = sub(leadLang, s)
+        s = sub(leadCode, s)
+        var prev = ""
+        var guardN = 0
+        while s != prev && guardN < 12 {
+            prev = s; guardN += 1
+            var t = sub(trail, s); t = sub(trailCode, t); t = sub(trailLang, t); t = sub(trailSeason, t)
+            t = t.replacingOccurrences(of: #"\s*[-–:|,]\s*$"#, with: "", options: .regularExpression).trimmingCharacters(in: .whitespaces)
+            if t.count < 2 { break }
+            s = t
+        }
+        s = s.replacingOccurrences(of: #"^\s*[-–:]\s*"#, with: "", options: .regularExpression)
+        s = s.replacingOccurrences(of: #"\s{2,}"#, with: " ", options: .regularExpression).trimmingCharacters(in: .whitespaces)
+        if s.count < 2 { s = raw }
         return CleanTitle(title: s, year: y, tags: tags)
     }
 
@@ -108,6 +138,45 @@ enum MediaStore {
                 if seen.insert(it.clean.key).inserted { out.append(it) }
             }
             return Array(out.prefix(limit)).withFiches()
+        }
+    }
+
+    /// Titres choisis d'après leur fiche TMDB (collections « Moins de 2 h », « ★ 8 et plus », une saga…).
+    static func ficheList(_ k: MediaKind, pids: [String], cond: String, args: [Any?] = [], order: String, limit: Int) async -> [MediaItem] {
+        guard !pids.isEmpty else { return [] }
+        let t = table(k), c = cols(k).split(separator: ",").map { $0.hasPrefix("'") ? String($0) : "m." + $0 }.joined(separator: ",")
+        let sql = "SELECT \(c) FROM fiche f JOIN \(t) m ON m.pid=f.pid AND m.sid=f.sid WHERE f.kind=? AND (\(cond)) AND m.pid IN \(inList(pids)) ORDER BY \(order) LIMIT \(limit * 3)"
+        let all: [Any?] = [k.rawValue] + args + pids.map { $0 as Any? }
+        return await Database.shared.read { db in
+            var out: [MediaItem] = [], seen = Set<String>()
+            db.query(sql, all) { r in let it = row(k, r); if seen.insert(it.clean.key).inserted { out.append(it) } }
+            return Array(out.prefix(limit)).withFiches()
+        }
+    }
+
+    /// Nombre de titres d'une condition sur la fiche (pour « 12 films » sur une tuile).
+    static func ficheCount(_ k: MediaKind, pids: [String], cond: String, args: [Any?] = []) async -> Int {
+        guard !pids.isEmpty else { return 0 }
+        let t = table(k)
+        let sql = "SELECT COUNT(DISTINCT f.ckey) FROM fiche f JOIN \(t) m ON m.pid=f.pid AND m.sid=f.sid WHERE f.kind=? AND (\(cond)) AND m.pid IN \(inList(pids))"
+        let all: [Any?] = [k.rawValue] + args + pids.map { $0 as Any? }
+        return await Database.shared.read { db in
+            var n = 0
+            db.query(sql, all) { r in n = r.int(0) }
+            return n
+        }
+    }
+
+    struct SagaInfo: Identifiable, Hashable { let id: Int; let name: String; let count: Int }
+
+    /// Sagas (collections TMDB) dont au moins 2 films sont chez tes fournisseurs.
+    static func sagas(pids: [String]) async -> [SagaInfo] {
+        guard !pids.isEmpty else { return [] }
+        let sql = "SELECT f.coll, MAX(f.collname), COUNT(DISTINCT f.ckey) AS n FROM fiche f JOIN vod m ON m.pid=f.pid AND m.sid=f.sid WHERE f.kind='film' AND f.coll>0 AND m.pid IN \(inList(pids)) GROUP BY f.coll HAVING n>=2 ORDER BY n DESC LIMIT 60"
+        return await Database.shared.read { db in
+            var out: [SagaInfo] = []
+            db.query(sql, pids.map { $0 as Any? }) { r in out.append(SagaInfo(id: r.int(0), name: r.str(1), count: r.int(2))) }
+            return out
         }
     }
 

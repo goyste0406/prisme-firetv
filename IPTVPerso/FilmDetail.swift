@@ -24,6 +24,8 @@ struct FilmDetailView: View {
     @State private var showSyn = false
     @State private var actor: CastMember?
     @State private var live: LiveLaunch?
+    @State private var trailer: Trailer?
+    @State private var showTrailer: Trailer?
     @State private var loaded = false
     @FocusState private var playFocused: Bool
 
@@ -66,8 +68,7 @@ struct FilmDetailView: View {
         }
         .background(alignment: .top) {
             let hasBd = fiche?.backdrop.isEmpty == false
-            DetailBackdrop(url: hasBd ? Fiche.img(fiche!.backdrop, "w1280") : (info.backdrop.isEmpty ? item.posterURL : info.backdrop),
-                           sharp: hasBd || !info.backdrop.isEmpty)
+            DetailBackdrop(backdrop: hasBd ? Fiche.img(fiche!.backdrop, "original") : info.backdrop, poster: item.posterURL)
         }
         .background(P.room)
         .ignoresSafeArea()
@@ -75,6 +76,10 @@ struct FilmDetailView: View {
         .task(id: item.id) { await load() }
         .fullScreenCover(item: $playing) { r in VodPlayerView(request: r) }
         .fullScreenCover(item: $live) { l in LivePlayerView(channels: [l.ch], start: 0) }
+        .fullScreenCover(item: $showTrailer) { t in
+            TrailerScreen(trailer: t, title: title, backdrop: (fiche?.backdrop.isEmpty == false) ? Fiche.img(fiche!.backdrop, "original") : info.backdrop,
+                          poster: item.posterURL, playFilm: trailerPlay)
+        }
         .sheet(isPresented: $showSyn) { SynopsisSheet(kicker: "RÉSUMÉ", title: title, text: plot) }
         .sheet(item: $actor) { a in ActorSheet(actor: a, kind: .film, excluding: item.clean.key) }
         .confirmationDialog("Choisir la version", isPresented: $pickVersion) {
@@ -155,9 +160,10 @@ struct FilmDetailView: View {
                     Text("\(max(1, versions.count)) VERSION\(versions.count > 1 ? "S" : "")" + (versions.count > 1 ? " ▾" : "")).font(P.font(15, .bold)).tracking(0.8).opacity(0.6)
                 }
             }.buttonStyle(GlassStyle())
-            if !info.trailer.isEmpty {
-                Button { Task { launchMsg = await openTrailer(info.trailer) } } label: { Image(systemName: "film").font(P.font(28, .semibold)).frame(width: 34) }
-                    .buttonStyle(GlassStyle(radius: 22, minH: 84))
+            if let t = trailer {
+                // bouton rond « bande-annonce » du simulateur
+                Button { showTrailer = t } label: { Image(systemName: "film").font(P.font(28, .semibold)).frame(width: 34) }
+                    .buttonStyle(GlassStyle(radius: 42, minH: 84))
             }
         }
         .defaultFocus($playFocused, true)
@@ -355,6 +361,7 @@ struct FilmDetailView: View {
         var air: [LiveStore.Airing] = []
         for t in titles where air.isEmpty { air = await LiveStore.airings(title: t, providers: pids) }
         airings = air
+        trailer = await TrailerStore.find(tmdb: fiche?.tmdb ?? i1.tmdb, tv: false, providerKey: i1.trailer)
         var exclude = Set<Int>()
         if let f = fiche, f.coll > 0 {
             let (n, parts) = await SagaStore.parts(f.coll)
@@ -382,6 +389,8 @@ struct FilmDetailView: View {
         let prov = store.provider(v.pid)?.name ?? ""
         return ([t.isEmpty ? "Version standard" : t.joined(separator: " · ")] + (Set(versions.map(\.pid)).count > 1 ? [prov] : [])).joined(separator: " · ")
     }
+
+    private var trailerPlay: (() -> Void)? { { play(from: resumeAt ?? 0) } }
 
     private func play(from: Double) {
         guard let p = store.provider(cur.pid), let url = p.movieURL(cur) else { return }

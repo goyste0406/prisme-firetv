@@ -24,6 +24,8 @@ struct SeriesDetailView: View {
     @State private var showSyn = false
     @State private var actor: CastMember?
     @State private var live: LiveLaunch?
+    @State private var trailer: Trailer?
+    @State private var showTrailer: Trailer?
     @State private var loading = true
     @FocusState private var tabFocus: String?
     @FocusState private var playFocused: Bool
@@ -54,7 +56,7 @@ struct SeriesDetailView: View {
         .background {
             let hasBd = fiche?.backdrop.isEmpty == false
             ZStack {
-                DetailBackdrop(url: hasBd ? Fiche.img(fiche!.backdrop, "w1280") : (info.backdrop.isEmpty ? item.posterURL : info.backdrop), sharp: hasBd || !info.backdrop.isEmpty)
+                DetailBackdrop(backdrop: hasBd ? Fiche.img(fiche!.backdrop, "original") : info.backdrop, poster: item.posterURL)
                 Color.black.opacity(0.25)
             }
         }
@@ -64,6 +66,10 @@ struct SeriesDetailView: View {
         .task(id: item.id) { await load() }
         .fullScreenCover(item: $playing) { r in VodPlayerView(request: r) }
         .fullScreenCover(item: $live) { l in LivePlayerView(channels: [l.ch], start: 0) }
+        .fullScreenCover(item: $showTrailer) { t in
+            TrailerScreen(trailer: t, title: title, backdrop: (fiche?.backdrop.isEmpty == false) ? Fiche.img(fiche!.backdrop, "original") : info.backdrop,
+                          poster: item.posterURL, playFilm: trailerPlay, playTitle: "Regarder la série")
+        }
         .sheet(isPresented: $showSyn) { SynopsisSheet(kicker: "SÉRIE", title: title, text: plot.isEmpty ? "Pas de résumé chez le fournisseur." : plot) }
         .sheet(item: $actor) { a in ActorSheet(actor: a, kind: .series, excluding: item.clean.key) }
         .confirmationDialog("Choisir la version", isPresented: $pickVersion) {
@@ -134,8 +140,8 @@ struct SeriesDetailView: View {
                         Text("\(max(1, versions.count)) VERSION\(versions.count > 1 ? "S ▾" : "")").font(P.font(15, .bold)).tracking(0.8).opacity(0.6)
                     }
                 }.buttonStyle(GlassStyle(radius: 20, minH: 76))
-                if !info.trailer.isEmpty {
-                    Button { Task { launchMsg = await openTrailer(info.trailer) } } label: { Image(systemName: "film").font(P.font(26, .semibold)).frame(width: 30) }
+                if let t = trailer {
+                    Button { showTrailer = t } label: { Image(systemName: "film").font(P.font(26, .semibold)).frame(width: 30) }
                         .buttonStyle(GlassStyle(radius: 20, minH: 76))
                 }
             }.focusSection()
@@ -303,8 +309,8 @@ struct SeriesDetailView: View {
                 }
                 Spacer()
                 HStack(spacing: 12) {
-                    if !info.trailer.isEmpty {
-                        Button { Task { launchMsg = await openTrailer(info.trailer) } } label: { Label("Bande-annonce", systemImage: "film").font(P.font(19, .semibold)) }
+                    if let t = trailer {
+                        Button { showTrailer = t } label: { Label("Bande-annonce", systemImage: "film").font(P.font(19, .semibold)) }
                             .buttonStyle(GlassStyle(radius: 30, minH: 52))
                     }
                     Button {
@@ -448,8 +454,14 @@ struct SeriesDetailView: View {
         loading = false
         if fiche == nil, TmdbKey.value != nil { fiche = await FicheWorker.fetchNow(item, tmdbHint: info.tmdb) }
         airings = await LiveStore.airings(title: title, providers: pids)
+        trailer = await TrailerStore.find(tmdb: fiche?.tmdb ?? info.tmdb, tv: true, providerKey: info.trailer)
         var it = item; it.fiche = fiche
         similar = await MediaStore.similar(of: it, genres: genres, pids: pids, limit: 16).map { SimilarItem(item: $0.0, common: $0.1) }
+    }
+
+    private var trailerPlay: (() -> Void)? {
+        if all.isEmpty { return nil }
+        return { mainAction() }
     }
 
     private func playEpisode(_ e: EpisodeInfo, from: Double) {
