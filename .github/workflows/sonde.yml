@@ -1,0 +1,31 @@
+name: Sonde réseau (bandes-annonces, police)
+on:
+  push:
+    branches: [appletv]
+    paths: [".github/workflows/sonde.yml"]
+permissions:
+  contents: write
+jobs:
+  sonde:
+    runs-on: ubuntu-latest
+    steps:
+      - name: iTunes Search API (bandes-annonces Apple)
+        run: |
+          for t in "interstellar" "projet%20derniere%20chance" "dune" "oppenheimer" "le%20comte%20de%20monte-cristo"; do
+            echo "== $t (fr)"; curl -s -m 20 "https://itunes.apple.com/search?term=$t&entity=movie&country=fr&limit=3" | python3 -c "import json,sys;d=json.load(sys.stdin);[print(r.get('trackName'),'|',r.get('releaseDate','')[:4],'|',r.get('previewUrl')) for r in d['results']]"
+          done
+          echo "== lookup tv"; curl -s -m 20 "https://itunes.apple.com/search?term=the%20bear&entity=tvSeason&country=fr&limit=2" | python3 -c "import json,sys;d=json.load(sys.stdin);[print(r.get('collectionName'),'|',r.get('previewUrl')) for r in d['results']]"
+          U=$(curl -s "https://itunes.apple.com/search?term=interstellar&entity=movie&country=fr&limit=1" | python3 -c "import json,sys;print(json.load(sys.stdin)['results'][0]['previewUrl'])")
+          echo "HEAD $U"; curl -sI "$U" | head -8
+      - name: Police Playfair Display (OFL)
+        run: |
+          mkdir out
+          curl -sL -o out/PlayfairDisplay.ttf "https://github.com/google/fonts/raw/main/ofl/playfairdisplay/PlayfairDisplay%5Bwght%5D.ttf"
+          curl -sL -o out/OFL.txt "https://github.com/google/fonts/raw/main/ofl/playfairdisplay/OFL.txt"
+          ls -la out; file out/*
+          cd out && zip -q ../police.zip *
+      - name: Publier
+        env: { GH_TOKEN: "${{ github.token }}" }
+        run: |
+          gh release view sonde-latest -R "$GITHUB_REPOSITORY" >/dev/null 2>&1 || gh release create sonde-latest -R "$GITHUB_REPOSITORY" --prerelease -t "sonde" -n "sonde" --target appletv
+          gh release upload sonde-latest police.zip --clobber -R "$GITHUB_REPOSITORY"
