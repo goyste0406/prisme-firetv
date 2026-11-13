@@ -136,6 +136,22 @@ final class Visite: XCTestCase {
         press(.down); shot("58-fenetre-versions-bas")
         back(); shot("59-fenetre-versions-fermee")
 
+        // fiche « Ce soir ? » (Dune : Deuxième partie, 2 h 46) : coucher simulé dans 60 min → fin après le coucher,
+        // raison « Suite de Dune » (Dune vu en entier dans l'historique de test), bouton « En 2 soirées » et sa fenêtre
+        relaunch(["-prisme.debug.open", "film:demo:1000", "-prisme.debug.bedIn", "60"])
+        shot("60a-ce-soir-apres-coucher")
+        for _ in 0..<4 where !focused().contains("En 2 soirées") { press(.right) }
+        shot("60b-bouton-en-2-soirees")
+        press(.select); Thread.sleep(forTimeInterval: 1.5); shot("60c-fenetre-en-2-soirees")
+        press(.down); shot("60d-fenetre-en-2-soirees-bas")
+        back(); shot("60e-fenetre-fermee")
+        // même film avec l'heure du coucher normale du profil (23:00) : message « il te restera … » ou « après ton coucher »
+        relaunch(["-prisme.debug.open", "film:demo:1000"])
+        shot("60f-ce-soir-coucher-profil")
+        // film court sans saga (pour voir le cas sans bouton « En 2 soirées ») : coucher dans 4 h
+        relaunch(["-prisme.debug.open", "film:demo:1016", "-prisme.debug.bedIn", "240"])
+        shot("60g-ce-soir-il-te-restera")
+
         // fiche série commencée : Reprendre S2 · É3 + Résumé 60 s (sans spoiler)
         relaunch(["-prisme.debug.open", "series:demo:2001"])
         shot("60-fiche-lupin")

@@ -29,6 +29,8 @@ extension Debug {
     static var profiles: String? { arg("prisme.debug.profiles") }
     /// « Qui regarde ? » : pas de choix automatique au bout de 5 s (la visite de test met plus de 5 s à prendre sa capture)
     static var whoHold: Bool { arg("prisme.debug.whoHold") == "1" }
+    /// heure du coucher simulée « dans N minutes » (pour voir « Fin à … · après ton coucher » à toute heure)
+    static var bedInMinutes: Int? { arg("prisme.debug.bedIn").flatMap { Int($0) } }
 
     /// Simule une installation 1.5.3 (avant les profils) : historique et Ma liste écrits dans les clés d'origine,
     /// AVANT le chargement des profils. Sert à vérifier que la migration les rattache bien au profil de Steven.

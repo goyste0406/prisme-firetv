@@ -13,6 +13,8 @@ struct VodRequest: Identifiable {
     let icon: String
     let startAt: Double
     var next: (() -> VodRequest?)? = nil
+    /// « En 2 soirées » : arrêt prévu (secondes) ; calé sur le début de chapitre le plus proche s'il y en a un à ± 10 min
+    var stopAt: Double? = nil
 }
 
 struct VodPlayerView: View {
@@ -46,6 +48,8 @@ final class VodPlayerController: UIViewController, VLCMediaPlayerDelegate {
     private var seeked = false
     private var retried = false
     private var pendingSeek: Double = 0
+    private var cutAt: Double?
+    private var cutDone = false
     private var seekWork: DispatchWorkItem?
 
     init(request: VodRequest, onClose: @escaping () -> Void) {
@@ -168,6 +172,8 @@ final class VodPlayerController: UIViewController, VLCMediaPlayerDelegate {
         case .menu: stop(); onClose()
         case .leftArrow: seek(-10)
         case .rightArrow: seek(10)
+        case .select where cutDone && !player.isPlaying:
+            cutClose?.cancel(); message.isHidden = true; player.play(); showCard()
         case .upArrow, .downArrow, .select: showCard()
         case .playPause:
             if player.isPlaying { player.pause() } else { player.play() }
@@ -185,8 +191,32 @@ final class VodPlayerController: UIViewController, VLCMediaPlayerDelegate {
                 self.player.time = VLCTime(int: Int32(self.req.startAt * 1000))
             }
             if self.card.alpha > 0 { self.refreshCard() }
+            self.checkCut()
         }
     }
+
+    /// Partie 1 d'un film en deux soirées : pause à la coupure, position gardée, « Bonne nuit ! », fermeture après 10 s.
+    private func checkCut() {
+        guard let s = req.stopAt, !cutDone, duration > 0 else { return }
+        if cutAt == nil {
+            cutAt = s
+            // chapitres du fichier : on se cale sur le début de chapitre le plus proche (± 10 min), sinon l'heure choisie
+            let ch = player.chapterDescriptions(ofTitle: player.currentTitleIndex) as? [[String: Any]] ?? []
+            let starts = ch.compactMap { ($0[VLCChapterDescriptionTimeOffset] as? NSNumber)?.doubleValue }.map { $0 / 1000 }.filter { $0 > 60 }
+            if let best = starts.min(by: { abs($0 - s) < abs($1 - s) }), abs(best - s) <= 600 { cutAt = best }
+        }
+        guard let c = cutAt, position >= c else { return }
+        cutDone = true
+        player.pause()
+        savePosition()
+        let rest = max(1, Int((duration - position) / 60))
+        message.text = "FIN DE LA PARTIE 1\nBonne nuit !\nLa partie 2 (\(rest >= 60 ? "\(rest / 60) h " + String(format: "%02d", rest % 60) : "\(rest) min")) t'attend sur la fiche et dans « Reprendre ».\n\nOK pour continuer quand même · fermeture dans 10 s"
+        message.isHidden = false
+        let w = DispatchWorkItem { [weak self] in guard let self, !self.player.isPlaying else { return }; self.stop(); self.onClose() }
+        cutClose = w
+        DispatchQueue.main.asyncAfter(deadline: .now() + 10, execute: w)
+    }
+    private var cutClose: DispatchWorkItem?
 
     func mediaPlayerStateChanged(_ aNotification: Notification) {
         DispatchQueue.main.async { [weak self] in
