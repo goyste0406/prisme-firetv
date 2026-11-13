@@ -133,7 +133,7 @@ struct ProfileDetail: View {
         // le vrai champ (clavier de l'Apple TV à l'appui sur OK) occupe la ligne mais reste invisible :
         // tvOS dessine sinon son propre cadre gris, absent du simulateur
         .background {
-            TextField("Nom", text: $name).opacity(0.02)
+            TextField("Nom", text: $name).foregroundStyle(Color.clear).tint(.clear).opacity(0.02)
                 .focused($focus, equals: "name")
                 .onSubmit { var x = p; let n = name.trimmingCharacters(in: .whitespaces); if !n.isEmpty { x.name = String(n.prefix(20)); ps.update(x) } }
         }

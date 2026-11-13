@@ -169,7 +169,7 @@ final class Visite: XCTestCase {
         press(.up); Thread.sleep(forTimeInterval: 0.5)
         for _ in 0..<3 where !focused().contains("Steven") { press(.left) }
         Thread.sleep(forTimeInterval: 1); shot("84-profils-focus")
-        press(.select); Thread.sleep(forTimeInterval: 1.5); press(.up); Thread.sleep(forTimeInterval: 0.5); shot("85-fiche-profil")
+        press(.select); Thread.sleep(forTimeInterval: 1.5); shot("85-fiche-profil")
         for i in 1...4 { press(.down); shot(String(format: "86-fiche-profil-bas-%02d", i)) }
         press(.select); Thread.sleep(forTimeInterval: 1); shot("87-limite-age-choix")
         back(); Thread.sleep(forTimeInterval: 1); shot("88-limite-age-ferme")
