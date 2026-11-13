@@ -15,6 +15,7 @@ targets:
         CFBundleShortVersionString: "$(MARKETING_VERSION)"
         CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
         UILaunchScreen: {}
+        UIAppFonts: [Prisme-PlayfairBoldItalic.ttf, BebasNeue-Regular.ttf, ArchivoBlack-Regular.ttf, Prisme-OutfitBold.ttf, Prisme-OutfitExtraBold.ttf, Prisme-OutfitLight.ttf, Prisme-OutfitExtraLight.ttf]
         LSApplicationQueriesSchemes: [nflx, disneyplus, aiv, videos, mycanal, hbomax, paramountplus, youtube, arte, francetv, m6plus, tf1plus, rakutentv]
         NSAppTransportSecurity:
           NSAllowsArbitraryLoads: true

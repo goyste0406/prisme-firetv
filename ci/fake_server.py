@@ -50,7 +50,13 @@ FILMS = [
     ("Mission: Impossible - Dead Reckoning", 2023, 163, 7.5, ["Action", "Thriller"], None, 80),
     ("Conjuring : Sous l'emprise du diable", 2021, 112, 6.6, ["Horreur", "Thriller"], None, 140),
     ("Le Roi Lion", 1994, 89, 8.3, ["Animation", "Familial"], None, 900),
+    ("Projet dernière chance", 2026, 156, 8.1, ["Science-Fiction", "Aventure"], None, 2),
 ]
+# mêmes films sous d'autres noms chez le fournisseur (test du dédoublonnage par identifiant TMDB)
+EXTRA_VOD = [(1901, 16, "FR| Interstellaire (2014) MULTI"), (1902, 16, "EN| Interstellar 4K"), (1903, 16, "Interstellar 2014 VOSTFR")]
+ALIASES = {"interstellaire": 16}
+# vraie bande-annonce de l'iTunes Store (le simulateur de test a Internet) : sert à tester la lecture dans l'app
+APPLE_PREVIEW = "https://video-ssl.itunes.apple.com/itunes-assets/Video111/v4/54/b7/37/54b737f0-63c2-77ed-44b3-4f7e2d34f386/mzvf_806821658861734960.640x354.h264lc.U.p.m4v"
 SERIES = [
     # (titre, année, note, genres, saisons, épisodes par saison, durée, ajouté il y a N jours)
     ("Engrenages", 2005, 8.2, ["Crime", "Drame"], 8, 10, 52, 3),
@@ -138,7 +144,7 @@ def live_streams():
     for i, (n, c, e) in enumerate(CHANNELS):
         clean = re.sub(r"^FR\| ", "", re.sub(r" (FHD|HD)$", "", n))
         out.append({"num": i + 1, "name": n, "stream_id": 300 + i, "stream_icon": img_url("l", clean, clean), "epg_channel_id": e,
-                    "category_id": c, "tv_archive": 0})
+                    "category_id": c, "tv_archive": 1 if i % 3 == 0 else 0, "tv_archive_duration": 3 if i % 3 == 0 else 0})
     return out
 
 def vod_streams():
@@ -149,6 +155,10 @@ def vod_streams():
         out.append({"num": i + 1, "name": f"FR| {t} ({y}){q}", "stream_id": fid(i), "stream_icon": img_url("p", f"m{fid(i)}", t),
                     "rating": str(round(v, 1)), "added": str(NOW - ago * DAY - 3600), "category_id": cat, "container_extension": "mkv",
                     "tmdb": "" if i % 2 else str(fid(i))})
+    for vid, i, name in EXTRA_VOD:
+        t, y, rt, v, g, col, ago = FILMS[i]
+        out.append({"num": vid, "name": name, "stream_id": vid, "stream_icon": img_url("p", f"m{fid(i)}", t), "rating": str(v),
+                    "added": str(NOW - ago * DAY), "category_id": "12", "container_extension": "mkv", "tmdb": str(fid(i))})
     return out
 
 def series_list():
@@ -160,7 +170,7 @@ def series_list():
     return out
 
 def vod_info(vid):
-    i = vid - 1000
+    i = next((x[1] for x in EXTRA_VOD if x[0] == vid), vid - 1000)
     t, y, rt, v, g, col, ago = FILMS[i]
     return {"info": {"plot": f"{t} : résumé fourni par le fournisseur.", "cast": "Timothée Chalamet, Zendaya, Rebecca Ferguson, Javier Bardem",
                      "director": "Denis Villeneuve", "genre": ", ".join(g), "duration": f"{rt // 60:02d}:{rt % 60:02d}:00", "duration_secs": rt * 60,
@@ -234,7 +244,8 @@ def tmdb(path, q):
     if m:
         qq = (q.get("query") or [""])[0].lower()
         if m.group(1) == "movie":
-            return {"results": [{"id": fid(i), "title": f[0], "original_title": f[0], "release_date": f"{f[1]}-03-01", "popularity": 50} for i, f in enumerate(FILMS) if f[0].lower() == qq]}
+            hit = [i for i, f in enumerate(FILMS) if f[0].lower() == qq] or ([ALIASES[qq]] if qq in ALIASES else [])
+            return {"results": [{"id": fid(i), "title": FILMS[i][0], "original_title": FILMS[i][0], "release_date": f"{FILMS[i][1]}-03-01", "popularity": 50} for i in hit]}
         return {"results": [{"id": sid(i), "name": f[0], "original_name": f[0], "first_air_date": f"{f[1]}-01-01", "popularity": 50} for i, f in enumerate(SERIES) if f[0].lower() == qq]}
     m = re.match(r"^/movie/(\d+)(/videos)?$", path)
     if m:
@@ -278,7 +289,7 @@ class H(http.server.BaseHTTPRequestHandler):
         u = urllib.parse.urlparse(self.path); q = urllib.parse.parse_qs(u.query); p = u.path
         if p.endswith("/player_api.php"):
             a = (q.get("action") or [None])[0]
-            if a is None: return self.send(200, {"user_info": {"auth": 1, "status": "Active", "exp_date": str(NOW + 300 * DAY)}, "server_info": {"url": "127.0.0.1"}})
+            if a is None: return self.send(200, {"user_info": {"auth": 1, "status": "Active", "exp_date": str(NOW + 300 * DAY)}, "server_info": {"url": "127.0.0.1", "timezone": "Europe/Paris"}})
             if a == "get_live_categories": return self.send(200, [{"category_id": c, "category_name": n} for c, n in LIVE_CATS])
             if a == "get_vod_categories": return self.send(200, [{"category_id": c, "category_name": n} for c, n in VOD_CATS])
             if a == "get_series_categories": return self.send(200, [{"category_id": c, "category_name": n} for c, n in SER_CATS])
@@ -289,6 +300,11 @@ class H(http.server.BaseHTTPRequestHandler):
             if a == "get_series_info": return self.send(200, series_info(int((q.get("series_id") or ["2000"])[0])))
             return self.send(200, [])
         if p.endswith("/xmltv.php"): return self.send(200, xmltv(), "application/xml")
+        if p == "/itunes/search":
+            term = (q.get("term") or [""])[0].lower(); country = (q.get("country") or [""])[0]
+            res = [{"kind": "feature-movie", "trackName": f[0], "releaseDate": f"{f[1]}-03-01T08:00:00Z", "trackTimeMillis": f[2] * 60000,
+                    "previewUrl": APPLE_PREVIEW} for f in FILMS if f[0].lower() == term and country == "fr" and "tvShow" not in (q.get("media") or [""])]
+            return self.send(200, {"resultCount": len(res), "results": res})
         if p.startswith("/tmdb/3"):
             r = tmdb(p[len("/tmdb/3"):], q)
             return self.send(200 if r is not None else 404, r if r is not None else {"status_code": 34})

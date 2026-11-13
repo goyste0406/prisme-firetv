@@ -12,6 +12,8 @@ struct Provider: Codable, Identifiable, Equatable {
     var lastImport: Date?
     var counts: [String: Int] = [:]   // "live", "vod", "series", "epg"
     var expires: Date?
+    /// fuseau horaire du serveur (replay) ; absent dans les anciennes installations, repris au prochain import
+    var tz: String?
 
     var account: XtreamAccount { XtreamAccount(server: server, username: username, password: password) }
 }
@@ -91,7 +93,7 @@ final class ProviderStore: ObservableObject {
                 await MainActor.run {
                     let s = ProviderStore.shared
                     if let i = s.providers.firstIndex(where: { $0.id == id }) {
-                        s.providers[i].lastImport = Date(); s.providers[i].counts = res.counts; s.providers[i].expires = res.expires
+                        s.providers[i].lastImport = Date(); s.providers[i].counts = res.counts; s.providers[i].expires = res.expires; if let tz = res.tz { s.providers[i].tz = tz }
                     }
                     s.importing = nil; s.status = ""; s.catalogVersion += 1
                     s.next()

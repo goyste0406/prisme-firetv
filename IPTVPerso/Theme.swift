@@ -259,10 +259,81 @@ struct TopBar: View {
     }
 }
 
-/// Titre de fiche : grand, en police à empattements (la police « Playfair Display » du simulateur n'existe pas
-/// sur l'Apple TV : la plus proche intégrée à tvOS est « New York », la police à empattements d'Apple).
+/// Titres des films et séries comme le simulateur : quatre polices de caractère selon le genre
+/// (Playfair Display italique, Bebas Neue, Archivo Black, Outfit — polices libres OFL intégrées à l'app,
+/// licences dans le dossier Fonts). Tailles reprises de titleSize() du simulateur, converties pour la télé (× 1,875).
+enum TitleFace {
+    case serif, bebas, black, sans
+
+    /// Choix stable d'après le premier genre reconnu (le simulateur choisit à la main ; ici une règle fixe).
+    static func of(genres: [String]) -> TitleFace {
+        for g in genres {
+            let k = g.folding(options: [.diacriticInsensitive, .caseInsensitive], locale: .init(identifier: "fr")).lowercased()
+            if k.contains("science") || k.contains("action") || k.contains("thriller") || k.contains("horreur") || k.contains("guerre") || k.contains("war") { return .bebas }
+            if k.contains("comedie") || k.contains("animation") || k.contains("famil") || k.contains("kids") || k.contains("enfant") { return .black }
+            if k.contains("romance") || k.contains("music") || k.contains("fantas") || k.contains("aventure") || k.contains("western") || k.contains("histoire") || k.contains("soap") { return .serif }
+            if k.contains("drame") || k.contains("crime") || k.contains("polic") || k.contains("myst") || k.contains("documentaire") || k.contains("guerre") { return .sans }
+        }
+        return .serif
+    }
+
+    static func of(_ genreText: String) -> TitleFace {
+        of(genres: genreText.components(separatedBy: CharacterSet(charactersIn: ",/&")).map { $0.trimmingCharacters(in: .whitespaces) })
+    }
+
+    /// titleSize() du simulateur (en points télé).
+    func size(for title: String) -> CGFloat {
+        let n = title.count
+        let base: CGFloat = n <= 10 ? 104 : n <= 16 ? 92 : n <= 24 ? 76 : n <= 34 ? 62 : 52
+        let k: CGFloat = self == .bebas ? 1 : self == .serif ? 0.78 : 0.72
+        return (base * k).rounded() * 1.875
+    }
+
+    func font(_ size: CGFloat) -> Font {
+        switch self {
+        case .serif: return .custom("PlayfairDisplay-BoldItalic", fixedSize: size)
+        case .bebas: return .custom("BebasNeue-Regular", fixedSize: size)
+        case .black: return .custom("ArchivoBlack-Regular", fixedSize: size)
+        case .sans: return .custom("Outfit-Bold", fixedSize: size)
+        }
+    }
+    /// Espacement des lettres du simulateur (em → points).
+    func tracking(_ size: CGFloat) -> CGFloat {
+        switch self { case .bebas: return size * 0.02; case .black: return -size * 0.01; case .sans: return -size * 0.02; case .serif: return 0 }
+    }
+    /// Interligne : Bebas 0,95, les autres 1,04 (le texte SwiftUI a déjà un interligne naturel d'environ 1,2).
+    func lineSpacing(_ size: CGFloat) -> CGFloat {
+        switch self { case .bebas: return -size * 0.22; case .serif: return -size * 0.26; default: return -size * 0.2 }
+    }
+}
+
+/// Titre d'un film ou d'une série, police et taille du simulateur, deux lignes au plus.
+struct BigTitle: View {
+    let text: String
+    let face: TitleFace
+    var scale: CGFloat = 1
+    var maxWidth: CGFloat = 1050
+    var body: some View {
+        let s = face.size(for: text) * scale
+        Text(text).font(face.font(s)).tracking(face.tracking(s)).lineSpacing(face.lineSpacing(s))
+            .lineLimit(2).minimumScaleFactor(0.55).multilineTextAlignment(.leading)
+            .shadow(color: .black.opacity(0.4), radius: 30, y: 4)
+            .frame(maxWidth: maxWidth, alignment: .leading)
+    }
+}
+
 extension P {
-    static func serif(_ size: CGFloat) -> Font { .system(size: size, weight: .black, design: .serif) }
+    /// Police à empattements du simulateur (Playfair Display italique grasse).
+    static func serif(_ size: CGFloat) -> Font { .custom("PlayfairDisplay-BoldItalic", fixedSize: size) }
+    /// Police UI du simulateur pour les petits textes « Outfit » (sinon la police système).
+    static func outfit(_ size: CGFloat, _ w: Font.Weight = .regular) -> Font {
+        switch w {
+        case .ultraLight, .thin: return .custom("Outfit-ExtraLight", fixedSize: size)
+        case .light: return .custom("Outfit-Light", fixedSize: size)
+        case .heavy, .black: return .custom("Outfit-ExtraBold", fixedSize: size)
+        default: return .custom("Outfit-Bold", fixedSize: size)
+        }
+    }
 }
 
 /// Anneau de progression (score prisme, avancement d'une série).

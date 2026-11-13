@@ -75,7 +75,7 @@ enum LiveStore {
         }
     }
 
-    private static func row(_ r: Database.Statement) -> Channel {
+    static func row(_ r: Database.Statement) -> Channel {
         Channel(pid: r.str(0), sid: r.str(1), name: r.str(2), num: r.int(3), icon: r.str(4), cid: r.str(5), epg: r.str(6), archive: r.int(7))
     }
 

@@ -44,97 +44,137 @@ struct FilmDetailView: View {
     }
     private var year: Int { (fiche?.year ?? 0) > 0 ? fiche!.year : (item.clean.year > 0 ? item.clean.year : info.year) }
 
+    /// Police du titre (règle du simulateur, d'après les genres).
+    private var face: TitleFace { TitleFace.of(genres: genres) }
+    /// Bande-annonce en fond de fiche (2,5 s après l'ouverture, comme le simulateur).
+    @StateObject private var bg = TrailerHolder()
+    @FocusState private var trailerFocused: Bool
+    /// Sélection sur le bouton bande-annonce : le texte s'efface pour laisser voir la vidéo (simulateur « peek »).
+    private var peek: Bool { trailerFocused && bg.playing }
+
     var body: some View {
-        ScrollViewReader { proxy in
-            ScrollView {
-                VStack(alignment: .leading, spacing: 60) {
-                    top(proxy).id("top")
-                    if saga.count > 1 { sagaRow }
-                    if !universe.isEmpty {
-                        MediaRow(title: saga.count > 1 ? "Dans le même univers" : "De la même saga",
-                                 sub: "\(universe.count) film\(universe.count > 1 ? "s" : "") chez tes fournisseurs · reconnus par le titre",
-                                 items: universe, open: { openOther = $0 })
+        ZStack {
+            ScrollViewReader { proxy in
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 60) {
+                        top(proxy).id("top")
+                        if saga.count > 1 { sagaRow }
+                        if !universe.isEmpty {
+                            MediaRow(title: saga.count > 1 ? "Dans le même univers" : "De la même saga", items: universe, open: { openOther = $0 })
+                        }
+                        castSection
+                        if !similar.isEmpty { similarRow }
+                        WhereSection(kind: .film, fiche: fiche, airings: airings, versions: versions,
+                                     onTV: { live = LiveLaunch(ch: $0.ch) },
+                                     onApp: { name in if let f = fiche { Task { launchMsg = await AppLauncher.open(providerName: name, tmdb: f.tmdb, tv: false) } } })
+                            .padding(.horizontal, 120).id("where")
                     }
-                    castSection
-                    if !similar.isEmpty { similarRow }
-                    WhereSection(kind: .film, fiche: fiche, airings: airings, versions: versions,
-                                 onTV: { live = LiveLaunch(ch: $0.ch) },
-                                 onApp: { name in if let f = fiche { Task { launchMsg = await AppLauncher.open(providerName: name, tmdb: f.tmdb, tv: false) } } })
-                        .padding(.horizontal, 120).id("where")
+                    .padding(.bottom, 120)
                 }
-                .padding(.bottom, 120)
+                .scrollClipDisabled()
             }
-            .scrollClipDisabled()
+            .disabled(pickVersion)
+            .defaultFocus($playFocused, true, priority: .userInitiated)
+            if pickVersion {
+                VersionsModal(title: title, versions: versions, current: cur, label: { versionInfo($0) },
+                              pick: { v in chosen = v; pickVersion = false; play(from: resumeAt ?? 0, item: v) },
+                              close: { pickVersion = false })
+                    .transition(.opacity.combined(with: .scale(scale: 0.97)))
+            }
         }
+        .animation(.easeOut(duration: 0.2), value: pickVersion)
         .background(alignment: .top) {
             let hasBd = fiche?.backdrop.isEmpty == false
-            DetailBackdrop(backdrop: hasBd ? Fiche.img(fiche!.backdrop, "original") : info.backdrop, poster: item.posterURL)
+            ZStack {
+                DetailBackdrop(backdrop: hasBd ? Fiche.img(fiche!.backdrop, "original") : info.backdrop, poster: item.posterURL, video: bg.player, playing: bg.playing, peek: peek)
+                if bg.playing, let t = trailer {
+                    TrailerChip(lang: t.lang, loud: peek).padding(.top, 142).padding(.trailing, 105)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
+                        .transition(.opacity)
+                }
+            }
+            .frame(width: 1920, height: 1080)
+            .animation(.easeInOut(duration: 0.45), value: bg.playing)
         }
         .background(P.room)
         .ignoresSafeArea()
         .navigationDestination(item: $openOther) { it in DetailView(item: it) }
         .task(id: item.id) { await load() }
+        .onAppear { DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { if !pickVersion { playFocused = true } } }
+        .onDisappear { bg.stop() }
+        .onChange(of: peek) { _, p in bg.loud(p) }
+        .onChange(of: playing) { _, p in if p != nil { bg.stop() } }
+        .onChange(of: showTrailer) { _, t in if t != nil { bg.stop() } }
         .fullScreenCover(item: $playing) { r in VodPlayerView(request: r) }
         .fullScreenCover(item: $live) { l in LivePlayerView(channels: [l.ch], start: 0) }
-        .fullScreenCover(item: $showTrailer) { t in
-            TrailerScreen(trailer: t, title: title, backdrop: (fiche?.backdrop.isEmpty == false) ? Fiche.img(fiche!.backdrop, "original") : info.backdrop,
-                          poster: item.posterURL, playFilm: trailerPlay)
-        }
+        .fullScreenCover(item: $showTrailer) { t in TrailerScreen(trailer: t, title: title, playFilm: trailerPlay) }
         .sheet(isPresented: $showSyn) { SynopsisSheet(kicker: "RÉSUMÉ", title: title, text: plot) }
         .sheet(item: $actor) { a in ActorSheet(actor: a, kind: .film, excluding: item.clean.key) }
-        .confirmationDialog("Choisir la version", isPresented: $pickVersion) {
-            ForEach(versions) { v in Button(versionLabel(v)) { chosen = v } }
-        }
         .alert(launchMsg ?? "", isPresented: Binding(get: { launchMsg != nil }, set: { if !$0 { launchMsg = nil } })) { Button("OK") {} }
     }
 
-    // MARK: haut de fiche (premier écran)
+    // MARK: haut de fiche (premier écran) — mesures du simulateur (fiche film « W2 »), converties pour la télé
 
     private func top(_ proxy: ScrollViewProxy) -> some View {
-        HStack(alignment: .bottom, spacing: 50) {
-            VStack(alignment: .leading, spacing: 18) {
-                Text("FILM" + (info.country.isEmpty ? "" : " · " + info.country.uppercased())).font(P.font(21, .bold)).tracking(2.5).foregroundStyle(P.dim).lineLimit(1)
-                Text(title).font(P.serif(titleSize)).lineLimit(2).minimumScaleFactor(0.6).frame(maxWidth: 1080, alignment: .leading)
-                meta
-                if shownRating >= 7.5 {
-                    HStack(spacing: 12) {
-                        Image(systemName: "trophy.fill").font(P.font(18)).padding(8).background(Color.white.opacity(0.12), in: RoundedRectangle(cornerRadius: 8))
-                        Image(systemName: "star.fill").font(P.font(18))
-                        Text(String(format: "%.1f", shownRating) + " · " + ratingWord(shownRating)).font(P.font(22, .semibold))
-                    }
-                    .padding(.horizontal, 12).padding(.vertical, 8).glass(14)
-                }
+        HStack(alignment: .bottom, spacing: 78) {
+            VStack(alignment: .leading, spacing: 0) {
+                Text("FILM" + (info.country.isEmpty ? "" : " · " + info.country.uppercased()))
+                    .font(P.font(24, .bold)).tracking(3.4).foregroundStyle(.white.opacity(0.7)).lineLimit(1)
+                    .padding(.bottom, 15).opacity(peek ? 0.14 : 1)
+                BigTitle(text: title, face: face).padding(.bottom, 18).opacity(peek ? 0.14 : 1)
+                meta.padding(.bottom, 19)
+                if shownRating >= 7.5 { whyChip.padding(.bottom, 17) }
                 if !plot.isEmpty {
                     Button { showSyn = true } label: {
-                        Text(plot).font(P.font(27)).lineLimit(2).multilineTextAlignment(.leading).frame(maxWidth: 1040, alignment: .leading).padding(.vertical, 8)
+                        Text(plot).font(P.font(31)).lineSpacing(9).lineLimit(2).multilineTextAlignment(.leading)
+                            .foregroundStyle(.white.opacity(0.82)).frame(width: 1050, alignment: .leading).padding(.vertical, 6)
                     }.buttonStyle(TextBlockStyle())
+                    .padding(.leading, -14).opacity(peek ? 0.14 : 1)
                 }
-                actions.focusSection()
+                actions.focusSection().padding(.top, 28)
             }
-            Spacer(minLength: 0)
-            panel(proxy)
+            .frame(width: 1050, alignment: .leading)
+            panel(proxy).opacity(peek ? 0.14 : 1)
         }
-        .padding(.horizontal, 120)
-        .frame(width: 1920, height: 1010, alignment: .bottom)
+        .animation(.easeInOut(duration: 0.45), value: peek)
+        .padding(.leading, 120)
+        .padding(.bottom, 18)
+        .frame(width: 1920, height: 960, alignment: .bottomLeading)
         .focusSection()
     }
 
-    private var titleSize: CGFloat {
-        let n = title.count
-        return n <= 10 ? 120 : n <= 16 ? 106 : n <= 24 ? 88 : n <= 34 ? 72 : 60
-    }
-
     private var meta: some View {
-        HStack(spacing: 20) {
+        HStack(spacing: 26) {
             if year > 0 { Text(String(year)) }
             if minutes > 0 { Text(runtimeText(minutes)) }
             if !genres.isEmpty { Text(genres.prefix(2).joined(separator: ", ")).lineLimit(1) }
             if !info.age.isEmpty { Text(info.age) }
-            if shownRating > 0 { Stars(value: shownRating) }
-            let t = cur.clean.tags
-            if !t.isEmpty { Pill(text: t.joined(separator: " · "), bg: .clear) }
+            if shownRating > 0 {
+                HStack(spacing: 8) { Image(systemName: "star.fill").font(P.font(25)); Text(String(format: "%.1f", shownRating)).fontWeight(.bold) }
+                    .foregroundStyle(Color(red: 1, green: 211 / 255, blue: 107 / 255))
+            }
+            let t = cur.clean.tags.filter { ["4K", "1080p", "720p", "HDR", "HEVC", "SD"].contains($0) }
+            if !t.isEmpty {
+                Text(t.joined(separator: " · ")).font(P.font(23, .bold)).tracking(0.4)
+                    .padding(.horizontal, 17).padding(.vertical, 5)
+                    .overlay(RoundedRectangle(cornerRadius: 13, style: .continuous).stroke(Color.white.opacity(0.35), lineWidth: 1.5))
+            }
         }
-        .font(P.font(26, .medium)).foregroundStyle(P.dim)
+        .font(P.font(30)).foregroundStyle(.white.opacity(0.82)).lineLimit(1)
+        .opacity(peek ? 0.14 : 1)
+    }
+
+    /// Puce « pourquoi ce film » du simulateur (ici : la note, quand elle est vraiment bonne).
+    private var whyChip: some View {
+        HStack(spacing: 15) {
+            Image(systemName: "trophy.fill").font(P.font(19)).frame(width: 36, height: 36)
+                .background(Color.white.opacity(0.14), in: RoundedRectangle(cornerRadius: 13, style: .continuous))
+            Text("★ " + String(format: "%.1f", shownRating) + " · " + ratingWord(shownRating)).font(P.font(26))
+        }
+        .padding(.leading, 14).padding(.trailing, 22).padding(.vertical, 12)
+        .background(Color(red: 10 / 255, green: 11 / 255, blue: 15 / 255).opacity(0.6), in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous).stroke(Color.white.opacity(0.16), lineWidth: 1.5))
+        .opacity(peek ? 0.14 : 1)
     }
 
     private var actions: some View {
@@ -146,27 +186,29 @@ struct FilmDetailView: View {
                     PlayLabel(title: "Lecture", sub: minutes > 0 ? "FINIT À " + Fmt.hm(Date().addingTimeInterval(Double(minutes * 60))) : nil)
                 }
             }
-            .buttonStyle(PrimaryStyle())
+            .buttonStyle(FicheButtonStyle(prim: true))
             .focused($playFocused)
+            .opacity(peek ? 0.22 : 1)
             if resumeAt != nil {
-                Button { play(from: 0) } label: { Label("Début", systemImage: "gobackward").font(P.font(27, .semibold)) }.buttonStyle(GlassStyle())
+                Button { play(from: 0) } label: { Label("Début", systemImage: "gobackward").font(P.font(30, .semibold)) }
+                    .buttonStyle(FicheButtonStyle()).opacity(peek ? 0.22 : 1)
             }
             Button { watch.toggleFavorite(item.id) } label: {
-                Image(systemName: watch.favorites.contains(item.id) ? "checkmark" : "plus").font(P.font(30, .bold)).frame(width: 34)
-            }.buttonStyle(GlassStyle(radius: 42, minH: 84))
-            Button { if versions.count > 1 { pickVersion = true } } label: {
+                Image(systemName: watch.favorites.contains(item.id) ? "checkmark" : "plus").font(P.font(32, .bold))
+            }.buttonStyle(FicheButtonStyle(square: true)).opacity(peek ? 0.22 : 1)
+            Button { if versions.count > 1 { pickVersion = true } else { launchMsg = "Une seule version chez ton fournisseur" } } label: {
                 VStack(alignment: .leading, spacing: 1) {
-                    Text(versionShort(cur)).font(P.font(26, .bold))
-                    Text("\(max(1, versions.count)) VERSION\(versions.count > 1 ? "S" : "")" + (versions.count > 1 ? " ▾" : "")).font(P.font(15, .bold)).tracking(0.8).opacity(0.6)
+                    Text(versionShort(cur)).font(P.font(32, .bold))
+                    Text("\(max(1, versions.count)) VERSION\(versions.count > 1 ? "S" : "") ▾").font(P.font(19, .bold)).tracking(1.2).opacity(0.6)
                 }
-            }.buttonStyle(GlassStyle())
+            }.buttonStyle(FicheButtonStyle()).opacity(peek ? 0.22 : 1)
             if let t = trailer {
-                // bouton rond « bande-annonce » du simulateur
-                Button { showTrailer = t } label: { Image(systemName: "film").font(P.font(28, .semibold)).frame(width: 34) }
-                    .buttonStyle(GlassStyle(radius: 42, minH: 84))
+                // bouton « bande-annonce » du simulateur : sélectionné, la vidéo de fond passe devant le texte ; OK = plein écran
+                Button { showTrailer = t } label: { Image(systemName: "film").font(P.font(30, .semibold)) }
+                    .buttonStyle(FicheButtonStyle(square: true, pulse: peek))
+                    .focused($trailerFocused)
             }
         }
-        .defaultFocus($playFocused, true)
     }
 
     // MARK: panneau de droite : Score prisme · Ta soirée · Aussi
@@ -174,21 +216,23 @@ struct FilmDetailView: View {
     @ViewBuilder private func panel(_ proxy: ScrollViewProxy) -> some View {
         let hasScore = providerRating > 0 || tmdbVote > 0
         if hasScore || minutes > 0 || !alsoParts.isEmpty {
-            VStack(alignment: .leading, spacing: 22) {
+            VStack(alignment: .leading, spacing: 26) {
                 if hasScore { scoreBox }
                 if minutes > 0 { evening }
                 if !alsoParts.isEmpty {
                     Button { withAnimation { proxy.scrollTo("where", anchor: .top) } } label: {
-                        HStack(spacing: 14) {
-                            Text("AUSSI").font(P.font(17, .bold)).tracking(2).opacity(0.5)
-                            Text(alsoParts.joined(separator: " · ")).font(P.font(20, .semibold)).lineLimit(1)
+                        HStack(spacing: 18) {
+                            Text("AUSSI").font(P.font(19, .bold)).tracking(3).opacity(0.5)
+                            Text(alsoParts.joined(separator: " · ")).font(P.font(25, .medium)).lineLimit(1)
                             Spacer(minLength: 0)
-                            Image(systemName: "chevron.right").font(P.font(18, .bold))
-                        }.padding(.horizontal, 18).frame(height: 62)
+                            Image(systemName: "chevron.right").font(P.font(20, .heavy)).opacity(0.6)
+                        }.padding(.horizontal, 26).frame(height: 64)
                     }.buttonStyle(WhereCardStyle())
                 }
             }
-            .padding(28).frame(width: 600).glass(30)
+            .padding(28).frame(width: 600, alignment: .leading)
+            .background(Color.white.opacity(0.1), in: RoundedRectangle(cornerRadius: 45, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 45, style: .continuous).stroke(Color.white.opacity(0.2), lineWidth: 1.5))
             .focusSection()
         }
     }
@@ -206,16 +250,16 @@ struct FilmDetailView: View {
         if providerRating > 0 { parts.append(providerRating * 10) }
         if tmdbVote > 0 { parts.append(tmdbVote * 10) }
         let sc = min(99, Int((parts.reduce(0, +) / Double(max(1, parts.count))).rounded()))
-        return HStack(spacing: 20) {
+        return HStack(spacing: 22) {
             ZStack {
-                Ring(value: Double(sc) / 100, width: 9).frame(width: 92, height: 92)
-                Circle().fill(Color.black.opacity(0.55)).frame(width: 74, height: 74)
-                Text("\(sc)").font(P.font(32, .heavy))
+                Ring(value: Double(sc) / 100, width: 10).frame(width: 96, height: 96)
+                Circle().fill(Color(red: 0.07, green: 0.08, blue: 0.1)).frame(width: 76, height: 76)
+                Text("\(sc)").font(P.font(36, .bold))
             }
-            VStack(alignment: .leading, spacing: 4) {
-                Text("Score prisme").font(P.font(21, .bold)).foregroundStyle(P.gold)
-                Text(scoreLine).font(P.font(19)).foregroundStyle(P.dim)
-                Text("Tes goûts : à découvrir").font(P.font(19)).foregroundStyle(P.dim)
+            VStack(alignment: .leading, spacing: 5) {
+                Text("Score prisme").font(P.font(24, .bold)).foregroundStyle(P.gold)
+                Text(scoreLine).font(P.font(23)).foregroundStyle(P.gold.opacity(0.75))
+                Text("Tes goûts : à découvrir").font(P.font(23)).foregroundStyle(P.gold.opacity(0.75))
             }
         }
     }
@@ -225,29 +269,28 @@ struct FilmDetailView: View {
         let left = max(60, Double(minutes * 60) - (resumeAt ?? 0))
         let end = now.addingTimeInterval(left)
         let span = max(left + 1800, 3 * 3600)
-        let a = 0.08, b = min(0.94, a + left / span)
-        return VStack(alignment: .leading, spacing: 16) {
-            Text("TA SOIRÉE").font(P.font(17, .bold)).tracking(2).foregroundStyle(P.faint)
+        let a = 0.02, b = min(0.94, a + left / span)
+        return VStack(alignment: .leading, spacing: 18) {
+            Text("TA SOIRÉE").font(P.font(20, .bold)).tracking(3).foregroundStyle(P.faint)
             GeometryReader { g in
                 let w = g.size.width
                 ZStack(alignment: .leading) {
                     Capsule().fill(Color.white.opacity(0.14)).frame(height: 8)
                     Capsule().fill(LinearGradient(colors: [P.gold, Color(red: 1, green: 0.55, blue: 0.22)], startPoint: .leading, endPoint: .trailing))
-                        .frame(width: max(16, w * (b - a)), height: 14).offset(x: w * a)
-                    Rectangle().fill(Color(red: 0.4, green: 0.75, blue: 1)).frame(width: 3, height: 34).offset(x: w * a - 1.5)
+                        .frame(width: max(16, w * (b - a)), height: 18).offset(x: w * a)
                 }.frame(height: 34)
             }.frame(height: 34)
-            HStack { Text("maintenant"); Spacer(); Text("fin " + Fmt.hm(end)) }.font(P.font(17)).foregroundStyle(P.faint)
-            (Text("Fin à " + Fmt.hm(end)).foregroundColor(P.gold).bold() + Text(" · dans " + runtimeText(Int(left / 60))).foregroundColor(P.dim)).font(P.font(23))
+            HStack { Text("maintenant"); Spacer(); Text("fin " + Fmt.hm(end)) }.font(P.font(19)).foregroundStyle(P.faint)
+            (Text("Fin à " + Fmt.hm(end)).foregroundColor(P.gold).bold() + Text(" · dans " + runtimeText(Int(left / 60))).foregroundColor(P.dim)).font(P.font(25))
         }
-        .padding(22).frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color.black.opacity(0.3), in: RoundedRectangle(cornerRadius: 22))
-        .overlay(RoundedRectangle(cornerRadius: 22).stroke(Color.white.opacity(0.08), lineWidth: 1.5))
+        .padding(26).frame(maxWidth: .infinity, minHeight: 280, alignment: .topLeading)
+        .background(Color.black.opacity(0.3), in: RoundedRectangle(cornerRadius: 30, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 30, style: .continuous).stroke(Color.white.opacity(0.08), lineWidth: 1.5))
     }
 
     private var alsoParts: [String] {
         var p: [String] = []
-        if let a = airings.first { p.append(a.ch.name + (a.p.startDate <= Date() ? " en direct" : " " + Fmt.hm(a.p.startDate))) }
+        if let a = airings.first { p.append(a.ch.name + (a.p.startDate <= Date() ? " en direct" : " ce soir " + Fmt.hm(a.p.startDate))) }
         if let f = fiche {
             p += Array(Array(Set((f.wp.f + f.wp.g).map(\.n))).sorted().prefix(2))
             if !f.wp.r.isEmpty { p.append("location") }
@@ -259,8 +302,7 @@ struct FilmDetailView: View {
 
     private var sagaRow: some View {
         VStack(alignment: .leading, spacing: 4) {
-            let n = saga.filter { sagaAvail[$0.tmdb] != nil }.count
-            SectionTitle(title: sagaName.isEmpty ? "La saga" : sagaName, sub: "\(saga.count) films" + (n < saga.count ? " · \(n) chez tes fournisseurs" : " · tous chez tes fournisseurs")).padding(.horizontal, 120)
+            SectionTitle(title: sagaName.isEmpty ? "La saga" : sagaName).padding(.horizontal, 120)
             ScrollView(.horizontal) {
                 LazyHStack(spacing: 34) {
                     ForEach(Array(saga.enumerated()), id: \.element.tmdb) { i, p in
@@ -310,7 +352,7 @@ struct FilmDetailView: View {
         let director = info.director
         if !cast.isEmpty || !director.isEmpty {
             VStack(alignment: .leading, spacing: 6) {
-                SectionTitle(title: "Distribution", sub: fiche != nil ? "OK pour ses autres films dans ton abonnement" : nil).padding(.horizontal, 120)
+                SectionTitle(title: "Distribution").padding(.horizontal, 120)
                 if !cast.isEmpty {
                     ScrollView(.horizontal) {
                         LazyHStack(spacing: 26) {
@@ -327,7 +369,7 @@ struct FilmDetailView: View {
 
     private var similarRow: some View {
         VStack(alignment: .leading, spacing: 4) {
-            SectionTitle(title: "Si tu hésites encore", sub: fiche != nil ? "selon les genres de ce film · les mieux notés d'abord" : "de la même catégorie chez ton fournisseur").padding(.horizontal, 120)
+            SectionTitle(title: "Si tu hésites encore").padding(.horizontal, 120)
             ScrollView(.horizontal) {
                 LazyHStack(alignment: .top, spacing: 34) {
                     ForEach(similar) { pair in
@@ -361,7 +403,8 @@ struct FilmDetailView: View {
         var air: [LiveStore.Airing] = []
         for t in titles where air.isEmpty { air = await LiveStore.airings(title: t, providers: pids) }
         airings = air
-        trailer = await TrailerStore.find(tmdb: fiche?.tmdb ?? i1.tmdb, tv: false, providerKey: i1.trailer)
+        trailer = await TrailerStore.find(title: title, year: year, minutes: minutes, tmdb: fiche?.tmdb ?? i1.tmdb, tv: false)
+        if let t = trailer { bg.arm(t.url) }
         var exclude = Set<Int>()
         if let f = fiche, f.coll > 0 {
             let (n, parts) = await SagaStore.parts(f.coll)
@@ -372,8 +415,8 @@ struct FilmDetailView: View {
         if let f = fiche { exclude.insert(f.tmdb) }
         var it = item; it.fiche = fiche
         universe = await MediaStore.universe(of: it, pids: pids, exclude: exclude)
-        let skip = Set(universe.map(\.clean.key)).union(sagaAvail.values.map(\.clean.key))
-        similar = await MediaStore.similar(of: it, genres: genres, pids: pids, limit: 16).filter { !skip.contains($0.0.clean.key) }.map { SimilarItem(item: $0.0, common: $0.1) }
+        let skip = Set(universe.map(\.workKey)).union(sagaAvail.values.map(\.workKey)).union(exclude.map { "t\($0)" })
+        similar = await MediaStore.similar(of: it, genres: genres, pids: pids, limit: 16).filter { !skip.contains($0.0.workKey) }.map { SimilarItem(item: $0.0, common: $0.1) }
         loaded = true
     }
 
@@ -392,9 +435,27 @@ struct FilmDetailView: View {
 
     private var trailerPlay: (() -> Void)? { { play(from: resumeAt ?? 0) } }
 
-    private func play(from: Double) {
-        guard let p = store.provider(cur.pid), let url = p.movieURL(cur) else { return }
+    private func play(from: Double, item v: MediaItem? = nil) {
+        let src = v ?? cur
+        guard let p = store.provider(src.pid), let url = p.movieURL(src) else { return }
+        bg.stop()
         playing = VodRequest(url: url, key: item.id, item: item.id, title: title, subtitle: "", icon: item.posterURL, startAt: from)
+    }
+
+    /// Ligne de détail d'une version (fenêtre « Choisis la version ») : uniquement ce que dit le nom chez le fournisseur.
+    private func versionInfo(_ v: MediaItem) -> VersionsModal.Row {
+        let t = v.clean.tags
+        let q = t.first { ["4K", "1080p", "720p", "SD"].contains($0) } ?? (t.contains("HD") ? "HD" : "")
+        var lang: [String] = []
+        if t.contains("VFF") { lang.append("Français (France) · VFF") }
+        else if t.contains("VFQ") { lang.append("Français (Québec) · VFQ") }
+        else if t.contains("VF") { lang.append("Français · VF") }
+        if t.contains("MULTI") { lang.append("Plusieurs langues · MULTI") }
+        if t.contains("VOSTFR") { lang.append("VO sous-titrée français") }
+        if t.contains("VO") { lang.append("Version originale") }
+        let extra = t.filter { ["HDR", "HEVC", "DV", "ATMOS", "5.1"].contains($0) }
+        return .init(quality: q, provider: store.provider(v.pid)?.name ?? "Fournisseur", raw: v.name + (extra.isEmpty ? "" : ""),
+                     audio: lang, isDefault: v.id == (versions.first?.id ?? ""))
     }
 }
 

@@ -6,16 +6,17 @@ import SwiftUI
 struct LiveHomeView: View {
     @EnvironmentObject var store: ProviderStore
     @ObservedObject var prefs = LivePrefs.shared
-    @State private var section: String = "home"
+    @State private var section: String = Debug.liveSection ?? "home"
     @State private var playing: PlayRequest?
     @State private var guide: GuideRequest?
     @State private var index: [LiveIndex.Entry] = []
+    @State private var replay: VodRequest?
 
     struct PlayRequest: Identifiable { let id = UUID(); let list: [Channel]; let index: Int }
     struct GuideRequest: Identifiable { let id = UUID(); let list: [Channel]; let title: String }
 
     private var rail: [(String, String, String)] {
-        var r: [(String, String, String)] = [("home", "house.fill", "Accueil"), ("guide", "tablecells", "Guide TV"), ("search", "magnifyingglass", "Rechercher")]
+        var r: [(String, String, String)] = [("home", "house.fill", "Accueil"), ("guide", "tablecells", "Guide TV"), ("search", "magnifyingglass", "Rechercher"), ("replay", "clock.arrow.circlepath", "Replay")]
         for u in Univers.allCases where index.contains(where: { $0.univers == u }) { r.append(("u:" + u.rawValue, u.icon, u.label)) }
         r.append(("fav", "star.fill", "Favoris"))
         r.append(("all", "square.grid.2x2", "Catégories du fournisseur"))
@@ -37,6 +38,7 @@ struct LiveHomeView: View {
         .ignoresSafeArea(edges: .top)
         .fullScreenCover(item: $playing) { r in LivePlayerView(channels: r.list, start: r.index) }
         .fullScreenCover(item: $guide) { g in GuideView(channels: g.list, title: g.title) }
+        .fullScreenCover(item: $replay) { r in VodPlayerView(request: r) }
         .task(id: store.catalogVersion) { index = await LiveIndex.all(pids: store.active.map(\.id), version: store.catalogVersion) }
     }
 
@@ -47,6 +49,7 @@ struct LiveHomeView: View {
         } else {
             switch section {
             case "search": ChannelSearchView(play: play)
+            case "replay": ReplayView(index: index, play: { replay = $0 })
             case "fav": ChannelListView(mode: .fav, play: play, guide: openGuide)
             case "recent": ChannelListView(mode: .recent, play: play, guide: openGuide)
             case "all": AllCategoriesView(play: play, guide: openGuide)
@@ -126,7 +129,7 @@ struct LiveFrontView: View {
 
     var body: some View {
         ScrollView {
-            LazyVStack(alignment: .leading, spacing: 34) {
+            VStack(alignment: .leading, spacing: 34) {
                 if let h = head { header(h) }
                 else if let a = soon.first { soonHeader(a) }
                 if !recent.isEmpty {
@@ -625,6 +628,8 @@ struct GuideView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var start = GuideView.roundedNow()
     @State private var playing: LiveHomeView.PlayRequest?
+    @State private var replay: VodRequest?
+    @State private var msg: String?
     static let hours: Double = 3
     static let pxPerMin: CGFloat = 8   // 3 h = 1440 px : la grille tient dans l'écran (avant, la fin dépassait à droite)
 
@@ -651,7 +656,11 @@ struct GuideView: View {
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 10) {
                     ForEach(Array(channels.enumerated()), id: \.element.id) { i, ch in
-                        GuideRow(ch: ch, start: start) { playing = .init(list: channels, index: i) }
+                        GuideRow(ch: ch, start: start, play: { playing = .init(list: channels, index: i) }, past: { p in
+                            // programme passé : replay s'il est dans l'archive de la chaîne, sinon on le dit
+                            let a = LiveStore.Airing(ch: ch, p: p)
+                            if let r = replayRequest(a) { replay = r } else { msg = ch.archive > 0 ? "Ce programme n'est plus dans l'archive de la chaîne." : "Cette chaîne ne propose pas le replay." }
+                        })
                     }
                 }.padding(.vertical, 10)
             }
@@ -660,6 +669,8 @@ struct GuideView: View {
         .background(PrismeBackground())
         .onExitCommand { dismiss() }
         .fullScreenCover(item: $playing) { r in LivePlayerView(channels: r.list, start: r.index) }
+        .fullScreenCover(item: $replay) { r in VodPlayerView(request: r) }
+        .alert(msg ?? "", isPresented: Binding(get: { msg != nil }, set: { if !$0 { msg = nil } })) { Button("OK") {} }
     }
 }
 
@@ -667,6 +678,7 @@ struct GuideRow: View {
     let ch: Channel
     let start: Date
     let play: () -> Void
+    var past: ((Program) -> Void)? = nil
     @State private var progs: [Program] = []
 
     var body: some View {
@@ -683,10 +695,12 @@ struct GuideRow: View {
                 ForEach(progs) { p in
                     let a = max(p.start, Int(start.timeIntervalSince1970)), z = min(p.stop, Int(start.timeIntervalSince1970 + GuideView.hours * 3600))
                     let w = max(40, CGFloat(z - a) / 60 * GuideView.pxPerMin - 6)
-                    Button(action: play) {
+                    let isPast = p.stop <= Int(Date().timeIntervalSince1970)
+                    Button { if isPast, let past { past(p) } else { play() } } label: {
                         VStack(alignment: .leading, spacing: 4) {
                             HStack(spacing: 8) {
                                 if p.start <= Int(Date().timeIntervalSince1970) && p.stop > Int(Date().timeIntervalSince1970) { Circle().fill(P.live).frame(width: 10, height: 10) }
+                                if isPast && ch.archive > 0 { Image(systemName: "clock.arrow.circlepath").font(P.font(17, .bold)).foregroundStyle(Color(red: 0.8, green: 0.7, blue: 1)) }
                                 Text(p.title).font(P.font(21, .semibold)).lineLimit(1)
                             }
                             Text(Fmt.hm(p.startDate) + " – " + Fmt.hm(p.stopDate)).font(P.font(17)).opacity(0.6)

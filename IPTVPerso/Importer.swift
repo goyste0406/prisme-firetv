@@ -5,7 +5,7 @@ import Foundation
 struct CatalogImporter {
     let provider: Provider
 
-    struct Result { var counts: [String: Int] = [:]; var expires: Date? }
+    struct Result { var counts: [String: Int] = [:]; var expires: Date?; var tz: String? }
 
     static let adult = try! NSRegularExpression(pattern: #"adult|xxx|porn|\+ ?18|18 ?\+|for adults|erotic|\bsex|\bhot\b"#, options: [.caseInsensitive])
     static func isAdult(_ s: String) -> Bool {
@@ -24,6 +24,8 @@ struct CatalogImporter {
         let ui = info?["user_info"] as? [String: Any]
         guard str(ui?["auth"]) == "1" else { throw XtreamError.authFailed }
         if let e = Double(str(ui?["exp_date"])), e > 0 { res.expires = Date(timeIntervalSince1970: e) }
+        // fuseau horaire du serveur : les adresses de replay (timeshift) s'écrivent à l'heure du serveur
+        if let si = info?["server_info"] as? [String: Any], let tz = si["timezone"] as? String, TimeZone(identifier: tz) != nil { res.tz = tz }
 
         // ---- catégories
         var blocked = Set<String>()

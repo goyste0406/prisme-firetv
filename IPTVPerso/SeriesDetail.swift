@@ -27,6 +27,7 @@ struct SeriesDetailView: View {
     @State private var trailer: Trailer?
     @State private var showTrailer: Trailer?
     @State private var loading = true
+    @State private var showRecap: RecapPlan?
     @FocusState private var tabFocus: String?
     @FocusState private var playFocused: Bool
 
@@ -68,10 +69,11 @@ struct SeriesDetailView: View {
         .task(id: item.id) { await load() }
         .fullScreenCover(item: $playing) { r in VodPlayerView(request: r) }
         .fullScreenCover(item: $live) { l in LivePlayerView(channels: [l.ch], start: 0) }
-        .fullScreenCover(item: $showTrailer) { t in
-            TrailerScreen(trailer: t, title: title, backdrop: (fiche?.backdrop.isEmpty == false) ? Fiche.img(fiche!.backdrop, "original") : info.backdrop,
-                          poster: item.posterURL, playFilm: trailerPlay, playTitle: "Regarder la série")
+        .fullScreenCover(item: $showTrailer) { t in TrailerScreen(trailer: t, title: title, playFilm: trailerPlay, playTitle: "Regarder la série") }
+        .fullScreenCover(item: $showRecap) { plan in
+            RecapScreen(plan: plan, backdrop: (fiche?.backdrop.isEmpty == false) ? Fiche.img(fiche!.backdrop, "original") : info.backdrop, poster: item.posterURL) { mainAction() }
         }
+        .onAppear { DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { playFocused = true } }
         .sheet(isPresented: $showSyn) { SynopsisSheet(kicker: "SÉRIE", title: title, text: plot.isEmpty ? "Pas de résumé chez le fournisseur." : plot) }
         .sheet(item: $actor) { a in ActorSheet(actor: a, kind: .series, excluding: item.clean.key) }
         .confirmationDialog("Choisir la version", isPresented: $pickVersion) {
@@ -85,9 +87,9 @@ struct SeriesDetailView: View {
     private var left: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 22) {
-                HStack(alignment: .center, spacing: 18) {
-                    Text(title).font(P.serif(titleSize)).lineLimit(2).minimumScaleFactor(0.6)
-                    Button { showSyn = true } label: { Image(systemName: "info").font(P.font(22, .bold)).frame(width: 26, height: 26) }
+                HStack(alignment: .center, spacing: 22) {
+                    BigTitle(text: title, face: TitleFace.of(genres: genres), scale: 0.55, maxWidth: 600).fixedSize(horizontal: true, vertical: false)
+                    Button { showSyn = true } label: { Image(systemName: "info").font(P.font(24, .bold)).frame(width: 30, height: 30) }
                         .buttonStyle(GlassStyle(radius: 30, minH: 54))
                 }
                 meta
@@ -109,7 +111,6 @@ struct SeriesDetailView: View {
         .focusSection()
     }
 
-    private var titleSize: CGFloat { let n = title.count; return n <= 10 ? 86 : n <= 16 ? 74 : n <= 24 ? 62 : 52 }
 
     private var meta: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -123,28 +124,41 @@ struct SeriesDetailView: View {
             }
             if let p = store.provider(cur.pid)?.name, store.active.count > 1 { Pill(text: p, bg: P.chip.opacity(0.45), stroke: P.chip) }
         }
-        .font(P.font(22, .medium)).foregroundStyle(P.dim)
+        .font(P.font(23)).foregroundStyle(.white.opacity(0.82))
+    }
+
+    /// Le plan du résumé (épisodes déjà vus seulement) quand la série est commencée et pas finie.
+    private var recapPlan: RecapPlan? {
+        guard started, !allSeen, let e = nextEp else { return nil }
+        return RecapPlan.make(item: item, info: info, next: e, watch: watch, title: title)
     }
 
     private var actions: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            Button { mainAction() } label: { PlayLabel(title: mainLabel.0, sub: mainLabel.1) }
-                .buttonStyle(PrimaryStyle())
-                .focused($playFocused)
-                .disabled(all.isEmpty)
-            HStack(spacing: 16) {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 12) {
+                Button { mainAction() } label: { PlayLabel(title: mainLabel.0, sub: mainLabel.1) }
+                    .buttonStyle(FicheButtonStyle(prim: true))
+                    .focused($playFocused)
+                    .disabled(all.isEmpty)
+                // « ⏮ Résumé 60 s » du simulateur : ce qu'il faut savoir avant l'épisode, sans rien dévoiler de la suite
+                if let plan = recapPlan {
+                    Button { showRecap = plan } label: { Label("Résumé 60 s", systemImage: "backward.end.fill").font(P.font(32, .semibold)) }
+                        .buttonStyle(FicheButtonStyle())
+                }
+            }.focusSection()
+            HStack(spacing: 12) {
                 Button { watch.toggleFavorite(item.id) } label: {
-                    Image(systemName: watch.favorites.contains(item.id) ? "checkmark" : "plus").font(P.font(28, .bold)).frame(width: 30)
-                }.buttonStyle(GlassStyle(radius: 40, minH: 76))
-                Button { if versions.count > 1 { pickVersion = true } } label: {
+                    Image(systemName: watch.favorites.contains(item.id) ? "checkmark" : "plus").font(P.font(32, .bold))
+                }.buttonStyle(FicheButtonStyle(square: true))
+                Button { if versions.count > 1 { pickVersion = true } else { launchMsg = "Une seule version chez ton fournisseur" } } label: {
                     VStack(alignment: .leading, spacing: 1) {
-                        Text(versionShort(cur)).font(P.font(25, .bold))
-                        Text("\(max(1, versions.count)) VERSION\(versions.count > 1 ? "S ▾" : "")").font(P.font(15, .bold)).tracking(0.8).opacity(0.6)
+                        Text(versionShort(cur)).font(P.font(32, .heavy))
+                        Text("\(max(1, versions.count)) VERSION\(versions.count > 1 ? "S ▾" : "")").font(P.font(19, .bold)).tracking(1).opacity(0.6)
                     }
-                }.buttonStyle(GlassStyle(radius: 20, minH: 76))
+                }.buttonStyle(FicheButtonStyle())
                 if let t = trailer {
-                    Button { showTrailer = t } label: { Image(systemName: "film").font(P.font(26, .semibold)).frame(width: 30) }
-                        .buttonStyle(GlassStyle(radius: 20, minH: 76))
+                    Button { showTrailer = t } label: { Image(systemName: "film").font(P.font(30, .semibold)) }
+                        .buttonStyle(FicheButtonStyle(square: true))
                 }
             }.focusSection()
         }
@@ -380,7 +394,7 @@ struct SeriesDetailView: View {
 
     @ViewBuilder private var castTab: some View {
         let cast = castList(fiche: fiche, info: info)
-        SectionTitle(title: "Qui est qui ?", sub: "sans spoiler : les personnages principaux")
+        SectionTitle(title: "Qui est qui ?")
         if cast.isEmpty {
             Text(TmdbKey.value == nil ? "La distribution arrive avec la clé TMDB (Réglages › Fiches TMDB)." : "Pas de distribution connue pour cette série.").font(P.font(22)).foregroundStyle(P.dim)
         } else {
@@ -393,7 +407,7 @@ struct SeriesDetailView: View {
     }
 
     @ViewBuilder private var simTab: some View {
-        SectionTitle(title: "Séries proches", sub: fiche != nil ? "mêmes genres, les mieux notées d'abord" : "de la même catégorie chez ton fournisseur")
+        SectionTitle(title: "Séries proches")
         if similar.isEmpty {
             Text("Pas encore de séries proches.").font(P.font(22)).foregroundStyle(P.dim)
         } else {
@@ -461,7 +475,8 @@ struct SeriesDetailView: View {
         loading = false
         if fiche == nil, TmdbKey.value != nil { fiche = await FicheWorker.fetchNow(item, tmdbHint: info.tmdb) }
         airings = await LiveStore.airings(title: title, providers: pids)
-        trailer = await TrailerStore.find(tmdb: fiche?.tmdb ?? info.tmdb, tv: true, providerKey: info.trailer)
+        let y = (fiche?.year ?? 0) > 0 ? fiche!.year : (item.clean.year > 0 ? item.clean.year : info.year)
+        trailer = await TrailerStore.find(title: title, year: y, minutes: 0, tmdb: fiche?.tmdb ?? info.tmdb, tv: true)
         var it = item; it.fiche = fiche
         similar = await MediaStore.similar(of: it, genres: genres, pids: pids, limit: 16).map { SimilarItem(item: $0.0, common: $0.1) }
     }

@@ -1,4 +1,5 @@
 import SwiftUI
+import AVFoundation
 import UIKit
 
 // Éléments communs aux fiches Films et Séries (reprises du simulateur).
@@ -80,14 +81,181 @@ enum EpisodeLogic {
 struct DetailBackdrop: View {
     let backdrop: String
     let poster: String
+    /// bande-annonce en fond (fiche film) : la vidéo remplace l'image, le voile s'allège quand on la regarde (« peek »)
+    var video: AVPlayer? = nil
+    var playing = false
+    var peek = false
     var body: some View {
         ZStack {
             ArtView(backdrop: backdrop, poster: poster, maxPixel: 1920, posterWidthRatio: 0.24).frame(width: 1920, height: 1080).clipped()
-            LinearGradient(colors: [P.room.opacity(0.96), P.room.opacity(0.62), .clear], startPoint: .leading, endPoint: .trailing)
-            LinearGradient(colors: [.black.opacity(0.35), .clear, P.room.opacity(0.85), P.room], startPoint: .top, endPoint: .bottom)
+            if let video {
+                VideoLayer(player: video).frame(width: 1920, height: 1080).clipped().opacity(playing ? 1 : 0)
+            }
+            Group {
+                LinearGradient(colors: [P.room.opacity(0.96), P.room.opacity(0.62), .clear], startPoint: .leading, endPoint: .trailing)
+                LinearGradient(colors: [.black.opacity(0.35), .clear, P.room.opacity(0.85), P.room], startPoint: .top, endPoint: .bottom)
+            }.opacity(peek ? 0.25 : 1)
         }
         .frame(width: 1920, height: 1080)
         .allowsHitTesting(false)
+        .animation(.easeInOut(duration: 0.45), value: peek)
+        .animation(.easeInOut(duration: 0.6), value: playing)
+    }
+}
+
+/// Bande-annonce de fond d'une fiche : démarre 2,5 s après l'ouverture, son faible ; plus fort quand on la regarde.
+final class TrailerHolder: ObservableObject {
+    @Published private(set) var player: AVPlayer?
+    @Published private(set) var playing = false
+    private var tp: TrailerPlayer?
+    private var work: DispatchWorkItem?
+    private var endObs: NSObjectProtocol?
+
+    func arm(_ url: URL) {
+        stop()
+        let t = TrailerPlayer(url: url)
+        tp = t; player = t.player
+        endObs = NotificationCenter.default.addObserver(forName: .AVPlayerItemDidPlayToEndTime, object: t.player.currentItem, queue: .main) { [weak self] _ in
+            self?.playing = false
+        }
+        let w = DispatchWorkItem { [weak self] in
+            guard let self, let tp = self.tp else { return }
+            tp.play(volume: 0.18); self.playing = true
+        }
+        work = w
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2.5, execute: w)
+    }
+    func loud(_ on: Bool) { tp?.player.volume = on ? 0.7 : 0.18 }
+    func stop() {
+        work?.cancel(); work = nil
+        tp?.pause()
+        playing = false
+        if let endObs { NotificationCenter.default.removeObserver(endObs); self.endObs = nil }
+    }
+}
+
+/// Boutons de la fiche (simulateur « fx-btn ») : 81 pt de haut, coins 30 ; Lecture blanc ; les autres verre sombre ;
+/// sélectionné : blanc, texte noir, léger zoom. `square` = bouton carré à coins arrondis (Ma liste, bande-annonce).
+struct FicheButtonStyle: ButtonStyle {
+    var prim = false
+    var square = false
+    var pulse = false
+    func makeBody(configuration c: Configuration) -> some View { Inner(c: c, prim: prim, square: square, pulse: pulse) }
+    private struct Inner: View {
+        let c: ButtonStyleConfiguration
+        let prim: Bool, square: Bool, pulse: Bool
+        @Environment(\.isFocused) var f
+        @State private var ring = false
+        var body: some View {
+            let shape = RoundedRectangle(cornerRadius: 30, style: .continuous)
+            c.label
+                .foregroundStyle(prim || f ? Color.black : Color.white)
+                .padding(.horizontal, square ? 0 : (prim ? 44 : 36))
+                .frame(width: square ? 81 : nil, height: 81)
+                .background(prim || f ? Color.white : Color(red: 20 / 255, green: 22 / 255, blue: 28 / 255).opacity(0.62), in: shape)
+                .overlay(shape.stroke(Color.white.opacity(prim || f ? 0 : 0.18), lineWidth: 1.5))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 38, style: .continuous).stroke(Color.white.opacity(pulse ? (ring ? 0.3 : 0.55) : 0), lineWidth: 3)
+                        .padding(ring ? -17 : -10)
+                )
+                .scaleEffect(f ? 1.07 : (c.isPressed ? 0.97 : 1))
+                .shadow(color: .black.opacity(f ? 0.5 : 0), radius: 22, y: 12)
+                .animation(.easeOut(duration: 0.18), value: f)
+                .onChange(of: pulse) { _, p in
+                    if p { withAnimation(.easeInOut(duration: 0.8).repeatForever(autoreverses: true)) { ring = true } } else { ring = false }
+                }
+        }
+    }
+}
+
+/// Fenêtre « Choisis la version » du simulateur : liste des sources (qualité, fournisseur, nom exact, langues).
+/// OK lit la source ; Menu ferme. Rien d'inventé : les langues et qualités viennent du nom chez le fournisseur.
+struct VersionsModal: View {
+    struct Row { let quality: String; let provider: String; let raw: String; let audio: [String]; let isDefault: Bool }
+    let title: String
+    let versions: [MediaItem]
+    let current: MediaItem
+    let label: (MediaItem) -> Row
+    let pick: (MediaItem) -> Void
+    let close: () -> Void
+    @FocusState private var focus: String?
+
+    var body: some View {
+        ZStack {
+            Rectangle().fill(.ultraThinMaterial).opacity(0.9).ignoresSafeArea()
+            Color.black.opacity(0.5).ignoresSafeArea()
+            VStack(alignment: .leading, spacing: 11) {
+                Text("\(versions.count) SOURCES · CHOISIS LA VERSION").font(P.font(24, .bold)).tracking(3.4).foregroundStyle(.white.opacity(0.7))
+                Text(title).font(P.font(54, .bold)).lineLimit(1).minimumScaleFactor(0.6).padding(.bottom, 14)
+                ScrollView {
+                    VStack(spacing: 11) {
+                        ForEach(versions) { v in
+                            Button { pick(v) } label: { row(label(v)) }
+                                .buttonStyle(SourceRowStyle())
+                                .focused($focus, equals: v.id)
+                        }
+                    }.padding(.vertical, 10).padding(.horizontal, 8)
+                }
+                .frame(maxHeight: 640).scrollClipDisabled()
+                Text("OK pour lire cette source · Menu pour fermer").font(P.font(26)).foregroundStyle(.white.opacity(0.6)).padding(.top, 14)
+            }
+            .padding(.horizontal, 52).padding(.vertical, 56)
+            .frame(width: 1300, alignment: .leading)
+            .background(Color(red: 36 / 255, green: 36 / 255, blue: 44 / 255).opacity(0.8), in: RoundedRectangle(cornerRadius: 52, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 52, style: .continuous).stroke(Color.white.opacity(0.16), lineWidth: 1.5))
+            .shadow(color: .black.opacity(0.5), radius: 60, y: 30)
+            .focusSection()
+        }
+        .defaultFocus($focus, current.id)
+        .onExitCommand { close() }
+    }
+
+    private func row(_ r: Row) -> some View {
+        HStack(spacing: 30) {
+            QualityBadge(q: r.quality).frame(width: 172, alignment: .leading)
+            VStack(alignment: .leading, spacing: 6) {
+                (Text(r.provider).font(P.font(36, .semibold)) + Text(r.isDefault ? " · par défaut" : "").font(P.font(26, .medium)).foregroundColor(.secondary))
+                Text(r.raw).font(P.font(26)).opacity(0.6).lineLimit(1)
+            }
+            Spacer(minLength: 10)
+            VStack(alignment: .trailing, spacing: 4) {
+                ForEach(r.audio, id: \.self) { Text($0) }
+            }.font(P.font(24)).opacity(0.6).frame(maxWidth: 420, alignment: .trailing)
+        }
+        .padding(.horizontal, 34).padding(.vertical, 26)
+    }
+}
+
+/// Badge de qualité du simulateur (« qb ») : 4K doré, 1080p bleu clair, 720p gris clair, SD gris.
+struct QualityBadge: View {
+    let q: String
+    var body: some View {
+        let t = q.isEmpty ? "HD" : q
+        Text(t).font(P.font(28, .heavy)).tracking(0.5).foregroundStyle(.black)
+            .padding(.horizontal, 26).frame(height: 56)
+            .background(bg, in: RoundedRectangle(cornerRadius: 15, style: .continuous))
+    }
+    private var bg: AnyShapeStyle {
+        switch q {
+        case "4K": return AnyShapeStyle(LinearGradient(colors: [Color(red: 0.97, green: 0.84, blue: 0.45), Color(red: 0.83, green: 0.61, blue: 0.16)], startPoint: .topLeading, endPoint: .bottomTrailing))
+        case "1080p": return AnyShapeStyle(Color(red: 0.49, green: 0.77, blue: 1))
+        case "SD": return AnyShapeStyle(Color(red: 0.56, green: 0.58, blue: 0.62))
+        default: return AnyShapeStyle(Color(red: 0.79, green: 0.81, blue: 0.85))
+        }
+    }
+}
+
+struct SourceRowStyle: ButtonStyle {
+    func makeBody(configuration c: Configuration) -> some View { Inner(c: c) }
+    private struct Inner: View {
+        let c: ButtonStyleConfiguration
+        @Environment(\.isFocused) var f
+        var body: some View {
+            c.label.foregroundStyle(f ? Color.black : Color.white)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(f ? Color.white : Color.white.opacity(0.07), in: RoundedRectangle(cornerRadius: 30, style: .continuous))
+                .scaleEffect(f ? 1.03 : 1).animation(.easeOut(duration: 0.16), value: f)
+        }
     }
 }
 
@@ -156,7 +324,7 @@ struct WhereSection: View {
         let loc = uniq(wp.r.map { WhereItem(wp: $0, sub: "Location", tail: "›") })
         let buy = uniq(wp.b.map { WhereItem(wp: $0, sub: "Achat", tail: "›") })
         VStack(alignment: .leading, spacing: 18) {
-            if showTitle { SectionTitle(title: "Où le regarder", sub: "ailleurs que dans prisme · OK sur une app pour l'ouvrir dessus") }
+            if showTitle { SectionTitle(title: "Où le regarder") }
             HStack(spacing: 10) {
                 Image(systemName: "play.fill").foregroundStyle(P.gold)
                 Text("Déjà dans prisme").foregroundColor(P.gold).bold()
@@ -314,93 +482,5 @@ struct SynopsisSheet: View {
     }
 }
 
-/// Ouvrir la bande-annonce YouTube (dans l'app YouTube si elle est installée).
-@MainActor
-func openTrailer(_ id: String) async -> String? {
-    let v = id.trimmingCharacters(in: .whitespaces)
-    guard !v.isEmpty else { return nil }
-    for u in ["youtube://watch?v=\(v)", "https://www.youtube.com/watch?v=\(v)"] {
-        if let url = URL(string: u), await UIApplication.shared.open(url) { return nil }
-    }
-    return "Installe l'app YouTube sur l'Apple TV pour voir la bande-annonce."
-}
-
 /// Lancer une chaîne depuis « À la TV ».
 struct LiveLaunch: Identifiable { let id = UUID(); let ch: Channel }
-
-// MARK: - Bande-annonce (simulateur : bouton rond « film », écran BANDE-ANNONCE VF · titre)
-
-struct Trailer: Identifiable, Hashable { let key: String; let lang: String; var id: String { key } }
-
-enum TrailerStore {
-    private static var memo: [String: Trailer?] = [:]
-    /// Bande-annonce TMDB : en français d'abord (VF), sinon en version originale. Sinon celle du fournisseur.
-    static func find(tmdb: Int, tv: Bool, providerKey: String) async -> Trailer? {
-        let mk = (tv ? "t" : "m") + String(tmdb) + "|" + providerKey
-        if let m = memo[mk] { return m }
-        var out: Trailer? = nil
-        if tmdb > 0, let key = TmdbKey.value {
-            let api = TmdbAPI(key: key)
-            let path = (tv ? "/tv/" : "/movie/") + String(tmdb) + "/videos"
-            for (lang, tag) in [("fr-FR", "VF"), ("en-US", "VO")] {
-                guard let d = await api.get(path, [("language", lang)]), let res = d["results"] as? [[String: Any]] else { continue }
-                let yt = res.filter { ($0["site"] as? String) == "YouTube" && (($0["type"] as? String) == "Trailer" || ($0["type"] as? String) == "Teaser") }
-                if let best = yt.first(where: { ($0["type"] as? String) == "Trailer" }) ?? yt.first, let k = best["key"] as? String {
-                    out = Trailer(key: k, lang: tag); break
-                }
-            }
-        }
-        if out == nil, !providerKey.trimmingCharacters(in: .whitespaces).isEmpty { out = Trailer(key: providerKey.trimmingCharacters(in: .whitespaces), lang: "") }
-        memo[mk] = out
-        return out
-    }
-}
-
-/// Écran de la bande-annonce (mise en page du simulateur).
-/// tvOS n'a pas de lecteur YouTube intégré : la vidéo s'ouvre dans l'app YouTube de l'Apple TV.
-struct TrailerScreen: View {
-    let trailer: Trailer
-    let title: String
-    let backdrop: String
-    let poster: String
-    let playFilm: (() -> Void)?
-    var playTitle = "Regarder le film"
-    @Environment(\.dismiss) private var dismiss
-    @State private var msg: String?
-    @FocusState private var first: Bool
-
-    var body: some View {
-        ZStack(alignment: .topLeading) {
-            Color.black
-            ArtView(backdrop: backdrop, poster: poster, maxPixel: 1920, posterWidthRatio: 0.22).opacity(0.85)
-            LinearGradient(colors: [.black.opacity(0.5), .clear, .black.opacity(0.85)], startPoint: .top, endPoint: .bottom)
-            Text("BANDE-ANNONCE" + (trailer.lang.isEmpty ? "" : " " + trailer.lang) + " · " + title.uppercased())
-                .font(P.font(21, .bold)).tracking(2).padding(.horizontal, 20).padding(.vertical, 12).glass(18)
-                .padding(.leading, 105).padding(.top, 70)
-            VStack(alignment: .trailing, spacing: 14) {
-                Text(langText).font(P.font(20)).foregroundStyle(P.dim)
-                if let msg { Text(msg).font(P.font(20, .semibold)).foregroundStyle(P.gold) }
-                HStack(spacing: 20) {
-                    Button { Task { msg = await openTrailer(trailer.key) } } label: { Label("Lire la bande-annonce", systemImage: "play.rectangle.fill").font(P.font(26, .bold)) }
-                        .buttonStyle(GlassStyle()).focused($first)
-                    if let playFilm {
-                        Button { dismiss(); playFilm() } label: { PlayLabel(title: playTitle) }.buttonStyle(PrimaryStyle())
-                    }
-                }
-                Text("La vidéo s'ouvre dans l'app YouTube de l'Apple TV · Menu pour revenir").font(P.font(18)).foregroundStyle(P.faint)
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
-            .padding(.trailing, 105).padding(.bottom, 90)
-        }
-        .ignoresSafeArea()
-        .defaultFocus($first, true)
-    }
-
-    private var langText: String {
-        switch trailer.lang {
-        case "VF": return "Bande-annonce en version française (choisie automatiquement quand elle existe)"
-        case "VO": return "Pas de version française sur TMDB : bande-annonce en version originale"
-        default: return "Bande-annonce donnée par ton fournisseur"
-        }
-    }
-}

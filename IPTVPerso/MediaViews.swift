@@ -56,10 +56,6 @@ struct MediaHomeView: View {
     private var pids: [String] { store.active.map(\.id) }
     private var providerNames: String { store.active.map(\.name).joined(separator: ", ") }
     private var unit: String { kind == .film ? "films" : "séries" }
-    private var mineSub: String {
-        let n = mine.count, pl = n > 1 ? "s" : ""
-        return kind == .film ? "\(n) film\(pl) mis de côté" : "\(n) série\(pl) mise\(pl) de côté"
-    }
 
     var body: some View {
         ScrollView {
@@ -73,14 +69,14 @@ struct MediaHomeView: View {
                 tonightBand
                 if !resume.isEmpty { resumeSection }
                 if !snap.top.isEmpty {
-                    Top10Row(title: kind == .film ? "Top 10 du moment" : "Top 10 séries", sub: snap.topSub, items: snap.top, open: { open = $0 })
+                    Top10Row(title: kind == .film ? "Top 10 du moment" : "Top 10 séries", sub: nil, items: snap.top, open: { open = $0 })
                 }
                 if !snap.newest.isEmpty { newSection }
                 if kind == .film, let b = because, !becauseList.isEmpty {
-                    MediaRow(title: "Parce que tu as aimé " + b.displayTitle, sub: "mêmes genres (TMDB) · sans les films déjà proposés plus haut", items: becauseList, open: { open = $0 })
+                    MediaRow(title: "Parce que tu as aimé " + b.displayTitle, items: becauseList, open: { open = $0 })
                 }
                 if !mine.isEmpty {
-                    MediaRow(title: "Ma liste", sub: mineSub, items: mine, open: { open = $0 })
+                    MediaRow(title: "Ma liste", items: mine, open: { open = $0 })
                 }
                 if kind == .film && !snap.colls.isEmpty { exploreSection }
                 browseSection
@@ -188,7 +184,7 @@ struct MediaHomeView: View {
 
     private var resumeSection: some View {
         VStack(alignment: .leading, spacing: 0) {
-            HomeHeader(title: "Reprendre", sub: "\(resume.count) en cours")
+            HomeHeader(title: "Reprendre")
             ScrollView(.horizontal) {
                 LazyHStack(spacing: 30) { ForEach(resume) { r in resumeCard(r) } }
                     .padding(.horizontal, 120).padding(.vertical, 30)
@@ -210,7 +206,7 @@ struct MediaHomeView: View {
 
     private var newSection: some View {
         VStack(alignment: .leading, spacing: 0) {
-            HomeHeader(icon: "sparkles", title: "Nouveau sur prisme", sub: (kind == .film ? "ajouts récents chez " : "ajouts et mises à jour récents chez ") + providerNames)
+            HomeHeader(icon: "sparkles", title: "Nouveau sur prisme")
             ScrollView(.horizontal) {
                 LazyHStack(spacing: 30) {
                     ForEach(snap.newest.prefix(12)) { it in
@@ -236,7 +232,7 @@ struct MediaHomeView: View {
 
     private var exploreSection: some View {
         VStack(alignment: .leading, spacing: 0) {
-            HomeHeader(title: "Explorer", sub: "des collections faites à partir de ton fournisseur")
+            HomeHeader(title: "Explorer")
             ScrollView(.horizontal) {
                 LazyHStack(spacing: 30) { ForEach(snap.colls) { c in CollTile(c: c, unit: unit) { openColl = c } } }
                     .padding(.horizontal, 120).padding(.vertical, 30)
@@ -649,7 +645,7 @@ struct ResumeRow: View {
     let open: (MediaItem) -> Void
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            HomeHeader(title: "Reprendre", sub: "\(entries.count) en cours")
+            HomeHeader(title: "Reprendre")
             ScrollView(.horizontal) {
                 LazyHStack(spacing: 30) {
                     ForEach(entries) { r in

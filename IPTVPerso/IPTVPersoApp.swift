@@ -20,7 +20,7 @@ struct IPTVPersoApp: App {
             }
             .environmentObject(store)
             .preferredColorScheme(.dark)
-            .onAppear { store.refreshIfStale(); FicheService.shared.start() }
+            .onAppear { Debug.seedIfNeeded(); store.refreshIfStale(); FicheService.shared.start() }
             .onChange(of: store.catalogVersion) { _ in FicheService.shared.restart() }
         }
     }
@@ -31,6 +31,7 @@ struct IPTVPersoApp: App {
 struct MainTabView: View {
     @EnvironmentObject var store: ProviderStore
     @ObservedObject var nav = Nav.shared
+    @State private var debugOpen: MediaItem?
 
     var body: some View {
         NavigationStack {
@@ -50,6 +51,20 @@ struct MainTabView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
             .ignoresSafeArea()
+            .navigationDestination(item: $debugOpen) { it in DetailView(item: it) }
+        }
+        .task {
+            // test du simulateur uniquement : onglet ou fiche demandés en argument de lancement
+            if let t = Debug.tab { nav.tab = ["films": .films, "series": .series, "live": .live, "mine": .mine, "settings": .settings][t] ?? nav.tab }
+            guard let o = Debug.open else { return }
+            for _ in 0..<120 {
+                if let it = await MediaStore.items(ids: [o]).first {
+                    try? await Task.sleep(nanoseconds: 1_500_000_000)
+                    debugOpen = await MediaStore.items(ids: [o]).first ?? it
+                    return
+                }
+                try? await Task.sleep(nanoseconds: 1_000_000_000)
+            }
         }
     }
 }

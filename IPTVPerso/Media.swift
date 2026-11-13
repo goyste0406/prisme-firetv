@@ -28,6 +28,26 @@ struct MediaItem: Identifiable, Hashable {
     var backdropHD: String { (fiche?.backdrop.isEmpty == false) ? Fiche.img(fiche!.backdrop, "original") : "" }
 }
 
+extension MediaItem {
+    /// Clé d'une œuvre : l'identifiant TMDB quand il est connu (fiche, sinon celui du fournisseur), sinon titre + année.
+    /// Deux versions du même film (titre anglais/français, qualités, fournisseurs) ont la même clé ; deux films
+    /// différents au titre proche restent distincts.
+    var workKey: String {
+        if let t = fiche?.tmdb, t > 0 { return "t\(t)" }
+        if let t = Int(tmdb.trimmingCharacters(in: .whitespaces)), t > 0 { return "t\(t)" }
+        return clean.key
+    }
+}
+
+extension Array where Element == MediaItem {
+    /// Sans doublon d'œuvre (garde le premier), en retirant éventuellement le titre de la fiche ouverte.
+    func uniqueWorks(excluding: MediaItem? = nil) -> [MediaItem] {
+        var seen = Set<String>()
+        if let e = excluding { seen.insert(e.workKey); seen.insert(e.clean.key) }
+        return filter { seen.insert($0.workKey).inserted && (excluding == nil || $0.clean.key != excluding!.clean.key) }
+    }
+}
+
 extension Array where Element == MediaItem {
     /// Ajoute les fiches TMDB connues (une requête pour toute la liste). À appeler sur la file de la base.
     func withFiches() -> [MediaItem] {
@@ -154,7 +174,7 @@ enum MediaStore {
                 let it = row(k, r)
                 if seen.insert(it.clean.key).inserted { out.append(it) }
             }
-            return Array(out.prefix(limit)).withFiches()
+            return Array(Array(out.prefix(limit * 2)).withFiches().uniqueWorks().prefix(limit))
         }
     }
 
@@ -167,7 +187,7 @@ enum MediaStore {
         return await Database.shared.read { db in
             var out: [MediaItem] = [], seen = Set<String>()
             db.query(sql, all) { r in let it = row(k, r); if seen.insert(it.clean.key).inserted { out.append(it) } }
-            return Array(out.prefix(limit)).withFiches()
+            return Array(Array(out.prefix(limit * 2)).withFiches().uniqueWorks().prefix(limit))
         }
     }
 
@@ -205,7 +225,7 @@ enum MediaStore {
         return await Database.shared.read { db in
             var out: [MediaItem] = [], seen = Set<String>()
             db.query(sql, [k.rawValue, "%" + genre + "%"] + pids) { r in let it = row(k, r); if seen.insert(it.clean.key).inserted { out.append(it) } }
-            return Array(out.prefix(limit)).withFiches()
+            return Array(Array(out.prefix(limit * 2)).withFiches().uniqueWorks().prefix(limit))
         }
     }
 
@@ -249,7 +269,7 @@ enum MediaStore {
                 let m = row(k, r)
                 if !exclude.contains(r.int(11)), m.clean.key != it.clean.key, seen.insert(m.clean.key).inserted { out.append(m) }
             }
-            return Array(out.prefix(24)).withFiches()
+            return Array(Array(out.prefix(40)).withFiches().uniqueWorks(excluding: it).prefix(24))
         }
     }
 
@@ -264,7 +284,7 @@ enum MediaStore {
                 db.query("SELECT \(cols(k)) FROM \(t) WHERE pid=? AND cid=? ORDER BY rating DESC, added DESC LIMIT \(limit * 3)", [it.pid, it.cid]) { r in
                     let m = row(k, r); if seen.insert(m.clean.key).inserted { out.append(m) }
                 }
-                return Array(out.prefix(limit)).withFiches()
+                return Array(Array(out.prefix(limit * 2)).withFiches().uniqueWorks(excluding: it).prefix(limit))
             }
             return list.map { ($0, []) }
         }
@@ -283,9 +303,13 @@ enum MediaStore {
                 let common = genres.filter { theirs.contains($0) }
                 out.append((m, common, i)); i += 1
             }
-            let best = out.sorted { $0.1.count != $1.1.count ? $0.1.count > $1.1.count : $0.2 < $1.2 }.prefix(limit)
+            let best = Array(out.sorted { $0.1.count != $1.1.count ? $0.1.count > $1.1.count : $0.2 < $1.2 }.prefix(limit * 3))
             let withF = best.map { $0.0 }.withFiches()
-            return Array(zip(withF, best.map { $0.1 }))
+            // une seule affiche par œuvre (identifiant TMDB), jamais le film de la fiche lui-même
+            var keys = Set<String>([it.workKey])
+            var res: [(MediaItem, [String])] = []
+            for (m, b) in zip(withF, best) where keys.insert(m.workKey).inserted { res.append((m, b.1)); if res.count >= limit { break } }
+            return res
         }
     }
 
@@ -299,7 +323,7 @@ enum MediaStore {
         return await Database.shared.read { db in
             var out: [MediaItem] = [], seen = Set<String>([key])
             db.query(sql, args) { r in let m = row(k, r); if seen.insert(m.clean.key).inserted { out.append(m) } }
-            return Array(out.prefix(30)).withFiches()
+            return Array(Array(out.prefix(50)).withFiches().uniqueWorks().prefix(30))
         }
     }
 
@@ -357,12 +381,19 @@ enum MediaStore {
         let words = c.title.split(separator: " ").prefix(3).joined(separator: " ")
         guard !pids.isEmpty, !words.isEmpty else { return [it] }
         let like = "%" + words.replacingOccurrences(of: "%", with: "") + "%"
+        // même œuvre sous un autre nom (titre français / anglais) : même identifiant TMDB (fiche ou fournisseur)
+        let tm = it.workKey.hasPrefix("t") ? String(it.workKey.dropFirst()) : ""
         let found = await Database.shared.read { db -> [MediaItem] in
-            var out: [MediaItem] = []
-            db.query("SELECT \(cols(it.kind)) FROM \(table(it.kind)) WHERE pid IN \(inList(pids)) AND name LIKE ? LIMIT 200", pids + [like]) { r in out.append(row(it.kind, r)) }
-            return out
+            var out: [MediaItem] = [], ids = Set<String>()
+            db.query("SELECT \(cols(it.kind)) FROM \(table(it.kind)) WHERE pid IN \(inList(pids)) AND name LIKE ? LIMIT 200", pids + [like]) { r in let m = row(it.kind, r); if ids.insert(m.id).inserted { out.append(m) } }
+            if !tm.isEmpty {
+                db.query("SELECT \(cols(it.kind)) FROM \(table(it.kind)) WHERE pid IN \(inList(pids)) AND tmdb=? LIMIT 50", pids + [tm]) { r in let m = row(it.kind, r); if ids.insert(m.id).inserted { out.append(m) } }
+                let t = table(it.kind), cc = cols(it.kind).split(separator: ",").map { $0.hasPrefix("'") ? String($0) : "m." + $0 }.joined(separator: ",")
+                db.query("SELECT \(cc) FROM fiche f JOIN \(t) m ON m.pid=f.pid AND m.sid=f.sid WHERE f.kind=? AND f.tmdb=? AND m.pid IN \(inList(pids)) LIMIT 50", ([it.kind.rawValue, Int(tm)] as [Any?]) + pids.map { $0 as Any? }) { r in let m = row(it.kind, r); if ids.insert(m.id).inserted { out.append(m) } }
+            }
+            return out.withFiches()
         }
-        var same = found.filter { $0.clean.key == c.key }.map { var x = $0; x.fiche = it.fiche; return x }
+        var same = found.filter { $0.clean.key == c.key || (!tm.isEmpty && $0.workKey == it.workKey) }.map { var x = $0; x.fiche = x.fiche ?? it.fiche; return x }
         if !same.contains(where: { $0.id == it.id }) { same.insert(it, at: 0) }
         func score(_ m: MediaItem) -> Int {
             let t = m.clean.tags
@@ -380,6 +411,9 @@ final class WatchStore: ObservableObject {
     struct Entry: Codable { var pos: Double; var dur: Double; var at: Date; var title: String; var icon: String; var item: String; var ep: String? }
     @Published private(set) var entries: [String: Entry] = [:]   // clé : id du film ou de l'épisode
     @Published var favorites: [String] = [] { didSet { UserDefaults.standard.set(favorites, forKey: "prisme.media.favs") } }
+
+    /// Test du simulateur uniquement (argument de lancement) : historique de visionnage factice pour voir « Reprendre ».
+    func debugSeed(_ list: [(String, Entry)]) { for (k, e) in list { entries[k] = e } }
 
     private init() {
         if let d = UserDefaults.standard.data(forKey: "prisme.watch"), let e = try? JSONDecoder().decode([String: Entry].self, from: d) { entries = e }
@@ -409,7 +443,7 @@ final class WatchStore: ObservableObject {
     /// « Reprendre » : ce qui a été commencé et pas fini, le plus récent d'abord (un seul épisode par série).
     var inProgress: [Entry] {
         var seen = Set<String>()
-        return entries.values.filter { $0.dur > 0 && $0.pos > 30 && $0.pos / $0.dur < 0.92 }.sorted { $0.at > $1.at }
+        return entries.values.filter { $0.dur > 0 && $0.pos > 30 && $0.pos / $0.dur < 0.92 && !$0.item.hasPrefix("replay:") }.sorted { $0.at > $1.at }
             .filter { seen.insert($0.item).inserted }
     }
 
