@@ -440,7 +440,7 @@ struct WhoIsWatchingScreen: View {
                 HStack(alignment: .top, spacing: 80) {
                     ForEach(ps.profiles) { p in
                         Button { choose(p.id, play: false) } label: { person(p) }
-                            .buttonStyle(WhoStyle())
+                            .buttonStyle(WhoStyle(ring: !(counting && p.id == guess)))
                             .focused($focus, equals: p.id)
                             .contextMenu { Button("Modifier ce profil") { ps.use(p.id); ProfileUI.shared.editProfile = p.id; manage() } }
                             .onPlayPauseCommand { choose(p.id, play: true) }
@@ -479,6 +479,8 @@ struct WhoIsWatchingScreen: View {
         .onChange(of: focus) { _, f in if let f, f != guess { moved = true } }
     }
 
+    private var counting: Bool { !moved && countdown > 0 }
+
     private var hello: String {
         let h = Calendar.current.component(.hour, from: Date())
         return h >= 5 && h < 12 ? "Bonjour" : h < 18 && h >= 12 ? "Bon après-midi" : "Bonsoir"
@@ -486,18 +488,22 @@ struct WhoIsWatchingScreen: View {
 
     private func person(_ p: Profile) -> some View {
         let n = news[p.id]?.count ?? 0
-        return whoItem(AnyView(ZStack(alignment: .topTrailing) {
-            ProfileAvatar(p: p, size: 190)
-            if n > 0 {
-                Text("\(n)").font(P.font(28, .bold)).frame(width: 52, height: 52).background(Circle().fill(Color(red: 0.94, green: 0.27, blue: 0.27)))
-                    .overlay(Circle().stroke(Color(red: 11 / 255, green: 13 / 255, blue: 19 / 255), lineWidth: 4)).offset(x: 6, y: -6)
+        return whoItem(AnyView(ProfileAvatar(p: p, size: 190)
+            .overlay {
+                // décompte des 5 s : il remplace l'anneau de sélection (même cercle, qui se vide)
+                if counting && p.id == guess {
+                    Circle().trim(from: 0, to: CGFloat(countdown) / 5).stroke(Color.white, style: StrokeStyle(lineWidth: 8, lineCap: .round))
+                        .rotationEffect(.degrees(-90)).frame(width: 206, height: 206)
+                        .animation(.linear(duration: 1), value: countdown)
+                }
             }
-            if !moved && countdown > 0 && p.id == guess {
-                Circle().trim(from: 0, to: CGFloat(countdown) / 5).stroke(Color.white, style: StrokeStyle(lineWidth: 6, lineCap: .round))
-                    .rotationEffect(.degrees(-90)).frame(width: 226, height: 226).offset(x: 18, y: -18)
-                    .animation(.linear(duration: 1), value: countdown)
+            .overlay(alignment: .topTrailing) {
+                if n > 0 {
+                    Text("\(n)").font(P.font(28, .bold)).frame(width: 52, height: 52).background(Circle().fill(Color(red: 0.94, green: 0.27, blue: 0.27)))
+                        .overlay(Circle().stroke(Color(red: 11 / 255, green: 13 / 255, blue: 19 / 255), lineWidth: 4)).offset(x: 6, y: -6)
+                }
             }
-        }), p.name, p.limit != nil ? "lock|" + Profile.ageLabel(p.limit) : " ")
+        ), p.name, p.limit != nil ? "lock|" + Profile.ageLabel(p.limit) : " ")
     }
 
     private func whoItem(_ av: AnyView, _ name: String, _ sub: String) -> some View {
@@ -571,13 +577,15 @@ struct WhoIsWatchingScreen: View {
 }
 
 struct WhoStyle: ButtonStyle {
-    func makeBody(configuration c: Configuration) -> some View { Inner(c: c) }
+    var ring = true
+    func makeBody(configuration c: Configuration) -> some View { Inner(c: c, ring: ring) }
     private struct Inner: View {
         let c: ButtonStyleConfiguration
+        let ring: Bool
         @Environment(\.isFocused) var f
         var body: some View {
             c.label.foregroundStyle(.white)
-                .overlay(alignment: .top) { Circle().stroke(Color.white, lineWidth: f ? 8 : 0).frame(width: 206, height: 206).offset(y: -8) }
+                .overlay(alignment: .top) { Circle().stroke(Color.white, lineWidth: f && ring ? 8 : 0).frame(width: 206, height: 206).offset(y: -8) }
                 .scaleEffect(f ? 1.08 : (c.isPressed ? 0.96 : 1))
                 .shadow(color: .black.opacity(f ? 0.5 : 0), radius: 24, y: 12)
                 .animation(.easeOut(duration: 0.18), value: f)
