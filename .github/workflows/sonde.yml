@@ -12,10 +12,21 @@ jobs:
       - name: iTunes Search API (bandes-annonces Apple)
         continue-on-error: true
         run: |
-          for q in "term=interstellar&country=fr" "term=interstellar&country=us&media=all" "term=dune&entity=movie&country=fr&attribute=movieTerm" "term=nolan&entity=movieArtist&country=us"; do
-            echo "== $q"; curl -s -m 20 "https://itunes.apple.com/search?$q&limit=8" | python3 -c "import json,sys;d=json.load(sys.stdin);print(d['resultCount']);[print(r.get('wrapperType'),r.get('kind'),'|',r.get('trackName') or r.get('collectionName') or r.get('artistName'),'|',r.get('previewUrl')) for r in d['results']]"
+          J='import json,sys;d=json.load(sys.stdin);print(d["resultCount"]);[print(r.get("kind"),r.get("trackId"),"|",r.get("trackName"),"|",r.get("releaseDate","")[:4],"|",r.get("trackTimeMillis"),"|",r.get("previewUrl")) for r in d["results"] if r.get("kind")=="feature-movie"]'
+          for t in interstellar "project%20hail%20mary" "dune%20part%20two" oppenheimer "the%20count%20of%20monte%20cristo" "intouchables" "la%20haine" "le%20comte%20de%20monte-cristo"; do
+            echo "== US $t"; curl -s -m 20 "https://itunes.apple.com/search?term=$t&country=us&media=all&limit=25" | python3 -c "$J"
           done
-          echo "== rss top films"; curl -s -m 20 "https://itunes.apple.com/fr/rss/topmovies/limit=3/json" | head -c 1500; echo
+          for t in interstellar "le%20comte%20de%20monte-cristo" "intouchables"; do
+            echo "== FR media=all $t"; curl -s -m 20 "https://itunes.apple.com/search?term=$t&country=fr&media=all&limit=25" | python3 -c "$J"
+            echo "== FR media=movie entity=movie $t"; curl -s -m 20 "https://itunes.apple.com/search?term=$t&country=fr&media=movie&entity=movie&limit=5" | python3 -c "$J"
+          done
+          ID=$(curl -s "https://itunes.apple.com/search?term=interstellar&country=us&media=all&limit=25" | python3 -c 'import json,sys;print([r["trackId"] for r in json.load(sys.stdin)["results"] if r.get("kind")=="feature-movie"][0])')
+          echo "== lookup $ID fr"; curl -s -m 20 "https://itunes.apple.com/lookup?id=$ID&country=fr" | python3 -c "$J"
+          FID=$(curl -s "https://itunes.apple.com/fr/rss/topmovies/limit=3/json" | python3 -c 'import json,sys;e=json.load(sys.stdin)["feed"]["entry"];print(e[0]["id"]["attributes"]["im:id"]);[print([l["attributes"].get("href") for l in x["link"]] if isinstance(x["link"],list) else x["link"]) for x in e]')
+          echo "rss ids $FID"; I1=$(echo "$FID"|head -1)
+          echo "== lookup rss fr $I1"; curl -s -m 20 "https://itunes.apple.com/lookup?id=$I1&country=fr" | python3 -c "$J"
+          U=$(curl -s "https://itunes.apple.com/lookup?id=$ID&country=us" | python3 -c 'import json,sys;print(json.load(sys.stdin)["results"][0]["previewUrl"])')
+          echo "HEAD $U"; curl -sI "$U" | head -6
       - name: Polices du simulateur (OFL)
         run: |
           mkdir out
