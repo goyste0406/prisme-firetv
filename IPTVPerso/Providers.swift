@@ -42,6 +42,10 @@ final class ProviderStore: ObservableObject {
             // compte de la version précédente : repris tel quel, rien n'est perdu
             providers = [Provider(id: "p1", name: "Mon fournisseur", server: old.server, username: old.username, password: old.password)]
         }
+        // simulateur de test uniquement (argument de lancement) : faux fournisseur local
+        if providers.isEmpty, let demo = Debug.demoServer {
+            providers = [Provider(id: "demo", name: "Lune", server: demo, username: "demo", password: "demo")]
+        }
     }
 
     private func save() {

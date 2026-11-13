@@ -7,6 +7,7 @@ import SwiftUI
 enum TmdbKey {
     private static let service = "prisme.tmdb"
     static var value: String? {
+        if let k = Debug.tmdbKey { return k }
         let q: [String: Any] = [kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: service,
                                 kSecReturnData as String: true, kSecMatchLimit as String: kSecMatchLimitOne]
         var out: AnyObject?
@@ -45,7 +46,7 @@ struct Fiche: Hashable {
     let wp: WatchProviders
     let pid: String
     let sid: String
-    static func img(_ path: String, _ size: String = "w342") -> String { path.isEmpty ? "" : "https://image.tmdb.org/t/p/\(size)\(path)" }
+    static func img(_ path: String, _ size: String = "w342") -> String { path.isEmpty ? "" : Debug.imgBase + "/t/p/\(size)\(path)" }
 }
 
 enum FicheStore {
@@ -227,7 +228,7 @@ struct FicheWorker {
 struct TmdbAPI {
     let key: String
     func get(_ path: String, _ q: [(String, String)] = []) async -> [String: Any]? {
-        var c = URLComponents(string: "https://api.themoviedb.org/3" + path)
+        var c = URLComponents(string: Debug.tmdbBase + path)
         c?.queryItems = [URLQueryItem(name: "api_key", value: key)] + q.map { URLQueryItem(name: $0.0, value: $0.1) }
         guard let url = c?.url else { return nil }
         for attempt in 0..<3 {

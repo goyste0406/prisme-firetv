@@ -26,3 +26,26 @@ targets:
         CODE_SIGN_STYLE: Automatic
         SWIFT_VERSION: "5.0"
         GENERATE_INFOPLIST_FILE: NO
+  IPTVPersoUITests:
+    # tests de navigation et captures d'écran dans le simulateur (compilation en ligne seulement, jamais dans l'IPA)
+    type: bundle.ui-testing
+    platform: tvOS
+    sources: [IPTVPersoUITests]
+    dependencies:
+      - target: IPTVPerso
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.steven.iptvperso.visite
+        GENERATE_INFOPLIST_FILE: YES
+        CODE_SIGN_STYLE: Automatic
+        SWIFT_VERSION: "5.0"
+        TEST_TARGET_NAME: IPTVPerso
+schemes:
+  IPTVPerso:
+    build:
+      targets:
+        IPTVPerso: all
+        IPTVPersoUITests: [test]
+    test:
+      targets: [IPTVPersoUITests]
+
