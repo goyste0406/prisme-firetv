@@ -469,6 +469,8 @@ struct WhoIsWatchingScreen: View {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { focus = g }
         }
         .task { await loadCards() }
+        // Retour : on garde le profil proposé (sans quitter prisme)
+        .onExitCommand { choose(guess.isEmpty ? ps.current : guess, play: false) }
         .onReceive(timer) { _ in
             guard !moved else { return }
             if countdown > 0 { countdown -= 1 }

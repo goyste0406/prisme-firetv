@@ -56,7 +56,7 @@ struct MainTabView: View {
                 }
                 .id("\(nav.tab.rawValue)|\(profiles.current)")
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .disabled(pui.picker)
+                .disabled(pui.picker || pui.launch)
                 if Debug.demoServer != nil {
                     // simulateur de test uniquement : état de l'écran « Qui regarde ? » lisible par la visite automatique
                     Text(diag).font(.system(size: 1)).opacity(0.01).accessibilityIdentifier("prisme.diag").accessibilityLabel(diag)
@@ -66,14 +66,21 @@ struct MainTabView: View {
                         .transition(.opacity)
                 }
             }
+            .overlay {
+                // « Qui regarde ? » à l'ouverture : couche plein écran au-dessus de la page (comme la fenêtre des profils ;
+                // une présentation « plein écran » système n'était pas affichée de façon fiable au lancement)
+                if pui.launch {
+                    WhoIsWatchingScreen(done: { it in pui.shownAtLaunch = true; pui.launch = false; if let it { DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { resumeOpen = it } } },
+                                        manage: { pui.shownAtLaunch = true; pui.launch = false; nav.tab = .settings; if pui.editProfile == nil { pui.editProfile = "" } })
+                        .focusSection()
+                        .transition(.opacity)
+                }
+            }
             .animation(.easeOut(duration: 0.2), value: pui.picker)
+            .animation(.easeOut(duration: 0.3), value: pui.launch)
             .ignoresSafeArea()
             .navigationDestination(item: $debugOpen) { it in DetailView(item: it) }
             .navigationDestination(item: $resumeOpen) { it in DetailView(item: it) }
-        }
-        .fullScreenCover(isPresented: $pui.launch) {
-            WhoIsWatchingScreen(done: { it in pui.shownAtLaunch = true; pui.launch = false; if let it { DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { resumeOpen = it } } },
-                                manage: { pui.shownAtLaunch = true; pui.launch = false; nav.tab = .settings; if pui.editProfile == nil { pui.editProfile = "" } })
         }
         .onAppear {
             // « Qui regarde ? » à l'ouverture, s'il y a plusieurs profils et si c'est demandé dans les réglages

@@ -157,7 +157,7 @@ final class Visite: XCTestCase {
 
         // PROFILS — « Qui regarde ? » à l'ouverture (2 profils : Steven, Léa 12 ans max)
         // (l'écran choisit tout seul le profil probable au bout de 5 s : capture avant)
-        relaunch(["-prisme.debug.profiles", "2"], wait: 2.2)
+        relaunch(["-prisme.debug.profiles", "2"], wait: 2.6)
         diag(); shot("80-qui-regarde")
         press(.right); shot("81-qui-regarde-lea")
         press(.left); Thread.sleep(forTimeInterval: 1); shot("81b-qui-regarde-steven")
@@ -166,7 +166,7 @@ final class Visite: XCTestCase {
         relaunch(["-prisme.debug.tab", "settings"])
         shot("83-reglages-profils")
         press(.down); Thread.sleep(forTimeInterval: 1); shot("83b-panneau-profils")
-        press(.up); Thread.sleep(forTimeInterval: 1); shot("84-profils-focus")
+        press(.up); press(.left, 3); Thread.sleep(forTimeInterval: 1); shot("84-profils-focus")
         press(.select); Thread.sleep(forTimeInterval: 1.5); shot("85-fiche-profil")
         for i in 1...4 { press(.down); shot(String(format: "86-fiche-profil-bas-%02d", i)) }
         press(.select); Thread.sleep(forTimeInterval: 1); shot("87-limite-age-choix")
