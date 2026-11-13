@@ -71,6 +71,10 @@ final class Visite: XCTestCase {
         Thread.sleep(forTimeInterval: 45)
         shot("01-films-ouverture")
         for i in 1...7 { press(.down); shot(String(format: "02-films-bas-%02d", i)) }
+        // onglet « Licences et sagas » (sélectionné par OK), puis ses tuiles avec logos
+        press(.select); Thread.sleep(forTimeInterval: 1.5); shot("02b-licences-onglet")
+        press(.down); Thread.sleep(forTimeInterval: 1.5); shot("02c-licences-tuiles")
+        press(.right, 2); Thread.sleep(forTimeInterval: 1.5); shot("02d-licences-tuiles-droite")
         press(.right, 6); shot("03-films-droite-bas")
         press(.up, 12); shot("04-films-retour-haut")
 

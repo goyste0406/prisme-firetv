@@ -141,7 +141,8 @@ struct FilmDetailView: View {
         .animation(.easeInOut(duration: 0.45), value: peek)
         .padding(.leading, 120)
         .padding(.bottom, 18)
-        .frame(width: 1920, height: 960, alignment: .bottomLeading)
+        .frame(width: 1920, height: 1002, alignment: .bottomLeading)
+        .padding(.bottom, -60)
         .focusSection()
     }
 

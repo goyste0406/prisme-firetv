@@ -136,14 +136,14 @@ struct SeriesDetailView: View {
     private var actions: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(spacing: 12) {
-                Button { mainAction() } label: { PlayLabel(title: mainLabel.0, sub: mainLabel.1) }
-                    .buttonStyle(FicheButtonStyle(prim: true))
+                Button { mainAction() } label: { PlayLabel(title: mainLabel.0, sub: mainLabel.1).lineLimit(1).fixedSize() }
+                    .buttonStyle(FicheButtonStyle(prim: true, pad: 28))
                     .focused($playFocused)
                     .disabled(all.isEmpty)
                 // « ⏮ Résumé 60 s » du simulateur : ce qu'il faut savoir avant l'épisode, sans rien dévoiler de la suite
                 if let plan = recapPlan {
-                    Button { showRecap = plan } label: { Label("Résumé 60 s", systemImage: "backward.end.fill").font(P.font(32, .semibold)) }
-                        .buttonStyle(FicheButtonStyle())
+                    Button { showRecap = plan } label: { Label("Résumé 60 s", systemImage: "backward.end.fill").font(P.font(29, .semibold)).lineLimit(1).fixedSize() }
+                        .buttonStyle(FicheButtonStyle(pad: 26))
                 }
             }.focusSection()
             HStack(spacing: 12) {

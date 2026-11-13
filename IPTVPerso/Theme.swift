@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 /// Apparence de prisme, reprise du simulateur (1280×720 → ×1,5 sur l'Apple TV en 1920×1080).
 enum P {
@@ -308,6 +309,7 @@ enum TitleFace {
 }
 
 /// Titre d'un film ou d'une série, police et taille du simulateur, deux lignes au plus.
+/// Affiché avec UIKit : SwiftUI ne sait pas resserrer l'interligne (0,95 / 1,04 dans le simulateur).
 struct BigTitle: View {
     let text: String
     let face: TitleFace
@@ -315,10 +317,42 @@ struct BigTitle: View {
     var maxWidth: CGFloat = 1050
     var body: some View {
         let s = face.size(for: text) * scale
-        Text(text).font(face.font(s)).tracking(face.tracking(s)).lineSpacing(face.lineSpacing(s))
-            .lineLimit(2).minimumScaleFactor(0.55).multilineTextAlignment(.leading)
+        let lh = s * (face == .bebas ? 0.95 : 1.04)
+        let ui = face.uiFont(s)
+        // hauteur de deux lignes au plus, mesurée
+        let rect = (text as NSString).boundingRect(with: CGSize(width: maxWidth, height: .greatestFiniteMagnitude), options: [.usesLineFragmentOrigin],
+                                                    attributes: [.font: ui, .kern: face.tracking(s)], context: nil)
+        let lines = min(2, max(1, Int(ceil(rect.height / (ui.lineHeight * 0.98)))))
+        TitleLabel(text: text, font: ui, kern: face.tracking(s), lineHeight: lh, width: maxWidth)
+            .frame(width: maxWidth, height: lh * CGFloat(lines) + s * 0.12, alignment: .leading)
             .shadow(color: .black.opacity(0.4), radius: 30, y: 4)
-            .frame(maxWidth: maxWidth, alignment: .leading)
+    }
+}
+
+private struct TitleLabel: UIViewRepresentable {
+    let text: String, font: UIFont, kern: CGFloat, lineHeight: CGFloat, width: CGFloat
+    func makeUIView(context: Context) -> UILabel {
+        let l = UILabel()
+        l.numberOfLines = 2
+        l.lineBreakMode = .byTruncatingTail
+        l.textColor = .white
+        l.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        return l
+    }
+    func updateUIView(_ l: UILabel, context: Context) {
+        let p = NSMutableParagraphStyle()
+        p.minimumLineHeight = lineHeight; p.maximumLineHeight = lineHeight
+        p.lineBreakMode = .byWordWrapping
+        l.attributedText = NSAttributedString(string: text, attributes: [.font: font, .kern: kern, .paragraphStyle: p, .foregroundColor: UIColor.white])
+        l.preferredMaxLayoutWidth = width
+    }
+}
+
+extension TitleFace {
+    func uiFont(_ size: CGFloat) -> UIFont {
+        let name: String
+        switch self { case .serif: name = "PlayfairDisplay-BoldItalic"; case .bebas: name = "BebasNeue-Regular"; case .black: name = "ArchivoBlack-Regular"; case .sans: name = "Outfit-Bold" }
+        return UIFont(name: name, size: size) ?? .systemFont(ofSize: size, weight: .heavy)
     }
 }
 

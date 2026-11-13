@@ -24,16 +24,27 @@ struct RecapPlan: Identifiable {
         for e in picked {
             let p = e.plot.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !p.isEmpty else { continue }
-            lines.append("S\(e.season) · É\(e.number)" + (e.title.isEmpty ? "" : " « \(e.title) »") + " : " + shorten(p, 260))
+            let t = RecapPlan.epTitle(e)
+            lines.append("S\(e.season) · É\(e.number)" + (t.isEmpty ? "" : " « \(t) »") + " : " + shorten(p, 260))
         }
         if lines.isEmpty {
-            lines = ["Dernier épisode vu : S\(last.season) · É\(last.number)" + (last.title.isEmpty ? "" : " · " + last.title),
+            lines = ["Dernier épisode vu : S\(last.season) · É\(last.number)" + (RecapPlan.epTitle(last).isEmpty ? "" : " · " + RecapPlan.epTitle(last)),
                      "Pas de résumé pour cet épisode, ni chez ton fournisseur ni sur TMDB."]
         }
         let lastAt = before.compactMap { watch.entries[EpisodeLogic.key(item, $0)]?.at }.max()
         let days = lastAt.map { Int(Date().timeIntervalSince($0) / 86400) } ?? 0
         let heading = days >= 7 ? "Tu n'as pas regardé \(title) depuis \(days) jours" : "Ce qu'il faut savoir avant S\(next.season) · É\(next.number)"
         return RecapPlan(kicker: "RÉSUMÉ DE 60 S", heading: heading, lines: lines)
+    }
+
+    /// Titre d'épisode sans le nom de la série ni « S02E01 » (« Lupin - S02E01 - Le pacte » → « Le pacte ») ;
+    /// vide s'il ne dit rien de plus que « Épisode 3 ».
+    static func epTitle(_ e: EpisodeInfo) -> String {
+        var t = e.title
+        if let r = t.range(of: #"^.*?[Ss]\d{1,2}\s*[EeÉé]\d{1,3}\s*[-–:·]?\s*"#, options: .regularExpression) { t = String(t[r.upperBound...]) }
+        t = t.trimmingCharacters(in: .whitespaces)
+        if t.range(of: #"^([ÉE]pisode|Episode)\s*\d+$"#, options: [.regularExpression, .caseInsensitive]) != nil { return "" }
+        return t
     }
 
     /// Coupe proprement à la fin d'une phrase (jamais au milieu d'un mot).

@@ -140,17 +140,19 @@ struct FicheButtonStyle: ButtonStyle {
     var prim = false
     var square = false
     var pulse = false
-    func makeBody(configuration c: Configuration) -> some View { Inner(c: c, prim: prim, square: square, pulse: pulse) }
+    var pad: CGFloat? = nil
+    func makeBody(configuration c: Configuration) -> some View { Inner(c: c, prim: prim, square: square, pulse: pulse, pad: pad) }
     private struct Inner: View {
         let c: ButtonStyleConfiguration
         let prim: Bool, square: Bool, pulse: Bool
+        let pad: CGFloat?
         @Environment(\.isFocused) var f
         @State private var ring = false
         var body: some View {
             let shape = RoundedRectangle(cornerRadius: 30, style: .continuous)
             c.label
                 .foregroundStyle(prim || f ? Color.black : Color.white)
-                .padding(.horizontal, square ? 0 : (prim ? 44 : 36))
+                .padding(.horizontal, square ? 0 : (pad ?? (prim ? 44 : 36)))
                 .frame(width: square ? 81 : nil, height: 81)
                 .background(prim || f ? Color.white : Color(red: 20 / 255, green: 22 / 255, blue: 28 / 255).opacity(0.62), in: shape)
                 .overlay(shape.stroke(Color.white.opacity(prim || f ? 0 : 0.18), lineWidth: 1.5))
@@ -207,6 +209,7 @@ struct VersionsModal: View {
             .focusSection()
         }
         .defaultFocus($focus, current.id)
+        .onAppear { DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { focus = versions.contains(where: { $0.id == current.id }) ? current.id : versions.first?.id } }
         .onExitCommand { close() }
     }
 

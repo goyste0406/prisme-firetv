@@ -32,7 +32,7 @@ struct ResumeRecap: Equatable {
             }
             if lines.isEmpty {
                 if let last = seen.last {
-                    lines = ["Dernier épisode vu : S\(last.season) · É\(last.number)" + (last.title.isEmpty ? "" : " · " + last.title),
+                    lines = ["Dernier épisode vu : S\(last.season) · É\(last.number)" + (RecapPlan.epTitle(last).isEmpty ? "" : " · " + RecapPlan.epTitle(last)),
                              "Pas de résumé pour cet épisode, ni chez ton fournisseur ni sur TMDB."]
                 } else {
                     lines = ["Tu as commencé le premier épisode : rien à résumer avant."]
