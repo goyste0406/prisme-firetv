@@ -127,10 +127,15 @@ struct ProfileDetail: View {
         HStack(spacing: 14) {
             Text("Nom").font(P.font(32, .semibold))
             Spacer()
-            TextField("Nom", text: $name).textFieldStyle(.plain).font(P.font(28)).multilineTextAlignment(.trailing).frame(width: 420)
+            Text(name).font(P.font(28)).opacity(0.75)
+            Image(systemName: "pencil").font(.system(size: 24, weight: .medium)).opacity(0.7)
+        }
+        // le vrai champ (clavier de l'Apple TV à l'appui sur OK) occupe la ligne mais reste invisible :
+        // tvOS dessine sinon son propre cadre gris, absent du simulateur
+        .background {
+            TextField("Nom", text: $name).opacity(0.02)
                 .focused($focus, equals: "name")
                 .onSubmit { var x = p; let n = name.trimmingCharacters(in: .whitespaces); if !n.isEmpty { x.name = String(n.prefix(20)); ps.update(x) } }
-            Image(systemName: "pencil").font(.system(size: 24, weight: .medium)).opacity(0.7)
         }
         .foregroundStyle(nf ? Color.black : Color.white)
         .padding(.horizontal, 24).frame(height: 108)
