@@ -58,6 +58,15 @@ final class Database: @unchecked Sendable {
             PRAGMA user_version=2;
             """)
         }
+        if v < 3 {
+            // 1.5.3 : pays, réalisateur, logo du titre et studios (colonnes ajoutées, les fiches existantes sont gardées
+            // et complétées petit à petit en arrière-plan)
+            exec("ALTER TABLE fiche ADD COLUMN country TEXT")
+            exec("ALTER TABLE fiche ADD COLUMN director TEXT")
+            exec("ALTER TABLE fiche ADD COLUMN logo TEXT")
+            exec("ALTER TABLE fiche ADD COLUMN companies TEXT")
+            exec("PRAGMA user_version=3")
+        }
     }
 
     // MARK: Requêtes

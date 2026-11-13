@@ -46,6 +46,16 @@ struct Fiche: Hashable {
     let wp: WatchProviders
     let pid: String
     let sid: String
+    /// codes pays de production (« FR,BE »), réalisateur(s) ou créateur(s), logo du titre (chemin TMDB), studios (JSON)
+    var country = ""
+    var director = ""
+    var logo = ""
+    var companies = ""
+    /// Pays en toutes lettres (« France »), le premier seulement.
+    var countryName: String {
+        guard let c = country.split(separator: ",").first.map(String.init), !c.isEmpty else { return "" }
+        return Locale(identifier: "fr_FR").localizedString(forRegionCode: c) ?? ""
+    }
     static func img(_ path: String, _ size: String = "w342") -> String { path.isEmpty ? "" : Debug.imgBase + "/t/p/\(size)\(path)" }
 }
 
@@ -55,11 +65,11 @@ enum FicheStore {
         let wp = (try? JSONDecoder().decode(WatchProviders.self, from: Data(r.str(11).utf8))) ?? WatchProviders()
         return Fiche(tmdb: r.int(0), title: r.str(1), overview: r.str(2), poster: r.str(3), backdrop: r.str(4), genres: r.str(5),
                      runtime: r.int(6), vote: r.double(7), year: r.int(8), coll: r.int(9), collName: r.str(12), cast: cast, wp: wp,
-                     pid: r.str(13), sid: r.str(14))
+                     pid: r.str(13), sid: r.str(14), country: r.str(15), director: r.str(16), logo: r.str(17), companies: r.str(18))
     }
     /// « cast » est un mot réservé de SQLite (CAST) : sans guillemets, la lecture des fiches échouait toujours
     /// (elles étaient bien téléchargées et enregistrées, mais jamais relues → fiches, saga, « Où le regarder » vides).
-    static let cols = "tmdb,title,overview,poster,backdrop,genres,runtime,vote,year,coll,\"cast\",wp,collname,pid,sid"
+    static let cols = "tmdb,title,overview,poster,backdrop,genres,runtime,vote,year,coll,\"cast\",wp,collname,pid,sid,country,director,logo,companies"
 
     /// Fiches de plusieurs titres d'un coup (clé = titre propre + année).
     static func byKeys(_ kind: MediaKind, _ keys: [String]) -> [String: Fiche] {
@@ -69,7 +79,7 @@ enum FicheStore {
         for chunk in stride(from: 0, to: keys.count, by: 400) {
             let part = Array(keys[chunk..<min(keys.count, chunk + 400)])
             db.query("SELECT \(cols),ckey FROM fiche WHERE kind=? AND ckey IN (" + part.map { _ in "?" }.joined(separator: ",") + ")",
-                     [kind.rawValue] + part) { r in out[r.str(15)] = row(r) }
+                     [kind.rawValue] + part) { r in out[r.str(19)] = row(r) }
         }
         return out
     }
@@ -134,7 +144,7 @@ struct FicheWorker {
         }
     }
 
-    static let insertSQL = "INSERT OR REPLACE INTO fiche(kind,ckey,pid,sid,\(FicheStore.cols.replacingOccurrences(of: ",pid,sid", with: ""))) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)"
+    static let insertSQL = "INSERT OR REPLACE INTO fiche(kind,ckey,pid,sid,\(FicheStore.cols.replacingOccurrences(of: ",pid,sid", with: ""))) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)"
 
     /// Fiche d'un seul titre, tout de suite : quand on ouvre sa page et qu'elle n'a pas encore été téléchargée en arrière-plan.
     /// `tmdbHint` : identifiant TMDB donné par le fournisseur (get_vod_info), plus sûr que la recherche par titre.
@@ -163,17 +173,18 @@ struct FicheWorker {
         let table = kind == .film ? "vod" : "series"
         let cols = kind == .film ? "pid,sid,name,year,icon,cid,ext,rating,added,tmdb,''" : "pid,sid,name,year,cover,cid,'',rating,added,tmdb,plot"
         return await Database.shared.read { db in
-            var have = Set<String>()
-            db.query("SELECT ckey FROM fiche WHERE kind=?", [kind.rawValue]) { r in have.insert(r.str(0)) }
+            var have = Set<String>(), old = Set<String>()
+            db.query("SELECT ckey, country IS NULL FROM fiche WHERE kind=?", [kind.rawValue]) { r in have.insert(r.str(0)); if r.int(1) == 1 { old.insert(r.str(0)) } }
             let weekAgo = Int(Date().timeIntervalSince1970) - 7 * 86400
             db.query("SELECT ckey FROM fmiss WHERE kind=? AND at>?", [kind.rawValue, weekAgo]) { r in have.insert(r.str(0)) }
-            var out: [MediaItem] = []
+            var out: [MediaItem] = [], refresh: [MediaItem] = []
             db.query("SELECT \(cols) FROM \(table) WHERE pid IN (" + pids.map { _ in "?" }.joined(separator: ",") + ") ORDER BY added DESC", pids) { r in
                 let m = MediaItem(kind: kind, pid: r.str(0), sid: r.str(1), name: r.str(2), year: r.int(3), icon: r.str(4), cid: r.str(5),
                                   ext: r.str(6), rating: r.double(7), added: r.int(8), tmdb: r.str(9), plot: r.str(10))
-                if have.insert(m.clean.key).inserted { out.append(m) }
+                let k = m.clean.key
+                if have.insert(k).inserted { out.append(m) } else if old.remove(k) != nil { refresh.append(m) }
             }
-            return out
+            return out + refresh
         }
     }
 
@@ -200,8 +211,8 @@ struct FicheWorker {
             guard best.1 >= 0.62 else { return nil }
             id = best.0
         }
-        let append = tv ? "aggregate_credits,watch/providers" : "credits,watch/providers"
-        guard let d = await api.get((tv ? "/tv/" : "/movie/") + String(id), [("language", "fr-FR"), ("append_to_response", append)]),
+        let append = tv ? "aggregate_credits,watch/providers,images" : "credits,watch/providers,images"
+        guard let d = await api.get((tv ? "/tv/" : "/movie/") + String(id), [("language", "fr-FR"), ("append_to_response", append), ("include_image_language", "fr,en,null")]),
               (d["adult"] as? Bool) != true else { return nil }
         let title = (d[tv ? "name" : "title"] as? String) ?? c.title
         let genres = ((d["genres"] as? [[String: Any]]) ?? []).compactMap { $0["name"] as? String }.joined(separator: ", ")
@@ -218,12 +229,24 @@ struct FicheWorker {
             func l(_ k: String) -> [WP] { ((fr[k] as? [[String: Any]]) ?? []).map { WP(n: ($0["provider_name"] as? String) ?? "", l: ($0["logo_path"] as? String) ?? "") } }
             wp.f = l("flatrate"); wp.r = l("rent"); wp.b = l("buy"); wp.g = l("free") + l("ads")
         }
+        // pays, réalisateur / créateur, logo du titre (français d'abord), studios avec leur logo
+        let countries = (((d[tv ? "origin_country" : "production_countries"] as? [Any]) ?? []).compactMap { x -> String? in
+            if let s = x as? String { return s }
+            return (x as? [String: Any])?["iso_3166_1"] as? String
+        }).prefix(3).joined(separator: ",")
+        let director: String = tv
+            ? (((d["created_by"] as? [[String: Any]]) ?? []).compactMap { $0["name"] as? String }.prefix(2).joined(separator: ", "))
+            : (((((d["credits"] as? [String: Any])?["crew"] as? [[String: Any]]) ?? []).filter { ($0["job"] as? String) == "Director" }.compactMap { $0["name"] as? String }).prefix(2).joined(separator: ", "))
+        let logos = ((d["images"] as? [String: Any])?["logos"] as? [[String: Any]]) ?? []
+        let logo = (["fr", "en", nil] as [String?]).lazy.compactMap { l in logos.first { ($0["iso_639_1"] as? String) == l }?["file_path"] as? String }.first ?? ""
+        let comps: [[String: Any]] = ((d[tv ? "networks" : "production_companies"] as? [[String: Any]]) ?? []).prefix(4).map { ["id": $0["id"] ?? 0, "n": $0["name"] ?? "", "l": $0["logo_path"] ?? ""] }
+        let compJ = String(data: (try? JSONSerialization.data(withJSONObject: comps)) ?? Data(), encoding: .utf8) ?? "[]"
         let castJ = String(data: (try? JSONEncoder().encode(cast)) ?? Data(), encoding: .utf8) ?? "[]"
         let wpJ = String(data: (try? JSONEncoder().encode(wp)) ?? Data(), encoding: .utf8) ?? "{}"
         // kind,ckey,pid,sid,tmdb,title,overview,poster,backdrop,genres,runtime,vote,year,coll,cast,wp,collname
         return [m.kind.rawValue, c.key, m.pid, m.sid, id, title, (d["overview"] as? String) ?? "", (d["poster_path"] as? String) ?? "",
                 (d["backdrop_path"] as? String) ?? "", genres, runtime, (d["vote_average"] as? Double) ?? 0, Int(date.prefix(4)) ?? c.year,
-                (coll?["id"] as? Int) ?? 0, castJ, wpJ, (coll?["name"] as? String) ?? ""]
+                (coll?["id"] as? Int) ?? 0, castJ, wpJ, (coll?["name"] as? String) ?? "", countries, director, logo, compJ]
     }
 }
 

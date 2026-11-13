@@ -103,6 +103,16 @@ def color_for(s):
 def make_png(kind, key, w, h, label):
     if Image is None:
         return b""
+    if kind == "g":  # logo de titre / de studio : texte blanc sur fond transparent
+        img = Image.new("RGBA", (w, h), (0, 0, 0, 0)); d = ImageDraw.Draw(img)
+        try:
+            font = ImageFont.truetype("/System/Library/Fonts/Supplemental/Arial Black.ttf", max(18, h // 3))
+        except Exception:
+            font = ImageFont.load_default()
+        txt = (label or key).upper()[:22]
+        tw = d.textlength(txt, font=font)
+        d.text(((w - tw) / 2, h * 0.3), txt, font=font, fill=color_for(key) + (255,))
+        out = io.BytesIO(); img.save(out, "PNG"); return out.getvalue()
     c = color_for(key)
     img = Image.new("RGB", (w, h), c)
     d = ImageDraw.Draw(img)
@@ -220,13 +230,27 @@ def providers_for(key):
 CAST = [("Timothée Chalamet", "Paul Atréides"), ("Zendaya", "Chani"), ("Rebecca Ferguson", "Jessica"), ("Javier Bardem", "Stilgar"),
         ("Austin Butler", "Feyd-Rautha"), ("Florence Pugh", "Irulan"), ("Omar Sy", "Assane Diop"), ("Audrey Fleurot", "Morgane")]
 
+FRENCH = {3, 4, 7, 9, 10, 23, 24, 25}
+DIRECTORS = {0: "Denis Villeneuve", 1: "Denis Villeneuve", 2: "Christopher Nolan", 6: "Christopher Nolan", 16: "Christopher Nolan",
+             3: "Alexandre de La Patellière", 23: "Martin Bourboulon", 12: "Jon Watts", 13: "Jon Watts", 14: "Jon Watts"}
+STUDIOS = [(420, "Marvel Studios"), (2, "Walt Disney Pictures"), (3, "Pixar"), (923, "Legendary Pictures"), (174, "Warner Bros. Pictures")]
+def studios_for(i):
+    if i in (12, 13, 14): return [STUDIOS[0]]
+    if i in (18, 19, 29): return [STUDIOS[1], STUDIOS[2]]
+    if i in (0, 1, 6, 16): return [STUDIOS[3], STUDIOS[4]]
+    return []
+
 def movie(i):
     t, y, rt, v, g, col, ago = FILMS[i]
     m = fid(i)
     return {"id": m, "title": t, "original_title": t, "overview": f"{t} : résumé TMDB, assez long pour tenir sur deux lignes dans l'en-tête de la fiche et vérifier la coupure du texte.",
             "poster_path": tmdb_path("p", f"m{m}"), "backdrop_path": tmdb_path("b", f"m{m}"), "genres": [{"name": x} for x in g], "runtime": rt,
             "vote_average": v, "release_date": f"{y}-03-01", "belongs_to_collection": ({"id": col[0], "name": col[1]} if col else None), "adult": False,
-            "credits": {"cast": [{"name": a, "character": c, "profile_path": tmdb_path("r", a.replace(" ", "_"))} for a, c in CAST[:6]]},
+            "credits": {"cast": [{"name": a, "character": c, "profile_path": tmdb_path("r", a.replace(" ", "_"))} for a, c in CAST[:6]],
+                        "crew": [{"job": "Director", "name": DIRECTORS.get(i, f"Réalisateur {i}")}]},
+            "production_countries": [{"iso_3166_1": "FR" if i in FRENCH else "US"}],
+            "production_companies": [{"id": sid_, "name": n, "logo_path": tmdb_path("g", f"co{sid_}")} for sid_, n in studios_for(i)],
+            "images": {"logos": [{"iso_639_1": "fr", "file_path": tmdb_path("g", f"m{m}")}] if i % 3 != 2 else []},
             "watch/providers": providers_for(t)}
 
 def tv(i):
@@ -234,7 +258,8 @@ def tv(i):
     s = sid(i)
     return {"id": s, "name": t, "original_name": t, "overview": f"{t} : résumé TMDB de la série.", "poster_path": tmdb_path("p", f"s{s}"),
             "backdrop_path": tmdb_path("b", f"s{s}"), "genres": [{"name": x} for x in g], "episode_run_time": [rt], "vote_average": v,
-            "first_air_date": f"{y}-01-01", "adult": False,
+            "first_air_date": f"{y}-01-01", "adult": False, "origin_country": ["FR" if i in (0, 1, 2, 7, 9) else "US"],
+            "created_by": [{"name": "Créateur " + t}], "networks": [], "images": {"logos": [{"iso_639_1": "fr", "file_path": tmdb_path("g", f"s{s}")}]},
             "aggregate_credits": {"cast": [{"name": a, "roles": [{"character": c}], "profile_path": tmdb_path("r", a.replace(" ", "_"))} for a, c in CAST[2:8]]},
             "watch/providers": providers_for(t)}
 
@@ -311,11 +336,12 @@ class H(http.server.BaseHTTPRequestHandler):
         m = re.match(r"^/img/t/p/(\w+)/(\w)/(.+)\.png$", p)
         if m:
             size, kind, key = m.groups(); key = urllib.parse.unquote(key)
-            w = {"p": 500, "b": 1920, "o": 92, "r": 185}.get(kind, 300)
+            w = {"p": 500, "b": 1920, "o": 92, "r": 185, "g": 500}.get(kind, 300)
             if size.startswith("w") and size[1:].isdigit(): w = min(w, int(size[1:])) if kind != "b" else min(1920, int(size[1:]))
-            h = {"p": int(w * 1.5), "b": int(w * 0.5625), "o": w, "r": int(w * 1.5)}.get(kind, w)
+            h = {"p": int(w * 1.5), "b": int(w * 0.5625), "o": w, "r": int(w * 1.5), "g": int(w * 0.3)}.get(kind, w)
             label = TITLES.get(key, "") if kind == "p" else (key.replace("_", " ") if kind in "or" else "")
             if kind == "o": label = {k: n for n, k in PROV}.get(key, key)
+            if kind == "g": label = TITLES.get(key, "") or {f"co{a}": b for a, b in STUDIOS}.get(key, key)
             return self.send(200, make_png(kind, key, w, h, label), "image/png")
         m = re.match(r"^/gen/(\w)/(.+)\.png$", p)
         if m:

@@ -204,7 +204,54 @@ enum MediaStore {
         }
     }
 
-    struct SagaInfo: Identifiable, Hashable { let id: Int; let name: String; let count: Int }
+    struct SagaInfo: Identifiable, Hashable { let id: Int; let name: String; let count: Int; var logo = "" }
+
+    /// Réalisateurs (films) ou créateurs (séries) qui ont au moins `min` titres chez tes fournisseurs.
+    static func directors(_ k: MediaKind, pids: [String], min: Int) async -> [(String, Int)] {
+        guard !pids.isEmpty else { return [] }
+        let sql = "SELECT f.director, COUNT(DISTINCT f.tmdb) AS n FROM fiche f JOIN \(table(k)) m ON m.pid=f.pid AND m.sid=f.sid WHERE f.kind=? AND f.director IS NOT NULL AND f.director!='' AND m.pid IN \(inList(pids)) GROUP BY f.director HAVING n>=\(min) ORDER BY n DESC LIMIT 6"
+        return await Database.shared.read { db in
+            var out: [(String, Int)] = []
+            db.query(sql, [k.rawValue] + pids.map { $0 as Any? }) { r in out.append((r.str(0), r.int(1))) }
+            return out
+        }
+    }
+
+    struct Studio { let id: Int; let name: String; let logo: String; let count: Int }
+
+    /// Studios (films) ou chaînes d'origine (séries) avec leur logo TMDB, d'après les fiches.
+    static func studios(_ k: MediaKind, pids: [String], min: Int) async -> [Studio] {
+        guard !pids.isEmpty else { return [] }
+        let sql = "SELECT f.tmdb, f.companies FROM fiche f JOIN \(table(k)) m ON m.pid=f.pid AND m.sid=f.sid WHERE f.kind=? AND f.companies IS NOT NULL AND f.companies!='[]' AND m.pid IN \(inList(pids))"
+        return await Database.shared.read { db in
+            var films: [Int: Set<Int>] = [:], info: [Int: (String, String)] = [:]
+            db.query(sql, [k.rawValue] + pids.map { $0 as Any? }) { r in
+                let t = r.int(0)
+                guard let arr = (try? JSONSerialization.jsonObject(with: Data(r.str(1).utf8))) as? [[String: Any]] else { return }
+                for c in arr {
+                    guard let id = c["id"] as? Int, id > 0 else { continue }
+                    films[id, default: []].insert(t)
+                    if info[id] == nil || (info[id]!.1.isEmpty && !((c["l"] as? String) ?? "").isEmpty) { info[id] = ((c["n"] as? String) ?? "", (c["l"] as? String) ?? "") }
+                }
+            }
+            return films.filter { $0.value.count >= min && !(info[$0.key]?.1 ?? "").isEmpty }
+                .map { Studio(id: $0.key, name: info[$0.key]!.0, logo: info[$0.key]!.1, count: $0.value.count) }
+                .sorted { $0.count > $1.count }.prefix(10).map { $0 }
+        }
+    }
+
+    /// Logo d'une plateforme d'après les fiches (« Où le regarder » de TMDB) : icône officielle du service.
+    static func serviceLogo(_ service: String) async -> String {
+        guard let w = Services.tmdbWord[service], let rx = Services.list.first(where: { $0.0 == service })?.1 else { return "" }
+        return await Database.shared.read { db in
+            var logo = ""
+            db.query("SELECT wp FROM fiche WHERE wp LIKE ? LIMIT 20", ["%" + w + "%"]) { r in
+                guard logo.isEmpty, let wp = try? JSONDecoder().decode(WatchProviders.self, from: Data(r.str(0).utf8)) else { return }
+                if let p = (wp.f + wp.g + wp.r + wp.b).first(where: { $0.n.range(of: rx, options: [.regularExpression, .caseInsensitive]) != nil && !$0.l.isEmpty }) { logo = p.l }
+            }
+            return logo
+        }
+    }
 
     /// Sagas (collections TMDB) dont au moins 2 films sont chez tes fournisseurs.
     static func sagas(pids: [String]) async -> [SagaInfo] {
@@ -213,6 +260,10 @@ enum MediaStore {
         return await Database.shared.read { db in
             var out: [SagaInfo] = []
             db.query(sql, pids.map { $0 as Any? }) { r in out.append(SagaInfo(id: r.int(0), name: r.str(1), count: r.int(2))) }
+            // logo de la saga : celui de son premier film qui en a un (TMDB)
+            for i in out.indices {
+                db.query("SELECT logo FROM fiche WHERE kind='film' AND coll=? AND logo IS NOT NULL AND logo!='' ORDER BY year LIMIT 1", [out[i].id]) { r in out[i].logo = r.str(0) }
+            }
             return out
         }
     }

@@ -192,14 +192,8 @@ struct MediaHomeView: View {
         }.focusSection()
     }
 
-    private func resumeCard(_ r: ResumeEntry) -> some View {
-        let e = r.entry
-        let left = max(60, e.dur - e.pos)
-        let done = e.dur > 0 && e.pos / e.dur >= 0.92
-        let ep = ResumeEntry.episodeTag(e.ep)
-        return WideCard(item: r.item, corner: versionTag(r.item), badge: ep, title: r.item.displayTitle,
-                        sub: done ? "épisode suivant" : "reste " + runtimeText(Int(left / 60)),
-                        progress: done ? nil : min(1, e.pos / max(1, e.dur))) { open = r.item }
+    private func resumeCard(_ r: ResumeEntry) -> ResumeCard {
+        ResumeCard(r: r, corner: versionTag(r.item)) { open = r.item }
     }
 
     // MARK: Nouveau sur prisme (cartes larges, « NOUVEAU · IL Y A 5 J »)
@@ -277,9 +271,7 @@ struct MediaHomeView: View {
     @ViewBuilder private func browseRow(_ t: String) -> some View {
         switch t {
         case "lic":
-            ForEach(Array(snap.lics.enumerated()), id: \.element.id) { i, c in
-                WordTile(title: c.name, sub: "\(c.kind) · \(c.count) \(unit)", rank: i + 1) { openColl = c }
-            }
+            ForEach(snap.lics) { c in LicenceTile(c: c, unit: unit) { openColl = c } }
         case "col":
             ForEach(snap.colls) { c in CollTile(c: c, unit: unit) { openColl = c } }
         default:
@@ -319,7 +311,7 @@ struct MediaHomeView: View {
             s.topSub = "les mieux notés des ajouts récents chez " + providerNames
         }
         s.colls = await collections(k, p)
-        s.lics = await licences(k, p)
+        s.lics = await licences(k, p, top: s.top)
         s.genres = await genreTiles(k, p)
         s.cats = await MediaStore.categories(k, pids: p)
         HomeCache.map[key] = s
@@ -334,50 +326,82 @@ struct MediaHomeView: View {
         hero = Array(base.filter { !$0.posterURL.isEmpty || !$0.backdropURL.isEmpty }.prefix(6))
     }
 
+    /// « Explorer » : collections tirées des vraies données (fiches TMDB) ; une collection n'apparaît que si elle
+    /// contient assez de titres (4 au moins, 3 pour « Signé … » comme le simulateur).
     private func collections(_ k: MediaKind, _ p: [String]) async -> [CollInfo] {
         var out: [CollInfo] = []
-        let defs: [(String, String, String, String, String)] = k == .film ? [
-            ("court", "timer", "Moins de 2 h", "Pour un film qui ne finit pas trop tard", "f.runtime>0 AND f.runtime<120"),
-            ("top", "trophy", "★ 8 et plus", "Les mieux notés de ton abonnement (TMDB)", "f.vote>=8"),
+        let fr = "(','||f.country||',') LIKE '%,FR,%'"
+        let defs: [(String, String, String, String, String, String)] = k == .film ? [
+            ("court", "timer", "Moins de 2 h", "Pour un film qui ne finit pas trop tard", "f.runtime>0 AND f.runtime<120", "f.vote DESC"),
+            ("fr", "flag", "Cinéma français", "Films produits en France (TMDB)", fr, "f.vote DESC"),
+            ("top", "trophy", "★ 8 et plus", "Les mieux notés de ton abonnement (TMDB)", "f.vote>=8", "f.vote DESC"),
         ] : [
-            ("top", "trophy", "★ 8,5 et plus", "Les séries les mieux notées de ton abonnement (TMDB)", "f.vote>=8.5"),
+            ("top", "trophy", "★ 8,5 et plus", "Les séries les mieux notées de ton abonnement (TMDB)", "f.vote>=8.5", "f.vote DESC"),
+            ("fr", "flag", "Séries françaises", "Séries produites en France (TMDB)", fr, "f.vote DESC"),
+            ("court", "timer", "Épisodes de 30 min", "Des épisodes courts, pour une soirée légère", "f.runtime>0 AND f.runtime<=30", "f.vote DESC"),
         ]
         for d in defs {
             let n = await MediaStore.ficheCount(k, pids: p, cond: d.4)
-            guard n >= 2 else { continue }
-            let prev = await MediaStore.ficheList(k, pids: p, cond: d.4, order: "f.vote DESC", limit: 3)
-            let cond = d.4
+            guard n >= 4 else { continue }
+            let prev = await MediaStore.ficheList(k, pids: p, cond: d.4, order: d.5, limit: 3)
+            let cond = d.4, order = d.5
             out.append(CollInfo(id: d.0, icon: d.1, name: d.2, why: d.3, count: n, preview: prev,
-                                loader: { await MediaStore.ficheList(k, pids: p, cond: cond, order: "f.vote DESC", limit: 300) }))
+                                loader: { await MediaStore.ficheList(k, pids: p, cond: cond, order: order, limit: 300) }))
+        }
+        // « Signé Nolan » : réalisateurs (ou créateurs) présents au moins 3 fois
+        for (dname, n) in await MediaStore.directors(k, pids: p, min: 3).prefix(4) where !dname.contains(",") {
+            let last = dname.split(separator: " ").last.map(String.init) ?? dname
+            let prev = await MediaStore.ficheList(k, pids: p, cond: "f.director=?", args: [dname], order: "f.year", limit: 3)
+            out.append(CollInfo(id: "dir:" + dname, icon: "film", name: (k == .film ? "Signé " : "Créé par ") + last, why: "\(dname) · \(n) " + (k == .film ? "films" : "séries") + " chez ton fournisseur",
+                                count: n, preview: prev, loader: { await MediaStore.ficheList(k, pids: p, cond: "f.director=?", args: [dname], order: "f.year", limit: 100) }))
         }
         return out
     }
 
-    private func licences(_ k: MediaKind, _ p: [String]) async -> [CollInfo] {
+    private func licences(_ k: MediaKind, _ p: [String], top: [TrendStore.Ranked]) async -> [CollInfo] {
         var out: [CollInfo] = []
         if k == .film {
             for sg in await MediaStore.sagas(pids: p) {
                 let id = sg.id
-                out.append(CollInfo(id: "col:\(id)", icon: "square.stack.3d.up", name: sg.name.isEmpty ? "Saga" : sg.name.replacingOccurrences(of: " - Saga", with: ""),
+                out.append(CollInfo(id: "col:\(id)", icon: "square.stack.3d.up", name: sg.name.isEmpty ? "Saga" : sg.name.replacingOccurrences(of: " - Saga", with: "").replacingOccurrences(of: " - Collection", with: ""),
                                     why: "Saga complète (collection TMDB), dans l'ordre", count: sg.count, preview: [],
-                                    loader: { await MediaStore.ficheList(.film, pids: p, cond: "f.coll=?", args: [id], order: "f.year", limit: 60) }, kind: "Saga"))
+                                    loader: { await MediaStore.ficheList(.film, pids: p, cond: "f.coll=?", args: [id], order: "f.year", limit: 60) }, kind: "Saga", logo: sg.logo))
             }
         }
-        // plateformes : catégories du fournisseur qui portent le nom d'un service
+        // plateformes : catégories du fournisseur qui portent le nom d'un service (logo : icône TMDB du service)
         var plat: [String: [MediaStore.Cat]] = [:]
         for c in await MediaStore.categories(k, pids: p) { if let sv = Services.match(c.name) { plat[sv, default: []].append(c) } }
         for (name, cats) in plat {
             var total = 0
             for c in cats { total += c.count }
             guard total >= 2 else { continue }
+            let logo = await MediaStore.serviceLogo(name)
             out.append(CollInfo(id: "pf:" + name, icon: "tv", name: name, why: "Les titres de ton fournisseur rangés dans sa catégorie " + name,
                                 count: total, preview: [], loader: {
                 var all: [MediaItem] = []
                 for c in cats { all += await MediaStore.page(k, cat: c, offset: 0, limit: 300) }
                 return all
-            }, kind: "Plateforme"))
+            }, kind: "Plateforme", logo: logo, logoIsIcon: true))
         }
-        return out.sorted { $0.count > $1.count }
+        // studios (films) ou chaînes d'origine (séries) d'après les fiches TMDB, avec leur logo
+        for st in await MediaStore.studios(k, pids: p, min: 3) {
+            let like1 = "%\"id\":\(st.id),%", like2 = "%\"id\":\(st.id)}%"
+            out.append(CollInfo(id: "co:\(st.id)", icon: "building.2", name: st.name, why: (k == .film ? "Studio" : "Chaîne d'origine") + " · \(st.count) titres chez ton fournisseur",
+                                count: st.count, preview: [], loader: { await MediaStore.ficheList(k, pids: p, cond: "(f.companies LIKE ? OR f.companies LIKE ?)", args: [like1, like2], order: "f.vote DESC", limit: 300) },
+                                kind: k == .film ? "Studio" : "Chaîne", logo: st.logo))
+        }
+        // pastille 🔥 : seulement si un de ses titres est dans le Top 10 de la semaine (donnée réelle)
+        let rank = Dictionary(top.map { ($0.item.workKey, $0.rank) }, uniquingKeysWith: { min($0, $1) })
+        if !rank.isEmpty {
+            for i in out.indices {
+                let items = await out[i].loader()
+                out[i].trend = items.compactMap { rank[$0.workKey] }.min() ?? 0
+            }
+        }
+        let sorted = out.sorted { ($0.trend > 0 ? 100 - $0.trend : 0, $0.count) > ($1.trend > 0 ? 100 - $1.trend : 0, $1.count) }
+        // le classement 🔥 suit l'ordre des meilleures places du Top 10
+        var r = 0
+        return sorted.map { var c = $0; if c.trend > 0 { r += 1; c.trend = r }; return c }
     }
 
     private func genreTiles(_ k: MediaKind, _ p: [String]) async -> [CollInfo] {
@@ -648,13 +672,7 @@ struct ResumeRow: View {
             HomeHeader(title: "Reprendre")
             ScrollView(.horizontal) {
                 LazyHStack(spacing: 30) {
-                    ForEach(entries) { r in
-                        let e = r.entry
-                        let done = e.dur > 0 && e.pos / e.dur >= 0.92
-                        WideCard(item: r.item, badge: ResumeEntry.episodeTag(e.ep), title: r.item.displayTitle,
-                                 sub: done ? "épisode suivant" : "reste " + runtimeText(Int(max(60, e.dur - e.pos) / 60)),
-                                 progress: done ? nil : min(1, e.pos / max(1, e.dur))) { open(r.item) }
-                    }
+                    ForEach(entries) { r in ResumeCard(r: r) { open(r.item) } }
                 }.padding(.horizontal, 120).padding(.vertical, 30)
             }.scrollClipDisabled()
         }.focusSection()

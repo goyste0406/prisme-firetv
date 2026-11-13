@@ -42,6 +42,8 @@ struct FilmDetailView: View {
         let g = (fiche?.genres.isEmpty == false) ? fiche!.genres : info.genre
         return g.components(separatedBy: CharacterSet(charactersIn: ",/")).map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
     }
+    /// Pays de production : TMDB (« France »), sinon le fournisseur.
+    private var countryText: String { (fiche?.countryName.isEmpty == false) ? fiche!.countryName : info.country }
     private var year: Int { (fiche?.year ?? 0) > 0 ? fiche!.year : (item.clean.year > 0 ? item.clean.year : info.year) }
 
     /// Police du titre (règle du simulateur, d'après les genres).
@@ -103,7 +105,7 @@ struct FilmDetailView: View {
         .onAppear { DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { if !pickVersion { playFocused = true } } }
         .onDisappear { bg.stop() }
         .onChange(of: peek) { _, p in bg.loud(p) }
-        .onChange(of: playing) { _, p in if p != nil { bg.stop() } }
+        .onChange(of: playing?.id) { _, p in if p != nil { bg.stop() } }
         .onChange(of: showTrailer) { _, t in if t != nil { bg.stop() } }
         .fullScreenCover(item: $playing) { r in VodPlayerView(request: r) }
         .fullScreenCover(item: $live) { l in LivePlayerView(channels: [l.ch], start: 0) }
@@ -118,7 +120,7 @@ struct FilmDetailView: View {
     private func top(_ proxy: ScrollViewProxy) -> some View {
         HStack(alignment: .bottom, spacing: 78) {
             VStack(alignment: .leading, spacing: 0) {
-                Text("FILM" + (info.country.isEmpty ? "" : " · " + info.country.uppercased()))
+                Text("FILM" + (countryText.isEmpty ? "" : " · " + countryText.uppercased()))
                     .font(P.font(24, .bold)).tracking(3.4).foregroundStyle(.white.opacity(0.7)).lineLimit(1)
                     .padding(.bottom, 15).opacity(peek ? 0.14 : 1)
                 BigTitle(text: title, face: face).padding(.bottom, 18).opacity(peek ? 0.14 : 1)

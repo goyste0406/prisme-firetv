@@ -106,7 +106,7 @@ struct OutlineNumber: View {
 
 struct Top10Row: View {
     let title: String
-    let sub: String
+    var sub: String? = nil
     let items: [TrendStore.Ranked]
     let open: (MediaItem) -> Void
     var body: some View {
@@ -252,7 +252,13 @@ struct CollInfo: Identifiable {
     let count: Int
     let preview: [MediaItem]
     let loader: () async -> [MediaItem]
-    var kind: String = "Collection"     // « Saga », « Plateforme » dans Licences et sagas
+    var kind: String = "Collection"     // « Saga », « Plateforme », « Studio » dans Licences et sagas
+    /// logo (chemin TMDB) : logo du titre pour une saga, du studio, ou icône de la plateforme
+    var logo: String = ""
+    /// l'icône d'une plateforme (carrée, en couleurs) ne se met pas en silhouette blanche
+    var logoIsIcon = false
+    /// meilleure place d'un de ses titres dans le Top 10 de la semaine (pastille 🔥), 0 = aucun
+    var trend = 0
 }
 
 struct CollTile: View {
@@ -370,7 +376,76 @@ struct CollectionGridView: View {
 }
 
 /// Services reconnus dans les noms de catégories des fournisseurs (« FR| NETFLIX », « Disney+ »…).
+/// Tuile « Licences et sagas » du simulateur (lic2) : logo en silhouette blanche, en couleurs quand la tuile est
+/// sélectionnée ; nom dessous ; « Saga · 5 films » affiché à la sélection ; liseré de couleur en bas.
+/// Sans logo connu (TMDB n'en a pas), le nom seul, en grand.
+struct LicenceTile: View {
+    let c: CollInfo
+    let unit: String
+    let action: () -> Void
+    var body: some View {
+        Button(action: action) { Inner(c: c, unit: unit) }.buttonStyle(PlainNoFocusStyle())
+    }
+    private struct Inner: View {
+        let c: CollInfo
+        let unit: String
+        @Environment(\.isFocused) var f
+        @State private var img: UIImage?
+        var body: some View {
+            let hue = P.hue(c.name)
+            ZStack {
+                RoundedRectangle(cornerRadius: 26, style: .continuous).fill(Color.white.opacity(f ? 0.12 : 0.04))
+                RoundedRectangle(cornerRadius: 26, style: .continuous).stroke(f ? Color.white : Color.white.opacity(0.08), lineWidth: f ? 4 : 1.5)
+                VStack(spacing: 6) {
+                    if let img {
+                        Group {
+                            if c.logoIsIcon {
+                                Image(uiImage: img).resizable().scaledToFit().clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                                    .frame(maxWidth: 76, maxHeight: 76)
+                            } else if f {
+                                Image(uiImage: img).resizable().scaledToFit().frame(maxWidth: 244, maxHeight: 76)
+                            } else {
+                                Image(uiImage: img).renderingMode(.template).resizable().scaledToFit().foregroundStyle(.white.opacity(0.92)).frame(maxWidth: 244, maxHeight: 76)
+                            }
+                        }
+                        Text(c.name).font(P.font(24, .semibold)).lineLimit(1).minimumScaleFactor(0.7).padding(.horizontal, 16)
+                    } else {
+                        Text(c.name).font(P.font(32, .semibold)).multilineTextAlignment(.center).lineLimit(2).minimumScaleFactor(0.6).padding(.horizontal, 18)
+                    }
+                    Text("\(c.kind) · \(c.count) \(unit)").font(P.font(20)).opacity(f ? 0.65 : 0)
+                }
+                .foregroundStyle(.white)
+                if c.trend > 0 && c.trend <= 3 {
+                    Text(c.trend == 1 ? "🔥 N° 1" : "🔥 Top \(c.trend)").font(P.font(19, .heavy)).foregroundStyle(Color(red: 1, green: 0.69, blue: 0.54))
+                        .padding(.horizontal, 12).padding(.vertical, 4)
+                        .background(Color(red: 1, green: 0.47, blue: 0.24).opacity(0.22), in: RoundedRectangle(cornerRadius: 12))
+                        .padding(14).frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                }
+                Capsule().fill(Color(hue: hue, saturation: 0.6, brightness: 0.85).opacity(0.6)).frame(width: 142, height: 4)
+                    .frame(maxHeight: .infinity, alignment: .bottom)
+            }
+            .frame(width: 356, height: 180)
+            .clipShape(RoundedRectangle(cornerRadius: 26, style: .continuous))
+            .scaleEffect(f ? 1.07 : 1)
+            .shadow(color: .black.opacity(f ? 0.5 : 0), radius: 26, y: 14)
+            .animation(.easeOut(duration: 0.18), value: f)
+            .task(id: c.logo) {
+                guard !c.logo.isEmpty else { return }
+                img = await ImageLoader.load(Fiche.img(c.logo, c.logoIsIcon ? "w92" : "w300"), maxPixel: 500)
+            }
+        }
+    }
+}
+
+/// Style neutre : la vue gère elle-même son apparence sélectionnée.
+struct PlainNoFocusStyle: ButtonStyle {
+    func makeBody(configuration c: Configuration) -> some View { c.label.scaleEffect(c.isPressed ? 0.97 : 1) }
+}
+
 enum Services {
+    /// mot à chercher dans les plateformes TMDB (« Où le regarder ») pour retrouver le logo du service
+    static let tmdbWord: [String: String] = ["Netflix": "Netflix", "Disney+": "Disney", "Prime Video": "Prime", "Apple TV+": "Apple TV",
+        "Canal+": "Canal", "Max": "Max", "Paramount+": "Paramount", "OCS": "OCS", "Arte": "Arte", "France TV": "France", "M6+": "M6", "TF1+": "TF1"]
     static let list: [(String, String)] = [
         ("Netflix", "netflix"), ("Disney+", "disney"), ("Prime Video", "amazon|prime"), ("Apple TV+", "apple"),
         ("Canal+", "canal"), ("Max", "\\bmax\\b|hbo"), ("Paramount+", "paramount"), ("OCS", "\\bocs\\b"),
