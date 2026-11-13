@@ -95,6 +95,8 @@ struct ProvidersSettingsView: View {
                         .padding(40).frame(maxWidth: .infinity, alignment: .leading)
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
+                // sur Apple TV une zone de défilement ne coupe pas ce qui dépasse : les lignes sortaient du panneau
+                .clipShape(RoundedRectangle(cornerRadius: 36, style: .continuous))
                 .glass(36)
                 .focusSection()
             }

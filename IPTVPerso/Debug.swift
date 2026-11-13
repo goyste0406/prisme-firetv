@@ -52,9 +52,38 @@ extension Debug {
 
     @MainActor static func seedIfNeeded() {
         guard seed, demoServer != nil else { return }
-        if profiles == "2", ProfileStore.shared.profiles.count == 1, let p = ProfileStore.shared.add() {
+        if (profiles == "2" || profiles == "6"), ProfileStore.shared.profiles.count == 1, let p = ProfileStore.shared.add() {
             var x = p; x.name = "Léa"; x.color = 1; x.maxAge = 12; x.bed = 22 * 60 + 30; x.lang = "VOSTFR"
             ProfileStore.shared.update(x)
         }
+        // « 6 » : le maximum de profils, pour vérifier les listes et le défilement
+        if profiles == "6", ProfileStore.shared.profiles.count == 2 {
+            for (i, n) in ["Tom", "Inès", "Noah", "Mamie"].enumerated() {
+                if let p = ProfileStore.shared.add() { var x = p; x.name = n; x.color = 2 + i; x.kids = i == 0; ProfileStore.shared.update(x) }
+            }
+        }
+    }
+}
+
+
+/// Simulateur de test seulement : mesures de l'ouverture des accueils Films / Séries, écrites dans Documents/mesures.txt
+/// (récupéré par la visite automatique). Jamais utilisé dans l'appli installée.
+enum PerfLog {
+    nonisolated(unsafe) static var newParts: (Double, Int) = (0, 0)
+
+    @MainActor static func home(kind: MediaKind, first: Double, full: Double, q1: Int, q2: Int, cached: Bool, old: () async -> (Double, Int)) async {
+        let parts = newParts
+        let o = await old()
+        // avant (build 117) : rien ne s'affichait avant la fin de TOUT le calcul, avec l'ancienne méthode pour les genres et la 🔥
+        let before = full - parts.0 + o.0, beforeQ = q2 - parts.1 + o.1
+        func ms(_ x: Double) -> String { "\(Int((x * 1000).rounded())) ms" }
+        let line = "\(kind == .film ? "Films" : "Séries")\(cached ? " (retour sur l'onglet)" : " (première ouverture)") : "
+            + "AVANT premières rangées \(ms(before)) / \(beforeQ) requêtes · "
+            + "APRÈS premières rangées \(ms(first)) / \(q1) requêtes, page complète \(ms(full)) / \(q2) requêtes · "
+            + "genres + 🔥 : avant \(ms(o.0)) / \(o.1) requêtes, après \(ms(parts.0)) / \(parts.1) requêtes\n"
+        guard let d = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first else { return }
+        let f = d.appendingPathComponent("mesures.txt")
+        let prev = (try? String(contentsOf: f, encoding: .utf8)) ?? ""
+        try? (prev + line).write(to: f, atomically: true, encoding: .utf8)
     }
 }

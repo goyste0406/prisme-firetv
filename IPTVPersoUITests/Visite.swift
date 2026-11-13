@@ -171,6 +171,14 @@ final class Visite: XCTestCase {
         relaunch(["-prisme.debug.open", "film:demo:1016", "-prisme.debug.bedIn", "240"])
         shot("60g-ce-soir-il-te-restera")
 
+        // SAGAS / UNIVERS : Wonder Woman (saga + même univers DC confirmé par TMDB : Aquaman), Wonder (aucun lien malgré le titre),
+        // Dune 1984 (remake homonyme : ni la saga Dune, ni « même univers »)
+        for (id, name) in [("1040", "wonder-woman"), ("1041", "wonder"), ("1044", "dune-1984"), ("1012", "spider-man")] {
+            relaunch(["-prisme.debug.open", "film:demo:" + id])
+            shot("B0-saga-\(name)")
+            for i in 1...4 { press(.down); shot(String(format: "B0-saga-\(name)-bas-%02d", i)) }
+        }
+
         // fiche série commencée : Reprendre S2 · É3 + Résumé 60 s (sans spoiler)
         relaunch(["-prisme.debug.open", "series:demo:2001"])
         shot("60-fiche-lupin")
@@ -228,5 +236,22 @@ final class Visite: XCTestCase {
         // fiche film : pastille du profil en haut à gauche
         relaunch(["-prisme.debug.open", "film:demo:1006"])
         press(.up, 4); Thread.sleep(forTimeInterval: 1); shot("99b-fiche-pastille-profil")
+
+        // 6 PROFILS (le maximum) : « Qui regarde ? », fenêtre « Choisis un profil », Réglages › Profils (défilement dans le cadre)
+        relaunch(["-prisme.debug.profiles", "6", "-prisme.debug.whoHold", "1"], wait: 2)
+        shot("A0-six-qui-regarde")
+        for i in 1...7 { press(.right); shot(String(format: "A0b-six-qui-regarde-%02d", i)) }
+        press(.left, 8); press(.select); Thread.sleep(forTimeInterval: 3)
+        press(.up, 8); press(.right, 8); press(.select); Thread.sleep(forTimeInterval: 1.5); shot("A1-six-fenetre")
+        for i in 1...7 { press(.down); shot(String(format: "A1b-six-fenetre-bas-%02d", i)) }
+        back(); Thread.sleep(forTimeInterval: 1)
+        relaunch(["-prisme.debug.tab", "settings"])
+        press(.down); Thread.sleep(forTimeInterval: 1); shot("A2-six-reglages")
+        press(.up); Thread.sleep(forTimeInterval: 0.5)
+        for _ in 0..<3 where !focused().contains("Steven") { press(.left) }
+        for i in 1...7 { press(.right); shot(String(format: "A2b-six-reglages-droite-%02d", i)) }
+        press(.left, 8); press(.select); Thread.sleep(forTimeInterval: 1.5); shot("A3-six-fiche-profil")
+        for i in 1...14 { press(.down); shot(String(format: "A3b-six-fiche-bas-%02d", i)) }
+        press(.up, 16); shot("A3c-six-fiche-haut")
     }
 }

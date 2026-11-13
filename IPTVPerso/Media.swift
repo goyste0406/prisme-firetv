@@ -105,7 +105,20 @@ enum TitleTools {
         rx.stringByReplacingMatches(in: s, range: NSRange(s.startIndex..., in: s), withTemplate: t)
     }
 
+    /// Nettoyage mémorisé : le même nom est nettoyé une seule fois (une douzaine d'expressions régulières par nom,
+    /// appelées des milliers de fois par les accueils, les dédoublonnages et les fiches).
+    private final class CleanBox { let v: CleanTitle; init(_ v: CleanTitle) { self.v = v } }
+    nonisolated(unsafe) private static let cleanMemo: NSCache<NSString, CleanBox> = { let c = NSCache<NSString, CleanBox>(); c.countLimit = 60000; return c }()
+
     static func clean(_ raw: String, year: Int) -> CleanTitle {
+        let mk = "\(year)|\(raw)" as NSString
+        if let b = cleanMemo.object(forKey: mk) { return b.v }
+        let v = clean0(raw, year: year)
+        cleanMemo.setObject(CleanBox(v), forKey: mk)
+        return v
+    }
+
+    private static func clean0(_ raw: String, year: Int) -> CleanTitle {
         var s = raw
         s = lead.stringByReplacingMatches(in: s, range: NSRange(s.startIndex..., in: s), withTemplate: "")
         var tags: [String] = []
@@ -225,6 +238,57 @@ enum MediaStore {
         }
     }
 
+    /// Nombre de titres par genre, en une seule lecture (mêmes règles que ficheCount : titres distincts, limite d'âge).
+    static func genreCounts(_ k: MediaKind, pids: [String], genres G: [String]) async -> [String: Int] {
+        guard !pids.isEmpty else { return [:] }
+        let sql = "SELECT f.ckey, f.genres FROM fiche f JOIN \(table(k)) m ON m.pid=f.pid AND m.sid=f.sid WHERE f.kind=? AND f.genres!='' AND \(MediaItem.ageSQL) AND m.pid IN \(inList(pids))"
+        return await Database.shared.read { db in
+            var sets: [String: Set<String>] = [:]
+            db.query(sql, [k.rawValue] + pids.map { $0 as Any? }) { r in
+                let key = r.str(0), gs = r.str(1)
+                for g in G where gs.range(of: g, options: .caseInsensitive) != nil { sets[g, default: []].insert(key) }
+            }
+            return sets.mapValues(\.count)
+        }
+    }
+
+    /// Pour la pastille 🔥 de « Licences et sagas » : meilleure place du Top 10 par saga (collection TMDB),
+    /// par studio / chaîne d'origine et par catégorie du fournisseur, d'après les seuls titres du Top.
+    struct TopLinks { var coll: [Int: Int] = [:]; var company: [Int: Int] = [:]; var cat: [String: Int] = [:] }
+    private static let companyRx = try! NSRegularExpression(pattern: #""id":(\d+)"#)
+    static func topLinks(_ k: MediaKind, pids: [String], top: [TrendStore.Ranked]) async -> TopLinks {
+        var rank: [Int: Int] = [:]
+        for r in top {
+            let t = r.item.fiche?.tmdb ?? Int(r.item.tmdb.trimmingCharacters(in: .whitespaces)) ?? 0
+            if t > 0 { rank[t] = min(rank[t] ?? 99, r.rank) }
+        }
+        guard !rank.isEmpty, !pids.isEmpty else { return TopLinks() }
+        let ids = Array(rank.keys), ph = ids.map { _ in "?" }.joined(separator: ",")
+        let t = table(k)
+        return await Database.shared.read { db in
+            var out = TopLinks()
+            func put(_ d: inout [Int: Int], _ key: Int, _ r: Int) { if key > 0 { d[key] = min(d[key] ?? 99, r) } }
+            db.query("SELECT f.tmdb, f.coll, f.companies, m.pid, m.cid FROM fiche f JOIN \(t) m ON m.pid=f.pid AND m.sid=f.sid WHERE f.kind=? AND f.tmdb IN (\(ph)) AND m.pid IN \(inList(pids))",
+                     [k.rawValue] + ids.map { $0 as Any? } + pids.map { $0 as Any? }) { r in
+                guard let rk = rank[r.int(0)] else { return }
+                put(&out.coll, r.int(1), rk)
+                let co = r.str(2)
+                for m in companyRx.matches(in: co, range: NSRange(co.startIndex..., in: co)) {
+                    if let rr = Range(m.range(at: 1), in: co), let c = Int(co[rr]) { put(&out.company, c, rk) }
+                }
+                let ck = r.str(3) + ":" + r.str(4)
+                out.cat[ck] = min(out.cat[ck] ?? 99, rk)
+            }
+            // copies sans fiche : l'identifiant TMDB donné par le fournisseur suffit pour la catégorie
+            db.query("SELECT tmdb, pid, cid FROM \(t) WHERE tmdb IN (\(ph)) AND pid IN \(inList(pids))", ids.map { String($0) as Any? } + pids.map { $0 as Any? }) { r in
+                guard let rk = rank[r.int(0)] else { return }
+                let ck = r.str(1) + ":" + r.str(2)
+                out.cat[ck] = min(out.cat[ck] ?? 99, rk)
+            }
+            return out
+        }
+    }
+
     struct SagaInfo: Identifiable, Hashable { let id: Int; let name: String; let count: Int; var logo = "" }
 
     /// Réalisateurs (films) ou créateurs (séries) qui ont au moins `min` titres chez tes fournisseurs.
@@ -323,23 +387,35 @@ enum MediaStore {
         }
     }
 
-    /// Même univers : titres dont le début (avant « : ») ou un mot composé (« spider-man ») est le même.
+    /// Mots-clés TMDB qui désignent une FRANCHISE (plusieurs sagas d'un même univers). Liste explicite :
+    /// les mots-clés ordinaires (« space opera », « superhero », « based on novel ») ne relient jamais deux films.
+    static let franchiseKeywords = ["marvel cinematic universe", "dc extended universe", "dc universe", "dceu", "wizarding world", "monsterverse",
+                                    "conjuring universe", "star wars", "middle-earth", "alien vs. predator", "x-men", "planet of the apes",
+                                    "jurassic park", "star trek", "toho godzilla", "fast and furious", "mission: impossible", "james bond", "pixar universe"]
+
+    /// « Dans le même univers » : seulement des films reliés par TMDB à la même franchise (mot-clé de franchise commun),
+    /// hors de la saga du film (déjà montrée). Jamais par ressemblance des titres (« Wonder » n'est pas « Wonder Woman »).
+    /// Sans mot-clé de franchise confirmé : rien.
     static func universe(of it: MediaItem, pids: [String], exclude: Set<Int>) async -> [MediaItem] {
-        let base = it.displayTitle.components(separatedBy: CharacterSet(charactersIn: ":–(")).first?.trimmingCharacters(in: .whitespaces) ?? ""
-        var terms: [String] = []
-        let core = base.replacingOccurrences(of: #"\s+\d+$"#, with: "", options: .regularExpression).replacingOccurrences(of: #"^(The|Le|La|Les|L')\s+"#, with: "", options: .regularExpression)
-        if core.count >= 4 { terms.append(core) }
-        for w in base.split(separator: " ") where w.contains("-") && w.count >= 5 { terms.append(String(w)) }
-        guard !terms.isEmpty, !pids.isEmpty else { return [] }
+        guard let f = it.fiche, !pids.isEmpty else { return [] }
+        let ids: [Int] = f.keywords.split(separator: "|").compactMap { kv in
+            let parts = kv.split(separator: ":", maxSplits: 1)
+            guard parts.count == 2, let id = Int(parts[0]) else { return nil }
+            let n = parts[1].lowercased()
+            return franchiseKeywords.contains(where: { n.contains($0) }) ? id : nil
+        }
+        guard !ids.isEmpty else { return [] }
         let k = it.kind, t = table(k), c = cols(k).split(separator: ",").map { $0.hasPrefix("'") ? String($0) : "m." + $0 }.joined(separator: ",")
-        let cond = terms.map { _ in "(f.title LIKE ? OR f.title LIKE ?)" }.joined(separator: " OR ")
-        let args: [Any?] = terms.flatMap { [$0 + "%", "% " + $0 + "%"] as [Any?] }
-        let sql = "SELECT \(c), f.tmdb FROM fiche f JOIN \(t) m ON m.pid=f.pid AND m.sid=f.sid WHERE f.kind=? AND (\(cond)) AND m.pid IN \(inList(pids)) ORDER BY f.year LIMIT 60"
+        let cond = ids.map { _ in "(f.keywords LIKE ? OR f.keywords LIKE ?)" }.joined(separator: " OR ")
+        let args: [Any?] = ids.flatMap { ["\($0):%", "%|\($0):%"] as [Any?] }
+        let sql = "SELECT \(c), f.tmdb, f.coll FROM fiche f JOIN \(t) m ON m.pid=f.pid AND m.sid=f.sid WHERE f.kind=? AND (\(cond)) AND m.pid IN \(inList(pids)) ORDER BY f.year LIMIT 80"
         return await Database.shared.read { db in
             var out: [MediaItem] = [], seen = Set<String>()
             db.query(sql, [k.rawValue] + args + pids) { r in
                 let m = row(k, r)
-                if !exclude.contains(r.int(11)), m.clean.key != it.clean.key, seen.insert(m.clean.key).inserted { out.append(m) }
+                let tm = r.int(11), coll = r.int(12)
+                guard tm != f.tmdb, !exclude.contains(tm), f.coll == 0 || coll != f.coll else { return }
+                if m.clean.key != it.clean.key, seen.insert(m.clean.key).inserted { out.append(m) }
             }
             return Array(Array(out.prefix(40)).withFiches().uniqueWorks(excluding: it).prefix(24))
         }
