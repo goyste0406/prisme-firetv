@@ -10,6 +10,8 @@ final class ProfileUI: ObservableObject {
     @Published var picker = false
     /// écran plein « Qui regarde ? » (ouverture de prisme)
     @Published var launch = false
+    /// déjà montré à cette ouverture (ne pas le remontrer)
+    var shownAtLaunch = false
     /// ouvrir les réglages directement sur la fiche d'un profil
     @Published var editProfile: String?
 }

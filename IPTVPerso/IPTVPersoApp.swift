@@ -38,6 +38,7 @@ struct MainTabView: View {
     @State private var debugOpen: MediaItem?
     @State private var resumeOpen: MediaItem?
     @State private var asked = false
+    @State private var diag = ""
 
     var body: some View {
         NavigationStack {
@@ -56,6 +57,10 @@ struct MainTabView: View {
                 .id("\(nav.tab.rawValue)|\(profiles.current)")
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .disabled(pui.picker)
+                if Debug.demoServer != nil {
+                    // simulateur de test uniquement : état de l'écran « Qui regarde ? » lisible par la visite automatique
+                    Text(diag).font(.system(size: 1)).opacity(0.01).accessibilityIdentifier("prisme.diag").accessibilityLabel(diag)
+                }
                 if pui.picker {
                     ProfilePickerModal(close: { pui.picker = false }, manage: { pui.picker = false; nav.tab = .settings; if pui.editProfile == nil { pui.editProfile = "" } })
                         .transition(.opacity)
@@ -67,15 +72,22 @@ struct MainTabView: View {
             .navigationDestination(item: $resumeOpen) { it in DetailView(item: it) }
         }
         .fullScreenCover(isPresented: $pui.launch) {
-            WhoIsWatchingScreen(done: { it in pui.launch = false; if let it { DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { resumeOpen = it } } },
-                                manage: { pui.launch = false; nav.tab = .settings; if pui.editProfile == nil { pui.editProfile = "" } })
+            WhoIsWatchingScreen(done: { it in pui.shownAtLaunch = true; pui.launch = false; if let it { DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { resumeOpen = it } } },
+                                manage: { pui.shownAtLaunch = true; pui.launch = false; nav.tab = .settings; if pui.editProfile == nil { pui.editProfile = "" } })
         }
         .onAppear {
             // « Qui regarde ? » à l'ouverture, s'il y a plusieurs profils et si c'est demandé dans les réglages
             guard !asked else { return }
             asked = true
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
-                if profiles.ask && profiles.profiles.count > 1 && Debug.open == nil && Debug.tab == nil { pui.launch = true }
+            Debug.seedIfNeeded()   // profils de test éventuels AVANT de décider (sans effet dans l'app installée)
+            // présenté un peu après l'apparition de l'écran (une fenêtre plein écran présentée trop tôt peut être ignorée),
+            // puis vérifié une seconde fois si la première tentative n'a pas pris
+            for delay in [0.8, 2.0] {
+                DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
+                    let want = profiles.ask && profiles.profiles.count > 1 && Debug.open == nil && Debug.tab == nil
+                    if want && !pui.launch && !pui.shownAtLaunch { pui.launch = true }
+                    diag = "ask=\(profiles.ask) profils=\(profiles.profiles.count) voulu=\(want) affiché=\(pui.launch) t=\(delay)"
+                }
             }
         }
         .task {

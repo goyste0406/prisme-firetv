@@ -46,6 +46,17 @@ final class Visite: XCTestCase {
         try? log.write(to: URL(fileURLWithPath: dir).appendingPathComponent("focus.txt"), atomically: true, encoding: .utf8)
     }
 
+    /// Descend jusqu'à un élément dont le nom contient l'un des textes (les rangées bougent selon l'historique de test).
+    func downUntil(_ texts: [String], max: Int = 14, prefix: String) {
+        for i in 1...max {
+            press(.down); shot(String(format: "\(prefix)-%02d", i))
+            if texts.contains(where: { focused().contains($0) }) { return }
+        }
+    }
+
+    /// Diagnostic de l'écran « Qui regarde ? » (texte invisible affiché seulement dans le simulateur de test).
+    func diag() { let e = app.staticTexts["prisme.diag"]; log += "   diag : " + (e.exists ? e.label : "(absent)") + "\n" }
+
     func press(_ b: XCUIRemote.Button, _ n: Int = 1) { for _ in 0..<n { remote.press(b); Thread.sleep(forTimeInterval: 0.45) } }
 
     /// Si un « Menu » de trop a renvoyé à l'écran d'accueil de l'Apple TV, on revient dans prisme.
@@ -70,7 +81,8 @@ final class Visite: XCTestCase {
         // import du catalogue et des fiches du faux fournisseur
         Thread.sleep(forTimeInterval: 45)
         shot("01-films-ouverture")
-        for i in 1...7 { press(.down); shot(String(format: "02-films-bas-%02d", i)) }
+        downUntil(["Catégories", "Licences et sagas"], prefix: "02-films-bas")
+        if focused().contains("Catégories") { press(.right) }
         // onglet « Licences et sagas » (sélectionné par OK), puis ses tuiles avec logos
         press(.select); Thread.sleep(forTimeInterval: 1.5); shot("02b-licences-onglet")
         press(.down); Thread.sleep(forTimeInterval: 1.5); shot("02c-licences-tuiles")
@@ -144,14 +156,15 @@ final class Visite: XCTestCase {
         back()
 
         // PROFILS — « Qui regarde ? » à l'ouverture (2 profils : Steven, Léa 12 ans max)
-        relaunch(["-prisme.debug.profiles", "2"], wait: 4)
-        shot("80-qui-regarde")
+        relaunch(["-prisme.debug.profiles", "2"], wait: 5)
+        diag(); shot("80-qui-regarde")
         press(.right); shot("81-qui-regarde-lea")
         press(.left); Thread.sleep(forTimeInterval: 1); shot("81b-qui-regarde-steven")
         press(.select); Thread.sleep(forTimeInterval: 3); shot("82-accueil-steven")
         // Réglages › Profils
         relaunch(["-prisme.debug.tab", "settings"])
         shot("83-reglages-profils")
+        press(.down); Thread.sleep(forTimeInterval: 1); shot("83b-categorie-profils")
         press(.right); Thread.sleep(forTimeInterval: 1); shot("84-profils-focus")
         press(.select); Thread.sleep(forTimeInterval: 1.5); shot("85-fiche-profil")
         for i in 1...4 { press(.down); shot(String(format: "86-fiche-profil-bas-%02d", i)) }
@@ -167,7 +180,10 @@ final class Visite: XCTestCase {
         tab(3); shot("95-ma-liste-lea")
         tab(0); Thread.sleep(forTimeInterval: 3); shot("96-films-lea")
         // retour à Steven : son historique et Ma liste d'avant les profils doivent être là
-        press(.up, 8); press(.right, 8); press(.select); Thread.sleep(forTimeInterval: 1.5); press(.select); Thread.sleep(forTimeInterval: 3)
+        press(.up, 8); press(.right, 8); press(.select); Thread.sleep(forTimeInterval: 1.5)
+        shot("96b-fenetre-depuis-lea")
+        press(.up); shot("96c-fenetre-steven")
+        press(.select); Thread.sleep(forTimeInterval: 3)
         shot("97-retour-steven")
         tab(3); shot("98-ma-liste-steven")
         tab(5); press(.down, 9); Thread.sleep(forTimeInterval: 1); shot("99-a-propos")
