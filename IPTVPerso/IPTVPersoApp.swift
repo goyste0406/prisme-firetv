@@ -55,6 +55,9 @@ struct MainTabView: View {
                     }
                 }
                 .id("\(nav.tab.rawValue)|\(profiles.current)")
+                // Retour depuis le contenu d'une page (rangées, grilles, colonne de la TV) : remonter d'abord à la barre
+                // du haut, comme les applications Apple ; Retour depuis la barre du haut quitte prisme (comportement tvOS)
+                .onExitCommand(perform: nav.barFocused ? nil : { nav.backToBar += 1 })
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 if Debug.demoServer != nil {
                     // simulateur de test uniquement : état de l'écran « Qui regarde ? » lisible par la visite automatique

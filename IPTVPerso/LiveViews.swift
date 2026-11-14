@@ -11,6 +11,8 @@ struct LiveHomeView: View {
     @State private var guide: GuideRequest?
     @State private var index: [LiveIndex.Entry] = []
     @State private var replay: VodRequest?
+    /// la rubrique a été ouverte depuis une tuile de la page (et non depuis la colonne)
+    @State private var fromPage = false
 
     struct PlayRequest: Identifiable { let id = UUID(); let list: [Channel]; let index: Int }
     struct GuideRequest: Identifiable { let id = UUID(); let list: [Channel]; let title: String }
@@ -38,7 +40,7 @@ struct LiveHomeView: View {
         .ignoresSafeArea(edges: .top)
         // Retour depuis une catégorie (Info, Sport…) ou une autre rubrique de la colonne : revenir à l'accueil
         // de la TV en direct, au lieu de quitter prisme (seulement depuis l'accueil, Retour garde son effet habituel)
-        .onExitCommand(perform: section == "home" ? nil : { section = "home" })
+        .onExitCommand(perform: section == "home" ? nil : { fromPage = false; section = "home" })
         .fullScreenCover(item: $playing) { r in LivePlayerView(channels: r.list, start: r.index) }
         .fullScreenCover(item: $guide) { g in GuideView(channels: g.list, title: g.title) }
         .fullScreenCover(item: $replay) { r in VodPlayerView(request: r) }
@@ -48,7 +50,7 @@ struct LiveHomeView: View {
     @ViewBuilder private var content: some View {
         if section.hasPrefix("u:"), let u = Univers(rawValue: String(section.dropFirst(2))) {
             let list = index.filter { $0.univers == u }.map(\.ch)
-            ChannelGrid(title: u.label, channels: list, loaded: true, empty: "Aucune chaîne dans cet univers.", play: play, guide: openGuide, columns: 5)
+            ChannelGrid(title: u.label, channels: list, loaded: true, empty: "Aucune chaîne dans cet univers.", play: play, guide: openGuide, columns: 5, autoFocus: fromPage)
         } else {
             switch section {
             case "search": ChannelSearchView(play: play)
@@ -56,7 +58,7 @@ struct LiveHomeView: View {
             case "fav": ChannelListView(mode: .fav, play: play, guide: openGuide)
             case "recent": ChannelListView(mode: .recent, play: play, guide: openGuide)
             case "all": AllCategoriesView(play: play, guide: openGuide)
-            default: LiveFrontView(index: index, play: play, guide: openGuide, openSection: { section = $0 })
+            default: LiveFrontView(index: index, play: play, guide: openGuide, openSection: { fromPage = true; section = $0 })
             }
         }
     }
@@ -72,7 +74,7 @@ struct LiveHomeView: View {
                 ForEach(0..<items.count, id: \.self) { i in
                     let r = items[i]
                     Button {
-                        if r.0 == "guide" { Task { await guideFromRail() } } else { section = r.0 }
+                        if r.0 == "guide" { Task { await guideFromRail() } } else { fromPage = false; section = r.0 }
                     } label: { Image(systemName: r.1).font(P.font(26, .semibold)).frame(width: 64, height: 58) }
                     .buttonStyle(RailStyle(selected: section == r.0))
                     .accessibilityLabel(r.2)
@@ -487,10 +489,14 @@ struct ChannelGrid: View {
     let play: ([Channel], Int) -> Void
     let guide: (([Channel], String) -> Void)?
     var columns = 5
+    /// ouverte depuis une tuile de la page (et non depuis la colonne) : la sélection va sur la première chaîne,
+    /// comme le simulateur (ldeck → première chaîne)
+    var autoFocus = false
     @ObservedObject var prefs = LivePrefs.shared
+    @FocusState private var gridFocus: Int?
 
-    init(title: String, channels: [Channel], loaded: Bool, empty: String, play: @escaping ([Channel], Int) -> Void, guide: (([Channel], String) -> Void)?, columns: Int = 5) {
-        self.title = title; self.raw = channels; self.loaded = loaded; self.empty = empty; self.play = play; self.guide = guide; self.columns = columns
+    init(title: String, channels: [Channel], loaded: Bool, empty: String, play: @escaping ([Channel], Int) -> Void, guide: (([Channel], String) -> Void)?, columns: Int = 5, autoFocus: Bool = false) {
+        self.title = title; self.raw = channels; self.loaded = loaded; self.empty = empty; self.play = play; self.guide = guide; self.columns = columns; self.autoFocus = autoFocus
     }
 
     var body: some View {
@@ -516,6 +522,7 @@ struct ChannelGrid: View {
                     LazyVGrid(columns: Array(repeating: GridItem(.fixed(ChannelCard.size.width), spacing: 28), count: columns), alignment: .leading, spacing: 36) {
                         ForEach(Array(channels.enumerated()), id: \.element.id) { i, ch in
                             ChannelCard(ch: ch, fav: prefs.favorites.contains(ch.id)) { play(channels, i) }
+                                .focused($gridFocus, equals: i)
                                 .contextMenu {
                                     Button(prefs.favorites.contains(ch.id) ? "Retirer des favoris" : "Ajouter aux favoris") { prefs.toggleFavorite(ch.id) }
                                 }
@@ -523,6 +530,7 @@ struct ChannelGrid: View {
                     }.padding(.vertical, 24).padding(.horizontal, 18).padding(.bottom, 60)
                 }
                 .clipped()
+                .onAppear { if autoFocus { DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { gridFocus = 0 } } }
             }
         }
     }
@@ -588,7 +596,9 @@ struct ChannelCard: View {
         Button(action: action) {
             ZStack(alignment: .topLeading) {
                 LinearGradient(colors: [Color(hue: hue, saturation: 0.55, brightness: 0.44), Color(hue: hue, saturation: 0.5, brightness: 0.15)], startPoint: .topLeading, endPoint: .bottomTrailing)
-                Text((now?.title ?? name).uppercased()).font(P.font(26, .heavy)).foregroundStyle(.white.opacity(0.16)).lineLimit(2)
+                Text((now?.title ?? name).uppercased()).font(P.font(26, .heavy)).foregroundStyle(.white.opacity(0.16))
+                    // une seule ligne : sur deux lignes, le titre en filigrane passait sous « TF1 · reste … »
+                    .lineLimit(1).minimumScaleFactor(0.7)
                     .padding(.horizontal, 16).padding(.top, 54).frame(maxWidth: .infinity, alignment: .leading)
                 LinearGradient(colors: [.clear, .black.opacity(0.78)], startPoint: .center, endPoint: .bottom)
                 VStack(alignment: .leading, spacing: 4) {

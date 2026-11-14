@@ -129,11 +129,16 @@ final class Visite: XCTestCase {
         // colonne d'icônes : chaque catégorie ouvre sa grille
         press(.left, 12); shot("28-colonne")
         for i in 1...12 { press(.down); Thread.sleep(forTimeInterval: 0.6); shot(String(format: "28b-colonne-%02d", i)) }
-        press(.right); Thread.sleep(forTimeInterval: 1); shot("29-grille-categorie")
+        // OK sur une icône de la colonne : la grille de la catégorie s'affiche (Catégories du fournisseur)
+        press(.select); Thread.sleep(forTimeInterval: 1.5); press(.right); Thread.sleep(forTimeInterval: 1); shot("29-grille-categorie")
+        // Retour depuis une catégorie : accueil de la TV en direct ; Retour depuis l'accueil : barre du haut (sans quitter prisme)
         back(); Thread.sleep(forTimeInterval: 1); shot("29a-retour-accueil-tv")
-        press(.left); press(.down, 6); press(.right); Thread.sleep(forTimeInterval: 1); shot("29a2-grille-categorie")
+        press(.down, 2); back(); Thread.sleep(forTimeInterval: 1); shot("29a1-retour-barre")
+        // « Autres » dans la colonne
+        press(.down); press(.left, 12); press(.down, 9); press(.select); Thread.sleep(forTimeInterval: 1.5); press(.right); Thread.sleep(forTimeInterval: 1); shot("29a2-grille-categorie")
         for i in 1...4 { press(.down); shot(String(format: "29b-grille-bas-%02d", i)) }
         press(.up, 8); shot("29c-grille-haut")
+        back(); Thread.sleep(forTimeInterval: 1); shot("29d-retour")
 
         tab(3); shot("30-maliste")
         press(.down, 2); press(.up, 4); shot("31-maliste-retour-barre")

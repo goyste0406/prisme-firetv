@@ -207,6 +207,10 @@ final class Nav: ObservableObject {
     @Published var tab: AppTab = {
         AppTab(rawValue: UserDefaults.standard.string(forKey: "prisme.tab") ?? "") ?? .films
     }() { didSet { UserDefaults.standard.set(tab.rawValue, forKey: "prisme.tab") } }
+    /// la sélection est dans la barre du haut (Retour y quitte prisme ; ailleurs, Retour y ramène d'abord)
+    @Published var barFocused = false
+    /// demande de ramener la sélection sur l'onglet de la barre du haut (Retour depuis le contenu d'une page)
+    @Published var backToBar = 0
 }
 
 /// Barre du haut, en haut de chaque page (comme le simulateur : elle défile avec la page).
@@ -242,6 +246,8 @@ struct TopBar: View {
         .contentShape(Rectangle())
         .focusSection()
         .defaultFocus($focus, nav.tab, priority: .userInitiated)
+        .onChange(of: focus) { _, f in if nav.barFocused != (f != nil) { nav.barFocused = f != nil } }
+        .onChange(of: nav.backToBar) { _, _ in focus = nav.tab }
         .onAppear {
             guard claimFocus else { return }
             let t = nav.tab
