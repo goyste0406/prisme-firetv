@@ -37,12 +37,13 @@ final class Visite: XCTestCase {
         return "\(e.elementType.rawValue) « \(e.label) » x=\(Int(f.minX)) y=\(Int(f.minY)) w=\(Int(f.width)) h=\(Int(f.height))"
     }
 
-    func shot(_ name: String) {
+    /// `focus: false` pendant une lecture vidéo : lire l'arbre des éléments peut alors dépasser le délai du test.
+    func shot(_ name: String, focus: Bool = true) {
         Thread.sleep(forTimeInterval: 1.6)
         let png = XCUIScreen.main.screenshot().pngRepresentation
         try? png.write(to: URL(fileURLWithPath: dir).appendingPathComponent(name + ".png"))
         let a = XCTAttachment(data: png, uniformTypeIdentifier: "public.png"); a.name = name; a.lifetime = .keepAlways; add(a)
-        log += name + " → " + focused() + "\n"
+        log += name + " → " + (focus ? focused() : "(lecture en cours, non lu)") + "\n"
         try? log.write(to: URL(fileURLWithPath: dir).appendingPathComponent("focus.txt"), atomically: true, encoding: .utf8)
     }
 
@@ -186,7 +187,7 @@ final class Visite: XCTestCase {
         relaunch(["-prisme.debug.tab", "live", "-prisme.debug.live", "replay"])
         shot("70-replay")
         for i in 1...3 { press(.down); shot(String(format: "71-replay-bas-%02d", i)) }
-        press(.select); Thread.sleep(forTimeInterval: 3); shot("72-replay-lecture")
+        press(.select); Thread.sleep(forTimeInterval: 3); shot("72-replay-lecture", focus: false)
         back()
 
         // PROFILS — « Qui regarde ? » à l'ouverture (2 profils : Steven, Léa 12 ans max)

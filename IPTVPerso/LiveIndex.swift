@@ -46,8 +46,11 @@ enum Univers: String, CaseIterable, Identifiable {
     static func of(name: String, category: String) -> Univers {
         let k = ChannelTools.nkey(ChannelTools.clean(name))
         if let u = known(k) { return u }
-        if let u = fromWords(ChannelTools.fold(category), group: true) { return u }
+        let g = fromWords(ChannelTools.fold(category), group: true)
+        if let u = g, u != .generaliste { return u }
         if let u = fromWords(ChannelTools.fold(ChannelTools.clean(name)), group: false) { return u }
+        // groupe « Régions » / « Généralistes » du fournisseur : seulement si le nom ne dit rien d'autre
+        if let u = g { return u }
         return .autres
     }
 
@@ -60,8 +63,8 @@ enum Univers: String, CaseIterable, Identifiable {
             (.generaliste, ["tf1", "france2", "france3", "m6", "canalplus", "tmc", "w9", "tfx", "6ter", "rmcstory", "cherie25", "nrj12", "c8", "cstar", "t18", "novo19",
                             "tv5monde", "tv5", "rtltvi", "latrois", "laune", "rtbf", "rts1", "rtsun", "rts2", "rtsdeux", "tvaplus", "tva", "noovo", "icitele", "radiocanada", "paris premiere", "parispremiere",
                             "france o", "franceo", "la1ere", "guadeloupe1ere", "martinique1ere", "reunion1ere", "guyane1ere", "mayotte1ere", "polynesie1ere", "nouvellecaledonie1ere",
-                            "bfmparis", "bfmlyon", "bfmmarseille", "bfmgrandlille", "bfmnice", "bfmalsace", "bfmtoulon", "bfmgrandlittoral", "bfmdici", "tebeo", "tvrennes", "tl7", "8montblanc", "tlm", "vialocale", "canal32", "ktotv", "kto"]),
-            (.info, ["bfmtv", "bfmbusiness", "bfm2", "cnews", "lci", "franceinfo", "franceinformation", "france24", "euronews", "i24news", "lcp", "publicsenat", "lcppublicsenat", "tf1info",
+                            "bbcone", "bbctwo", "bbcthree", "bbcfour", "itv1", "itv", "channel4", "channel5", "clubrtl", "tipik", "plugrtl", "tebeo", "tvrennes", "tl7", "8montblanc", "tlm", "vialocale", "canal32", "ktotv", "kto"]),
+            (.info, ["bfmparis", "bfmlyon", "bfmmarseille", "bfmgrandlille", "bfmnice", "bfmalsace", "bfmtoulon", "bfmgrandlittoral", "bfmdici", "tv5mondeinfo", "ln24", "bfmtv", "bfmbusiness", "bfm2", "cnews", "lci", "franceinfo", "franceinformation", "france24", "euronews", "i24news", "lcp", "publicsenat", "lcppublicsenat", "tf1info",
                      "bloomberg", "cnn", "bbcworldnews", "bbcnews", "skynews", "aljazeera", "cnbc", "lcn", "rdi", "rtsinfo", "lequipeinfo", "africa24", "trtfrancais"]),
             (.sport, ["lequipe", "beinsports", "bein", "rmcsport", "eurosport", "canalplussport", "canalplusfoot", "canalplussport360", "canalplussportmax", "canalplusmotors", "canalplusmotogp", "canalplusformula1",
                       "infosportplus", "infosport", "equidia", "automotolachaine", "automoto", "golfplus", "golfchannel", "sportenfrance", "multisports", "dazn", "ligue1plus", "olplay", "omtv", "pstv", "tvsport",
@@ -69,9 +72,9 @@ enum Univers: String, CaseIterable, Identifiable {
             (.cinema, ["tf1seriesfilms", "canalpluscinema", "canalpluscinemas", "canalplusgrandecran", "canalpluspremier", "canalplusbox", "cineplus", "ocs", "tcmcinema", "tcm", "paramountchannel", "paramountnetwork",
                        "warnertv", "actionmax", "action", "polarplus", "polar", "rtl9", "cinefx", "cinema", "studiocanal", "sundancetv", "amc", "mgm", "hbo", "showtime", "starz", "cinemax", "filmo", "sonymovies", "goldmovie"]),
             (.series, ["canalplusseries", "serieclub", "13emerue", "13erue", "treizemerue", "syfy", "teva", "ab1", "abxplore", "novelas", "novelastv", "seriesplus", "serieplus", "foxlife", "universal", "tf1series",
-                       "crimedistrict", "investigationdiscovery", "polarseries", "comedycentral"]),
+                       "crimedistrict", "investigationdiscovery", "polarseries"]),
             (.divert, ["comedieplus", "gameone", "j one", "jone", "mcm", "rmc life", "rmclife", "m6boutique", "tfouboutique", "gongtv", "gong", "e!", "eentertainment", "tlc", "fashiontv", "ftv", "luxetv",
-                       "elleplus", "bblack", "rtl2", "canalplusdivertissement", "slip", "melodytv", "museum"]),
+                       "elleplus", "bblack", "rtl2", "comedycentral", "canalplusdivertissement", "slip", "melodytv", "museum"]),
             (.jeunesse, ["gulli", "canalj", "tiji", "disneychannel", "disneyjunior", "disneyxd", "nickelodeon", "nickjr", "nickjunior", "nickteen", "cartoonnetwork", "cartoonito", "boomerang", "piwiplus", "piwi",
                          "teletoonplus", "teletoon", "boing", "mangas", "okoo", "babytv", "babyfirst", "canalpluskids", "france4", "ludikids", "toonami", "duckTV", "ducktv", "tfou", "lucky jack", "luckyjack", "mangasplus", "ginx", "kidsandme", "discoverykids"]),
             (.decouverte, ["france5", "arte", "rmcdecouverte", "planeteplus", "planete", "ushuaiatv", "ushuaia", "nationalgeographic", "natgeo", "natgeowild", "discovery", "discoveryscience", "histoiretv", "histoire",
@@ -112,7 +115,7 @@ enum Univers: String, CaseIterable, Identifiable {
         (.decouverte, #"\b(docu|docus|documentaires?|documentary|documentaries|decouvertes?|discovery|nature|histoire|history)\b"#),
         (.musique, #"\b(musiques?|music|musik|clips?|radios?|hits)\b"#),
         (.divert, #"\b(divertissements?|entertainment|varietes?|humour|comedy)\b"#),
-        (.generaliste, #"\b(generalistes?|tnt|nationales?|regionales?|regions|locales?)\b"#),
+        (.generaliste, #"\b(generalistes?|regionales?|regions|locales?)\b"#),
     ]
 
     static func fromWords(_ s: String, group: Bool) -> Univers? {
