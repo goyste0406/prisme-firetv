@@ -394,8 +394,9 @@ struct SeriesDetailView: View {
                     HStack(spacing: 8) {
                         if e.rating > 0 {
                             let top = info.seasons.first { $0.number == e.season }.map { topEpisodes($0).contains(e.number) } ?? false
-                            Text("★ " + String(format: "%.1f", e.rating).replacingOccurrences(of: ".", with: ",") + (top ? " · à ne pas manquer" : ""))
-                                .foregroundStyle(top ? P.gold : .primary).fontWeight(top ? .heavy : nil)
+                            let note = "★ " + String(format: "%.1f", e.rating).replacingOccurrences(of: ".", with: ",")
+                            // couleur héritée hors « à ne pas manquer » : lisible aussi sur la ligne sélectionnée (fond clair)
+                            if top { Text(note + " · à ne pas manquer").foregroundStyle(P.gold).fontWeight(.heavy) } else { Text(note) }
                         }
                         if m > 0 { Text(runtimeText(m)) }
                         if st == 2 { Pill(text: "✓ VU", bg: Color.white.opacity(0.1), stroke: nil) }
