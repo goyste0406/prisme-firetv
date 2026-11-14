@@ -83,6 +83,7 @@ final class Visite: XCTestCase {
         Thread.sleep(forTimeInterval: 45)
         // visite partielle (lancement manuel avec « seulement = lecteur ») : uniquement le lecteur
         if ProcessInfo.processInfo.environment["ONLY"] == "lecteur" { lecteur(); return }
+        if ProcessInfo.processInfo.environment["ONLY"] == "serie" { ficheSerie(); return }
         shot("01-films-ouverture")
         downUntil(["Catégories", "Licences et sagas"], prefix: "02-films-bas")
         if focused().contains("Catégories") { press(.right) }
@@ -310,11 +311,25 @@ final class Visite: XCTestCase {
         for i in 1...14 { press(.down); shot(String(format: "A3b-six-fiche-bas-%02d", i)) }
         press(.up, 16); shot("A3c-six-fiche-haut")
 
+        ficheSerie()
         lecteur()
 
         // MESURES : accueil Films avec, en plus, le coût de l'ancienne méthode (comparaison avant / après dans mesures.txt)
         relaunch(["-prisme.debug.tab", "films", "-prisme.debug.perfOld", "1"], wait: 20)
         shot("Z-mesures")
+    }
+
+    /// Fiche série : états du simulateur (complété depuis une autre version, manquant, à venir annoncé par TMDB)
+    func ficheSerie() {
+        relaunch(["-prisme.debug.open", "series:demo:2001", "-prisme.debug.season", "3"])
+        Thread.sleep(forTimeInterval: 3); shot("16-fiche-serie-saison3")
+        press(.right, 2); press(.down, 3); Thread.sleep(forTimeInterval: 1); shot("16b-saison3-episodes")
+        press(.down, 3); Thread.sleep(forTimeInterval: 1); shot("16c-saison3-fin")
+        press(.select); Thread.sleep(forTimeInterval: 1); shot("16d-saison3-a-venir-message")
+        press(.select); Thread.sleep(forTimeInterval: 1)
+        relaunch(["-prisme.debug.open", "series:demo:2001", "-prisme.debug.season", "2"])
+        Thread.sleep(forTimeInterval: 3)
+        press(.right, 2); press(.down, 6); Thread.sleep(forTimeInterval: 1); shot("16e-saison2-complete")
     }
 
     func lecteur() {

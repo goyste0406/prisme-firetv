@@ -19,6 +19,8 @@ enum Debug {
     static var liveSection: String? { arg("prisme.debug.live") }
     /// onglet au lancement (« live », « series »…)
     static var tab: String? { arg("prisme.debug.tab") }
+    /// saison affichée à l'ouverture d'une fiche série (visite automatique)
+    static var season: Int? { arg("prisme.debug.season").flatMap { Int($0) } }
     /// historique de visionnage factice (pour voir « Reprendre », « Résumé 60 s »)
     static var seed: Bool { arg("prisme.debug.seed") == "1" }
     static var imgBase: String { arg("prisme.debug.imgBase") ?? "https://image.tmdb.org" }

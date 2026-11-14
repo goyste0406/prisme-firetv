@@ -9,7 +9,7 @@ on:
   workflow_dispatch:
     inputs:
       seulement:
-        description: "Partie à visiter seule (lecteur), vide = visite complète"
+        description: "Partie à visiter seule (lecteur, serie), vide = visite complète"
         required: false
         default: ""
 

@@ -212,12 +212,18 @@ def vod_streams():
                     "added": str(NOW - ago * DAY), "category_id": "12", "container_extension": "mkv", "tmdb": str(fid(i))})
     return out
 
+# Lupin : la version principale n'a pas S2E4 (complété depuis la version VOSTFR) ; aucune n'a S3E2 (« manquant »)
+LUPIN_ALT = 2900
+HOLES = {2001: {(2, 4), (3, 2)}, LUPIN_ALT: {(3, 2)}}
+
 def series_list():
     out = []
     for i, (t, y, v, g, ns, ne, rt, ago) in enumerate(SERIES):
         cat = "20" if i in (0, 1, 2, 6, 8) else ("21" if i in (3, 9) else "22")
         out.append({"num": i + 1, "name": f"FR| {t} ({y})", "series_id": sid(i), "cover": img_url("p", f"s{sid(i)}", t), "plot": f"{t} : résumé de la série.",
                     "releaseDate": f"{y}-01-01", "rating": str(v), "last_modified": str(NOW - ago * DAY - 7200), "category_id": cat, "tmdb": str(sid(i))})
+    out.append({"num": 99, "name": "FR| Lupin (2021) VOSTFR", "series_id": LUPIN_ALT, "cover": img_url("p", "s2001", "Lupin"), "plot": "Lupin : résumé de la série.",
+                "releaseDate": "2021-01-01", "rating": "7.5", "last_modified": str(NOW - 400 * DAY), "category_id": "22", "tmdb": "2001"})
     return out
 
 def vod_info(vid):
@@ -230,15 +236,16 @@ def vod_info(vid):
             "movie_data": {"stream_id": vid, "container_extension": "mkv"}}
 
 def series_info(sidv):
-    i = sidv - 2000
+    i = 1 if sidv == LUPIN_ALT else sidv - 2000
     t, y, v, g, ns, ne, rt, ago = SERIES[i]
     eps = {}
+    holes = HOLES.get(sidv, set())
     for s in range(1, ns + 1):
         eps[str(s)] = [{"id": f"{sidv}{s:02d}{e:02d}", "episode_num": e, "title": f"{t} - S{s:02d}E{e:02d} - Épisode {e}", "container_extension": "mkv", "season": s,
                         "info": {"plot": f"Épisode {e} de la saison {s}.", "movie_image": img_url("b", f"e{sidv}{s}{e}", ""), "duration": f"00:{rt}:00",
                                  "duration_secs": rt * 60, "rating": str(round(7.2 + ((s * 7 + e * 5) % 22) / 10, 1))},
                         # les 2 derniers épisodes de la dernière saison sont arrivés il y a 2 jours (« nouveau »), les autres il y a longtemps
-                        "added": str(NOW - (2 if s == ns and e > ne - 2 else 200) * DAY)} for e in range(1, ne + 1)]
+                        "added": str(NOW - (2 if s == ns and e > ne - 2 else 200) * DAY)} for e in range(1, ne + 1) if (s, e) not in holes]
     return {"info": {"name": t, "plot": f"{t} : résumé fourni par le fournisseur.", "cast": "Omar Sy, Ludivine Sagnier, Clotilde Hesme",
                      "director": "George Kay", "genre": ", ".join(g), "backdrop_path": [img_url("b", f"s{sidv}", "")], "rating": str(v),
                      "releaseDate": f"{y}-01-01", "episode_run_time": str(rt), "youtube_trailer": "dQw4w9WgXcQ", "tmdb": str(sidv)},
@@ -311,7 +318,18 @@ def tv(i):
             "first_air_date": f"{y}-01-01", "adult": False, "origin_country": ["FR" if i in (0, 1, 2, 7, 9) else "US"],
             "created_by": [{"name": "Créateur " + t}], "networks": [], "images": {"logos": [{"iso_639_1": "fr", "file_path": tmdb_path("g", f"s{s}")}]},
             "aggregate_credits": {"cast": [{"name": a, "roles": [{"character": c}], "profile_path": tmdb_path("r", a.replace(" ", "_"))} for a, c in CAST[2:8]]},
-            "watch/providers": providers_for(t)}
+            "watch/providers": providers_for(t),
+            # Lupin : un 6e épisode de la saison 3 annoncé dans 3 jours (« à venir »)
+            "next_episode_to_air": ({"season_number": ns, "episode_number": ne + 1, "name": "Le dernier coup", "air_date": day(3)} if i == 1 else None)}
+
+def day(n):
+    return time.strftime("%Y-%m-%d", time.localtime(NOW + n * DAY))
+
+def tv_season(i, sn):
+    t, y, v, g, ns, ne, rt, ago = SERIES[i]
+    count = ne + (1 if i == 1 and sn == ns else 0)
+    return {"season_number": sn, "episodes": [{"season_number": sn, "episode_number": e, "name": ("Le dernier coup" if e > ne else f"Épisode {e}"),
+                                               "air_date": day(3) if e > ne else f"{y + sn - 1}-0{min(9, e)}-01"} for e in range(1, count + 1)]}
 
 def tmdb(path, q):
     if path == "/configuration": return {"images": {}}
@@ -328,6 +346,11 @@ def tmdb(path, q):
         if not (0 <= i < len(FILMS)): return None
         if m.group(2): return {"results": [{"site": "YouTube", "type": "Trailer", "key": "dQw4w9WgXcQ"}] if (q.get("language") or [""])[0] == "fr-FR" else []}
         return movie(i)
+    m = re.match(r"^/tv/(\d+)/season/(\d+)$", path)
+    if m:
+        i = int(m.group(1)) - 2000
+        if not (0 <= i < len(SERIES)): return None
+        return tv_season(i, int(m.group(2)))
     m = re.match(r"^/tv/(\d+)(/videos)?$", path)
     if m:
         i = int(m.group(1)) - 2000

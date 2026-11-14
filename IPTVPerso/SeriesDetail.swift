@@ -28,6 +28,10 @@ struct SeriesDetailView: View {
     @State private var showTrailer: Trailer?
     @State private var loading = true
     @State private var showRecap: RecapPlan?
+    /// épisodes absents de la version choisie mais présents dans une autre version (« complété depuis … »)
+    @State private var fills: [String: EpisodeFill] = [:]
+    /// épisodes annoncés par TMDB dans les 7 prochains jours, pas encore chez le fournisseur (« à venir »)
+    @State private var upcoming: [UpcomingEpisode] = []
     @FocusState private var tabFocus: String?
     @FocusState private var playFocused: Bool
 
@@ -98,11 +102,14 @@ struct SeriesDetailView: View {
                 if info.seasons.count > 0 { seasonRows }
                 if !all.isEmpty {
                     HStack(spacing: 22) {
-                        Label("vu", systemImage: "checkmark").foregroundStyle(Color(red: 0.45, green: 0.85, blue: 0.5))
-                        Text("● à suivre").foregroundStyle(.white.opacity(0.85))
-                        if hasNew { Text("● nouveau").foregroundStyle(Self.newBlue) }
-                        Text("○ pas encore vu").foregroundStyle(P.faint)
-                    }.font(P.font(17, .medium))
+                        // légende du simulateur (.f3leg)
+                        Text("✓ vu").foregroundStyle(Color(red: 0.62, green: 0.94, blue: 0.69))
+                        Text("● à suivre").foregroundStyle(.white)
+                        Text("● nouveau").foregroundStyle(Self.newBlue)
+                        Text("○ à venir").foregroundStyle(Self.soonTeal)
+                        Text("! manquant").foregroundStyle(Self.missOrange)
+                        Text("◆ complété").foregroundStyle(Self.fillPurple)
+                    }.font(P.font(17, .medium)).opacity(0.85)
                 }
                 if loading { ProgressView().tint(.white).padding(.top, 20) }
             }
@@ -242,13 +249,10 @@ struct SeriesDetailView: View {
                     HStack(spacing: 18) {
                         Text("Saison \(s.number)").font(P.font(22, .bold)).frame(width: 130, alignment: .leading)
                         VStack(alignment: .leading, spacing: 4) {
+                            let sl = slots(s)
                             HStack(spacing: 5) {
-                                ForEach(s.episodes.prefix(24)) { e in
-                                    let st = state(e)
-                                    RoundedRectangle(cornerRadius: 4).fill(st == 2 ? Color(red: 0.45, green: 0.85, blue: 0.5).opacity(0.85) : st == 1 ? Color.white : isNew(e) ? Self.newBlue : Color.white.opacity(0.16))
-                                        .frame(width: 18, height: 22)
-                                }
-                                if s.episodes.count > 24 { Text("+\(s.episodes.count - 24)").font(P.font(15, .bold)).opacity(0.6) }
+                                ForEach(sl.prefix(24)) { x in slotBox(x) }
+                                if sl.count > 24 { Text("+\(sl.count - 24)").font(P.font(15, .bold)).opacity(0.6) }
                             }
                             // courbe des notes des épisodes (simulateur : .spk), points sur les deux meilleurs
                             if s.episodes.count > 1, s.episodes.allSatisfy({ $0.rating > 0 }) {
@@ -268,6 +272,55 @@ struct SeriesDetailView: View {
     }
 
     static let newBlue = Color(red: 0.31, green: 0.63, blue: 1)
+    // couleurs du simulateur : à venir #5ee0c8, manquant #ffb35c, complété #b48cff
+    static let soonTeal = Color(red: 0.37, green: 0.88, blue: 0.78)
+    static let missOrange = Color(red: 1, green: 0.70, blue: 0.36)
+    static let fillPurple = Color(red: 0.71, green: 0.55, blue: 1)
+
+    /// Une place d'épisode dans une saison : épisode du fournisseur, complété depuis une autre version, manquant, ou à venir.
+    struct Slot: Identifiable {
+        enum Kind { case ep(EpisodeInfo), filled(EpisodeFill), missing, soon(UpcomingEpisode) }
+        let season: Int, number: Int, kind: Kind
+        var id: String { "\(season)-\(number)" }
+    }
+
+    /// Les épisodes de la saison dans l'ordre, trous compris : un numéro absent de la version choisie est pris dans une
+    /// autre version s'il y existe (« complété »), sinon il est « manquant » ; les épisodes annoncés par TMDB suivent.
+    private func slots(_ s: Season) -> [Slot] {
+        var byN: [Int: EpisodeInfo] = [:]
+        for e in s.episodes where byN[e.number] == nil { byN[e.number] = e }
+        let filledHere = fills.values.filter { $0.episode.season == s.number }
+        let top = max(byN.keys.max() ?? 0, filledHere.map(\.episode.number).max() ?? 0)
+        guard top > 0, top <= 60 else { return s.episodes.map { Slot(season: s.number, number: $0.number, kind: .ep($0)) } }
+        var out: [Slot] = []
+        for n in 1...top {
+            if let e = byN[n] { out.append(Slot(season: s.number, number: n, kind: .ep(e))) }
+            else if let f = fills["\(s.number)-\(n)"] { out.append(Slot(season: s.number, number: n, kind: .filled(f))) }
+            else { out.append(Slot(season: s.number, number: n, kind: .missing)) }
+        }
+        for u in upcoming where u.season == s.number && u.number > top { out.append(Slot(season: s.number, number: u.number, kind: .soon(u))) }
+        return out
+    }
+
+    /// Case d'un épisode dans la ligne d'une saison (simulateur : .g3d i)
+    @ViewBuilder private func slotBox(_ x: Slot) -> some View {
+        let shape = RoundedRectangle(cornerRadius: 4)
+        switch x.kind {
+        case .ep(let e):
+            let st = state(e)
+            shape.fill(st == 2 ? Color(red: 0.45, green: 0.85, blue: 0.5).opacity(0.85) : st == 1 ? Color.white : isNew(e) ? Self.newBlue : Color.white.opacity(0.16))
+                .frame(width: 18, height: 22)
+        case .filled(let f):
+            let st = state(f.episode)
+            shape.fill(st == 2 ? Color(red: 0.45, green: 0.85, blue: 0.5).opacity(0.85) : st == 1 ? Color.white : Color.white.opacity(0.16))
+                .overlay(alignment: .bottom) { Rectangle().fill(Self.fillPurple).frame(height: 4) }
+                .clipShape(shape).frame(width: 18, height: 22)
+        case .missing:
+            shape.fill(Self.missOrange).frame(width: 18, height: 22)
+        case .soon:
+            shape.strokeBorder(Self.soonTeal.opacity(0.7), style: StrokeStyle(lineWidth: 1.5, dash: [3, 2])).frame(width: 18, height: 22)
+        }
+    }
 
     /// Ajouté chez le fournisseur depuis moins de 7 jours et pas encore vu (date d'ajout réelle de l'épisode).
     private func isNew(_ e: EpisodeInfo) -> Bool {
@@ -364,7 +417,18 @@ struct SeriesDetailView: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .focusSection()
-            ForEach(shown) { e in episodeRow(e) }
+            ForEach(slots(s).filter { x in
+                guard essential else { return true }
+                if case .ep(let e) = x.kind { return shown.contains(e) }
+                return false
+            }) { x in
+                switch x.kind {
+                case .ep(let e): episodeRow(e)
+                case .filled(let f): episodeRow(f.episode, fill: f)
+                case .missing: placeholderRow(x)
+                case .soon: placeholderRow(x)
+                }
+            }
         } else if loading {
             ProgressView().tint(.white).frame(maxWidth: .infinity, minHeight: 300)
         } else {
@@ -372,11 +436,13 @@ struct SeriesDetailView: View {
         }
     }
 
-    private func episodeRow(_ e: EpisodeInfo) -> some View {
+    private func episodeRow(_ e: EpisodeInfo, fill: EpisodeFill? = nil) -> some View {
         let st = state(e)
         let f = watch.fraction(key(e))
         let m = mins(e)
-        return Button { playEpisode(e, from: watch.resume(key(e)) ?? 0) } label: {
+        return Button {
+            if let fill { playFill(fill, from: watch.resume(key(e)) ?? 0) } else { playEpisode(e, from: watch.resume(key(e)) ?? 0) }
+        } label: {
             HStack(alignment: .top, spacing: 24) {
                 ZStack(alignment: .bottom) {
                     Poster(url: e.image.isEmpty ? (info.backdrop.isEmpty ? item.posterURL : info.backdrop) : e.image).frame(width: 288, height: 162).clipped()
@@ -402,6 +468,7 @@ struct SeriesDetailView: View {
                         if st == 2 { Pill(text: "✓ VU", bg: Color.white.opacity(0.1), stroke: nil) }
                         else if f != nil { Pill(text: "EN COURS", bg: Color.white.opacity(0.85), fg: .black, stroke: nil) }
                         else if isNew(e) { Pill(text: "NOUVEAU", bg: Self.newBlue.opacity(0.25), fg: Self.newBlue, stroke: nil) }
+                        if let fill { Text("◆ complété depuis " + fill.from).foregroundStyle(Self.fillPurple).lineLimit(1) }
                     }.font(P.font(18, .medium)).opacity(0.75)
                     if !e.plot.isEmpty { Text(e.plot).font(P.font(19)).opacity(0.7).lineLimit(2) }
                 }
@@ -410,7 +477,41 @@ struct SeriesDetailView: View {
             .padding(12)
             .frame(width: SeriesDetailView.panelW - 60, alignment: .leading)
         }
-        .buttonStyle(EpisodeStyle(current: st == 1))
+        .buttonStyle(EpisodeStyle(current: st == 1, seen: st == 2))
+    }
+
+    /// Épisode manquant chez le fournisseur ou annoncé par TMDB : même ligne que les autres, sans lecture possible.
+    private func placeholderRow(_ x: Slot) -> some View {
+        var name = "Épisode \(x.number)", pill = ("MANQUANT", Self.missOrange, Color.black), when = "", msg = ""
+        if case .soon(let u) = x.kind {
+            if !u.name.isEmpty { name = u.name }
+            pill = ("À VENIR", Self.soonTeal.opacity(0.25), Self.soonTeal)
+            when = u.days == 1 ? "demain" : Fmt.day(u.date)
+            msg = "Épisode \(x.number) de la saison \(x.season) : diffusion prévue \(when == "demain" ? "demain" : when + " " + Fmt.date(u.date))."
+        } else {
+            msg = "L'épisode \(x.number) de la saison \(x.season) n'est pas encore chez ton fournisseur."
+        }
+        let m = info.seasons.first { $0.number == x.season }?.episodes.first.map { mins($0) } ?? 0
+        return Button { launchMsg = msg } label: {
+            HStack(alignment: .top, spacing: 24) {
+                Poster(url: info.backdrop.isEmpty ? item.posterURL : info.backdrop).frame(width: 288, height: 162).clipped()
+                    .overlay(Color.black.opacity(0.45))
+                    .clipShape(RoundedRectangle(cornerRadius: 14))
+                VStack(alignment: .leading, spacing: 7) {
+                    Text("\(x.number). " + name).font(P.font(25, .bold)).lineLimit(1)
+                    HStack(spacing: 8) {
+                        if m > 0 { Text(runtimeText(m)) }
+                        Pill(text: pill.0, bg: pill.1, fg: pill.2, stroke: nil)
+                        if !when.isEmpty { Text(when) }
+                    }.font(P.font(18, .medium)).opacity(0.75)
+                    if case .missing = x.kind { Text("pas encore chez ton fournisseur").font(P.font(19)).opacity(0.7) }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .padding(12)
+            .frame(width: SeriesDetailView.panelW - 60, alignment: .leading)
+        }
+        .buttonStyle(EpisodeStyle(current: false, seen: false))
     }
 
     /// Titre d'épisode sans le nom de la série répété par certains fournisseurs (« Lupin - S01E02 - … »).
@@ -499,11 +600,13 @@ struct SeriesDetailView: View {
         if chosen == nil { chosen = v1.first }
         if let c = chosen, c.id != item.id { info = await InfoLoader.load(c) } else { info = i1 }
         versions = v1
-        if season == 0 { season = nextEp?.season ?? info.seasons.first?.number ?? 1 }
+        if season == 0 { season = Debug.season ?? nextEp?.season ?? info.seasons.first?.number ?? 1 }
         loading = false
         // le bouton Reprendre/Commencer n'est sélectionnable qu'une fois les épisodes chargés : on y pose le focus à ce moment-là
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { if !all.isEmpty && showRecap == nil && playing == nil { playFocused = true } }
         if fiche == nil, TmdbKey.value != nil { fiche = await FicheWorker.fetchNow(item, tmdbHint: info.tmdb) }
+        fills = await EpisodeFill.find(main: chosen ?? item, info: info, versions: v1, providerName: { store.provider($0)?.name ?? "" })
+        if let id = fiche?.tmdb ?? (info.tmdb > 0 ? info.tmdb : nil) { upcoming = await UpcomingEpisode.load(tmdb: id, have: Set(all.map { "\($0.season)-\($0.number)" })) }
         airings = await LiveStore.airings(title: title, providers: pids)
         let y = (fiche?.year ?? 0) > 0 ? fiche!.year : (item.clean.year > 0 ? item.clean.year : info.year)
         trailer = await TrailerStore.find(title: title, year: y, minutes: 0, tmdb: fiche?.tmdb ?? info.tmdb, tv: true)
@@ -514,6 +617,11 @@ struct SeriesDetailView: View {
     private var trailerPlay: (() -> Void)? {
         if all.isEmpty { return nil }
         return { mainAction() }
+    }
+
+    private func playFill(_ f: EpisodeFill, from: Double) {
+        guard let p = store.provider(f.version.pid) else { return }
+        playing = EpisodeLogic.request(item, title: title, info: f.info, provider: p, episode: f.episode, from: from)
     }
 
     private func playEpisode(_ e: EpisodeInfo, from: Double) {
@@ -554,16 +662,25 @@ struct SeasonStyle: ButtonStyle {
 /// Ligne d'épisode dans le panneau : verre clair quand sélectionnée, liseré blanc à gauche pour l'épisode à suivre.
 struct EpisodeStyle: ButtonStyle {
     let current: Bool
-    func makeBody(configuration c: Configuration) -> some View { Inner(c: c, current: current) }
+    var seen = false
+    func makeBody(configuration c: Configuration) -> some View { Inner(c: c, current: current, seen: seen) }
+    /// comme le simulateur (.sf2e) : sélection = fond blanc à 12 % et anneau blanc autour de l'image ;
+    /// épisode à suivre = fond à 7 % et trait blanc à gauche ; épisode vu = atténué
     private struct Inner: View {
         let c: ButtonStyleConfiguration
         let current: Bool
+        let seen: Bool
         @Environment(\.isFocused) var f
         var body: some View {
-            c.label.foregroundStyle(f ? Color.black : .white)
-                .background(RoundedRectangle(cornerRadius: 20, style: .continuous).fill(f ? Color.white : Color.white.opacity(current ? 0.08 : 0)))
-                .overlay(alignment: .leading) { if current && !f { Capsule().fill(.white).frame(width: 4).padding(.vertical, 14) } }
-                .scaleEffect(f ? 1.02 : 1).shadow(color: .black.opacity(f ? 0.4 : 0), radius: 16, y: 8)
+            c.label.foregroundStyle(.white)
+                .background(RoundedRectangle(cornerRadius: 20, style: .continuous).fill(Color.white.opacity(f ? 0.12 : (current ? 0.07 : 0))))
+                .overlay(alignment: .topLeading) {
+                    // anneau de la vignette (288 × 162, à 12 pt du bord de la ligne)
+                    if f { RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(Color.white, lineWidth: 3).frame(width: 288, height: 162).padding(12) }
+                }
+                .overlay(alignment: .leading) { if current { Capsule().fill(.white).frame(width: 4).padding(.vertical, 14) } }
+                .opacity(seen && !f ? 0.6 : 1)
+                .scaleEffect(f ? 1.01 : 1)
                 .animation(.easeOut(duration: 0.15), value: f)
         }
     }
@@ -606,5 +723,54 @@ struct RatingSpark: View {
                 Circle().fill(Color(red: 1, green: 0.83, blue: 0.42)).frame(width: 7, height: 7).position(pt(i))
             }
         }
+    }
+}
+
+
+/// Épisode absent de la version choisie, pris dans une autre version de la même série.
+struct EpisodeFill {
+    let episode: EpisodeInfo
+    let version: MediaItem
+    let info: MediaInfo
+    /// fournisseur de l'autre version, ou ses repères (« VOSTFR ») si c'est le même fournisseur
+    let from: String
+
+    static func find(main: MediaItem, info: MediaInfo, versions: [MediaItem], providerName: (String) -> String) async -> [String: EpisodeFill] {
+        let others = versions.filter { $0.id != main.id }.prefix(4)
+        guard !others.isEmpty else { return [:] }
+        let have = Set(info.seasons.flatMap(\.episodes).map { "\($0.season)-\($0.number)" })
+        var out: [String: EpisodeFill] = [:]
+        for v in others {
+            let vi = await InfoLoader.load(v)
+            let from = v.pid != main.pid ? providerName(v.pid) : (v.clean.tags.isEmpty ? "une autre version" : "la version " + v.clean.tags.joined(separator: " · "))
+            for e in vi.seasons.flatMap(\.episodes) {
+                let k = "\(e.season)-\(e.number)"
+                if !have.contains(k), out[k] == nil { out[k] = EpisodeFill(episode: e, version: v, info: vi, from: from) }
+            }
+        }
+        return out
+    }
+}
+
+/// Épisode annoncé par TMDB (prochaine diffusion) dans les 7 jours, pas encore chez le fournisseur.
+struct UpcomingEpisode {
+    let season: Int, number: Int, name: String, date: Date, days: Int
+
+    static func load(tmdb: Int, have: Set<String>) async -> [UpcomingEpisode] {
+        guard let key = TmdbKey.value, tmdb > 0 else { return [] }
+        let api = TmdbAPI(key: key)
+        guard let d = await api.get("/tv/\(tmdb)", [("language", "fr-FR")]),
+              let nx = d["next_episode_to_air"] as? [String: Any], let sn = nx["season_number"] as? Int,
+              let sd = await api.get("/tv/\(tmdb)/season/\(sn)", [("language", "fr-FR")]) else { return [] }
+        let f = DateFormatter(); f.locale = Locale(identifier: "en_US_POSIX"); f.dateFormat = "yyyy-MM-dd"
+        let today = Calendar.current.startOfDay(for: Date())
+        return ((sd["episodes"] as? [[String: Any]]) ?? []).compactMap { e in
+            guard let n = e["episode_number"] as? Int, let ds = e["air_date"] as? String, let date = f.date(from: ds),
+                  !have.contains("\(sn)-\(n)") else { return nil }
+            let j = Calendar.current.dateComponents([.day], from: today, to: date).day ?? 0
+            // comme le simulateur : diffusion dans 1 à 7 jours
+            guard (1...7).contains(j) else { return nil }
+            return UpcomingEpisode(season: sn, number: n, name: (e["name"] as? String) ?? "", date: date, days: j)
+        }.sorted { $0.number < $1.number }
     }
 }
