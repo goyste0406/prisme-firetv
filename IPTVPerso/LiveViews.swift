@@ -78,6 +78,8 @@ struct LiveHomeView: View {
             .padding(.vertical, 16).padding(.horizontal, 10)
         }
         .frame(width: 104).frame(maxHeight: .infinity, alignment: .top)
+        // les icônes du bas (Musique, Autres, Favoris…) défilent DANS la colonne au lieu de déborder dessous
+        .clipShape(RoundedRectangle(cornerRadius: 30, style: .continuous))
         .glass(30)
         .padding(.bottom, 50)
         .focusSection()
@@ -321,9 +323,10 @@ struct UniverseCard: View {
             }
             HStack(spacing: 8) {
                 Image(systemName: icon).font(P.font(17, .semibold))
-                Text(label).font(P.font(20, .bold)).lineLimit(1)
-                Spacer()
-                Text("\(count) chaîne" + (count > 1 ? "s" : "")).font(P.font(17)).foregroundStyle(P.dim)
+                // le nom de la catégorie reste entier (« Généraliste », « Divertissement ») ; le nombre se resserre
+                Text(label).font(P.font(20, .bold)).lineLimit(1).fixedSize()
+                Spacer(minLength: 6)
+                Text("\(count) chaîne" + (count > 1 ? "s" : "")).font(P.font(17)).foregroundStyle(P.dim).lineLimit(1).minimumScaleFactor(0.7)
             }
             .frame(width: ChannelCard.size.width)
             HStack(spacing: 6) {

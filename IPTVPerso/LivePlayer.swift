@@ -138,13 +138,15 @@ final class LivePlayerController: UIViewController, VLCMediaPlayerDelegate {
 
     private func showCard() {
         let ch = current
-        chLabel.text = (ch.num > 0 ? "\(ch.num) · " : "") + ch.name
-        nowLabel.text = ch.name; nextLabel.text = ""; bar.progress = 0
+        // vrai nom de la chaîne (« TF1 », pas « FR| TF1 HEVC »)
+        let shown = ChannelTools.clean(ch.name)
+        chLabel.text = (ch.num > 0 ? "\(ch.num) · " : "") + shown
+        nowLabel.text = shown; nextLabel.text = ""; bar.progress = 0
         Task { @MainActor in
             let (n, x) = await LiveStore.nowNext(ch)
             guard self.current.id == ch.id else { return }
             let f = DateFormatter(); f.dateFormat = "HH:mm"
-            self.nowLabel.text = n?.title ?? ch.name
+            self.nowLabel.text = n?.title ?? ChannelTools.clean(ch.name)
             self.bar.progress = Float(n?.progress() ?? 0)
             self.bar.isHidden = n == nil
             if let x { self.nextLabel.text = "Ensuite à \(f.string(from: x.startDate)) · \(x.title)" }

@@ -115,13 +115,16 @@ final class Visite: XCTestCase {
         // TV en direct : catégories fixes (Explorer par univers), « En ce moment à la télé », colonne d'icônes
         relaunch(["-prisme.debug.tab", "live"])
         shot("25-tv-accueil")
-        downUntil(["Généraliste", "Info"], max: 8, prefix: "25b-tv-vers-univers")
+        // en-tête, puis « Explorer par univers » (catégories fixes), puis « En ce moment à la télé »
+        press(.down, 2); shot("25b-tv-univers")
         for i in 1...10 { press(.right); shot(String(format: "26-univers-%02d", i)) }
-        press(.left, 12)
+        press(.left, 12); shot("26b-univers-debut")
+        press(.select); Thread.sleep(forTimeInterval: 2); shot("26c-univers-grille")
+        back(); Thread.sleep(forTimeInterval: 1)
         press(.down); shot("27-en-ce-moment")
         for i in 1...4 { press(.right); shot(String(format: "27b-en-ce-moment-%02d", i)) }
         press(.select); Thread.sleep(forTimeInterval: 2); shot("27c-en-ce-moment-chaines")
-        back(); shot("27d-retour")
+        back(); Thread.sleep(forTimeInterval: 1); shot("27d-retour")
         press(.down, 3); shot("27e-tv-bas")
         // colonne d'icônes : chaque catégorie ouvre sa grille
         press(.left, 12); shot("28-colonne")
