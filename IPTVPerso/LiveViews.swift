@@ -15,6 +15,8 @@ struct LiveHomeView: View {
     @State private var fromPage = false
 
     struct PlayRequest: Identifiable { let id = UUID(); let list: [Channel]; let index: Int }
+    /// paquet « univers » ouvert en éventail par-dessus la page
+    @State private var deck: ChannelDeck?
     struct GuideRequest: Identifiable { let id = UUID(); let list: [Channel]; let title: String }
 
     private var rail: [(String, String, String)] {
@@ -37,6 +39,14 @@ struct LiveHomeView: View {
             }
             .padding(.leading, 60).padding(.trailing, 40)
         }
+        .disabled(deck != nil)
+        .overlay {
+            if let d = deck {
+                ChannelFan(title: d.title, icon: d.icon, channels: d.channels, play: play, close: { deck = nil })
+                    .transition(.opacity)
+            }
+        }
+        .animation(.easeOut(duration: 0.3), value: deck?.id)
         .ignoresSafeArea(edges: .top)
         // Retour depuis une catégorie (Info, Sport…) ou une autre rubrique de la colonne : revenir à l'accueil
         // de la TV en direct, au lieu de quitter prisme (seulement depuis l'accueil, Retour garde son effet habituel)
@@ -58,7 +68,7 @@ struct LiveHomeView: View {
             case "fav": ChannelListView(mode: .fav, play: play, guide: openGuide)
             case "recent": ChannelListView(mode: .recent, play: play, guide: openGuide)
             case "all": AllCategoriesView(play: play, guide: openGuide)
-            default: LiveFrontView(index: index, play: play, guide: openGuide, openSection: { fromPage = true; section = $0 })
+            default: LiveFrontView(index: index, play: play, guide: openGuide, openSection: { fromPage = true; section = $0 }, openDeck: { d in deck = d }, deckOpen: deck != nil)
             }
         }
     }
@@ -120,6 +130,10 @@ struct LiveFrontView: View {
     let play: ([Channel], Int) -> Void
     let guide: ([Channel], String) -> Void
     let openSection: (String) -> Void
+    var openDeck: (ChannelDeck) -> Void = { _ in }
+    var deckOpen = false
+    @FocusState private var deckFocus: String?
+    @State private var lastDeck: String?
     @EnvironmentObject var store: ProviderStore
     @ObservedObject var prefs = LivePrefs.shared
     @State private var recent: [Channel] = []
@@ -157,11 +171,12 @@ struct LiveFrontView: View {
                 if !index.isEmpty {
                     rowTitle("Explorer par univers", "OK pour voir toutes les chaînes")
                     row {
-                        if !recent.isEmpty { UniverseCard(label: "Reprendre", icon: "arrow.counterclockwise", channels: recent, count: recent.count) { openRecent = true } }
-                        if !favs.isEmpty { UniverseCard(label: "Favoris", icon: "star.fill", channels: favs, count: favs.count) { openFav = true } }
+                        // OK ouvre le paquet en éventail par-dessus la page (simulateur : ldeck)
+                        if !recent.isEmpty { UniverseCard(label: "Reprendre", icon: "arrow.counterclockwise", channels: recent, count: recent.count, focusTag: ($deckFocus, "rec")) { open("rec", ChannelDeck(title: "Reprendre", icon: "arrow.counterclockwise", channels: recent)) } }
+                        if !favs.isEmpty { UniverseCard(label: "Favoris", icon: "star.fill", channels: favs, count: favs.count, focusTag: ($deckFocus, "fav")) { open("fav", ChannelDeck(title: "Favoris", icon: "star.fill", channels: favs)) } }
                         ForEach(Univers.allCases) { u in
                             let L = index.filter { $0.univers == u }.map(\.ch)
-                            if !L.isEmpty { UniverseCard(label: u.label, icon: u.icon, channels: L, count: L.count) { openSection("u:" + u.rawValue) } }
+                            if !L.isEmpty { UniverseCard(label: u.label, icon: u.icon, channels: L, count: L.count, focusTag: ($deckFocus, "u:" + u.rawValue)) { open("u:" + u.rawValue, ChannelDeck(title: u.label, icon: u.icon, channels: L)) } }
                         }
                     }
                 }
@@ -171,7 +186,7 @@ struct LiveFrontView: View {
                     rowTitle("En ce moment à la télé", "selon le guide des programmes · OK pour voir les chaînes")
                     row {
                         ForEach(nowGenres, id: \.0) { g in
-                            UniverseCard(label: g.0.label, icon: g.0.icon, channels: g.1, count: g.1.count) { nowOpen = g.0; nowShown = true }
+                            UniverseCard(label: g.0.label, icon: g.0.icon, channels: g.1, count: g.1.count, focusTag: ($deckFocus, "now:" + g.0.rawValue)) { open("now:" + g.0.rawValue, ChannelDeck(title: g.0.label + " en ce moment", icon: g.0.icon, channels: g.1)) }
                         }
                     }
                 }
@@ -201,7 +216,13 @@ struct LiveFrontView: View {
             CategoryChannelsView(title: "Reprendre", loader: { ChannelTools.dedupe(await LiveStore.channels(ids: LivePrefs.shared.recent)) }, play: play, guide: guide)
         }
         .task(id: "\(store.catalogVersion)|\(prefs.recent.first ?? "")|\(prefs.favorites.count)") { await load() }
+        .onChange(of: deckOpen) { _, o in
+            if !o, let k = lastDeck { DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { deckFocus = k } }
+        }
     }
+
+    /// ouvre un paquet et retient lequel, pour lui rendre la sélection quand il sera refermé
+    private func open(_ key: String, _ d: ChannelDeck) { lastDeck = key; openDeck(d) }
 
     private func row<C: View>(@ViewBuilder _ c: () -> C) -> some View {
         ScrollView(.horizontal) {
@@ -320,11 +341,21 @@ struct UniverseCard: View {
     let icon: String
     let channels: [Channel]
     let count: Int
+    var focusTag: (FocusState<String?>.Binding, String)? = nil
     let action: () -> Void
+    @State private var focused = false
+    private var isOpen: Bool { focusTag.map { $0.0.wrappedValue == $0.1 } ?? focused }
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             if let first = channels.first {
-                ChannelCard(ch: first, fav: false, action: action)
+                // paquet de cartes du simulateur (.ldk) : deux cartes derrière, décalées en haut à droite et assombries,
+                // qui s'écartent quand le paquet est sélectionné
+                ZStack(alignment: .topLeading) {
+                    ForEach([2, 1], id: \.self) { k in
+                        if channels.count > k { DeckLayer(ch: channels[k], depth: k, open: isOpen) }
+                    }
+                    ChannelCard(ch: first, fav: false, onFocus: { f in focused = f }, focusTag: focusTag, action: action)
+                }
             }
             HStack(spacing: 8) {
                 Image(systemName: icon).font(P.font(17, .semibold))
@@ -339,6 +370,95 @@ struct UniverseCard: View {
                 if count > 3 { Text("+\(count - 3)").font(P.font(15, .bold)).foregroundStyle(P.dim) }
             }
             .frame(width: ChannelCard.size.width, alignment: .leading)
+        }
+    }
+}
+
+/// Sélection d'une carte : liée à un état de la page si demandé, sinon à la carte elle-même.
+struct CardFocus: ViewModifier {
+    let tag: (FocusState<String?>.Binding, String)?
+    let own: FocusState<Bool>.Binding
+    @ViewBuilder func body(content: Content) -> some View {
+        if let t = tag { content.focused(t.0, equals: t.1) } else { content.focused(own) }
+    }
+}
+
+/// Carte de fond d'un paquet « univers » (simulateur : .ldk .lay.l2, .l3).
+struct DeckLayer: View {
+    let ch: Channel
+    let depth: Int
+    let open: Bool
+    var body: some View {
+        let hue = P.hue(ChannelTools.clean(ch.name))
+        // simulateur (carte de 220 px) : l2 = (9, −9) ×0,94 luminosité 0,5 ; l3 = (18, −18) ×0,88 luminosité 0,32 ;
+        // sélectionné : l2 = (20, −16), l3 = (38, −30). Ici à l'échelle de la carte de 300 pt.
+        let k: CGFloat = ChannelCard.size.width / 220
+        let off: CGSize = depth == 1 ? (open ? CGSize(width: 20, height: -16) : CGSize(width: 9, height: -9)) : (open ? CGSize(width: 38, height: -30) : CGSize(width: 18, height: -18))
+        LinearGradient(colors: [Color(hue: hue, saturation: 0.55, brightness: 0.44), Color(hue: hue, saturation: 0.5, brightness: 0.15)], startPoint: .topLeading, endPoint: .bottomTrailing)
+            .overlay(Color.black.opacity(depth == 1 ? 0.5 : 0.68))
+            .frame(width: ChannelCard.size.width, height: ChannelCard.size.height)
+            .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+            .shadow(color: .black.opacity(0.5), radius: 14, y: 6)
+            .scaleEffect(depth == 1 ? 0.94 : 0.88)
+            .offset(x: off.width * k, y: off.height * k)
+            .animation(.timingCurve(0.2, 0.8, 0.2, 1, duration: 0.3), value: open)
+            .allowsHitTesting(false)
+    }
+}
+
+/// Paquet ouvert (simulateur : .lfan) : fond sombre flouté, nom de l'univers, ses chaînes en éventail, « Refermer ».
+struct ChannelFan: View {
+    let title: String
+    let icon: String
+    let channels: [Channel]
+    let play: ([Channel], Int) -> Void
+    let close: () -> Void
+    @ObservedObject var prefs = LivePrefs.shared
+    @State private var shown = false
+    @FocusState private var foc: Int?
+
+    var body: some View {
+        ZStack(alignment: .leading) {
+            Rectangle().fill(.ultraThinMaterial).environment(\.colorScheme, .dark)
+                .overlay(Color(red: 6 / 255, green: 7 / 255, blue: 10 / 255).opacity(0.74))
+                .ignoresSafeArea()
+            VStack(alignment: .leading, spacing: 0) {
+                HStack(alignment: .firstTextBaseline, spacing: 18) {
+                    Image(systemName: icon).font(P.font(40, .semibold))
+                    Text(title).font(P.font(54, .bold))
+                    Text("\(channels.count) en direct").font(P.font(24, .medium)).foregroundStyle(.white.opacity(0.55))
+                }
+                .padding(.leading, 210)
+                Text("OK pour regarder · maintiens le clic pour plus d'options · Retour pour refermer")
+                    .font(P.font(22)).foregroundStyle(.white.opacity(0.5)).padding(.leading, 210).padding(.top, 6)
+                ScrollView(.horizontal) {
+                    LazyHStack(alignment: .top, spacing: 33) {
+                        ForEach(Array(channels.prefix(120).enumerated()), id: \.element.id) { i, ch in
+                            ChannelCard(ch: ch, fav: prefs.favorites.contains(ch.id)) { play(channels, i) }
+                                .contextMenu { Button(prefs.favorites.contains(ch.id) ? "Retirer des favoris" : "Ajouter aux favoris") { prefs.toggleFavorite(ch.id) } }
+                                .focused($foc, equals: i)
+                                // entrée en éventail du simulateur (lfanin) : de la gauche, légèrement tournée, l'une après l'autre
+                                .opacity(shown ? 1 : 0)
+                                .offset(x: shown ? 0 : -90)
+                                .rotationEffect(.degrees(shown ? 0 : -4))
+                                .animation(.timingCurve(0.2, 0.8, 0.2, 1, duration: 0.45).delay(Double(min(i, 8)) * 0.045), value: shown)
+                        }
+                    }
+                    .padding(.horizontal, 210).padding(.vertical, 33)
+                }
+                .scrollClipDisabled()
+                .focusSection()
+                Button(action: close) { Label("Refermer", systemImage: "xmark").font(P.font(26, .semibold)).padding(.horizontal, 10) }
+                    .buttonStyle(GlassStyle(radius: 18, minH: 69))
+                    .padding(.leading, 210)
+                    .focusSection()
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+        }
+        .onExitCommand { close() }
+        .onAppear {
+            shown = true
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { foc = 0 }
         }
     }
 }
@@ -586,9 +706,13 @@ struct ChannelCard: View {
     static let size = CGSize(width: 300, height: 190)
     let ch: Channel
     let fav: Bool
+    var onFocus: ((Bool) -> Void)? = nil
+    /// sélection pilotée de l'extérieur (rendre la sélection au paquet refermé)
+    var focusTag: (FocusState<String?>.Binding, String)? = nil
     let action: () -> Void
     @State private var now: Program?
     @State private var next: Program?
+    @FocusState private var focused: Bool
 
     var body: some View {
         let name = ChannelTools.clean(ch.name)
@@ -618,6 +742,8 @@ struct ChannelCard: View {
             .frame(width: ChannelCard.size.width, height: ChannelCard.size.height)
         }
         .buttonStyle(TileStyle(radius: 18, zoom: 1.07))
+        .modifier(CardFocus(tag: focusTag, own: $focused))
+        .onChange(of: focused) { _, f in onFocus?(f) }
         .task(id: ch.id) { let r = await LiveStore.nowNext(ch); now = r.0; next = r.1 }
     }
 
@@ -752,4 +878,13 @@ struct GuideRow: View {
             progs = await LiveStore.programs(ch, from: start, hours: GuideView.hours)
         }
     }
+}
+
+
+/// Un paquet de chaînes à ouvrir en éventail (univers, favoris, reprendre, en ce moment).
+struct ChannelDeck: Identifiable {
+    let id = UUID()
+    let title: String
+    let icon: String
+    let channels: [Channel]
 }

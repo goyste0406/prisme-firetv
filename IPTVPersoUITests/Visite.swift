@@ -122,12 +122,15 @@ final class Visite: XCTestCase {
         press(.down, 2); shot("25b-tv-univers")
         for i in 1...10 { press(.right); shot(String(format: "26-univers-%02d", i)) }
         press(.left, 9); shot("26b-univers-debut")
-        press(.select); Thread.sleep(forTimeInterval: 2); shot("26c-univers-grille")
-        back(); Thread.sleep(forTimeInterval: 1)
+        // OK : le paquet s'ouvre en éventail par-dessus la page (simulateur), Retour le referme
+        press(.select); Thread.sleep(forTimeInterval: 2); shot("26c-univers-eventail")
+        press(.right, 3); shot("26d-eventail-droite")
+        press(.down); shot("26e-eventail-refermer")
+        press(.up); back(); Thread.sleep(forTimeInterval: 1); shot("26f-eventail-ferme")
         press(.down); shot("27-en-ce-moment")
         for i in 1...4 { press(.right); shot(String(format: "27b-en-ce-moment-%02d", i)) }
         press(.select); Thread.sleep(forTimeInterval: 2); shot("27c-en-ce-moment-chaines")
-        back(); Thread.sleep(forTimeInterval: 1); shot("27d-retour")
+        press(.down); press(.select); Thread.sleep(forTimeInterval: 1.5); shot("27d-retour")
         press(.down, 3); shot("27e-tv-bas")
         // colonne d'icônes : chaque catégorie ouvre sa grille
         press(.left, 12); shot("28-colonne")

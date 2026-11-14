@@ -487,7 +487,8 @@ struct SeriesDetailView: View {
             if !u.name.isEmpty { name = u.name }
             pill = ("À VENIR", Self.soonTeal.opacity(0.25), Self.soonTeal)
             when = u.days == 1 ? "demain" : Fmt.day(u.date)
-            msg = "Épisode \(x.number) de la saison \(x.season) : diffusion prévue \(when == "demain" ? "demain" : when + " " + Fmt.date(u.date))."
+            let df = DateFormatter(); df.locale = Locale(identifier: "fr_FR"); df.dateFormat = "EEEE d MMMM"
+            msg = "Épisode \(x.number) de la saison \(x.season) : diffusion prévue \(u.days == 1 ? "demain" : df.string(from: u.date))."
         } else {
             msg = "L'épisode \(x.number) de la saison \(x.season) n'est pas encore chez ton fournisseur."
         }
