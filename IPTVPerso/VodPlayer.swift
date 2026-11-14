@@ -27,10 +27,17 @@ struct VodRequest: Identifiable {
 struct VodPlayerView: View {
     let request: VodRequest
     @Environment(\.dismiss) private var dismiss
+    @State private var bridge = PlayerBridge()
     var body: some View {
-        VodPlayerRepresentable(request: request, onClose: { dismiss() }).ignoresSafeArea()
+        VodPlayerRepresentable(request: request, bridge: bridge, onClose: { dismiss() }).ignoresSafeArea()
+            // Retour court sans panneau ouvert : sans ce gestionnaire, SwiftUI fermerait la présentation plein écran
+            // (donc tout le lecteur). Les panneaux ont leur propre gestionnaire, prioritaire.
+            .onExitCommand { bridge.vc?.shortBack() }
     }
 }
+
+/// Lien entre la vue SwiftUI du lecteur et son contrôleur UIKit.
+final class PlayerBridge { weak var vc: VodPlayerController? }
 
 /// Vue transparente qui peut prendre le focus (les touches de la télécommande remontent ensuite au lecteur).
 final class PressCatcher: UIView {
@@ -41,8 +48,11 @@ final class PressCatcher: UIView {
 
 struct VodPlayerRepresentable: UIViewControllerRepresentable {
     let request: VodRequest
+    let bridge: PlayerBridge
     let onClose: () -> Void
-    func makeUIViewController(context: Context) -> VodPlayerController { VodPlayerController(request: request, onClose: onClose) }
+    func makeUIViewController(context: Context) -> VodPlayerController {
+        let c = VodPlayerController(request: request, onClose: onClose); bridge.vc = c; return c
+    }
     func updateUIViewController(_ c: VodPlayerController, context: Context) {}
     static func dismantleUIViewController(_ c: VodPlayerController, coordinator: ()) { c.stop() }
 }
@@ -72,8 +82,6 @@ final class VodPlayerController: UIViewController, VLCMediaPlayerDelegate {
     private var bedDone = false
     private var seekWork: DispatchWorkItem?
     private var closeWork: DispatchWorkItem?
-    private var menuDown: Date?
-    private var menuWork: DispatchWorkItem?
     // marque-page du sommeil
     private var lastInput = Date()
     private var lastInputPos: Double = 0
@@ -96,6 +104,10 @@ final class VodPlayerController: UIViewController, VLCMediaPlayerDelegate {
     override func viewDidLoad() {
         super.viewDidLoad()
         view.backgroundColor = .black
+        let held = UILongPressGestureRecognizer(target: self, action: #selector(menuHeld(_:)))
+        held.allowedPressTypes = [NSNumber(value: UIPress.PressType.menu.rawValue)]
+        held.minimumPressDuration = 0.7
+        view.addGestureRecognizer(held)
         videoView.frame = view.bounds; videoView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
         view.addSubview(videoView)
         catcher.frame = view.bounds; catcher.autoresizingMask = [.flexibleWidth, .flexibleHeight]
@@ -257,13 +269,7 @@ final class VodPlayerController: UIViewController, VLCMediaPlayerDelegate {
             return super.pressesBegan(presses, with: event)
         }
         switch press.type {
-        case .menu:
-            ui.log("VC began menu (sans panneau)")
-            // Retour maintenu : quitter ; Retour court : cacher le bandeau, ou le montrer (avec la consigne) s'il est caché
-            menuDown = Date()
-            let w = DispatchWorkItem { [weak self] in self?.quit() }
-            menuWork = w
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.7, execute: w)
+        case .menu: return   // Retour : court → shortBack() (via SwiftUI), maintenu → menuHeld (geste)
         case .leftArrow: seek(-10)
         case .rightArrow: seek(10)
         case .upArrow: ui.panel = .shortcuts; ui.osd = true
@@ -278,11 +284,18 @@ final class VodPlayerController: UIViewController, VLCMediaPlayerDelegate {
 
     override func pressesEnded(_ presses: Set<UIPress>, with event: UIPressesEvent?) {
         guard let press = presses.first, press.type == .menu else { return super.pressesEnded(presses, with: event) }
-        ui.log("VC ended menu down=\(menuDown != nil)")
-        guard let d = menuDown else { return }   // Retour court déjà traité (panneau) : ne pas le laisser remonter
-        menuDown = nil
-        guard Date().timeIntervalSince(d) < 0.7 else { return }
-        menuWork?.cancel()
+    }
+
+    override func pressesCancelled(_ presses: Set<UIPress>, with event: UIPressesEvent?) {
+        guard let press = presses.first, press.type == .menu else { return super.pressesCancelled(presses, with: event) }
+    }
+
+    /// Retour court quand aucun panneau n'a pris la touche : cacher le bandeau, ou le montrer (avec la consigne)
+    func shortBack() {
+        ui.log("shortBack interactive=\(ui.interactive)")
+        noteInput()
+        if ui.sleepLeft != nil { ui.stillWatching(); return }
+        if ui.interactive { ui.back("lecteur"); return }
         if ui.message != nil && (cutDone || bedDone) { quit(); return }
         if ui.osd { ui.osd = false } else {
             ui.hint = "Retour maintenu : quitter · ↑ raccourcis puis tous les réglages · ↓ options"
@@ -290,9 +303,10 @@ final class VodPlayerController: UIViewController, VLCMediaPlayerDelegate {
         }
     }
 
-    override func pressesCancelled(_ presses: Set<UIPress>, with event: UIPressesEvent?) {
-        guard let press = presses.first, press.type == .menu else { return super.pressesCancelled(presses, with: event) }
-        ui.log("VC cancelled menu"); menuWork?.cancel(); menuDown = nil
+    /// Retour maintenu : quitter le lecteur
+    @objc private func menuHeld(_ g: UILongPressGestureRecognizer) {
+        guard g.state == .began else { return }
+        ui.log("Retour maintenu"); quit()
     }
 
     private func quit() { ui.log("quit"); stop(); onClose() }
