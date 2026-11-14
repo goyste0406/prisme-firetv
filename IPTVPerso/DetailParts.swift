@@ -61,6 +61,8 @@ enum EpisodeLogic {
         let all = info.seasons.flatMap(\.episodes)
         var r = VodRequest(url: url, key: key(item, e), item: item.id, title: title,
                            subtitle: "Saison \(e.season) · Épisode \(e.number)" + (e.title.isEmpty ? "" : " · " + e.title), icon: item.posterURL, startAt: from)
+        r.kicker = "SÉRIE · SAISON \(e.season) · ÉPISODE \(e.number)"
+        r.meta = (e.title.isEmpty ? "" : e.title + " · ") + "chez " + provider.name
         if let i = all.firstIndex(of: e), i + 1 < all.count {
             let n = all[i + 1]
             r.next = { request(item, title: title, info: info, provider: provider, episode: n, from: 0) }

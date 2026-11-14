@@ -30,6 +30,8 @@ extension Debug {
     /// « off » : pas de bande-annonce en fond sur les fiches (pendant la visite automatique, une vidéo en fond peut
     /// faire dépasser le délai de lecture de l'écran par le test ; testée à part sur la fiche « Projet dernière chance »)
     static var bgTrailer: Bool { arg("prisme.debug.bgTrailer") != "off" }
+    /// marque-page du sommeil après N secondes sans touche (au lieu de 90 min), pour le tester
+    static var sleepAfterSeconds: Int? { arg("prisme.debug.sleepAfter").flatMap { Int($0) } }
     /// mesure aussi l'ancienne méthode des accueils (lourde : une seule ouverture dédiée dans la visite)
     static var perfOld: Bool { arg("prisme.debug.perfOld") == "1" }
     /// « Qui regarde ? » : pas de choix automatique au bout de 5 s (la visite de test met plus de 5 s à prendre sa capture)

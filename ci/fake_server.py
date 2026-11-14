@@ -397,6 +397,10 @@ class H(http.server.BaseHTTPRequestHandler):
             label = (q.get("l") or [""])[0]
             w, h = {"p": (400, 600), "b": (1280, 720), "l": (300, 170)}.get(kind, (300, 300))
             return self.send(200, make_png(kind, key, w, h, label), "image/png")
+        # vraie vidéo (bande-annonce iTunes) pour tester le lecteur : Dune : Deuxième partie, Interstellar et une autre version
+        m = re.match(r"^/movie/[^/]+/[^/]+/(\d+)\.\w+$", p)
+        if m and int(m.group(1)) in (fid(0), fid(16), 1901):
+            self.send_response(302); self.send_header("Location", APPLE_PREVIEW); self.send_header("Content-Length", "0"); self.end_headers(); return
         if p.startswith("/movie/") or p.startswith("/series/") or p.startswith("/live/"):
             return self.send(404, "")
         self.send(404, {"error": p})

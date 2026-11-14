@@ -518,6 +518,12 @@ struct FilmDetailView: View {
         guard let p = store.provider(src.pid), let url = p.movieURL(src) else { return }
         bg.stop()
         var r = VodRequest(url: url, key: item.id, item: item.id, title: title, subtitle: "", icon: item.posterURL, startAt: from)
+        // bandeau du lecteur (simulateur) et « Version » du panneau : la version lancée d'abord, puis les autres
+        r.kicker = "FILM" + ((fiche?.year ?? item.year) > 0 ? " · \(fiche?.year ?? item.year)" : "")
+        r.meta = ([versionShort(src)] + [store.provider(src.pid).map { "chez " + $0.name } ?? ""]).filter { !$0.isEmpty }.joined(separator: " · ")
+        r.cast = fiche?.cast.prefix(6).map(\.n) ?? []
+        let others = versions.filter { $0.id != src.id }
+        r.versions = ([src] + others).compactMap { v in store.provider(v.pid)?.movieURL(v).map { (label: versionLabel(v), url: $0) } }
         // partie 1 d'un film coupé en deux soirées : arrêt prévu (encore à venir)
         if let s = stopAt ?? SplitStore.get(item.id), from < s - 60 { r.stopAt = s }
         playing = r
