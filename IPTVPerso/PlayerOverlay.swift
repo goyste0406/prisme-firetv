@@ -17,12 +17,18 @@ final class PlayerUI: ObservableObject {
     @Published var options = false
     @Published var loading = true
     @Published var paused = false
-    @Published var kicker = "", title = "", meta = ""
-    @Published var pos: Double = 0, dur: Double = 0
+    @Published var kicker = ""
+    @Published var title = ""
+    @Published var meta = ""
+    @Published var pos: Double = 0
+    @Published var dur: Double = 0
     @Published var pending: Double = 0
-    @Published var audio: [PlayerOption] = [], audioCur: Int32 = -1
-    @Published var subs: [PlayerOption] = [], subCur: Int32 = -1
-    @Published var versions: [String] = [], versionCur = 0
+    @Published var audio: [PlayerOption] = []
+    @Published var audioCur: Int32 = -1
+    @Published var subs: [PlayerOption] = []
+    @Published var subCur: Int32 = -1
+    @Published var versions: [String] = []
+    @Published var versionCur = 0
     @Published var aspect = "auto"
     @Published var night = "auto"
     @Published var nightActive = false
