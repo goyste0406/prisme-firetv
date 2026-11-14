@@ -448,7 +448,7 @@ struct FilmDetailView: View {
         for t in titles where air.isEmpty { air = await LiveStore.airings(title: t, providers: pids) }
         airings = air
         trailer = await TrailerStore.find(title: title, year: year, minutes: minutes, tmdb: fiche?.tmdb ?? i1.tmdb, tv: false)
-        if let t = trailer { bg.arm(t.url) }
+        if let t = trailer, Debug.bgTrailer { bg.arm(t.url) }
         var exclude = Set<Int>()
         if let f = fiche, f.coll > 0 {
             let (n, parts) = await SagaStore.parts(f.coll)

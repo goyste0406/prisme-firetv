@@ -27,6 +27,11 @@ enum Debug {
 extension Debug {
     /// nombre de profils de test (« 2 » : ajoute Léa, 12 ans max)
     static var profiles: String? { arg("prisme.debug.profiles") }
+    /// « off » : pas de bande-annonce en fond sur les fiches (pendant la visite automatique, une vidéo en fond peut
+    /// faire dépasser le délai de lecture de l'écran par le test ; testée à part sur la fiche « Projet dernière chance »)
+    static var bgTrailer: Bool { arg("prisme.debug.bgTrailer") != "off" }
+    /// mesure aussi l'ancienne méthode des accueils (lourde : une seule ouverture dédiée dans la visite)
+    static var perfOld: Bool { arg("prisme.debug.perfOld") == "1" }
     /// « Qui regarde ? » : pas de choix automatique au bout de 5 s (la visite de test met plus de 5 s à prendre sa capture)
     static var whoHold: Bool { arg("prisme.debug.whoHold") == "1" }
     /// heure du coucher simulée « dans N minutes » (pour voir « Fin à … · après ton coucher » à toute heure)
@@ -73,14 +78,14 @@ enum PerfLog {
 
     @MainActor static func home(kind: MediaKind, first: Double, full: Double, q1: Int, q2: Int, cached: Bool, old: () async -> (Double, Int)) async {
         let parts = newParts
-        let o = await old()
+        let o = Debug.perfOld ? await old() : (0, 0)
         // avant (build 117) : rien ne s'affichait avant la fin de TOUT le calcul, avec l'ancienne méthode pour les genres et la 🔥
         let before = full - parts.0 + o.0, beforeQ = q2 - parts.1 + o.1
         func ms(_ x: Double) -> String { "\(Int((x * 1000).rounded())) ms" }
         let line = "\(kind == .film ? "Films" : "Séries")\(cached ? " (retour sur l'onglet)" : " (première ouverture)") : "
-            + "AVANT premières rangées \(ms(before)) / \(beforeQ) requêtes · "
+            + (Debug.perfOld ? "AVANT premières rangées \(ms(before)) / \(beforeQ) requêtes · " : "")
             + "APRÈS premières rangées \(ms(first)) / \(q1) requêtes, page complète \(ms(full)) / \(q2) requêtes · "
-            + "genres + 🔥 : avant \(ms(o.0)) / \(o.1) requêtes, après \(ms(parts.0)) / \(parts.1) requêtes\n"
+            + (Debug.perfOld ? "genres + 🔥 : avant \(ms(o.0)) / \(o.1) requêtes, après \(ms(parts.0)) / \(parts.1) requêtes" : "") + "\n"
         guard let d = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first else { return }
         let f = d.appendingPathComponent("mesures.txt")
         let prev = (try? String(contentsOf: f, encoding: .utf8)) ?? ""

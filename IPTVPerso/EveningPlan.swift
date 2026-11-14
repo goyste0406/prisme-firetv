@@ -17,7 +17,9 @@ struct EveningPlan {
         let n = (c.hour ?? 0) * 60 + (c.minute ?? 0)
         // entre minuit et 5 h, le coucher « de ce soir » est déjà passé : on le ramène sur la même journée (comme le simulateur)
         // (et un coucher noté « 00:38 » au lieu de « 24:38 » est ramené après minuit quand il est encore la soirée)
-        let b = n < 300 ? (bed >= 1440 ? bed - 1440 : bed) : (bed < 300 ? bed + 1440 : bed)
+        // (coucher 23:00 vu à 00:18 → hier 23:00, soit -60 ; coucher 01:00 noté 25:00 → 60 ; un coucher noté « 00:38 » au lieu
+        //  de « 24:38 » pendant la soirée est ramené après minuit)
+        let b = n < 300 ? (bed < 300 ? bed : bed - 1440) : (bed < 300 ? bed + 1440 : bed)
         return EveningPlan(now: n, end: n + r, bed: b)
     }
 
@@ -48,8 +50,13 @@ struct EveningTimeline: View {
                 Capsule().fill(LinearGradient(colors: [P.gold, Color(red: 1, green: 0.54, blue: 0.24)], startPoint: .leading, endPoint: .trailing))
                     .frame(width: max(14, w * (X(p.end) - X(p.now))), height: 26).offset(x: w * X(p.now), y: 19)
                 Rectangle().fill(Color(red: 0.49, green: 0.83, blue: 0.99)).frame(width: 4, height: 60).offset(x: w * X(p.bed) - 2, y: 4)
-                label("maintenant", X(p.now), w, color: .white.opacity(0.62))
-                label("fin " + EveningPlan.hm(p.end), X(p.end), w, color: .white.opacity(0.62))
+                // film court par rapport à la soirée : « maintenant » et « fin » se chevauchaient → un seul libellé
+                if X(p.end) - X(p.now) < 0.22 {
+                    label("maintenant → fin " + EveningPlan.hm(p.end), X(p.now), w, color: .white.opacity(0.62))
+                } else {
+                    label("maintenant", X(p.now), w, color: .white.opacity(0.62))
+                    label("fin " + EveningPlan.hm(p.end), X(p.end), w, color: .white.opacity(0.62))
+                }
                 if abs(X(p.bed) - X(p.now)) > 0.14 && abs(X(p.bed) - X(p.end)) > 0.14 {
                     label("☾ " + EveningPlan.hm(p.bed), X(p.bed), w, color: Color(red: 0.49, green: 0.83, blue: 0.99))
                 }

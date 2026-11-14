@@ -20,12 +20,12 @@ final class Visite: XCTestCase {
                 "-prisme.debug.tmdbBase", "http://127.0.0.1:8099/tmdb/3",
                 "-prisme.debug.imgBase", "http://127.0.0.1:8099/img",
                 "-prisme.debug.itunesBase", "http://127.0.0.1:8099/itunes",
-                "-prisme.debug.seed", "1"]
+                "-prisme.debug.seed", "1", "-prisme.debug.bgTrailer", "off"]
 
     /// Relance l'app directement sur un écran (fiche, rubrique) : le catalogue est déjà dans la base.
-    func relaunch(_ extra: [String], wait: Double = 14) {
+    func relaunch(_ extra: [String], wait: Double = 14, trailer: Bool = false) {
         app.terminate()
-        app.launchArguments = base + extra
+        app.launchArguments = (trailer ? Array(base.dropLast(2)) : base) + extra
         app.launch()
         Thread.sleep(forTimeInterval: wait)
     }
@@ -141,7 +141,7 @@ final class Visite: XCTestCase {
         press(.down, 2); press(.left, 4); press(.up, 6); shot("42-reglages-gauche-haut")
 
         // fiche « Projet dernière chance » : focus d'ouverture, bande-annonce en fond, effet de transparence, plein écran
-        relaunch(["-prisme.debug.open", "film:demo:1030"])
+        relaunch(["-prisme.debug.open", "film:demo:1030"], trailer: true)
         shot("50-fiche-projet")
         Thread.sleep(forTimeInterval: 5); shot("50b-fiche-projet-bande-annonce-fond")
         press(.right, 3); Thread.sleep(forTimeInterval: 1.5); shot("51-fiche-projet-bouton-bande-annonce")
@@ -256,5 +256,9 @@ final class Visite: XCTestCase {
         press(.left, 8); press(.select); Thread.sleep(forTimeInterval: 1.5); shot("A3-six-fiche-profil")
         for i in 1...14 { press(.down); shot(String(format: "A3b-six-fiche-bas-%02d", i)) }
         press(.up, 16); shot("A3c-six-fiche-haut")
+
+        // MESURES : accueil Films avec, en plus, le coût de l'ancienne méthode (comparaison avant / après dans mesures.txt)
+        relaunch(["-prisme.debug.tab", "films", "-prisme.debug.perfOld", "1"], wait: 20)
+        shot("Z-mesures")
     }
 }
