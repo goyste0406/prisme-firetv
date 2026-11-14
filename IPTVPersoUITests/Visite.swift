@@ -149,13 +149,13 @@ final class Visite: XCTestCase {
 
         // fiche « Projet dernière chance » : focus d'ouverture, bande-annonce en fond, effet de transparence, plein écran
         relaunch(["-prisme.debug.open", "film:demo:1030"], trailer: true)
-        shot("50-fiche-projet")
-        Thread.sleep(forTimeInterval: 5); shot("50b-fiche-projet-bande-annonce-fond")
-        press(.right, 3); Thread.sleep(forTimeInterval: 1.5); shot("51-fiche-projet-bouton-bande-annonce")
-        press(.select); Thread.sleep(forTimeInterval: 5); shot("52-bande-annonce-plein-ecran")
-        back(); shot("53-retour-fiche")
+        shot("50-fiche-projet", focus: false)
+        Thread.sleep(forTimeInterval: 5); shot("50b-fiche-projet-bande-annonce-fond", focus: false)
+        press(.right, 3); Thread.sleep(forTimeInterval: 1.5); shot("51-fiche-projet-bouton-bande-annonce", focus: false)
+        press(.select); Thread.sleep(forTimeInterval: 5); shot("52-bande-annonce-plein-ecran", focus: false)
+        back(); shot("53-retour-fiche", focus: false)
         press(.left, 3)
-        for i in 1...5 { press(.down); shot(String(format: "54-fiche-projet-bas-%02d", i)) }
+        for i in 1...5 { press(.down); shot(String(format: "54-fiche-projet-bas-%02d", i), focus: false) }
 
         // fenêtre des versions (Interstellar : 4 versions sous des noms différents chez le fournisseur)
         relaunch(["-prisme.debug.open", "film:demo:1016"])
