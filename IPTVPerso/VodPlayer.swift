@@ -32,6 +32,13 @@ struct VodPlayerView: View {
     }
 }
 
+/// Vue transparente qui peut prendre le focus (les touches de la télécommande remontent ensuite au lecteur).
+final class PressCatcher: UIView {
+    /// coupé pendant qu'un panneau est ouvert, pour que le focus ne glisse jamais du panneau vers cette vue
+    var active = true
+    override var canBecomeFocused: Bool { active }
+}
+
 struct VodPlayerRepresentable: UIViewControllerRepresentable {
     let request: VodRequest
     let onClose: () -> Void
@@ -48,6 +55,9 @@ final class VodPlayerController: UIViewController, VLCMediaPlayerDelegate {
     private let onClose: () -> Void
     private let player = VLCMediaPlayer()
     private let videoView = UIView()
+    /// vue invisible qui garde le focus quand aucun panneau n'est ouvert : sans elle, rien n'a le focus dans le lecteur
+    /// et Retour court remonte jusqu'à la présentation plein écran, qui ferme le lecteur
+    private let catcher = PressCatcher()
     private let ui = PlayerUI()
     private var host: UIHostingController<PlayerOverlay>!
     private var watch: AnyCancellable?
@@ -88,6 +98,8 @@ final class VodPlayerController: UIViewController, VLCMediaPlayerDelegate {
         view.backgroundColor = .black
         videoView.frame = view.bounds; videoView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
         view.addSubview(videoView)
+        catcher.frame = view.bounds; catcher.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+        view.addSubview(catcher)
 
         setupUI()
         host = UIHostingController(rootView: PlayerOverlay(m: ui))
@@ -103,6 +115,7 @@ final class VodPlayerController: UIViewController, VLCMediaPlayerDelegate {
             DispatchQueue.main.async {
                 guard let self, self.ui.interactive != self.wasInteractive else { return }
                 self.wasInteractive = self.ui.interactive
+                self.catcher.active = !self.ui.interactive
                 self.setNeedsFocusUpdate(); self.updateFocusIfNeeded()
             }
         }
@@ -114,7 +127,7 @@ final class VodPlayerController: UIViewController, VLCMediaPlayerDelegate {
         minuteTimer = Timer.scheduledTimer(withTimeInterval: 20, repeats: true) { [weak self] _ in self?.minuteCheck() }
     }
 
-    override var preferredFocusEnvironments: [UIFocusEnvironment] { ui.interactive ? [host.view] : [] }
+    override var preferredFocusEnvironments: [UIFocusEnvironment] { ui.interactive ? [host.view] : [catcher] }
 
     override func viewWillDisappear(_ animated: Bool) { super.viewWillDisappear(animated); stop() }
 

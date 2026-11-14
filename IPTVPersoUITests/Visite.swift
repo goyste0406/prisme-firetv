@@ -330,7 +330,7 @@ final class Visite: XCTestCase {
         press(.down, 4); press(.select); Thread.sleep(forTimeInterval: 1); shot("E4-son-de-nuit", focus: false)
         press(.down); press(.select); Thread.sleep(forTimeInterval: 6); shot("E5-son-de-nuit-toujours", focus: false)
         press(.down, 3); Thread.sleep(forTimeInterval: 1); shot("E5b-lecture-bas", focus: false)
-        back(); back(); back(); Thread.sleep(forTimeInterval: 1); shot("E6-ferme", focus: false)
+        back(); shot("E6a-retour-1", focus: false); back(); shot("E6b-retour-2", focus: false); back(); Thread.sleep(forTimeInterval: 1); shot("E6-ferme", focus: false)
         press(.down); Thread.sleep(forTimeInterval: 1); shot("E7-options", focus: false)
         press(.select); Thread.sleep(forTimeInterval: 1); shot("E7b-qu-a-t-il-dit", focus: false)
         press(.up); Thread.sleep(forTimeInterval: 1); shot("E7c-raccourcis-appris", focus: false)
@@ -340,7 +340,7 @@ final class Visite: XCTestCase {
         Thread.sleep(forTimeInterval: 17); shot("E9-pause-place-gardee", focus: false)
         relaunch(["-prisme.debug.open", "film:demo:1000", "-prisme.debug.bedIn", "1"])
         press(.select); Thread.sleep(forTimeInterval: 6)
-        press(.up); press(.up); Thread.sleep(forTimeInterval: 1); press(.down, 5); Thread.sleep(forTimeInterval: 1); shot("E10-arret-coucher-choix", focus: false)
+        press(.up); press(.up); Thread.sleep(forTimeInterval: 1); press(.down, 5); press(.left); Thread.sleep(forTimeInterval: 1); shot("E10-arret-coucher-choix", focus: false)
         press(.select); Thread.sleep(forTimeInterval: 1); shot("E10b-arret-coucher-active", focus: false)
         back(); back(); Thread.sleep(forTimeInterval: 75); shot("E11-arret-coucher", focus: false)
     }
