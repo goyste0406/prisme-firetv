@@ -11,9 +11,9 @@ jobs:
     steps:
       - name: Télécharger TVVLCKit (même version que le projet) et lire ses déclarations
         run: |
-          V=$(curl -s https://cdn.cocoapods.org/all_pods_versions_b_f_5.txt | grep '^TVVLCKit/' | tr '/' '\n' | grep -E '^3\.6' | sort -V | tail -1)
+          V=$(curl -s https://cdn.cocoapods.org/all_pods_versions_b_f_5.txt | grep '^TVVLCKit/' | tr '/' '\n' | grep -E '^3\.[6-9](\.[0-9]+)?$' | sort -V | tail -1)
           echo "version $V"
-          curl -s "https://cdn.cocoapods.org/Specs/b/f/5/TVVLCKit/$V/TVVLCKit.podspec.json" > spec.json
+          curl -sL "https://cdn.cocoapods.org/Specs/b/f/5/TVVLCKit/$V/TVVLCKit.podspec.json" > spec.json
           cat spec.json | head -40
           URL=$(python3 -c 'import json;print(json.load(open("spec.json"))["source"]["http"])')
           echo "source $URL"
