@@ -1,0 +1,29 @@
+name: Sonde VLC (fonctions disponibles sur Apple TV)
+on:
+  push:
+    branches: [appletv]
+    paths: [".github/workflows/entetes-vlc.yml"]
+permissions:
+  contents: write
+jobs:
+  sonde:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Télécharger TVVLCKit (même version que le projet) et lire ses déclarations
+        run: |
+          V=$(curl -s https://cdn.cocoapods.org/all_pods_versions_b_f_5.txt | grep '^TVVLCKit/' | tr '/' '\n' | grep -E '^3\.6' | sort -V | tail -1)
+          echo "version $V"
+          curl -s "https://cdn.cocoapods.org/Specs/b/f/5/TVVLCKit/$V/TVVLCKit.podspec.json" > spec.json
+          cat spec.json | head -40
+          URL=$(python3 -c 'import json;print(json.load(open("spec.json"))["source"]["http"])')
+          echo "source $URL"
+          curl -sL "$URL" -o k.tar.xz && mkdir k && tar -xf k.tar.xz -C k
+          H=$(find k -name VLCMediaPlayer.h | head -1); echo "fichier $H"
+          { echo "== $V"; grep -n -i -E "equalizer|amplification|numberOfBands|frequencyOfBand|audioTrack|SubTitle|AspectRatio|CropGeometry|scaleFactor|chapter|audioChannel|deinterlace|adjustFilter|TARGET_OS|NS_SWIFT_NAME|audio-filter" "$H"; } > vlc-entetes.txt
+          for f in $(find k -name 'VLCAudio.h' -o -name 'VLCMedia.h' -o -name 'VLCAdjustFilter.h' -o -name 'VLCAudioEqualizer.h' | head -6); do echo "== $f" >> vlc-entetes.txt; grep -n -i -E "volume|equalizer|addOption|filter|amplif" "$f" >> vlc-entetes.txt; done
+          cat vlc-entetes.txt
+      - name: Publier
+        env: { GH_TOKEN: "${{ github.token }}" }
+        run: |
+          gh release view sonde-vlc -R "$GITHUB_REPOSITORY" >/dev/null 2>&1 || gh release create sonde-vlc -R "$GITHUB_REPOSITORY" --title "Sonde VLC" --notes "déclarations de TVVLCKit"
+          gh release upload sonde-vlc vlc-entetes.txt -R "$GITHUB_REPOSITORY" --clobber
