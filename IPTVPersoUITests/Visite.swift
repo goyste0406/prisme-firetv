@@ -102,7 +102,7 @@ final class Visite: XCTestCase {
 
         tab(1); shot("10-series-ouverture")
         for i in 1...6 { press(.down); shot(String(format: "11-series-bas-%02d", i)) }
-        press(.up, 12); press(.down, 2); press(.select); Thread.sleep(forTimeInterval: 3); shot("12-fiche-serie")
+        press(.up, 12); press(.down, 3); press(.select); Thread.sleep(forTimeInterval: 3); shot("12-fiche-serie")
         press(.right, 2); shot("13-fiche-serie-panneau")
         press(.down, 3); shot("14-fiche-serie-episodes")
         press(.right, 2); shot("15-fiche-serie-episodes-droite")

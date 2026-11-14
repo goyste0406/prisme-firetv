@@ -1,6 +1,7 @@
 name: IPTVPerso
 options:
   bundleIdPrefix: com.steven
+  developmentLanguage: fr
   deploymentTarget:
     tvOS: "17.0"
 targets:
@@ -12,6 +13,9 @@ targets:
       path: IPTVPerso/Info.plist
       properties:
         CFBundleDisplayName: prisme
+        # boutons système (Annuler, OK…) en français
+        CFBundleDevelopmentRegion: fr
+        CFBundleLocalizations: [fr]
         CFBundleShortVersionString: "$(MARKETING_VERSION)"
         CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
         UILaunchScreen: {}

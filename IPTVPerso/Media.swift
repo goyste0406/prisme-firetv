@@ -686,6 +686,8 @@ struct EpisodeInfo: Identifiable, Hashable {
     let id: String; let season: Int; let number: Int; let title: String; let ext: String; let plot: String; let image: String; let duration: String
     var seconds = 0
     var rating = 0.0
+    /// date d'ajout chez le fournisseur (secondes Unix, 0 si inconnue) : « nouveau » pendant 7 jours
+    var added = 0
     var minutes: Int { seconds > 0 ? Int((Double(seconds) / 60).rounded()) : MediaInfo.parseMinutes(duration) }
 }
 
@@ -734,7 +736,7 @@ enum InfoLoader {
                     seasons[sn, default: []].append(EpisodeInfo(id: es("id"), season: sn, number: Int(es("episode_num")) ?? (seasons[sn]?.count ?? 0) + 1,
                         title: es("title"), ext: es("container_extension").isEmpty ? "mp4" : es("container_extension"),
                         plot: isf("plot"), image: isf("movie_image"), duration: isf("duration"),
-                        seconds: Int(isf("duration_secs")) ?? 0, rating: Double(isf("rating")) ?? 0))
+                        seconds: Int(isf("duration_secs")) ?? 0, rating: Double(isf("rating")) ?? 0, added: Int(es("added")) ?? 0))
                 }
             }
             if let d = root["episodes"] as? [String: Any] {

@@ -100,6 +100,7 @@ struct SeriesDetailView: View {
                     HStack(spacing: 22) {
                         Label("vu", systemImage: "checkmark").foregroundStyle(Color(red: 0.45, green: 0.85, blue: 0.5))
                         Text("● à suivre").foregroundStyle(.white.opacity(0.85))
+                        if hasNew { Text("● nouveau").foregroundStyle(Self.newBlue) }
                         Text("○ pas encore vu").foregroundStyle(P.faint)
                     }.font(P.font(17, .medium))
                 }
@@ -240,23 +241,44 @@ struct SeriesDetailView: View {
                 Button { season = s.number; tab = "eps" } label: {
                     HStack(spacing: 18) {
                         Text("Saison \(s.number)").font(P.font(22, .bold)).frame(width: 130, alignment: .leading)
-                        HStack(spacing: 5) {
-                            ForEach(s.episodes.prefix(24)) { e in
-                                let st = state(e)
-                                RoundedRectangle(cornerRadius: 4).fill(st == 2 ? Color(red: 0.45, green: 0.85, blue: 0.5).opacity(0.85) : st == 1 ? Color.white : Color.white.opacity(0.16))
-                                    .frame(width: 18, height: 22)
+                        VStack(alignment: .leading, spacing: 4) {
+                            HStack(spacing: 5) {
+                                ForEach(s.episodes.prefix(24)) { e in
+                                    let st = state(e)
+                                    RoundedRectangle(cornerRadius: 4).fill(st == 2 ? Color(red: 0.45, green: 0.85, blue: 0.5).opacity(0.85) : st == 1 ? Color.white : isNew(e) ? Self.newBlue : Color.white.opacity(0.16))
+                                        .frame(width: 18, height: 22)
+                                }
+                                if s.episodes.count > 24 { Text("+\(s.episodes.count - 24)").font(P.font(15, .bold)).opacity(0.6) }
                             }
-                            if s.episodes.count > 24 { Text("+\(s.episodes.count - 24)").font(P.font(15, .bold)).opacity(0.6) }
+                            // courbe des notes des épisodes (simulateur : .spk), points sur les deux meilleurs
+                            if s.episodes.count > 1, s.episodes.allSatisfy({ $0.rating > 0 }) {
+                                RatingSpark(ratings: s.episodes.map(\.rating), tops: topEpisodes(s).compactMap { n in s.episodes.firstIndex { $0.number == n } })
+                                    .frame(height: 16)
+                            }
                         }
                         Spacer(minLength: 0)
                         Text(vu == s.episodes.count ? "✓" : "\(vu)/\(s.episodes.count)").font(P.font(19, .semibold)).opacity(0.7)
                     }
-                    .padding(.horizontal, 16).frame(height: 58)
+                    .padding(.horizontal, 16).frame(minHeight: 58).padding(.vertical, 4)
                 }
                 .buttonStyle(SeasonStyle(selected: s.number == season))
             }
         }
         .focusSection()
+    }
+
+    static let newBlue = Color(red: 0.31, green: 0.63, blue: 1)
+
+    /// Ajouté chez le fournisseur depuis moins de 7 jours et pas encore vu (date d'ajout réelle de l'épisode).
+    private func isNew(_ e: EpisodeInfo) -> Bool {
+        e.added > 0 && Date().timeIntervalSince1970 - Double(e.added) < 7 * 86400 && state(e) == 0
+    }
+
+    private var hasNew: Bool { info.seasons.contains { $0.episodes.contains { isNew($0) } } }
+
+    /// Les deux épisodes les mieux notés de la saison (note ≥ 8,6), comme le simulateur.
+    private func topEpisodes(_ s: Season) -> [Int] {
+        s.episodes.filter { $0.rating >= 8.6 }.sorted { $0.rating > $1.rating }.prefix(2).map(\.number)
     }
 
     /// 2 = vu, 1 = en cours / à suivre, 0 = pas vu.
@@ -370,10 +392,15 @@ struct SeriesDetailView: View {
                 VStack(alignment: .leading, spacing: 7) {
                     Text("\(e.number). " + (e.title.isEmpty ? "Épisode \(e.number)" : cleanEpTitle(e.title))).font(P.font(25, .bold)).lineLimit(1)
                     HStack(spacing: 8) {
-                        if e.rating > 0 { Text("★ " + String(format: "%.1f", e.rating).replacingOccurrences(of: ".", with: ",")).foregroundStyle(e.rating >= 8.6 ? P.gold : .primary) }
+                        if e.rating > 0 {
+                            let top = info.seasons.first { $0.number == e.season }.map { topEpisodes($0).contains(e.number) } ?? false
+                            Text("★ " + String(format: "%.1f", e.rating).replacingOccurrences(of: ".", with: ",") + (top ? " · à ne pas manquer" : ""))
+                                .foregroundStyle(top ? P.gold : .primary).fontWeight(top ? .heavy : nil)
+                        }
                         if m > 0 { Text(runtimeText(m)) }
                         if st == 2 { Pill(text: "✓ VU", bg: Color.white.opacity(0.1), stroke: nil) }
                         else if f != nil { Pill(text: "EN COURS", bg: Color.white.opacity(0.85), fg: .black, stroke: nil) }
+                        else if isNew(e) { Pill(text: "NOUVEAU", bg: Self.newBlue.opacity(0.25), fg: Self.newBlue, stroke: nil) }
                     }.font(P.font(18, .medium)).opacity(0.75)
                     if !e.plot.isEmpty { Text(e.plot).font(P.font(19)).opacity(0.7).lineLimit(2) }
                 }
@@ -555,6 +582,28 @@ struct PanelTabStyle: ButtonStyle {
                 .padding(.horizontal, 20).frame(height: 58)
                 .background(Capsule().fill(f ? Color.white : (selected ? Color.white.opacity(0.18) : .clear)))
                 .scaleEffect(f ? 1.06 : 1).animation(.easeOut(duration: 0.15), value: f)
+        }
+    }
+}
+
+/// Courbe fine des notes d'une saison (simulateur : .spk, or translucide, points sur les meilleurs épisodes).
+struct RatingSpark: View {
+    let ratings: [Double]
+    let tops: [Int]
+    var body: some View {
+        GeometryReader { g in
+            let n = ratings.count
+            let pt = { (i: Int) -> CGPoint in
+                let y = 14 - (min(max(ratings[i], 7.2), 9.3) - 7.2) / 2.1 * 12
+                return CGPoint(x: n > 1 ? g.size.width * CGFloat(i) / CGFloat(n - 1) : g.size.width / 2, y: g.size.height * CGFloat(y) / 16)
+            }
+            Path { p in
+                for i in 0..<n { i == 0 ? p.move(to: pt(i)) : p.addLine(to: pt(i)) }
+            }
+            .stroke(Color(red: 1, green: 0.83, blue: 0.42).opacity(0.75), lineWidth: 2)
+            ForEach(tops, id: \.self) { i in
+                Circle().fill(Color(red: 1, green: 0.83, blue: 0.42)).frame(width: 7, height: 7).position(pt(i))
+            }
         }
     }
 }

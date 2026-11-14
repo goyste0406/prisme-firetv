@@ -236,7 +236,9 @@ def series_info(sidv):
     for s in range(1, ns + 1):
         eps[str(s)] = [{"id": f"{sidv}{s:02d}{e:02d}", "episode_num": e, "title": f"{t} - S{s:02d}E{e:02d} - Épisode {e}", "container_extension": "mkv", "season": s,
                         "info": {"plot": f"Épisode {e} de la saison {s}.", "movie_image": img_url("b", f"e{sidv}{s}{e}", ""), "duration": f"00:{rt}:00",
-                                 "duration_secs": rt * 60, "rating": str(round(7 + ((s * e) % 20) / 10, 1))}} for e in range(1, ne + 1)]
+                                 "duration_secs": rt * 60, "rating": str(round(7.2 + ((s * 7 + e * 5) % 22) / 10, 1))},
+                        # les 2 derniers épisodes de la dernière saison sont arrivés il y a 2 jours (« nouveau »), les autres il y a longtemps
+                        "added": str(NOW - (2 if s == ns and e > ne - 2 else 200) * DAY)} for e in range(1, ne + 1)]
     return {"info": {"name": t, "plot": f"{t} : résumé fourni par le fournisseur.", "cast": "Omar Sy, Ludivine Sagnier, Clotilde Hesme",
                      "director": "George Kay", "genre": ", ".join(g), "backdrop_path": [img_url("b", f"s{sidv}", "")], "rating": str(v),
                      "releaseDate": f"{y}-01-01", "episode_run_time": str(rt), "youtube_trailer": "dQw4w9WgXcQ", "tmdb": str(sidv)},
