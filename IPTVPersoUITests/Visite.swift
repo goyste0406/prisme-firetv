@@ -84,6 +84,7 @@ final class Visite: XCTestCase {
         // visite partielle (lancement manuel avec « seulement = lecteur ») : uniquement le lecteur
         if ProcessInfo.processInfo.environment["ONLY"] == "lecteur" { lecteur(); return }
         if ProcessInfo.processInfo.environment["ONLY"] == "serie" { ficheSerie(); return }
+        if ProcessInfo.processInfo.environment["ONLY"] == "tv" { tvUnivers(); return }
         shot("01-films-ouverture")
         downUntil(["Catégories", "Licences et sagas"], prefix: "02-films-bas")
         if focused().contains("Catégories") { press(.right) }
@@ -115,23 +116,7 @@ final class Visite: XCTestCase {
         press(.left, 12); shot("23-tv-gauche")
         press(.up, 10); shot("24-tv-retour-barre")
 
-        // TV en direct : catégories fixes (Explorer par univers), « En ce moment à la télé », colonne d'icônes
-        relaunch(["-prisme.debug.tab", "live"])
-        shot("25-tv-accueil")
-        // en-tête, puis « Explorer par univers » (catégories fixes), puis « En ce moment à la télé »
-        press(.down, 2); shot("25b-tv-univers")
-        for i in 1...10 { press(.right); shot(String(format: "26-univers-%02d", i)) }
-        press(.left, 9); shot("26b-univers-debut")
-        // OK : le paquet s'ouvre en éventail par-dessus la page (simulateur), Retour le referme
-        press(.select); Thread.sleep(forTimeInterval: 2); shot("26c-univers-eventail")
-        press(.right, 3); shot("26d-eventail-droite")
-        press(.down); shot("26e-eventail-refermer")
-        press(.up); back(); Thread.sleep(forTimeInterval: 1); shot("26f-eventail-ferme")
-        press(.down); shot("27-en-ce-moment")
-        for i in 1...4 { press(.right); shot(String(format: "27b-en-ce-moment-%02d", i)) }
-        press(.select); Thread.sleep(forTimeInterval: 2); shot("27c-en-ce-moment-chaines")
-        press(.down); press(.select); Thread.sleep(forTimeInterval: 1.5); shot("27d-retour")
-        press(.down, 3); shot("27e-tv-bas")
+        tvUnivers()
         // colonne d'icônes : chaque catégorie ouvre sa grille
         press(.left, 12); shot("28-colonne")
         for i in 1...12 { press(.down); Thread.sleep(forTimeInterval: 0.6); shot(String(format: "28b-colonne-%02d", i)) }
@@ -323,6 +308,27 @@ final class Visite: XCTestCase {
     }
 
     /// Fiche série : états du simulateur (complété depuis une autre version, manquant, à venir annoncé par TMDB)
+    /// TV en direct : paquets « univers » et leur éventail, « En ce moment à la télé »
+    func tvUnivers() {
+        // TV en direct : catégories fixes (Explorer par univers), « En ce moment à la télé », colonne d'icônes
+        relaunch(["-prisme.debug.tab", "live"])
+        shot("25-tv-accueil")
+        // en-tête, puis « Explorer par univers » (catégories fixes), puis « En ce moment à la télé »
+        press(.down, 2); shot("25b-tv-univers")
+        for i in 1...10 { press(.right); shot(String(format: "26-univers-%02d", i)) }
+        press(.left, 9); shot("26b-univers-debut")
+        // OK : le paquet s'ouvre en éventail par-dessus la page (simulateur), Retour le referme
+        press(.select); Thread.sleep(forTimeInterval: 2); shot("26c-univers-eventail")
+        press(.right, 3); shot("26d-eventail-droite")
+        press(.down); shot("26e-eventail-refermer")
+        press(.up); back(); Thread.sleep(forTimeInterval: 1); shot("26f-eventail-ferme")
+        press(.down); shot("27-en-ce-moment")
+        for i in 1...4 { press(.right); shot(String(format: "27b-en-ce-moment-%02d", i)) }
+        press(.select); Thread.sleep(forTimeInterval: 2); shot("27c-en-ce-moment-chaines")
+        press(.down); press(.select); Thread.sleep(forTimeInterval: 1.5); shot("27d-retour")
+        press(.down, 3); shot("27e-tv-bas")
+    }
+
     func ficheSerie() {
         relaunch(["-prisme.debug.open", "series:demo:2001", "-prisme.debug.season", "3"])
         Thread.sleep(forTimeInterval: 3); shot("16-fiche-serie-saison3")

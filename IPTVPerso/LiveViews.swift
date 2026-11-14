@@ -19,6 +19,9 @@ struct LiveHomeView: View {
     @State private var deck: ChannelDeck?
     struct GuideRequest: Identifiable { let id = UUID(); let list: [Channel]; let title: String }
 
+    /// sources de chaque chaîne, pour l'éventail
+    private var sourceCounts: [String: Int] { Dictionary(index.map { (ChannelTools.key($0.ch), $0.sources) }, uniquingKeysWith: max) }
+
     private var rail: [(String, String, String)] {
         var r: [(String, String, String)] = [("home", "house.fill", "Accueil"), ("guide", "tablecells", "Guide TV"), ("search", "magnifyingglass", "Rechercher"), ("replay", "clock.arrow.circlepath", "Replay")]
         for u in Univers.allCases where index.contains(where: { $0.univers == u }) { r.append(("u:" + u.rawValue, u.icon, u.label)) }
@@ -42,7 +45,7 @@ struct LiveHomeView: View {
         .disabled(deck != nil)
         .overlay {
             if let d = deck {
-                ChannelFan(title: d.title, icon: d.icon, channels: d.channels, play: play, close: { deck = nil })
+                ChannelFan(title: d.title, icon: d.icon, channels: d.channels, sources: sourceCounts, play: play, close: { deck = nil })
                     .transition(.opacity)
             }
         }
@@ -411,6 +414,8 @@ struct ChannelFan: View {
     let title: String
     let icon: String
     let channels: [Channel]
+    /// nombre de sources de chaque chaîne (clé ChannelTools.key), pour « TF1 · 2 sources »
+    let sources: [String: Int]
     let play: ([Channel], Int) -> Void
     let close: () -> Void
     @ObservedObject var prefs = LivePrefs.shared
@@ -422,19 +427,21 @@ struct ChannelFan: View {
             Rectangle().fill(.ultraThinMaterial).environment(\.colorScheme, .dark)
                 .overlay(Color(red: 6 / 255, green: 7 / 255, blue: 10 / 255).opacity(0.74))
                 .ignoresSafeArea()
+            // simulateur (.lfan) : titre, aide, rangée et « Refermer » groupés au centre de l'écran
             VStack(alignment: .leading, spacing: 0) {
-                HStack(alignment: .firstTextBaseline, spacing: 18) {
-                    Image(systemName: icon).font(P.font(40, .semibold))
-                    Text(title).font(P.font(54, .bold))
-                    Text("\(channels.count) en direct").font(P.font(24, .medium)).foregroundStyle(.white.opacity(0.55))
+                HStack(alignment: .center, spacing: 18) {
+                    Image(systemName: icon).font(P.font(40, .regular))
+                    Text(title).font(P.font(45, .bold))
+                    Text(title == "Reprendre" ? "tes dernières chaînes · reprise sur la même source, sans question" : "\(channels.count) en direct")
+                        .font(P.font(21, .medium)).foregroundStyle(.white.opacity(0.55))
                 }
-                .padding(.leading, 210)
+                .padding(.leading, 210).padding(.bottom, 6)
                 Text("OK pour regarder · maintiens le clic pour plus d'options · Retour pour refermer")
-                    .font(P.font(22)).foregroundStyle(.white.opacity(0.5)).padding(.leading, 210).padding(.top, 6)
+                    .font(P.font(20)).foregroundStyle(.white.opacity(0.5)).padding(.leading, 210)
                 ScrollView(.horizontal) {
                     LazyHStack(alignment: .top, spacing: 33) {
                         ForEach(Array(channels.prefix(120).enumerated()), id: \.element.id) { i, ch in
-                            ChannelCard(ch: ch, fav: prefs.favorites.contains(ch.id)) { play(channels, i) }
+                            FanCard(ch: ch, sources: sources[ChannelTools.key(ch)] ?? 1, fav: prefs.favorites.contains(ch.id)) { play(channels, i) }
                                 .contextMenu { Button(prefs.favorites.contains(ch.id) ? "Retirer des favoris" : "Ajouter aux favoris") { prefs.toggleFavorite(ch.id) } }
                                 .focused($foc, equals: i)
                                 // entrée en éventail du simulateur (lfanin) : de la gauche, légèrement tournée, l'une après l'autre
@@ -446,9 +453,10 @@ struct ChannelFan: View {
                     }
                     .padding(.horizontal, 210).padding(.vertical, 33)
                 }
+                .frame(height: FanCard.thumb.height + 33 * 2 + 80)
                 .scrollClipDisabled()
                 .focusSection()
-                Button(action: close) { Label("Refermer", systemImage: "xmark").font(P.font(26, .semibold)).padding(.horizontal, 10) }
+                Button(action: close) { Label("Refermer", systemImage: "xmark").font(P.font(25, .semibold)).padding(.horizontal, 10) }
                     .buttonStyle(GlassStyle(radius: 18, minH: 69))
                     .padding(.leading, 210)
                     .focusSection()
@@ -460,6 +468,65 @@ struct ChannelFan: View {
             shown = true
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { foc = 0 }
         }
+    }
+}
+
+/// Carte de l'éventail (simulateur, .lfan .lcard) : vignette plus grande avec la pastille de la chaîne,
+/// DIRECT et la progression ; dessous, le programme puis « chaîne · N sources » et la qualité.
+struct FanCard: View {
+    static let thumb = CGSize(width: 408, height: 230)
+    let ch: Channel
+    let sources: Int
+    let fav: Bool
+    let action: () -> Void
+    @State private var now: Program?
+    @FocusState private var focused: Bool
+
+    var body: some View {
+        let name = ChannelTools.clean(ch.name)
+        let hue = P.hue(name)
+        VStack(alignment: .leading, spacing: 2) {
+            Button(action: action) {
+                ZStack(alignment: .topLeading) {
+                    LinearGradient(colors: [Color(hue: hue, saturation: 0.55, brightness: 0.44), Color(hue: hue, saturation: 0.5, brightness: 0.15)], startPoint: .topLeading, endPoint: .bottomTrailing)
+                    Text((now?.title ?? name).uppercased()).font(P.font(34, .heavy)).foregroundStyle(.white.opacity(0.16))
+                        .lineLimit(3).minimumScaleFactor(0.7)
+                        .padding(.horizontal, 18).padding(.top, 72).frame(maxWidth: 300, alignment: .leading)
+                    HStack(spacing: 8) {
+                        ChannelChip(name: name, icon: ch.icon, height: 40)
+                        Spacer(minLength: 4)
+                        if fav { Image(systemName: "star.fill").font(P.font(19)).foregroundStyle(P.star) }
+                        LiveBadge(text: "DIRECT")
+                    }
+                    .padding(15)
+                    if let now {
+                        ProgressLine(value: now.progress()).frame(height: 5)
+                            .padding(.horizontal, 15).frame(maxHeight: .infinity, alignment: .bottom).padding(.bottom, 14)
+                    }
+                }
+                .frame(width: FanCard.thumb.width, height: FanCard.thumb.height)
+            }
+            .buttonStyle(TileStyle(radius: 21, zoom: 1.08))
+            .focused($focused)
+            Group {
+                Text(now?.title ?? "Programme non communiqué").font(P.font(23, .semibold)).lineLimit(1).padding(.top, 12)
+                HStack(spacing: 8) {
+                    Text(name + " · \(sources) source" + (sources > 1 ? "s" : "")).font(P.font(19)).foregroundStyle(.white.opacity(0.55)).lineLimit(1)
+                    if let q = quality { Text(q).font(P.font(16, .heavy)).foregroundStyle(.black).padding(.horizontal, 8).padding(.vertical, 1)
+                        .background(q == "4K" ? Color(red: 0.95, green: 0.76, blue: 0.31) : q == "1080p" ? Color(red: 0.49, green: 0.77, blue: 1) : Color(red: 0.83, green: 0.84, blue: 0.87), in: RoundedRectangle(cornerRadius: 7)) }
+                }
+            }
+            .frame(width: FanCard.thumb.width, alignment: .leading)
+            // simulateur : le texte descend un peu quand la vignette grossit
+            .offset(y: focused ? 9 : 0)
+            .animation(.timingCurve(0.2, 0.8, 0.2, 1, duration: 0.2), value: focused)
+        }
+        .task(id: ch.id) { now = await LiveStore.nowNext(ch).0 }
+    }
+
+    /// qualité lue dans le nom de la chaîne chez le fournisseur ; rien si elle n'y figure pas
+    private var quality: String? {
+        switch ChannelTools.quality(ch.name) { case 4: return "4K"; case 3: return "1080p"; case 2: return "720p"; default: return nil }
     }
 }
 
