@@ -285,10 +285,24 @@ struct FilmDetailView: View {
                 Circle().fill(Color(red: 0.07, green: 0.08, blue: 0.1)).frame(width: 76, height: 76)
                 Text("\(sc)").font(P.font(36, .bold))
             }
-            VStack(alignment: .leading, spacing: 5) {
-                Text("Score prisme").font(P.font(24, .bold)).foregroundStyle(P.gold)
-                Text(scoreLine).font(P.font(23)).foregroundStyle(P.gold.opacity(0.75))
-                Text("Tes goûts : à découvrir").font(P.font(23)).foregroundStyle(P.gold.opacity(0.75))
+            if profiles.isDuo {
+                // « Vous deux » (simulateur) : le goût de chacun ; « à découvrir » tant que ses goûts ne sont pas connus
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Pour vous deux").font(P.font(24, .bold)).foregroundStyle(P.gold)
+                    ForEach(profiles.watchers) { w in
+                        HStack(spacing: 8) {
+                            ProfileAvatar(p: w, size: 30)
+                            Text(w.name).font(P.font(22)).foregroundStyle(P.gold.opacity(0.75))
+                            Text("à découvrir").font(P.font(22, .bold)).foregroundStyle(P.gold.opacity(0.9))
+                        }
+                    }
+                }
+            } else {
+                VStack(alignment: .leading, spacing: 5) {
+                    Text("Score prisme").font(P.font(24, .bold)).foregroundStyle(P.gold)
+                    Text(scoreLine).font(P.font(23)).foregroundStyle(P.gold.opacity(0.75))
+                    Text("Tes goûts : à découvrir").font(P.font(23)).foregroundStyle(P.gold.opacity(0.75))
+                }
             }
         }
     }
@@ -304,7 +318,7 @@ struct FilmDetailView: View {
             let c = Calendar.current.dateComponents([.hour, .minute], from: clock.addingTimeInterval(Double(n) * 60))
             return (c.hour ?? 0) * 60 + (c.minute ?? 0)
         }
-        return profiles.me.bed
+        return profiles.bedMinutes   // « Vous deux » : le coucher le plus tôt des deux
     }
     private var plan: EveningPlan? { EveningPlan.make(remaining: remainingMin, bed: bedMinutes, at: clock) }
 

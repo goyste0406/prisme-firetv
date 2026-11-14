@@ -240,10 +240,28 @@ final class Visite: XCTestCase {
         relaunch(["-prisme.debug.open", "film:demo:1006"])
         press(.up, 4); Thread.sleep(forTimeInterval: 1); shot("99b-fiche-pastille-profil")
 
+        // VOUS DEUX : fenêtre « Choisis un profil » → « Steven + Léa, à deux », accueil, fiche (score pour vous deux,
+        // coucher le plus tôt = celui de Léa, 22:30), retour à Steven seul
+        relaunch(["-prisme.debug.profiles", "2", "-prisme.debug.tab", "films"])
+        press(.up, 8); press(.right, 8); press(.select); Thread.sleep(forTimeInterval: 1.5); shot("C0-fenetre")
+        for i in 1...2 { press(.down); shot(String(format: "C0b-fenetre-bas-%02d", i)) }
+        press(.select); Thread.sleep(forTimeInterval: 4); shot("C1-a-deux-films")
+        press(.down, 2); shot("C1b-a-deux-films-bas")
+        relaunch(["-prisme.debug.profiles", "2", "-prisme.debug.duo", "1", "-prisme.debug.open", "film:demo:1000"])
+        shot("C2-a-deux-fiche")
+        press(.up, 4); Thread.sleep(forTimeInterval: 1); shot("C3-a-deux-pastille")
+        press(.select); Thread.sleep(forTimeInterval: 1.5); shot("C3b-a-deux-fenetre")
+        press(.up, 2); shot("C3c-vers-steven")
+        press(.select); Thread.sleep(forTimeInterval: 3); shot("C4-steven-seul")
+
         // 6 PROFILS (le maximum) : « Qui regarde ? », fenêtre « Choisis un profil », Réglages › Profils (défilement dans le cadre)
         relaunch(["-prisme.debug.profiles", "6", "-prisme.debug.whoHold", "1"], wait: 2)
         shot("A0-six-qui-regarde")
         for i in 1...7 { press(.right); shot(String(format: "A0b-six-qui-regarde-%02d", i)) }
+        // « À deux » avec 6 profils : choisir les deux
+        press(.left, 8); press(.right, 6); shot("A0c-six-a-deux"); press(.select); Thread.sleep(forTimeInterval: 1); shot("A0d-six-qui-es-tu")
+        press(.left, 6); press(.select); Thread.sleep(forTimeInterval: 1); shot("A0e-six-avec-qui")
+        back(); Thread.sleep(forTimeInterval: 1); shot("A0f-six-annule")
         press(.left, 8); press(.select); Thread.sleep(forTimeInterval: 3)
         press(.up, 8); press(.right, 8); press(.select); Thread.sleep(forTimeInterval: 1.5); shot("A1-six-fenetre")
         for i in 1...7 { press(.down); shot(String(format: "A1b-six-fenetre-bas-%02d", i)) }
