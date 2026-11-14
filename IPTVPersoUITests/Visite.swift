@@ -335,7 +335,7 @@ final class Visite: XCTestCase {
         press(.select); Thread.sleep(forTimeInterval: 1); shot("E7b-qu-a-t-il-dit", focus: false)
         press(.up); Thread.sleep(forTimeInterval: 1); shot("E7c-raccourcis-appris", focus: false)
         back(); back(); Thread.sleep(forTimeInterval: 1); shot("E7d-retour-court-sans-panneau", focus: false)
-        remote.press(.menu, forDuration: 1.5); Thread.sleep(forTimeInterval: 3); shot("E7e-retour-maintenu-quitte", focus: false)
+        back(); Thread.sleep(forTimeInterval: 1); shot("E7e-retour-quitte", focus: false)
         relaunch(["-prisme.debug.open", "film:demo:1016", "-prisme.debug.sleepAfter", "25"])
         press(.select); Thread.sleep(forTimeInterval: 34); shot("E8-tu-regardes-toujours", focus: false)
         Thread.sleep(forTimeInterval: 17); shot("E9-pause-place-gardee", focus: false)

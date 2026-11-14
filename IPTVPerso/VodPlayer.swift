@@ -104,10 +104,6 @@ final class VodPlayerController: UIViewController, VLCMediaPlayerDelegate {
     override func viewDidLoad() {
         super.viewDidLoad()
         view.backgroundColor = .black
-        let held = UILongPressGestureRecognizer(target: self, action: #selector(menuHeld(_:)))
-        held.allowedPressTypes = [NSNumber(value: UIPress.PressType.menu.rawValue)]
-        held.minimumPressDuration = 0.7
-        view.addGestureRecognizer(held)
         videoView.frame = view.bounds; videoView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
         view.addSubview(videoView)
         catcher.frame = view.bounds; catcher.autoresizingMask = [.flexibleWidth, .flexibleHeight]
@@ -269,7 +265,7 @@ final class VodPlayerController: UIViewController, VLCMediaPlayerDelegate {
             return super.pressesBegan(presses, with: event)
         }
         switch press.type {
-        case .menu: return   // Retour : court → shortBack() (via SwiftUI), maintenu → menuHeld (geste)
+        case .menu: return   // Retour : traité par shortBack() (via SwiftUI)
         case .leftArrow: seek(-10)
         case .rightArrow: seek(10)
         case .upArrow: ui.panel = .shortcuts; ui.osd = true
@@ -290,23 +286,16 @@ final class VodPlayerController: UIViewController, VLCMediaPlayerDelegate {
         guard let press = presses.first, press.type == .menu else { return super.pressesCancelled(presses, with: event) }
     }
 
-    /// Retour court quand aucun panneau n'a pris la touche : cacher le bandeau, ou le montrer (avec la consigne)
+    /// Retour court : remonter d'un niveau (panneau → bandeau → quitter le lecteur)
     func shortBack() {
         ui.log("shortBack interactive=\(ui.interactive)")
         noteInput()
         if ui.sleepLeft != nil { ui.stillWatching(); return }
         if ui.interactive { ui.back("lecteur"); return }
         if ui.message != nil && (cutDone || bedDone) { quit(); return }
-        if ui.osd { ui.osd = false } else {
-            ui.hint = "Retour maintenu : quitter · ↑ raccourcis puis tous les réglages · ↓ options"
-            showOSD()
-        }
-    }
-
-    /// Retour maintenu : quitter le lecteur
-    @objc private func menuHeld(_ g: UILongPressGestureRecognizer) {
-        guard g.state == .began else { return }
-        ui.log("Retour maintenu"); quit()
+        // tvOS réserve « Retour maintenu » à l'écran d'accueil de l'Apple TV : on quitte donc par Retour court,
+        // couche par couche (panneau, puis bandeau, puis lecteur), comme le lecteur d'Apple
+        if ui.osd { ui.osd = false } else { quit() }
     }
 
     private func quit() { ui.log("quit"); stop(); onClose() }

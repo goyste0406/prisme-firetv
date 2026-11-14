@@ -38,7 +38,7 @@ final class PlayerUI: ObservableObject {
     @Published var toast: String?
     @Published var sleepLeft: Int?
     @Published var message: String?
-    @Published var hint = "↑ raccourcis puis tous les réglages · ↓ options · ⏯ pause · Retour maintenu : quitter"
+    @Published var hint = "↑ raccourcis puis tous les réglages · ↓ options · ⏯ pause · Retour ×2 : quitter"
     /// dernière option utilisée (le panneau s'ouvre dessus)
     @Published var lastKey = "audio"
     var bedMinutes = 1380
