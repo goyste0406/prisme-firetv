@@ -250,20 +250,20 @@ final class VodPlayerController: UIViewController, VLCMediaPlayerDelegate {
     override func pressesBegan(_ presses: Set<UIPress>, with event: UIPressesEvent?) {
         guard let press = presses.first else { return super.pressesBegan(presses, with: event) }
         noteInput()
-        // Retour : géré ici seulement (jamais par les panneaux, jamais transmis plus haut, sinon la présentation
-        // plein écran fermerait le lecteur). Court = remonter d'un niveau au relâchement ; maintenu = quitter.
-        if press.type == .menu {
-            menuDown = Date()
-            menuWork?.cancel()
-            let w = DispatchWorkItem { [weak self] in self?.menuDown = nil; self?.quit() }
-            menuWork = w
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.7, execute: w)
-            return
-        }
         if ui.interactive {
+            // Retour non pris par le panneau : ne jamais le laisser remonter (tvOS fermerait tout le lecteur) ;
+            // (c'est le panneau qui remonte d'un niveau, via son « onExitCommand » : ne pas le faire une 2e fois ici)
+            if press.type == .menu { ui.log("VC began menu (panneau)"); return }
             return super.pressesBegan(presses, with: event)
         }
         switch press.type {
+        case .menu:
+            ui.log("VC began menu (sans panneau)")
+            // Retour maintenu : quitter ; Retour court : cacher le bandeau, ou le montrer (avec la consigne) s'il est caché
+            menuDown = Date()
+            let w = DispatchWorkItem { [weak self] in self?.quit() }
+            menuWork = w
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.7, execute: w)
         case .leftArrow: seek(-10)
         case .rightArrow: seek(10)
         case .upArrow: ui.panel = .shortcuts; ui.osd = true
@@ -278,12 +278,11 @@ final class VodPlayerController: UIViewController, VLCMediaPlayerDelegate {
 
     override func pressesEnded(_ presses: Set<UIPress>, with event: UIPressesEvent?) {
         guard let press = presses.first, press.type == .menu else { return super.pressesEnded(presses, with: event) }
-        guard let d = menuDown else { return }   // Retour maintenu déjà traité (lecteur quitté)
+        ui.log("VC ended menu down=\(menuDown != nil)")
+        guard let d = menuDown else { return }   // Retour court déjà traité (panneau) : ne pas le laisser remonter
         menuDown = nil
         guard Date().timeIntervalSince(d) < 0.7 else { return }
         menuWork?.cancel()
-        if ui.sleepLeft != nil { ui.stillWatching(); return }       // « Tu regardes toujours ? » : Retour = je regarde
-        if ui.interactive { ui.back(); return }                      // panneau : remonter d'un niveau
         if ui.message != nil && (cutDone || bedDone) { quit(); return }
         if ui.osd { ui.osd = false } else {
             ui.hint = "Retour maintenu : quitter · ↑ raccourcis puis tous les réglages · ↓ options"
@@ -293,10 +292,10 @@ final class VodPlayerController: UIViewController, VLCMediaPlayerDelegate {
 
     override func pressesCancelled(_ presses: Set<UIPress>, with event: UIPressesEvent?) {
         guard let press = presses.first, press.type == .menu else { return super.pressesCancelled(presses, with: event) }
-        menuWork?.cancel(); menuDown = nil
+        ui.log("VC cancelled menu"); menuWork?.cancel(); menuDown = nil
     }
 
-    private func quit() { stop(); onClose() }
+    private func quit() { ui.log("quit"); stop(); onClose() }
 
     // MARK: lecture
 

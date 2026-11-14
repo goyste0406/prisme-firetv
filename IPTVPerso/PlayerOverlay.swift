@@ -102,8 +102,17 @@ final class PlayerUI: ObservableObject {
     }
     var endText: String { dur > 0 ? Fmt.hm(Date().addingTimeInterval(dur - pos)) : "" }
 
+    /// simulateur de test uniquement : dernières touches Retour reçues, affichées en petit pour la visite automatique
+    @Published var trace = ""
+    func log(_ s: String) {
+        guard Debug.demoServer != nil else { return }
+        let t = String(format: "%.2f", Date().timeIntervalSince1970.truncatingRemainder(dividingBy: 100))
+        trace = (trace.split(separator: "\n").suffix(7).map(String.init) + ["\(t) \(s)"]).joined(separator: "\n")
+    }
+
     /// Retour : remonte d'un niveau (sous-liste → Lecture → Raccourcis → fermé)
-    func back() {
+    func back(_ from: String = "ui") {
+        log("back(\(from)) \(panel) opt=\(options)")
         touch()
         switch panel {
         case .sub: panel = .full
@@ -122,6 +131,10 @@ struct PlayerOverlay: View {
 
     var body: some View {
         ZStack {
+            if Debug.demoServer != nil {
+                Text(m.trace).font(.system(size: 16, design: .monospaced)).foregroundStyle(.yellow)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading).padding(30).allowsHitTesting(false)
+            }
             if m.osd || m.interactive {
                 LinearGradient(colors: [.clear, .black.opacity(0.85)], startPoint: UnitPoint(x: 0.5, y: 0.45), endPoint: .bottom).ignoresSafeArea()
                 topRight
@@ -197,6 +210,7 @@ struct PlayerOverlay: View {
         }
         .padding(.leading, 86).padding(.trailing, 86 + right).padding(.bottom, 58)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
+        .onExitCommand { m.back("swiftui") }
     }
 
     private var shownPos: Double { m.pending != 0 ? max(0, min(m.dur, m.pos + m.pending)) : m.pos }
@@ -222,6 +236,7 @@ struct PlayerOverlay: View {
             .background(panelBG(36))
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing).padding(.trailing, 37).padding(.bottom, 37)
             .onMoveCommand { d in if d == .up, focus == m.shortcuts.first { m.panel = .full } }
+            .onExitCommand { m.back("swiftui") }
         default:
             VStack(alignment: .leading, spacing: 0) {
                 HStack {
@@ -247,6 +262,7 @@ struct PlayerOverlay: View {
             .background(panelBG(44))
             .padding(.vertical, 37).padding(.trailing, 37)
             .frame(maxWidth: .infinity, alignment: .trailing)
+            .onExitCommand { m.back("swiftui") }
         }
     }
 
@@ -397,6 +413,7 @@ struct PlayerOverlay: View {
             }
             .padding(.vertical, 56).padding(.horizontal, 60).frame(width: 1034)
             .background(panelBG(44))
+            .onExitCommand { m.stillWatching() }
         }
     }
 
