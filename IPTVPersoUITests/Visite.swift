@@ -118,7 +118,7 @@ final class Visite: XCTestCase {
         // en-tête, puis « Explorer par univers » (catégories fixes), puis « En ce moment à la télé »
         press(.down, 2); shot("25b-tv-univers")
         for i in 1...10 { press(.right); shot(String(format: "26-univers-%02d", i)) }
-        press(.left, 12); shot("26b-univers-debut")
+        press(.left, 9); shot("26b-univers-debut")
         press(.select); Thread.sleep(forTimeInterval: 2); shot("26c-univers-grille")
         back(); Thread.sleep(forTimeInterval: 1)
         press(.down); shot("27-en-ce-moment")
@@ -130,6 +130,8 @@ final class Visite: XCTestCase {
         press(.left, 12); shot("28-colonne")
         for i in 1...12 { press(.down); Thread.sleep(forTimeInterval: 0.6); shot(String(format: "28b-colonne-%02d", i)) }
         press(.right); Thread.sleep(forTimeInterval: 1); shot("29-grille-categorie")
+        back(); Thread.sleep(forTimeInterval: 1); shot("29a-retour-accueil-tv")
+        press(.left); press(.down, 6); press(.right); Thread.sleep(forTimeInterval: 1); shot("29a2-grille-categorie")
         for i in 1...4 { press(.down); shot(String(format: "29b-grille-bas-%02d", i)) }
         press(.up, 8); shot("29c-grille-haut")
 
@@ -176,7 +178,7 @@ final class Visite: XCTestCase {
 
         // SAGAS / UNIVERS : Wonder Woman (saga + même univers DC confirmé par TMDB : Aquaman), Wonder (aucun lien malgré le titre),
         // Dune 1984 (remake homonyme : ni la saga Dune, ni « même univers »)
-        for (id, name) in [("1040", "wonder-woman"), ("1041", "wonder"), ("1044", "dune-1984"), ("1012", "spider-man")] {
+        for (id, name) in [("1031", "wonder-woman"), ("1032", "wonder"), ("1035", "dune-1984"), ("1012", "spider-man")] {
             relaunch(["-prisme.debug.open", "film:demo:" + id])
             shot("B0-saga-\(name)")
             for i in 1...4 { press(.down); shot(String(format: "B0-saga-\(name)-bas-%02d", i)) }
@@ -255,7 +257,7 @@ final class Visite: XCTestCase {
         press(.select); Thread.sleep(forTimeInterval: 3); shot("C4-steven-seul")
 
         // MES GOÛTS : le test en entier (8 titres, 5 duels, ambiances, « jamais de… »), puis ses effets
-        relaunch(["-prisme.debug.taste", "1", "-prisme.debug.tab", "films"], wait: 8)
+        relaunch(["-prisme.debug.taste", "1", "-prisme.debug.tab", "films"], wait: 12)
         shot("D0-gouts-intro")
         press(.select); Thread.sleep(forTimeInterval: 1.5); shot("D1-gouts-carte-01")
         let verdicts = [0, 0, 2, 1, 0, 2, 0, 0]   // 0 j'aime, 1 pas vu, 2 pas pour moi

@@ -382,6 +382,8 @@ struct TasteTestView: View {
         if let a = TasteStore.shared.answers(pid) { never = Set(a.never); kindPref = a.kindPref; weeknight = a.weeknight; moods = Set(a.moods) }
         lang = me.lang
         loading = false
+        // « Commencer » était désactivé pendant la préparation : la sélection y revient quand il devient utilisable
+        if step == .intro { DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { focus = "start" } }
     }
 
     private func start() {

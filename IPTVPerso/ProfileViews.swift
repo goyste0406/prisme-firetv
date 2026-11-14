@@ -610,8 +610,8 @@ struct WhoIsWatchingScreen: View {
         default: choose(id, play: false)
         }
     }
-    private var avSize: CGFloat { itemCount <= 6 ? 190 : itemCount == 7 ? 172 : 152 }
-    private var itemGap: CGFloat { itemCount <= 5 ? 80 : 40 }
+    private var avSize: CGFloat { itemCount <= 6 ? 190 : itemCount == 7 ? 168 : 144 }
+    private var itemGap: CGFloat { itemCount <= 5 ? 80 : 36 }
 
     private var hello: String {
         let h = Calendar.current.component(.hour, from: Date())
