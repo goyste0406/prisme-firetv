@@ -197,7 +197,6 @@ struct PlayerOverlay: View {
         }
         .padding(.leading, 86).padding(.trailing, 86 + right).padding(.bottom, 58)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
-        .onExitCommand { m.back() }
     }
 
     private var shownPos: Double { m.pending != 0 ? max(0, min(m.dur, m.pos + m.pending)) : m.pos }
@@ -223,7 +222,6 @@ struct PlayerOverlay: View {
             .background(panelBG(36))
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing).padding(.trailing, 37).padding(.bottom, 37)
             .onMoveCommand { d in if d == .up, focus == m.shortcuts.first { m.panel = .full } }
-            .onExitCommand { m.back() }
         default:
             VStack(alignment: .leading, spacing: 0) {
                 HStack {
@@ -249,7 +247,6 @@ struct PlayerOverlay: View {
             .background(panelBG(44))
             .padding(.vertical, 37).padding(.trailing, 37)
             .frame(maxWidth: .infinity, alignment: .trailing)
-            .onExitCommand { m.back() }
         }
     }
 
@@ -400,7 +397,6 @@ struct PlayerOverlay: View {
             }
             .padding(.vertical, 56).padding(.horizontal, 60).frame(width: 1034)
             .background(panelBG(44))
-            .onExitCommand { m.stillWatching() }
         }
     }
 
