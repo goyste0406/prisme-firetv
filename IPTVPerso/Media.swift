@@ -566,7 +566,9 @@ enum MediaStore {
 @MainActor
 final class WatchStore: ObservableObject {
     static let shared = WatchStore()
-    struct Entry: Codable { var pos: Double; var dur: Double; var at: Date; var title: String; var icon: String; var item: String; var ep: String? }
+    struct Entry: Codable { var pos: Double; var dur: Double; var at: Date; var title: String; var icon: String; var item: String; var ep: String?
+        /// « vu à deux » : prénom de l'autre profil (absent dans les anciens historiques, qui restent lisibles)
+        var with: String? = nil }
     @Published private(set) var entries: [String: Entry] = [:]   // clé : id du film ou de l'épisode
     /// Ma liste du profil actif (clé d'origine pour le profil de Steven)
     @Published var favorites: [String] = [] { didSet { if !loading { UserDefaults.standard.set(favorites, forKey: ProfileStore.shared.key("prisme.media.favs")) } } }
@@ -587,6 +589,17 @@ final class WatchStore: ObservableObject {
         return e
     }
 
+    /// Écrit une entrée dans l'historique d'un AUTRE profil (mode « Vous deux »), sans toucher au reste.
+    static func saveFor(_ id: String, key: String, _ e: Entry) {
+        var all = entries(for: id)
+        all[key] = e
+        if all.count > 600 {
+            let old = all.sorted { $0.value.at < $1.value.at }.prefix(all.count - 600).map(\.key)
+            old.forEach { all.removeValue(forKey: $0) }
+        }
+        if let d = try? JSONEncoder().encode(all) { UserDefaults.standard.set(d, forKey: ProfileStore.storageKey("prisme.watch", for: id)) }
+    }
+
     private func persist() {
         if let d = try? JSONEncoder().encode(entries) { UserDefaults.standard.set(d, forKey: ProfileStore.shared.key("prisme.watch")) }
     }
@@ -599,7 +612,11 @@ final class WatchStore: ObservableObject {
     func save(key: String, pos: Double, dur: Double, title: String, icon: String, item: String, ep: String? = nil) {
         guard dur > 0 else { return }
         if entries[key] == nil { ProfileStore.shared.noteUse() }
-        entries[key] = Entry(pos: pos, dur: dur, at: Date(), title: title, icon: icon, item: item, ep: ep)
+        let ps = ProfileStore.shared
+        let other = ps.partnerProfile
+        entries[key] = Entry(pos: pos, dur: dur, at: Date(), title: title, icon: icon, item: item, ep: ep, with: other?.name)
+        // « Vous deux » : la même progression est aussi enregistrée chez l'autre profil (marquée « vu à deux »)
+        if let o = other { WatchStore.saveFor(o.id, key: key, Entry(pos: pos, dur: dur, at: Date(), title: title, icon: icon, item: item, ep: ep, with: ps.me.name)) }
         if entries.count > 600 {
             let old = entries.sorted { $0.value.at < $1.value.at }.prefix(entries.count - 600).map(\.key)
             old.forEach { entries.removeValue(forKey: $0) }

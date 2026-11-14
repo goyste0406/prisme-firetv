@@ -14,6 +14,8 @@ final class ProfileUI: ObservableObject {
     var shownAtLaunch = false
     /// ouvrir les réglages directement sur la fiche d'un profil
     @Published var editProfile: String?
+    /// test « Mes goûts » ouvert pour ce profil
+    @Published var taste: String?
 }
 
 // MARK: Réglages › Profils
@@ -98,6 +100,7 @@ struct ProfileDetail: View {
     @Binding var desc: String
     let back: () -> Void
     @ObservedObject var ps = ProfileStore.shared
+    @ObservedObject var tasteStore = TasteStore.shared
     @State private var open: String?
     @State private var confirm: String?
     @State private var name = ""
@@ -166,6 +169,19 @@ struct ProfileDetail: View {
             "Chaque profil a sa langue : VF pour l'un, VOSTFR pour l'autre. La version choisie automatiquement sur les fiches en tient compte.")
         if open == "plang" { options(Array(Profile.langs.indices), cur: Profile.langs.firstIndex(of: p.lang) ?? 0, key: "plang") { i in AnyView(Text(Profile.langNames[Profile.langs[i]] ?? "")) } set: { var x = p; x.lang = Profile.langs[$0]; ps.update(x) } }
 
+        // « Mes goûts » (simulateur : genres aimés · jamais : … ; sinon « pas encore appris · faire le test »)
+        let ta = TasteStore.shared.answers(p.id)
+        action("pgout", "Mes goûts", tasteSummary(ta),
+               "Un test court (titres connus, duels, ambiances, « jamais de… ») ; ensuite, ce que ce profil regarde compte de plus en plus. OK pour faire ou refaire le test.") {
+            ProfileUI.shared.taste = p.id
+        }
+        if ta != nil {
+            action("pgforget", "Oublier les réponses du test", confirm == "taste" ? "OK encore pour confirmer" : "›",
+                   "Efface les réponses du test « Mes goûts » de ce profil. Ce qu'il a regardé reste.", danger: confirm == "taste") {
+                if confirm == "taste" { TasteStore.shared.forget(p.id); confirm = nil } else { confirm = "taste" }
+            }
+        }
+
         row("pst", "Sous-titres", AnyView(Text(Profile.subNames[min(2, p.subs)] + (open == "pst" ? " ⌄" : " ›"))),
             "Remplace le réglage général pour ce profil seulement (appliqué dans le lecteur).")
         if open == "pst" { options([0, 1, 2], cur: p.subs, key: "pst") { i in AnyView(Text(Profile.subNames[i])) } set: { var x = p; x.subs = $0; ps.update(x) } }
@@ -183,6 +199,16 @@ struct ProfileDetail: View {
                 if confirm == "del" { ps.remove(p.id); back() } else { confirm = "del" }
             }
         }
+    }
+
+    private func tasteSummary(_ a: TasteAnswers?) -> String {
+        guard let a else { return "pas encore appris · faire le test ›" }
+        var g: [String: Double] = [:]
+        for (k, v) in a.judged where v > 0 { for x in a.judgedInfo[k]?.genres ?? [] { g[x, default: 0] += 1 } }
+        for m in TasteMood.all where a.moods.contains(m.id) { for x in m.genres { g[x, default: 0] += 1 } }
+        let top = g.sorted { $0.value > $1.value }.prefix(3).map { $0.key.lowercased() }
+        let nv = a.never.map { $0 == "__long" ? "films longs" : $0.lowercased() }.prefix(2)
+        return (top.isEmpty ? "variés" : top.joined(separator: ", ")) + (nv.isEmpty ? "" : " · jamais : " + nv.joined(separator: ", ")) + " ›"
     }
 
     private func row(_ key: String, _ title: String, _ value: AnyView, _ d: String) -> some View {
@@ -297,9 +323,23 @@ struct AvatarTileStyle: ButtonStyle {
 struct TopBarProfile: View {
     @ObservedObject var ps = ProfileStore.shared
     var body: some View {
-        Button { ProfileUI.shared.picker = true } label: { ProfileAvatar(p: ps.me, size: 45).frame(width: 30) }
+        Button { ProfileUI.shared.picker = true } label: { DuoAvatar(list: ps.watchers, size: 45).frame(minWidth: 30) }
             .buttonStyle(TabPillStyle(selected: false))
-            .accessibilityLabel("Profil " + ps.me.name)
+            .accessibilityLabel("Profil " + ps.watchersName)
+    }
+}
+
+/// Un avatar, ou deux qui se chevauchent en mode « Vous deux » (simulateur).
+struct DuoAvatar: View {
+    let list: [Profile]
+    var size: CGFloat
+    var body: some View {
+        HStack(spacing: -size * 0.32) {
+            ForEach(list) { p in
+                ProfileAvatar(p: p, size: size)
+                    .overlay(Circle().stroke(Color(red: 10 / 255, green: 11 / 255, blue: 15 / 255).opacity(list.count > 1 ? 0.8 : 0), lineWidth: 2.5))
+            }
+        }
     }
 }
 
@@ -309,8 +349,8 @@ struct ProfileChip: View {
     var body: some View {
         Button { ProfileUI.shared.picker = true } label: {
             HStack(spacing: 14) {
-                ProfileAvatar(p: ps.me, size: 48)
-                Text(ps.me.name).font(P.font(28, .semibold)).lineLimit(1)
+                DuoAvatar(list: ps.watchers, size: 48)
+                Text(ps.watchersName).font(P.font(28, .semibold)).lineLimit(1)
                 Text("▾").font(P.font(21, .semibold)).opacity(0.7)
             }
             .padding(.leading, 10).padding(.trailing, 22).frame(height: 66)
@@ -340,6 +380,12 @@ struct ProfilePickerModal: View {
     let close: () -> Void
     let manage: () -> Void
     @FocusState private var focus: String?
+    /// « À deux » avec plus de 2 profils : choisir avec qui
+    @State private var duoMode = false
+
+    /// le profil qui lance « À deux » (le profil actif) et ceux qui peuvent le rejoindre
+    private var duoA: Profile { ps.isGuest ? ps.profiles[0] : ps.me }
+    private var duoOthers: [Profile] { ps.profiles.filter { $0.id != duoA.id } }
 
     var body: some View {
         ZStack {
@@ -347,21 +393,42 @@ struct ProfilePickerModal: View {
             Color.black.opacity(0.45).ignoresSafeArea()
             VStack(alignment: .leading, spacing: 14) {
                 Text("QUI REGARDE ?").font(P.font(21, .bold)).tracking(3).foregroundStyle(.white.opacity(0.7))
-                Text("Choisis un profil").font(P.font(42, .bold)).padding(.bottom, 14)
+                Text(duoMode ? "Avec qui regardes-tu ?" : "Choisis un profil").font(P.font(42, .bold)).padding(.bottom, 14)
                 // jusqu'à 6 profils + Invité + Ajouter : liste qui défile dans un cadre de hauteur fixe (simulateur),
                 // coupée au bord (sur Apple TV une zone de défilement ne coupe pas ce qui dépasse)
                 ScrollView {
                     VStack(alignment: .leading, spacing: 14) {
+                      if duoMode {
+                        ForEach(duoOthers) { o in
+                            Button { ps.useDuo(duoA.id, o.id); close() } label: {
+                                pickRow(AnyView(DuoAvatar(list: [duoA, o], size: 58)), duoA.name + " + " + o.name, "Regarder à deux", radio: ps.partner == o.id)
+                            }
+                            .buttonStyle(PickRowStyle()).focused($focus, equals: "duo:" + o.id)
+                        }
+                      } else {
                         ForEach(ps.profiles) { p in
                             let st = ps.stats(p.id)
                             Button { ps.use(p.id); close() } label: {
                                 pickRow(AnyView(ProfileAvatar(p: p, size: 74)), p.name,
                                         (p.limit != nil ? "lock|" + Profile.ageLabel(p.limit) + " · " : "") + "\(st.seen) film\(st.seen > 1 ? "s" : "") vu\(st.seen > 1 ? "s" : "") · \(st.hist) dans l'historique",
-                                        radio: p.id == ps.current)
+                                        radio: p.id == ps.current && !ps.isDuo)
                             }
                             .buttonStyle(PickRowStyle())
                             .focused($focus, equals: p.id)
                             .contextMenu { Button("Modifier ce profil") { ProfileUI.shared.editProfile = p.id; manage() } }
+                        }
+                        if ps.profiles.count >= 2 {
+                            // « À deux » (simulateur) : un score commun et des films pour vous deux
+                            let one = duoOthers.count == 1 ? duoOthers[0] : nil
+                            Button {
+                                if let o = one { ps.useDuo(duoA.id, o.id); close() }
+                                else { duoMode = true; let f = "duo:" + (ps.partner ?? duoOthers[0].id); DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { focus = f } }
+                            } label: {
+                                pickRow(AnyView(DuoAvatar(list: ps.isDuo ? ps.watchers : [duoA] + (one.map { [$0] } ?? [duoOthers[0]]), size: 58)),
+                                        ps.isDuo ? ps.watchersName + ", à deux" : one.map { duoA.name + " + " + $0.name + ", à deux" } ?? "À deux…",
+                                        "Un score commun et des films pour vous deux", radio: ps.isDuo)
+                            }
+                            .buttonStyle(PickRowStyle()).focused($focus, equals: "duo")
                         }
                         Button { ps.use(ProfileStore.guestID); close() } label: {
                             pickRow(AnyView(ZStack { Circle().fill(Color(hex: "#64748b")); Image(systemName: "person").font(.system(size: 32)) }.frame(width: 74, height: 74)),
@@ -375,6 +442,7 @@ struct ProfilePickerModal: View {
                             }
                             .buttonStyle(PickRowStyle()).focused($focus, equals: "add")
                         }
+                      }
                     }
                     .padding(.horizontal, 12).padding(.vertical, 10)
                 }
@@ -393,8 +461,8 @@ struct ProfilePickerModal: View {
             .shadow(color: .black.opacity(0.5), radius: 60, y: 30)
             .focusSection()
         }
-        .onAppear { let c = ps.isGuest ? "guest" : ps.current; DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { focus = c } }
-        .onExitCommand { close() }
+        .onAppear { let c = ps.isGuest ? "guest" : ps.isDuo ? "duo" : ps.current; DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { focus = c } }
+        .onExitCommand { if duoMode { duoMode = false; DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { focus = "duo" } } else { close() } }
     }
 
     private func pickRow(_ av: AnyView, _ name: String, _ sub: String, radio: Bool?) -> some View {
@@ -442,6 +510,9 @@ struct WhoIsWatchingScreen: View {
     @State private var moved = false
     @State private var resume: [String: (MediaItem, WatchStore.Entry)] = [:]
     @State private var news: [String: [MediaItem]] = [:]
+    /// « À deux » avec plus de 2 profils : 1 = choisir le premier, 2 = choisir l'autre
+    @State private var duoStep = 0
+    @State private var duoFirst: String?
     @FocusState private var focus: String?
     private let timer = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
 
@@ -455,19 +526,31 @@ struct WhoIsWatchingScreen: View {
                 .animation(.easeInOut(duration: 0.5), value: focusedID)
             VStack(spacing: 0) {
                 VStack(spacing: 14) {
-                    Text(!moved && countdown > 0 ? "\(hello) \(ps.profile(guess)?.name ?? "") ?" : "Qui regarde ?").font(P.font(72, .bold))
-                    Text(!moved && countdown > 0 ? "prisme t'ouvre ton profil dans \(countdown) s · choisis-en un autre si ce n'est pas toi"
+                    Text(duoStep == 1 ? "À deux · qui es-tu ?" : duoStep == 2 ? "À deux · avec qui ?" : !moved && countdown > 0 ? "\(hello) \(ps.profile(guess)?.name ?? "") ?" : "Qui regarde ?").font(P.font(72, .bold))
+                    Text(duoStep > 0 ? "OK pour choisir · Retour pour annuler"
+                         : !moved && countdown > 0 ? "prisme t'ouvre ton profil dans \(countdown) s · choisis-en un autre si ce n'est pas toi"
                          : "OK pour choisir · ▶︎ pour reprendre directement · maintiens pour modifier").font(P.font(28)).foregroundStyle(.white.opacity(0.75))
                 }
                 .padding(.top, 150)
                 HStack(alignment: .top, spacing: itemGap) {
                     ForEach(ps.profiles) { p in
-                        Button { choose(p.id, play: false) } label: { person(p) }
+                        Button { pick(p.id) } label: { person(p) }
                             .buttonStyle(WhoStyle(ring: !(counting && p.id == guess), size: avSize))
                             .focused($focus, equals: p.id)
+                            .disabled(duoStep == 2 && p.id == duoFirst)
+                            .opacity(duoStep == 2 && p.id == duoFirst ? 0.45 : 1)
                             .contextMenu { Button("Modifier ce profil") { ps.use(p.id); ProfileUI.shared.editProfile = p.id; manage() } }
-                            .onPlayPauseCommand { choose(p.id, play: true) }
+                            .onPlayPauseCommand { if duoStep == 0 { choose(p.id, play: true) } }
                     }
+                    if ps.profiles.count >= 2 && duoStep == 0 {
+                        // « À deux » (simulateur) : un score commun, la limite d'âge la plus stricte, le coucher le plus tôt
+                        Button { startDuo() } label: {
+                            whoItem(AnyView(DuoAvatar(list: duoPreview, size: avSize * 0.68).frame(width: avSize, height: avSize)
+                                        .background(Circle().fill(Color.white.opacity(0.05)))), "À deux",
+                                    ps.profiles.count == 2 ? duoPreview.map(\.name).joined(separator: " + ") : "choisis les deux profils")
+                        }.buttonStyle(WhoStyle(size: avSize)).focused($focus, equals: "duo")
+                    }
+                    if duoStep == 0 {
                     Button { choose(ProfileStore.guestID, play: false) } label: {
                         whoItem(AnyView(ZStack { Circle().fill(Color(hex: "#64748b")); Image(systemName: "person").font(.system(size: avSize * 0.4, weight: .regular)) }), "Invité", "sans historique")
                     }.buttonStyle(WhoStyle(size: avSize)).focused($focus, equals: ProfileStore.guestID)
@@ -475,6 +558,7 @@ struct WhoIsWatchingScreen: View {
                         Button { if let p = ps.add() { ps.use(p.id); ProfileUI.shared.editProfile = p.id; manage() } } label: {
                             whoItem(AnyView(ZStack { Circle().fill(Color.white.opacity(0.05)); Circle().strokeBorder(style: StrokeStyle(lineWidth: 3, dash: [10, 8])).foregroundStyle(.white.opacity(0.4)); Image(systemName: "plus").font(.system(size: avSize * 0.42, weight: .ultraLight)) }), "Ajouter", "nom au clavier ou sur l'iPhone")
                         }.buttonStyle(WhoStyle(size: avSize)).focused($focus, equals: "add")
+                    }
                     }
                 }
                 .padding(.top, 80)
@@ -492,8 +576,8 @@ struct WhoIsWatchingScreen: View {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { focus = g }
         }
         .task { await loadCards() }
-        // Retour : on garde le profil proposé (sans quitter prisme)
-        .onExitCommand { choose(guess.isEmpty ? ps.current : guess, play: false) }
+        // Retour : annule le choix « À deux » en cours, sinon garde le profil proposé (sans quitter prisme)
+        .onExitCommand { if duoStep > 0 { duoStep = 0; duoFirst = nil; focus = "duo" } else { choose(guess.isEmpty ? ps.current : guess, play: false) } }
         .onReceive(timer) { _ in
             guard !moved, !Debug.whoHold else { return }
             if countdown > 0 { countdown -= 1 }
@@ -506,7 +590,26 @@ struct WhoIsWatchingScreen: View {
 
     /// Taille des avatars selon le nombre d'éléments de la rangée (jusqu'à 6 profils + Invité + Ajouter) :
     /// la rangée tient toujours dans l'écran, sans rien couper.
-    private var itemCount: Int { ps.profiles.count + 1 + (ps.profiles.count < 6 ? 1 : 0) }
+    private var itemCount: Int { ps.profiles.count + 1 + (ps.profiles.count < 6 ? 1 : 0) + (ps.profiles.count >= 2 ? 1 : 0) }
+    /// les deux profils montrés sur la tuile « À deux » : le profil proposé et un autre
+    private var duoPreview: [Profile] {
+        let a = ps.profile(guess) ?? ps.profiles[0]
+        return [a] + (ps.profiles.first { $0.id != a.id }.map { [$0] } ?? [])
+    }
+
+    private func startDuo() {
+        moved = true
+        if ps.profiles.count == 2, duoPreview.count == 2 { ps.useDuo(duoPreview[0].id, duoPreview[1].id); done(nil); return }
+        duoStep = 1; duoFirst = nil
+    }
+
+    private func pick(_ id: String) {
+        switch duoStep {
+        case 1: duoFirst = id; duoStep = 2; focus = ps.profiles.first { $0.id != id }?.id
+        case 2: if let a = duoFirst, a != id { ps.useDuo(a, id); done(nil) }
+        default: choose(id, play: false)
+        }
+    }
     private var avSize: CGFloat { itemCount <= 6 ? 190 : itemCount == 7 ? 172 : 152 }
     private var itemGap: CGFloat { itemCount <= 5 ? 80 : 40 }
 
@@ -547,7 +650,9 @@ struct WhoIsWatchingScreen: View {
     /// Carte « Steven regardait Lupin · 18 % vu » (vraies données du profil sélectionné).
     @ViewBuilder private var card: some View {
         let id = focusedID
-        if id == ProfileStore.guestID {
+        if id == "duo" {
+            cardBox(nil, "À DEUX", "Des films que vous aimerez tous les deux", "Un score commun · la limite d'âge la plus stricte · fini avant l'heure de coucher la plus tôt", nil, nil)
+        } else if id == ProfileStore.guestID {
             cardBox(nil, "MODE INVITÉ", "Regarder sans rien changer", "Ni historique, ni reprises, ni Ma liste touchés · effacé en changeant de profil", nil, nil)
         } else if let p = ps.profile(id) {
             let r = resume[id], nw = news[id] ?? []
@@ -588,6 +693,7 @@ struct WhoIsWatchingScreen: View {
 
     private func choose(_ id: String, play: Bool) {
         moved = true
+        duoStep = 0
         ps.use(id)
         done(play ? resume[id]?.0 : nil)
     }

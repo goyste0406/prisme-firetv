@@ -99,12 +99,16 @@ enum WhyBuilder {
             }
             // « Ton genre préféré » : au moins 3 films finis, et ce genre dans plus de 30 % d'entre eux
             let gs = seen.compactMap { $0.fiche?.genres }.map { $0.components(separatedBy: ", ") }
+            var fav = false
             if gs.count >= 3 {
                 let mine = f.genres.components(separatedBy: ", ")
-                if mine.contains(where: { g in Double(gs.filter { $0.contains(g) }.count) / Double(gs.count) > 0.3 }) {
-                    out.append(WhyReason(icon: "sparkles", text: "Ton genre préféré"))
-                }
+                fav = mine.contains(where: { g in Double(gs.filter { $0.contains(g) }.count) / Double(gs.count) > 0.3 })
             }
+            // ou d'après le test « Mes goûts » : le genre le plus aimé du profil
+            if !fav, let top = (await TasteStore.shared.model(ProfileStore.shared.current)).topGenres.first?.0 {
+                fav = Genres.canon(f.genres).contains(top)
+            }
+            if fav { out.append(WhyReason(icon: "sparkles", text: "Ton genre préféré")) }
         }
         if rating >= 7.5 { out.append(WhyReason(icon: "trophy", text: "★ " + String(format: "%.1f", rating).replacingOccurrences(of: ".", with: ",") + " · " + ratingWord(rating))) }
         return out

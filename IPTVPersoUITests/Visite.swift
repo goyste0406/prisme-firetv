@@ -240,10 +240,54 @@ final class Visite: XCTestCase {
         relaunch(["-prisme.debug.open", "film:demo:1006"])
         press(.up, 4); Thread.sleep(forTimeInterval: 1); shot("99b-fiche-pastille-profil")
 
+        // VOUS DEUX : fenêtre « Choisis un profil » → « Steven + Léa, à deux », accueil, fiche (score pour vous deux,
+        // coucher le plus tôt = celui de Léa, 22:30), retour à Steven seul
+        relaunch(["-prisme.debug.profiles", "2", "-prisme.debug.tab", "films"])
+        press(.up, 8); press(.right, 8); press(.select); Thread.sleep(forTimeInterval: 1.5); shot("C0-fenetre")
+        for i in 1...2 { press(.down); shot(String(format: "C0b-fenetre-bas-%02d", i)) }
+        press(.select); Thread.sleep(forTimeInterval: 4); shot("C1-a-deux-films")
+        press(.down, 2); shot("C1b-a-deux-films-bas")
+        relaunch(["-prisme.debug.profiles", "2", "-prisme.debug.duo", "1", "-prisme.debug.open", "film:demo:1000"])
+        shot("C2-a-deux-fiche")
+        press(.up, 4); Thread.sleep(forTimeInterval: 1); shot("C3-a-deux-pastille")
+        press(.select); Thread.sleep(forTimeInterval: 1.5); shot("C3b-a-deux-fenetre")
+        press(.up, 2); shot("C3c-vers-steven")
+        press(.select); Thread.sleep(forTimeInterval: 3); shot("C4-steven-seul")
+
+        // MES GOÛTS : le test en entier (8 titres, 5 duels, ambiances, « jamais de… »), puis ses effets
+        relaunch(["-prisme.debug.taste", "1", "-prisme.debug.tab", "films"], wait: 8)
+        shot("D0-gouts-intro")
+        press(.select); Thread.sleep(forTimeInterval: 1.5); shot("D1-gouts-carte-01")
+        let verdicts = [0, 0, 2, 1, 0, 2, 0, 0]   // 0 j'aime, 1 pas vu, 2 pas pour moi
+        for (i, v) in verdicts.enumerated() {
+            if v > 0 { press(.left, v) }
+            press(.select); Thread.sleep(forTimeInterval: 1.2)
+            shot(String(format: "D1-gouts-carte-%02d", i + 2))
+        }
+        for i in 1...5 { if i % 2 == 0 { press(.right) }; press(.select); Thread.sleep(forTimeInterval: 1.2); shot(String(format: "D2-gouts-duel-%02d", i)) }
+        press(.select); press(.right); press(.select); shot("D3-gouts-ambiances")
+        press(.down, 3); press(.select); Thread.sleep(forTimeInterval: 1); shot("D4-gouts-jamais")
+        press(.up, 4); press(.select); shot("D4b-gouts-jamais-horreur")
+        press(.down, 5); press(.select); Thread.sleep(forTimeInterval: 3); shot("D5-gouts-resultat")
+        press(.select); Thread.sleep(forTimeInterval: 2); shot("D6-gouts-fini")
+        relaunch(["-prisme.debug.open", "film:demo:1000"])
+        shot("D7-gouts-fiche-score")
+        relaunch(["-prisme.debug.tab", "films"])
+        for i in 1...4 { press(.down); shot(String(format: "D8-gouts-pour-toi-%02d", i)) }
+        relaunch(["-prisme.debug.tab", "settings"])
+        press(.down); Thread.sleep(forTimeInterval: 1); press(.up); Thread.sleep(forTimeInterval: 0.5)
+        for _ in 0..<3 where !focused().contains("Steven") { press(.left) }
+        press(.select); Thread.sleep(forTimeInterval: 1.5)
+        for i in 1...9 { press(.down); shot(String(format: "D9-gouts-reglages-%02d", i)) }
+
         // 6 PROFILS (le maximum) : « Qui regarde ? », fenêtre « Choisis un profil », Réglages › Profils (défilement dans le cadre)
         relaunch(["-prisme.debug.profiles", "6", "-prisme.debug.whoHold", "1"], wait: 2)
         shot("A0-six-qui-regarde")
         for i in 1...7 { press(.right); shot(String(format: "A0b-six-qui-regarde-%02d", i)) }
+        // « À deux » avec 6 profils : choisir les deux
+        press(.left, 8); press(.right, 6); shot("A0c-six-a-deux"); press(.select); Thread.sleep(forTimeInterval: 1); shot("A0d-six-qui-es-tu")
+        press(.left, 6); press(.select); Thread.sleep(forTimeInterval: 1); shot("A0e-six-avec-qui")
+        back(); Thread.sleep(forTimeInterval: 1); shot("A0f-six-annule")
         press(.left, 8); press(.select); Thread.sleep(forTimeInterval: 3)
         press(.up, 8); press(.right, 8); press(.select); Thread.sleep(forTimeInterval: 1.5); shot("A1-six-fenetre")
         for i in 1...7 { press(.down); shot(String(format: "A1b-six-fenetre-bas-%02d", i)) }

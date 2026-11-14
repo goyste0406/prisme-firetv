@@ -55,6 +55,9 @@ final class ProfileStore: ObservableObject {
     @Published var ask = true { didSet { save() } }
     /// change à chaque changement de profil : les écrans se rechargent
     @Published private(set) var version = 0
+    /// Mode « Vous deux » : le second profil qui regarde avec le profil actif (jamais enregistré : à la réouverture
+    /// de prisme on repart d'un profil seul). Le profil actif reste celui qui porte Ma liste et les réglages du lecteur.
+    @Published private(set) var partner: String? = nil
 
     /// Filtre d'âge lu par la base de données (hors du fil principal).
     nonisolated(unsafe) static var ageLimit: Int? = nil
@@ -92,9 +95,17 @@ final class ProfileStore: ObservableObject {
         ud.set(Date(), forKey: "prisme.backup.1-5-3.done")
     }
 
-    static let perProfileKeys = ["prisme.watch", "prisme.media.favs", "prisme.live.favs", "prisme.live.recent", "prisme.live.lastcat", "prisme.split"]
+    static let perProfileKeys = ["prisme.watch", "prisme.media.favs", "prisme.live.favs", "prisme.live.recent", "prisme.live.lastcat", "prisme.split", "prisme.taste"]
 
     var isGuest: Bool { current == ProfileStore.guestID }
+    var isDuo: Bool { partner != nil }
+    var partnerProfile: Profile? { partner.flatMap { id in profiles.first { $0.id == id } } }
+    /// les deux profils (ou le seul) qui regardent
+    var watchers: [Profile] { [me] + (partnerProfile.map { [$0] } ?? []) }
+    /// « Steven + Léa » ou « Steven »
+    var watchersName: String { watchers.map(\.name).joined(separator: " + ") }
+    /// Heure du coucher qui compte : la plus tôt des deux en mode « Vous deux » (les heures après minuit valent 24:00 et plus).
+    var bedMinutes: Int { watchers.map { $0.bed < 300 ? $0.bed + 1440 : $0.bed }.min() ?? me.bed }
     var me: Profile { profiles.first { $0.id == current } ?? Profile(id: ProfileStore.guestID, name: "Invité", color: 2, icon: "person") }
     func profile(_ id: String) -> Profile? { profiles.first { $0.id == id } }
 
@@ -107,9 +118,24 @@ final class ProfileStore: ObservableObject {
     func use(_ id: String) {
         guard id == ProfileStore.guestID || profiles.contains(where: { $0.id == id }) else { return }
         if isGuest { ProfileStore.wipe(ProfileStore.guestID) }   // le mode invité ne garde rien
+        partner = nil
         current = id
         if id == ProfileStore.guestID { ProfileStore.wipe(id) }
         save(); publishFilters(); reloadAll()
+    }
+
+    /// « Vous deux » : `a` devient le profil actif, `b` regarde avec lui.
+    func useDuo(_ a: String, _ b: String) {
+        guard a != b, profiles.contains(where: { $0.id == a }), profiles.contains(where: { $0.id == b }) else { return }
+        if current != a { use(a) }
+        partner = b
+        publishFilters(); HomeCacheReset.run(); version += 1
+    }
+    /// Revenir au profil actif seul.
+    func endDuo() {
+        guard partner != nil else { return }
+        partner = nil
+        publishFilters(); HomeCacheReset.run(); version += 1
     }
 
     @discardableResult func add() -> Profile? {
@@ -131,6 +157,7 @@ final class ProfileStore: ObservableObject {
     func remove(_ id: String) {
         guard id != "p1", profiles.count > 1, profiles.contains(where: { $0.id == id }) else { return }
         profiles.removeAll { $0.id == id }
+        if partner == id { partner = nil }
         ProfileStore.wipe(id)
         if current == id { current = "p1"; publishFilters(); reloadAll() }
         save()
@@ -169,8 +196,10 @@ final class ProfileStore: ObservableObject {
 
     private func publishFilters() {
         let p = me
-        ProfileStore.ageLimit = isGuest ? nil : p.limit
-        ProfileStore.kidsOnly = !isGuest && p.kids
+        // « Vous deux » : la limite d'âge la plus stricte des deux, et contenus enfants si l'un des deux est un profil enfant
+        let limits = isGuest ? [] : watchers.compactMap(\.limit)
+        ProfileStore.ageLimit = limits.min()
+        ProfileStore.kidsOnly = !isGuest && watchers.contains { $0.kids }
         ProfileStore.langPref = isGuest ? "auto" : p.lang
     }
 

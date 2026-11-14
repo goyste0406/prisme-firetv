@@ -101,7 +101,8 @@ private struct ResumeCardStyle: ButtonStyle {
                             .background(Color(red: 0.31, green: 0.63, blue: 1).opacity(0.25), in: RoundedRectangle(cornerRadius: 7)).padding(.bottom, 8)
                     }
                     Text(r.item.displayTitle).font(P.font(26, .bold)).lineLimit(1)
-                    Text(done ? "épisode suivant" : "reste " + runtimeText(Int(max(60, e.dur - e.pos) / 60))).font(P.font(18)).opacity(0.75).lineLimit(1).padding(.top, 3)
+                    Text((done ? "épisode suivant" : "reste " + runtimeText(Int(max(60, e.dur - e.pos) / 60))) + (e.with.map { " · vu avec " + $0 } ?? ""))
+                        .font(P.font(18)).opacity(0.75).lineLimit(1).padding(.top, 3)
                     if !done { ProgressLine(value: min(1, e.pos / max(1, e.dur)), color: .white).frame(height: 5).padding(.top, 10) }
                 }
                 .frame(width: Inner.w - 40, alignment: .leading)

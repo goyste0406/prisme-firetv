@@ -61,6 +61,10 @@ extension Debug {
             var x = p; x.name = "Léa"; x.color = 1; x.maxAge = 12; x.bed = 22 * 60 + 30; x.lang = "VOSTFR"
             ProfileStore.shared.update(x)
         }
+        // test « Mes goûts » ouvert dès l'ouverture (profil de Steven)
+        if arg("prisme.debug.taste") == "1" { ProfileUI.shared.taste = "p1" }
+        // « Vous deux » dès l'ouverture (Steven + Léa), pour photographier les écrans en mode à deux
+        if arg("prisme.debug.duo") == "1", let b = ProfileStore.shared.profiles.first(where: { $0.id != "p1" }) { ProfileStore.shared.useDuo("p1", b.id) }
         // « 6 » : le maximum de profils, pour vérifier les listes et le défilement
         if profiles == "6", ProfileStore.shared.profiles.count == 2 {
             for (i, n) in ["Tom", "Inès", "Noah", "Mamie"].enumerated() {
