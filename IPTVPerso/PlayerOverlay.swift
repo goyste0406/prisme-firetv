@@ -384,7 +384,8 @@ struct PlayerOverlay: View {
 
     private func sleepModal(_ s: Int) -> some View {
         ZStack {
-            Color.black.opacity(0.6).ignoresSafeArea()
+            // simulateur : fond noir 50 % + flou de ce qui est derrière (.modal)
+            Rectangle().fill(.ultraThinMaterial).environment(\.colorScheme, .dark).overlay(Color.black.opacity(0.5)).ignoresSafeArea()
             VStack(spacing: 26) {
                 Text("Tu regardes toujours ?").font(P.font(50, .bold))
                 (Text("Aucune touche depuis 90 min. Sans réponse dans ") + Text("\(s)").bold() + Text(" s, prisme met en pause et garde ta place là où tu as arrêté de réagir."))

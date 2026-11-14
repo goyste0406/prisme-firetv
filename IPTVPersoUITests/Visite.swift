@@ -81,6 +81,8 @@ final class Visite: XCTestCase {
         app.launch()
         // import du catalogue et des fiches du faux fournisseur
         Thread.sleep(forTimeInterval: 45)
+        // visite partielle (lancement manuel avec « seulement = lecteur ») : uniquement le lecteur
+        if ProcessInfo.processInfo.environment["ONLY"] == "lecteur" { lecteur(); return }
         shot("01-films-ouverture")
         downUntil(["Catégories", "Licences et sagas"], prefix: "02-films-bas")
         if focused().contains("Catégories") { press(.right) }
@@ -308,6 +310,14 @@ final class Visite: XCTestCase {
         for i in 1...14 { press(.down); shot(String(format: "A3b-six-fiche-bas-%02d", i)) }
         press(.up, 16); shot("A3c-six-fiche-haut")
 
+        lecteur()
+
+        // MESURES : accueil Films avec, en plus, le coût de l'ancienne méthode (comparaison avant / après dans mesures.txt)
+        relaunch(["-prisme.debug.tab", "films", "-prisme.debug.perfOld", "1"], wait: 20)
+        shot("Z-mesures")
+    }
+
+    func lecteur() {
         // LECTEUR (vraie vidéo de test) : bandeau, Raccourcis (↑), Lecture (↑ encore), sous-listes, son de nuit,
         // « Qu'a-t-il dit ? » (↓), puis « Tu regardes toujours ? » et l'arrêt au coucher (délais raccourcis pour le test).
         // Captures sans lecture du focus : pendant une vidéo, lire l'écran peut dépasser le délai du test.
@@ -330,12 +340,8 @@ final class Visite: XCTestCase {
         Thread.sleep(forTimeInterval: 17); shot("E9-pause-place-gardee", focus: false)
         relaunch(["-prisme.debug.open", "film:demo:1000", "-prisme.debug.bedIn", "1"])
         press(.select); Thread.sleep(forTimeInterval: 6)
-        press(.up); press(.up); Thread.sleep(forTimeInterval: 1); press(.down, 6); Thread.sleep(forTimeInterval: 1); shot("E10-arret-coucher-choix", focus: false)
+        press(.up); press(.up); Thread.sleep(forTimeInterval: 1); press(.down, 5); Thread.sleep(forTimeInterval: 1); shot("E10-arret-coucher-choix", focus: false)
         press(.select); Thread.sleep(forTimeInterval: 1); shot("E10b-arret-coucher-active", focus: false)
         back(); back(); Thread.sleep(forTimeInterval: 75); shot("E11-arret-coucher", focus: false)
-
-        // MESURES : accueil Films avec, en plus, le coût de l'ancienne méthode (comparaison avant / après dans mesures.txt)
-        relaunch(["-prisme.debug.tab", "films", "-prisme.debug.perfOld", "1"], wait: 20)
-        shot("Z-mesures")
     }
 }

@@ -51,6 +51,7 @@ final class VodPlayerController: UIViewController, VLCMediaPlayerDelegate {
     private let ui = PlayerUI()
     private var host: UIHostingController<PlayerOverlay>!
     private var watch: AnyCancellable?
+    private var wasInteractive = false
     private var hideWork: DispatchWorkItem?
     private var saveTimer: Timer?
     private var minuteTimer: Timer?
@@ -96,8 +97,14 @@ final class VodPlayerController: UIViewController, VLCMediaPlayerDelegate {
         view.addSubview(host.view)
         host.didMove(toParent: self)
         // quand le panneau s'ouvre ou se ferme, la sélection de l'Apple TV entre dans l'interface ou en sort
+        // (uniquement à ce changement : redemander la sélection à chaque tic de la progression la ramenait sans cesse
+        // sur la première ligne du panneau, et la flèche bas ne descendait plus)
         watch = ui.objectWillChange.sink { [weak self] _ in
-            DispatchQueue.main.async { guard let self else { return }; self.setNeedsFocusUpdate(); self.updateFocusIfNeeded() }
+            DispatchQueue.main.async {
+                guard let self, self.ui.interactive != self.wasInteractive else { return }
+                self.wasInteractive = self.ui.interactive
+                self.setNeedsFocusUpdate(); self.updateFocusIfNeeded()
+            }
         }
 
         player.drawable = videoView
@@ -230,7 +237,19 @@ final class VodPlayerController: UIViewController, VLCMediaPlayerDelegate {
     override func pressesBegan(_ presses: Set<UIPress>, with event: UIPressesEvent?) {
         guard let press = presses.first else { return super.pressesBegan(presses, with: event) }
         noteInput()
-        if ui.interactive { return super.pressesBegan(presses, with: event) }
+        if ui.interactive {
+            // Retour non pris par le panneau : ne jamais le laisser remonter (tvOS fermerait tout le lecteur) ;
+            // si le panneau n'a pas bougé entre-temps, on remonte d'un niveau nous-mêmes
+            if press.type == .menu {
+                let before = (ui.panel, ui.options, ui.sleepLeft == nil)
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { [weak self] in
+                    guard let self, self.ui.interactive, (self.ui.panel, self.ui.options, self.ui.sleepLeft == nil) == before else { return }
+                    self.ui.back()
+                }
+                return
+            }
+            return super.pressesBegan(presses, with: event)
+        }
         switch press.type {
         case .menu:
             // Retour maintenu : quitter ; Retour court : cacher le bandeau, ou le montrer (avec la consigne) s'il est caché
@@ -251,7 +270,8 @@ final class VodPlayerController: UIViewController, VLCMediaPlayerDelegate {
     }
 
     override func pressesEnded(_ presses: Set<UIPress>, with event: UIPressesEvent?) {
-        guard let press = presses.first, press.type == .menu, let d = menuDown else { return super.pressesEnded(presses, with: event) }
+        guard let press = presses.first, press.type == .menu else { return super.pressesEnded(presses, with: event) }
+        guard let d = menuDown else { return }   // Retour court déjà traité (panneau) : ne pas le laisser remonter
         menuDown = nil
         guard Date().timeIntervalSince(d) < 0.7 else { return }
         menuWork?.cancel()
