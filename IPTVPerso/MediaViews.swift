@@ -52,6 +52,9 @@ struct MediaHomeView: View {
     @State private var becauseList: [MediaItem] = []
     @State private var browseTab = ""
     @State private var showAllNew = false
+    @State private var forYou: [MediaItem] = []
+    @ObservedObject var ps = ProfileStore.shared
+    @ObservedObject var tasteStore = TasteStore.shared
     @FocusState private var heroFocus: Bool
 
     private var loadKey: String { "\(kind.rawValue)|\(store.catalogVersion)|\(store.active.map(\.id).joined())|\(fiches.running ? fiches.version / 25 : fiches.version)" }
@@ -70,6 +73,12 @@ struct MediaHomeView: View {
                 //                       Séries : Ce soir ? · Reprendre · Top 10 · Nouveau · Ma liste · Parcourir
                 tonightBand
                 if !resume.isEmpty { resumeSection }
+                if !forYou.isEmpty {
+                    // « Pour toi » (« Pour vous deux » à deux) : seulement quand des goûts sont connus (test ou historique)
+                    MediaRow(title: ps.isDuo ? "Pour vous deux" : "Pour toi",
+                             sub: ps.isDuo ? "ce qui plaît à " + ps.watchersName + " · selon vos goûts" : "selon tes goûts · le test et ce que tu regardes",
+                             items: forYou, open: { open = $0 })
+                }
                 if !snap.top.isEmpty {
                     Top10Row(title: kind == .film ? "Top 10 du moment" : "Top 10 séries", sub: nil, items: snap.top, open: { open = $0 })
                 }
@@ -110,6 +119,7 @@ struct MediaHomeView: View {
         }
         .task(id: loadKey) { await load(loadKey) }
         .task(id: watch.entries.count) { await loadResume() }
+        .task(id: "\(snap.tonight.count)|\(ps.version)|\(tasteStore.version)|\(watch.entries.count)") { await loadForYou() }
         .task {
             // la grande affiche change toutes les 8 s, sauf quand son bouton est sélectionné
             while !Task.isCancelled {
@@ -453,6 +463,24 @@ struct MediaHomeView: View {
                                 loader: { await MediaStore.ficheList(k, pids: p, cond: "f.genres LIKE ?", args: ["%" + g + "%"], order: "f.vote DESC", limit: 300) }, kind: "Catégorie"))
         }
         return out.sorted { $0.count > $1.count }
+    }
+
+    /// « Pour toi » : titres pas encore vus, hors « jamais de… », les plus proches des goûts du profil
+    /// (à deux : le goût le moins favorable des deux doit rester bon).
+    private func loadForYou() async {
+        let watchers = ps.watchers.filter { $0.id != ProfileStore.guestID }
+        guard !watchers.isEmpty else { forYou = []; return }
+        var models: [TasteModel] = []
+        for w in watchers { models.append(await TasteStore.shared.model(w.id)) }
+        guard models.allSatisfy({ !$0.isEmpty }) else { forYou = []; return }
+        let seen = Set(watch.entries.values.filter { $0.dur > 0 && $0.pos / $0.dur >= 0.85 }.map(\.item))
+        let scored: [(MediaItem, Int)] = snap.tonight.compactMap { it in
+            guard !seen.contains(it.id), let f = it.fiche else { return nil }
+            let v = models.compactMap { $0.fit(f, kind: kind) }
+            guard v.count == models.count, let m = v.min(), m >= 60 else { return nil }
+            return (it, m)
+        }
+        forYou = Array(scored.sorted { $0.1 > $1.1 }.prefix(16).map(\.0))
     }
 
     private func loadResume() async {

@@ -14,6 +14,8 @@ final class ProfileUI: ObservableObject {
     var shownAtLaunch = false
     /// ouvrir les réglages directement sur la fiche d'un profil
     @Published var editProfile: String?
+    /// test « Mes goûts » ouvert pour ce profil
+    @Published var taste: String?
 }
 
 // MARK: Réglages › Profils
@@ -98,6 +100,7 @@ struct ProfileDetail: View {
     @Binding var desc: String
     let back: () -> Void
     @ObservedObject var ps = ProfileStore.shared
+    @ObservedObject var tasteStore = TasteStore.shared
     @State private var open: String?
     @State private var confirm: String?
     @State private var name = ""
@@ -166,6 +169,19 @@ struct ProfileDetail: View {
             "Chaque profil a sa langue : VF pour l'un, VOSTFR pour l'autre. La version choisie automatiquement sur les fiches en tient compte.")
         if open == "plang" { options(Array(Profile.langs.indices), cur: Profile.langs.firstIndex(of: p.lang) ?? 0, key: "plang") { i in AnyView(Text(Profile.langNames[Profile.langs[i]] ?? "")) } set: { var x = p; x.lang = Profile.langs[$0]; ps.update(x) } }
 
+        // « Mes goûts » (simulateur : genres aimés · jamais : … ; sinon « pas encore appris · faire le test »)
+        let ta = TasteStore.shared.answers(p.id)
+        action("pgout", "Mes goûts", tasteSummary(ta),
+               "Un test court (titres connus, duels, ambiances, « jamais de… ») ; ensuite, ce que ce profil regarde compte de plus en plus. OK pour faire ou refaire le test.") {
+            ProfileUI.shared.taste = p.id
+        }
+        if ta != nil {
+            action("pgforget", "Oublier les réponses du test", confirm == "taste" ? "OK encore pour confirmer" : "›",
+                   "Efface les réponses du test « Mes goûts » de ce profil. Ce qu'il a regardé reste.", danger: confirm == "taste") {
+                if confirm == "taste" { TasteStore.shared.forget(p.id); confirm = nil } else { confirm = "taste" }
+            }
+        }
+
         row("pst", "Sous-titres", AnyView(Text(Profile.subNames[min(2, p.subs)] + (open == "pst" ? " ⌄" : " ›"))),
             "Remplace le réglage général pour ce profil seulement (appliqué dans le lecteur).")
         if open == "pst" { options([0, 1, 2], cur: p.subs, key: "pst") { i in AnyView(Text(Profile.subNames[i])) } set: { var x = p; x.subs = $0; ps.update(x) } }
@@ -183,6 +199,16 @@ struct ProfileDetail: View {
                 if confirm == "del" { ps.remove(p.id); back() } else { confirm = "del" }
             }
         }
+    }
+
+    private func tasteSummary(_ a: TasteAnswers?) -> String {
+        guard let a else { return "pas encore appris · faire le test ›" }
+        var g: [String: Double] = [:]
+        for (k, v) in a.judged where v > 0 { for x in a.judgedInfo[k]?.genres ?? [] { g[x, default: 0] += 1 } }
+        for m in TasteMood.all where a.moods.contains(m.id) { for x in m.genres { g[x, default: 0] += 1 } }
+        let top = g.sorted { $0.value > $1.value }.prefix(3).map { $0.key.lowercased() }
+        let nv = a.never.map { $0 == "__long" ? "films longs" : $0.lowercased() }.prefix(2)
+        return (top.isEmpty ? "variés" : top.joined(separator: ", ")) + (nv.isEmpty ? "" : " · jamais : " + nv.joined(separator: ", ")) + " ›"
     }
 
     private func row(_ key: String, _ title: String, _ value: AnyView, _ d: String) -> some View {

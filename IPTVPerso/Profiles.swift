@@ -95,7 +95,7 @@ final class ProfileStore: ObservableObject {
         ud.set(Date(), forKey: "prisme.backup.1-5-3.done")
     }
 
-    static let perProfileKeys = ["prisme.watch", "prisme.media.favs", "prisme.live.favs", "prisme.live.recent", "prisme.live.lastcat", "prisme.split"]
+    static let perProfileKeys = ["prisme.watch", "prisme.media.favs", "prisme.live.favs", "prisme.live.recent", "prisme.live.lastcat", "prisme.split", "prisme.taste"]
 
     var isGuest: Bool { current == ProfileStore.guestID }
     var isDuo: Bool { partner != nil }

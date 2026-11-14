@@ -35,6 +35,9 @@ struct FilmDetailView: View {
     @FocusState private var playFocused: Bool
     @FocusState private var versionFocused: Bool
     @FocusState private var splitFocused: Bool
+    /// « Tes goûts X % » pour chaque personne qui regarde (nil = à découvrir)
+    @State private var fits: [String: Int] = [:]
+    @ObservedObject var tasteStore = TasteStore.shared
 
     private var cur: MediaItem { chosen ?? item }
     private var title: String { (fiche?.title.isEmpty == false) ? fiche!.title : item.clean.title }
@@ -120,6 +123,8 @@ struct FilmDetailView: View {
         .ignoresSafeArea()
         .navigationDestination(item: $openOther) { it in DetailView(item: it) }
         .task(id: item.id) { await load() }
+        // changement de profil, mode « Vous deux » ou nouvelles réponses au test : les « goûts » se recalculent
+        .task(id: "\(profiles.version)|\(tasteStore.version)") { if loaded { await loadFits() } }
         .onAppear { DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { if !pickVersion { playFocused = true } } }
         .onDisappear { bg.stop() }
         .onChange(of: peek) { _, p in bg.loud(p) }
@@ -278,7 +283,11 @@ struct FilmDetailView: View {
         var parts: [Double] = []
         if providerRating > 0 { parts.append(providerRating * 10) }
         if tmdbVote > 0 { parts.append(tmdbVote * 10) }
-        let sc = min(99, Int((parts.reduce(0, +) / Double(max(1, parts.count))).rounded()))
+        let note = parts.reduce(0, +) / Double(max(1, parts.count))
+        // avec des goûts connus (simulateur) : 55 % la note, 45 % les goûts ; à deux, le goût le moins favorable des deux
+        let fitVals = profiles.watchers.compactMap { fits[$0.id] }
+        let fit = fitVals.count == profiles.watchers.count ? fitVals.min() : nil
+        let sc = min(99, Int((fit.map { 0.55 * note + 0.45 * Double($0) } ?? note).rounded()))
         return HStack(spacing: 22) {
             ZStack {
                 Ring(value: Double(sc) / 100, width: 10).frame(width: 96, height: 96)
@@ -293,7 +302,7 @@ struct FilmDetailView: View {
                         HStack(spacing: 8) {
                             ProfileAvatar(p: w, size: 30)
                             Text(w.name).font(P.font(22)).foregroundStyle(P.gold.opacity(0.75))
-                            Text("à découvrir").font(P.font(22, .bold)).foregroundStyle(P.gold.opacity(0.9))
+                            Text(fits[w.id].map { "\($0) %" } ?? "à découvrir").font(P.font(22, .bold)).foregroundStyle(P.gold.opacity(0.9))
                         }
                     }
                 }
@@ -301,7 +310,7 @@ struct FilmDetailView: View {
                 VStack(alignment: .leading, spacing: 5) {
                     Text("Score prisme").font(P.font(24, .bold)).foregroundStyle(P.gold)
                     Text(scoreLine).font(P.font(23)).foregroundStyle(P.gold.opacity(0.75))
-                    Text("Tes goûts : à découvrir").font(P.font(23)).foregroundStyle(P.gold.opacity(0.75))
+                    Text(fits[profiles.me.id].map { "Tes goûts \($0) %" } ?? "Tes goûts : à découvrir").font(P.font(23)).foregroundStyle(P.gold.opacity(0.75))
                 }
             }
         }
@@ -476,7 +485,17 @@ struct FilmDetailView: View {
         let skip = Set(universe.map(\.workKey)).union(sagaAvail.values.map(\.workKey)).union(exclude.map { "t\($0)" })
         similar = await MediaStore.similar(of: it, genres: genres, pids: pids, limit: 16).filter { !skip.contains($0.0.workKey) }.map { SimilarItem(item: $0.0, common: $0.1) }
         why = await WhyBuilder.reasons(fiche: fiche, rating: shownRating, item: item, pids: pids)
+        await loadFits()
         loaded = true
+    }
+
+    private func loadFits() async {
+        guard let f = fiche else { fits = [:]; return }
+        var out: [String: Int] = [:]
+        for w in profiles.watchers where w.id != ProfileStore.guestID {
+            if let v = await TasteStore.shared.model(w.id).fit(f, kind: .film) { out[w.id] = v }
+        }
+        fits = out
     }
 
     private func versionShort(_ v: MediaItem) -> String {

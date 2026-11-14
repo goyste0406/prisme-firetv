@@ -56,7 +56,7 @@ struct MainTabView: View {
                 }
                 .id("\(nav.tab.rawValue)|\(profiles.current)")
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .disabled(pui.picker || pui.launch)
+                .disabled(pui.picker || pui.launch || pui.taste != nil)
                 if Debug.demoServer != nil {
                     // simulateur de test uniquement : état de l'écran « Qui regarde ? » lisible par la visite automatique
                     Text(diag).font(.system(size: 1)).opacity(0.01).accessibilityIdentifier("prisme.diag").accessibilityLabel(diag)
@@ -76,8 +76,15 @@ struct MainTabView: View {
                         .transition(.opacity)
                 }
             }
+            .overlay {
+                // test « Mes goûts » (plein écran, au-dessus de tout)
+                if let t = pui.taste {
+                    TasteTestView(pid: t, close: { pui.taste = nil }).focusSection().transition(.opacity)
+                }
+            }
             .animation(.easeOut(duration: 0.2), value: pui.picker)
             .animation(.easeOut(duration: 0.3), value: pui.launch)
+            .animation(.easeOut(duration: 0.3), value: pui.taste)
             .ignoresSafeArea()
             .navigationDestination(item: $debugOpen) { it in DetailView(item: it) }
             .navigationDestination(item: $resumeOpen) { it in DetailView(item: it) }
