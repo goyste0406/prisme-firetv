@@ -82,7 +82,7 @@ final class Visite: XCTestCase {
         // import du catalogue et des fiches du faux fournisseur
         Thread.sleep(forTimeInterval: 45)
         // visite partielle (lancement manuel avec « seulement = lecteur ») : uniquement le lecteur
-        if ProcessInfo.processInfo.environment["ONLY"] == "lecteur" { lecteur(); return }
+        if ProcessInfo.processInfo.environment["ONLY"] == "lecteur" { lecteur(); lecteurTV(); return }
         if ProcessInfo.processInfo.environment["ONLY"] == "serie" { ficheSerie(); return }
         if ProcessInfo.processInfo.environment["ONLY"] == "tv" { tvUnivers(); return }
         if ProcessInfo.processInfo.environment["ONLY"] == "nav" { navigation(); return }
@@ -500,6 +500,26 @@ final class Visite: XCTestCase {
         relaunch(["-prisme.debug.open", "series:demo:2001", "-prisme.debug.season", "2"])
         Thread.sleep(forTimeInterval: 3)
         press(.right, 2); press(.down, 6); Thread.sleep(forTimeInterval: 1); shot("16e-saison2-complete")
+    }
+
+    /// Lecteur de la TV en direct (1.7 : lecteur commun, variante TV) : bandeau, raccourcis, liste des chaînes,
+    /// zapping en descendant la liste, sources de la chaîne, Retour couche par couche.
+    func lecteurTV() {
+        relaunch(["-prisme.debug.demoServer2", "http://127.0.0.1:8098", "-prisme.debug.tab", "live"], wait: 45)
+        press(.down, 2); press(.select); Thread.sleep(forTimeInterval: 2)
+        press(.select); Thread.sleep(forTimeInterval: 9); shot("T0-direct-bandeau", focus: false)
+        Thread.sleep(forTimeInterval: 6); shot("T0b-direct-sans-aide", focus: false)
+        press(.up); Thread.sleep(forTimeInterval: 1); shot("T1-direct-raccourcis", focus: false)
+        press(.up); Thread.sleep(forTimeInterval: 1.5); shot("T2-direct-chaines", focus: false)
+        press(.down); Thread.sleep(forTimeInterval: 0.5); shot("T3-direct-chaine-suivante", focus: false)
+        Thread.sleep(forTimeInterval: 4); shot("T3b-direct-zappe", focus: false)
+        back(); Thread.sleep(forTimeInterval: 1); shot("T4-direct-retour-raccourcis", focus: false)
+        press(.down, 2); press(.select); Thread.sleep(forTimeInterval: 1.5); shot("T5-direct-sources", focus: false)
+        back(); Thread.sleep(forTimeInterval: 1); back(); Thread.sleep(forTimeInterval: 1); back(); Thread.sleep(forTimeInterval: 1)
+        shot("T6-direct-panneaux-fermes", focus: false)
+        press(.down); Thread.sleep(forTimeInterval: 1.5); shot("T7-direct-bas-chaines", focus: false)
+        back(); Thread.sleep(forTimeInterval: 1); back(); Thread.sleep(forTimeInterval: 1); back(); Thread.sleep(forTimeInterval: 2)
+        shot("T8-direct-quitte")
     }
 
     func lecteur() {

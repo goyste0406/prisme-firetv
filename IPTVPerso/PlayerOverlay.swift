@@ -6,6 +6,8 @@ import SwiftUI
 // La lecture elle-même reste dans VLC (VodPlayerController) ; cet écran ne fait que montrer et transmettre les choix.
 
 struct PlayerOption: Identifiable, Equatable { let id: Int32; let name: String }
+/// Une chaîne de la liste du panneau (TV en direct) : programme en cours, avancement, ensuite.
+struct LiveRow: Identifiable, Equatable { let id: Int; let name: String; let now: String; let progress: Double; let next: String }
 
 @MainActor
 final class PlayerUI: ObservableObject {
@@ -39,6 +41,16 @@ final class PlayerUI: ObservableObject {
     @Published var sleepLeft: Int?
     @Published var message: String?
     @Published var hint = "↑ raccourcis puis tous les réglages · ↓ options · ⏯ pause · Retour ×2 : quitter"
+    /// l'aide ne s'affiche que quelques secondes, à l'ouverture du lecteur (demande de Steven : interface sobre)
+    @Published var hintVisible = true
+    // TV en direct
+    @Published var live = false
+    @Published var cur = 0
+    @Published var channels: [LiveRow] = []
+    @Published var recent: [(Int, String)] = []
+    @Published var liveStart: Date?
+    @Published var liveStop: Date?
+    var zapTo: (Int, Bool) -> Void = { _, _ in }
     /// dernière option utilisée (le panneau s'ouvre dessus)
     @Published var lastKey = "audio"
     var bedMinutes = 1380
@@ -87,6 +99,7 @@ final class PlayerUI: ObservableObject {
         switch k {
         case "audio": return ("waveform", "Audio", audio.first { $0.id == audioCur }?.name ?? (audio.isEmpty ? "Piste unique" : "—"))
         case "subs": return ("captions.bubble", "Sous-titres", subCur < 0 ? "Désactivés" : (subs.first { $0.id == subCur }?.name ?? "—"))
+        case "version" where live: return ("antenna.radiowaves.left.and.right", "Source", versions.indices.contains(versionCur) ? versions[versionCur] + (versions.count > 1 ? " · \(versions.count) dispo" : "") : "Source unique")
         case "version": return ("square.stack.3d.up", "Version", versions.indices.contains(versionCur) ? versions[versionCur] + " · \(versions.count) dispo" : "Version unique")
         case "image": return ("viewfinder", "Image", PlayerUI.aspects.first { $0.0 == aspect }?.1 ?? "Auto")
         case "night": return ("moon", "Son de nuit", (night == "auto" ? "Auto après " + Self.hm(bedMinutes) : night == "on" ? "Toujours" : "Jamais") + (nightActive ? " · actif" : ""))
@@ -131,10 +144,6 @@ struct PlayerOverlay: View {
 
     var body: some View {
         ZStack {
-            if Debug.demoServer != nil {
-                Text(m.trace).font(.system(size: 16, design: .monospaced)).foregroundStyle(.yellow)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading).padding(30).allowsHitTesting(false)
-            }
             if m.osd || m.interactive {
                 LinearGradient(colors: [.clear, .black.opacity(0.85)], startPoint: UnitPoint(x: 0.5, y: 0.45), endPoint: .bottom).ignoresSafeArea()
                 topRight
@@ -156,6 +165,7 @@ struct PlayerOverlay: View {
         .onReceive(clock) { now = $0 }
         .onChange(of: m.panel) { _, p in placeFocus(p) }
         .onChange(of: m.options) { _, o in if o { focus = "said" } }
+        .task { try? await Task.sleep(nanoseconds: 6_000_000_000); withAnimation(.easeOut(duration: 0.6)) { m.hintVisible = false } }
         .onChange(of: m.sleepLeft == nil) { _, none in if !none { focus = "sleep-yes" } }
     }
 
@@ -180,7 +190,7 @@ struct PlayerOverlay: View {
             Text(m.title).font(P.font(54, .bold)).lineLimit(1).minimumScaleFactor(0.7).padding(.top, 4)
             if !m.meta.isEmpty { Text(m.meta).font(P.font(25)).foregroundStyle(.white.opacity(0.8)).padding(.top, 2) }
             HStack(spacing: 20) {
-                Text(PlayerUI.hms(shownPos)).font(P.font(28)).monospacedDigit()
+                Text(m.live ? (m.liveStart.map { Fmt.hm($0) } ?? "DIRECT") : PlayerUI.hms(shownPos)).font(P.font(28)).monospacedDigit()
                 GeometryReader { g in
                     ZStack(alignment: .leading) {
                         Capsule().fill(Color.white.opacity(0.18)).frame(height: 12)
@@ -190,11 +200,22 @@ struct PlayerOverlay: View {
                     .frame(maxHeight: .infinity)
                 }
                 .frame(height: 40)
-                Text("−" + PlayerUI.hms(max(0, m.dur - shownPos))).font(P.font(28)).monospacedDigit()
+                Text(m.live ? (m.liveStop.map { Fmt.hm($0) } ?? "") : "−" + PlayerUI.hms(max(0, m.dur - shownPos))).font(P.font(28)).monospacedDigit()
                     + Text(m.pending != 0 ? String(format: "  (%@%d s)", m.pending > 0 ? "+" : "−", Int(abs(m.pending))) : "").font(P.font(24, .bold))
             }
             .padding(.top, 22)
-            Text(m.hint).font(P.font(21)).foregroundStyle(.white.opacity(0.6)).padding(.top, 10)
+            if m.hintVisible {
+                Text(m.live ? "↑ raccourcis puis chaînes · ↓ chaînes · ⏯ pause · Retour ×2 : quitter" : m.hint)
+                    .font(P.font(21)).foregroundStyle(.white.opacity(0.6)).padding(.top, 10).transition(.opacity)
+            }
+            if !m.live { saidButton }
+        }
+        .padding(.leading, 86).padding(.trailing, 86 + right).padding(.bottom, 58)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
+        .onExitCommand { m.back("swiftui") }
+    }
+
+    private var saidButton: some View {
             Button { m.whatSaid() } label: {
                 HStack(spacing: 12) {
                     Image(systemName: "arrow.counterclockwise").font(.system(size: 24, weight: .semibold))
@@ -207,10 +228,6 @@ struct PlayerOverlay: View {
             .focused($focus, equals: "said")
             .disabled(!m.options)
             .padding(.top, 22)
-        }
-        .padding(.leading, 86).padding(.trailing, 86 + right).padding(.bottom, 58)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
-        .onExitCommand { m.back("swiftui") }
     }
 
     private var shownPos: Double { m.pending != 0 ? max(0, min(m.dur, m.pos + m.pending)) : m.pos }
@@ -230,7 +247,7 @@ struct PlayerOverlay: View {
                 .padding(.bottom, 4)
                 ForEach(m.shortcuts, id: \.self) { k in row(k) }
                 Divider().overlay(Color.white.opacity(0.15))
-                rowButton(icon: "rectangle.grid.1x2", title: "Tous les réglages", value: "↑ ou OK", key: "all") { m.panel = .full }
+                rowButton(icon: m.live ? "list.bullet.rectangle" : "rectangle.grid.1x2", title: m.live ? "Chaînes et tout le reste" : "Tous les réglages", value: "↑ ou OK", key: "all") { m.panel = .full }
             }
             .padding(28).frame(width: 565)
             .background(panelBG(36))
@@ -243,7 +260,7 @@ struct PlayerOverlay: View {
                     if case let .sub(k) = m.panel {
                         Label(m.label(k).title, systemImage: "chevron.left").font(P.font(34, .bold))
                     } else {
-                        Text("Lecture").font(P.font(36, .bold))
+                        Text(m.live ? "Chaînes" : "Lecture").font(P.font(36, .bold))
                     }
                     Spacer()
                     Text(Fmt.hm(now)).font(P.font(34, .semibold)).monospacedDigit()
@@ -267,6 +284,46 @@ struct PlayerOverlay: View {
     }
 
     @ViewBuilder private var fullList: some View {
+        if m.live { liveList } else { vodList }
+    }
+
+    /// TV en direct (simulateur, variante « tv ») : récentes, liste des chaînes avec leur programme, puis les réglages
+    @ViewBuilder private var liveList: some View {
+        if !m.recent.isEmpty {
+            HStack(spacing: 12) {
+                Text("RÉCENTES").font(P.font(19, .bold)).tracking(2.5).foregroundStyle(.white.opacity(0.65))
+                ForEach(m.recent, id: \.0) { r in
+                    Button { m.zapTo(r.0, true); m.panel = .none } label: { Text(r.1).font(P.font(21, .bold)).lineLimit(1).padding(.horizontal, 18).frame(height: 50) }
+                        .buttonStyle(PlayerChipStyle()).focused($focus, equals: "rc\(r.0)")
+                }
+            }
+            .padding(.bottom, 10)
+        }
+        ForEach(m.channels) { c in
+            Button { m.zapTo(c.id, true); m.panel = .none } label: {
+                HStack(alignment: .top, spacing: 18) {
+                    Text(c.name).font(P.font(22, .heavy)).lineLimit(2).frame(width: 150, alignment: .leading)
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text(c.now).font(P.font(23, .semibold)).lineLimit(1)
+                        ZStack(alignment: .leading) {
+                            Capsule().fill(Color.white.opacity(0.18))
+                            GeometryReader { g in Capsule().fill(Color(red: 0.9, green: 0.28, blue: 0.3)).frame(width: g.size.width * min(1, max(0, c.progress))) }
+                        }.frame(height: 5)
+                        Text((c.id == m.cur ? "tu regardes · " : "") + c.next).font(P.font(18)).opacity(0.7).lineLimit(1)
+                    }
+                }
+                .padding(.horizontal, 18).padding(.vertical, 14).frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .buttonStyle(PlayerRowStyle(current: c.id == m.cur))
+            .focused($focus, equals: "ch\(c.id)")
+            // simple passage dans la liste : la chaîne suit au bout d'une seconde (simulateur)
+            .onChange(of: focus) { _, f in if f == "ch\(c.id)", c.id != m.cur { m.zapTo(c.id, false) } }
+        }
+        Divider().overlay(Color.white.opacity(0.15)).padding(.vertical, 10)
+        ForEach(["version", "audio", "subs", "image", "night"], id: \.self) { k in row(k) }
+    }
+
+    @ViewBuilder private var vodList: some View {
         ForEach(["audio", "subs", "version", "image", "night"], id: \.self) { k in row(k) }
         Divider().overlay(Color.white.opacity(0.15)).padding(.vertical, 10)
         Text("CE SOIR").font(P.font(20, .bold)).tracking(3).foregroundStyle(.white.opacity(0.65))
@@ -378,6 +435,7 @@ struct PlayerOverlay: View {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) {
             switch p {
             case .shortcuts: focus = m.shortcuts.contains(m.lastKey) ? m.lastKey : m.shortcuts.first
+            case .full where m.live: focus = "ch\(m.cur)"
             case .full: focus = ["audio", "subs", "version", "image", "night", "bedstop", "info"].contains(m.lastKey) ? m.lastKey : "audio"
             case let .sub(k):
                 switch k {
@@ -427,13 +485,16 @@ struct PlayerOverlay: View {
 private extension PlayerUI.Panel { var isSub: Bool { if case .sub = self { return true }; return false } }
 
 struct PlayerRowStyle: ButtonStyle {
-    func makeBody(configuration c: Configuration) -> some View { Inner(c: c) }
+    /// chaîne en cours dans la liste du direct (simulateur .pb-ch.cur) : fond léger
+    var current = false
+    func makeBody(configuration c: Configuration) -> some View { Inner(c: c, current: current) }
     private struct Inner: View {
         let c: ButtonStyleConfiguration
+        let current: Bool
         @Environment(\.isFocused) var f
         var body: some View {
             c.label.foregroundStyle(f ? Color.black : Color.white)
-                .background(f ? Color.white : Color.clear, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+                .background(f ? Color.white : Color.white.opacity(current ? 0.1 : 0), in: RoundedRectangle(cornerRadius: 22, style: .continuous))
                 .scaleEffect(f ? 1.02 : 1).animation(.easeOut(duration: 0.15), value: f)
         }
     }

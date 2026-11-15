@@ -22,6 +22,16 @@ struct VodRequest: Identifiable {
     var cast: [String] = []
     /// autres versions du même film (libellé, adresse) : « Version » du panneau, reprise au même moment
     var versions: [(label: String, url: URL)] = []
+    /// TV en direct (simulateur : même lecteur, variante « tv ») : la liste de chaînes en cours et la chaîne de départ
+    var live: [Channel] = []
+    var liveIndex = 0
+
+    /// Lecture d'une chaîne (zapping dans `channels`) avec le lecteur commun aux films et séries
+    static func live(_ channels: [Channel], start: Int) -> VodRequest {
+        var r = VodRequest(url: URL(string: "about:blank")!, key: "", item: "", title: "", subtitle: "", icon: "", startAt: 0)
+        r.live = channels; r.liveIndex = max(0, min(start, channels.count - 1))
+        return r
+    }
 }
 
 struct VodPlayerView: View {
@@ -92,11 +102,26 @@ final class VodPlayerController: UIViewController, VLCMediaPlayerDelegate {
     private var restartAt: Double?
     private var versionIndex = 0
     private var shownTracks = false
+    /// numéro de la lecture en cours : un événement de VLC arrivé en retard (chaîne, source ou version précédente)
+    /// ne peut plus rallumer la roulette ni afficher une erreur sur la nouvelle lecture
+    private var gen = 0
+    /// dernière position vue : la roulette s'éteint dès que l'image avance réellement (VLC n'annonce pas toujours
+    /// « lecture » après une mise en mémoire tampon)
+    private var lastTick: Double = -1
+    private var stallWork: DispatchWorkItem?
+    // TV en direct
+    private var isLive: Bool { !req.live.isEmpty }
+    private var liveIndex = 0
+    private var sources: [Channel] = []
+    private var sourceIndex = 0
+    private var zapWork: DispatchWorkItem?
+    private var recent: [Int] = []
 
     private var sleepAfter: TimeInterval { Double(Debug.sleepAfterSeconds ?? 90 * 60) }
 
     init(request: VodRequest, onClose: @escaping () -> Void) {
         self.req = request; self.onClose = onClose
+        self.liveIndex = request.liveIndex
         super.init(nibName: nil, bundle: nil)
     }
     required init?(coder: NSCoder) { fatalError() }
@@ -140,6 +165,7 @@ final class VodPlayerController: UIViewController, VLCMediaPlayerDelegate {
     override func viewWillDisappear(_ animated: Bool) { super.viewWillDisappear(animated); stop() }
 
     func stop() {
+        stallWork?.cancel(); zapWork?.cancel()
         savePosition()
         saveTimer?.invalidate(); saveTimer = nil
         minuteTimer?.invalidate(); minuteTimer = nil
@@ -176,18 +202,34 @@ final class VodPlayerController: UIViewController, VLCMediaPlayerDelegate {
             self.toast(on ? "Arrêt à " + PlayerUI.hm(self.ui.bedMinutes) + " : pause et place gardée" : "Arrêt au coucher désactivé")
         }
         ui.whatSaid = { [weak self] in self?.whatSaid() }
+        if isLive {
+            ui.live = true
+            ui.setVersion = { [weak self] i in self?.switchSource(i) }
+            ui.zapTo = { [weak self] i, now in self?.zap(to: i, now: now) }
+            loadLive()
+        }
         ui.stillWatching = { [weak self] in self?.endSleepAsk(pause: false) }
         ui.pauseForLater = { [weak self] in self?.endSleepAsk(pause: true) }
     }
 
     private func start(at: Double? = nil) {
         if player.state != .stopped { player.stop() }     // une seule connexion
-        seeked = false; retried = false; shownTracks = false
+        gen += 1
+        seeked = false; retried = false; shownTracks = false; lastTick = -1
         restartAt = at
         ui.message = nil; ui.loading = true
-        let url = req.versions.indices.contains(versionIndex) ? req.versions[versionIndex].url : req.url
+        var url = req.versions.indices.contains(versionIndex) ? req.versions[versionIndex].url : req.url
+        if isLive {
+            guard sources.indices.contains(sourceIndex), let p = ProviderStore.sharedProvider(sources[sourceIndex].pid),
+                  let u = p.liveURL(sources[sourceIndex]) else {
+                ui.loading = false; ui.message = "Ce fournisseur n'est plus disponible."; return
+            }
+            url = u
+            let ch = sources[sourceIndex]
+            Task { @MainActor in LivePrefs.shared.played(ch) }
+        }
         let media = VLCMedia(url: url)
-        media.addOption(":network-caching=2000")
+        media.addOption(isLive ? ":network-caching=1500" : ":network-caching=2000")
         if ui.nightActive {
             // son de nuit : compresseur de VLC (sons forts adoucis) — se règle au démarrage de la lecture
             for o in [":audio-filter=compressor", ":compressor-rms-peak=0.2", ":compressor-attack=25", ":compressor-release=100",
@@ -197,12 +239,30 @@ final class VodPlayerController: UIViewController, VLCMediaPlayerDelegate {
         applyEqualizer()
         player.play()
         showOSD()
+        armStall()
+    }
+
+    /// Filet de sécurité : si rien n'avance au bout de 25 s, la roulette laisse place à un message clair
+    /// (au lieu de tourner indéfiniment quand le flux ne répond plus sans erreur de VLC).
+    private func armStall() {
+        stallWork?.cancel()
+        let g = gen
+        let w = DispatchWorkItem { [weak self] in
+            guard let self, self.gen == g, self.ui.loading, self.ui.message == nil else { return }
+            if self.isLive, self.trySource(after: self.sourceIndex) { return }
+            self.ui.loading = false
+            self.ui.message = self.isLive ? "Cette chaîne ne répond pas.\nChoisis une autre chaîne ou une autre source, ou réessaie plus tard."
+                                          : "La lecture ne démarre pas.\nEssaie une autre version depuis la fiche, ou réessaie plus tard."
+        }
+        stallWork = w
+        DispatchQueue.main.asyncAfter(deadline: .now() + 25, execute: w)
     }
 
     private var duration: Double { Double(player.media?.length.intValue ?? 0) / 1000 }
     private var position: Double { Double(player.time.intValue) / 1000 }
 
     private func savePosition(at p0: Double? = nil) {
+        guard !isLive else { return }
         let d = duration, p = p0 ?? position
         guard d > 60, p > 0 else { return }
         let r = req
@@ -210,7 +270,9 @@ final class VodPlayerController: UIViewController, VLCMediaPlayerDelegate {
     }
 
     private func refresh() {
-        ui.pos = position; ui.dur = duration; ui.paused = !player.isPlaying
+        ui.paused = !player.isPlaying
+        guard !isLive else { return }   // en direct, la barre suit le programme du guide (loadLive)
+        ui.pos = position; ui.dur = duration
     }
 
     private func showOSD() {
@@ -266,9 +328,11 @@ final class VodPlayerController: UIViewController, VLCMediaPlayerDelegate {
         }
         switch press.type {
         case .menu: return   // Retour : traité par shortBack() (via SwiftUI)
+        case .leftArrow where isLive, .rightArrow where isLive: showOSD()
         case .leftArrow: seek(-10)
         case .rightArrow: seek(10)
         case .upArrow: ui.panel = .shortcuts; ui.osd = true
+        case .downArrow where isLive: ui.panel = .full; ui.osd = true     // TV : la liste des chaînes
         case .downArrow: ui.options = true; ui.osd = true
         case .select where (cutDone || bedDone) && !player.isPlaying:
             closeWork?.cancel(); ui.message = nil; player.play(); showOSD()
@@ -303,8 +367,18 @@ final class VodPlayerController: UIViewController, VLCMediaPlayerDelegate {
     // MARK: lecture
 
     func mediaPlayerTimeChanged(_ aNotification: Notification) {
+        let g = gen
         DispatchQueue.main.async { [weak self] in
-            guard let self else { return }
+            guard let self, self.gen == g else { return }
+            // l'image avance : la lecture tourne, quelle que soit la dernière annonce de VLC
+            let p = self.position
+            if self.ui.loading, self.lastTick >= 0, p != self.lastTick { self.ui.loading = false; self.stallWork?.cancel() }
+            self.lastTick = p
+            if self.isLive {
+                if !self.shownTracks, p > 0 { self.shownTracks = true; self.readTracks() }
+                self.checkSleep()
+                return
+            }
             // reprise : on saute à la position enregistrée (ou à celle d'avant un changement) dès que la durée est connue
             if !self.seeked, self.duration > 0 {
                 self.seeked = true
@@ -335,13 +409,17 @@ final class VodPlayerController: UIViewController, VLCMediaPlayerDelegate {
         var info: [(String, String)] = []
         let sz = player.videoSize
         if sz.width > 0 { info.append(("Image", "\(Int(sz.width)) × \(Int(sz.height))")) }
-        info.append(("Durée", PlayerUI.hms(duration)))
+        if !isLive { info.append(("Durée", PlayerUI.hms(duration))) }
         info.append(("Pistes audio", "\(max(1, ui.audio.count))"))
         info.append(("Sous-titres", "\(ui.subs.filter { $0.id >= 0 }.count)"))
         let ch = player.numberOfChapters(forTitle: player.currentTitleIndex)
         if ch > 0 { info.append(("Chapitres", "\(ch)")) }
         let url = req.versions.indices.contains(versionIndex) ? req.versions[versionIndex].url : req.url
-        info.append(("Serveur", url.host ?? "—"))       // jamais l'adresse complète (elle contient tes identifiants)
+        if isLive, sources.indices.contains(sourceIndex) {
+            info.append(("Source", LiveSourceLabel.text(sources[sourceIndex])))
+        } else {
+            info.append(("Serveur", url.host ?? "—"))
+        }       // jamais l'adresse complète (elle contient tes identifiants)
         info.append(("Son de nuit", ui.nightActive ? "actif" : "inactif"))
         ui.info = info
     }
@@ -411,6 +489,82 @@ final class VodPlayerController: UIViewController, VLCMediaPlayerDelegate {
     private func minuteCheck() {
         if ui.night == "auto", !ui.nightActive, nightWanted, player.isPlaying { changeNight("auto") }
         checkBed()
+        if isLive { loadLive() }
+    }
+
+    // MARK: TV en direct (variante « tv » du lecteur du simulateur)
+
+    private var liveChannel: Channel { req.live[liveIndex] }
+
+    /// Chaîne en cours : ses sources (qualité · fournisseur, la meilleure d'abord), le programme et la liste des chaînes.
+    private func loadLive() {
+        let ch = liveChannel
+        if sources.isEmpty || sources.first.map({ ChannelTools.key($0) != ChannelTools.key(ch) }) ?? true {
+            let copies = LiveIndex.entry(ch)?.copies ?? [ch]
+            sources = copies.isEmpty ? [ch] : copies
+            sourceIndex = max(0, sources.firstIndex { $0.id == ch.id } ?? 0)
+        }
+        ui.versions = sources.map { LiveSourceLabel.text($0) }
+        ui.versionCur = sourceIndex
+        let name = ChannelTools.clean(ch.name)
+        ui.kicker = "DIRECT · " + name.uppercased() + (ch.num > 0 ? " · CANAL \(ch.num)" : "")
+        ui.cur = liveIndex
+        let list = req.live, idx = liveIndex
+        Task { @MainActor in
+            let (n, x) = await LiveStore.nowNext(ch)
+            guard self.liveIndex == idx else { return }
+            self.ui.title = n?.title ?? name
+            if let n {
+                self.ui.dur = n.stopDate.timeIntervalSince(n.startDate)
+                self.ui.pos = Date().timeIntervalSince(n.startDate)
+                self.ui.liveStart = n.startDate; self.ui.liveStop = n.stopDate
+            } else { self.ui.dur = 0; self.ui.pos = 0; self.ui.liveStart = nil; self.ui.liveStop = nil }
+            self.ui.meta = x.map { "Ensuite à " + Fmt.hm($0.startDate) + " · " + $0.title } ?? (n == nil ? "Programme non communiqué" : "")
+            // la liste des chaînes du panneau (programme en cours, ensuite) : seulement autour de la chaîne, pour rester léger
+            let lo = max(0, idx - 30), hi = min(list.count, idx + 31)
+            var rows: [LiveRow] = []
+            for i in lo..<hi {
+                let c = list[i]
+                let (cn, cx) = await LiveStore.nowNext(c)
+                rows.append(LiveRow(id: i, name: ChannelTools.clean(c.name), now: cn?.title ?? "Programme non communiqué",
+                                    progress: cn?.progress() ?? 0, next: cx.map { "ensuite " + Fmt.hm($0.startDate) + " · " + $0.title } ?? ""))
+            }
+            guard self.liveIndex == idx else { return }
+            self.ui.channels = rows
+            self.ui.recent = self.recent.filter { $0 != idx && list.indices.contains($0) }.prefix(4).map { ($0, ChannelTools.clean(list[$0].name)) }
+        }
+    }
+
+    /// Zapping : la chaîne affichée change tout de suite ; le flux suit (aussitôt à l'appui sur OK, 1 s après
+    /// un simple passage dans la liste, comme le simulateur) pour ne pas ouvrir dix connexions en descendant la liste.
+    private func zap(to i: Int, now: Bool) {
+        guard req.live.indices.contains(i), i != liveIndex else { return }
+        zapWork?.cancel()
+        let w = DispatchWorkItem { [weak self] in
+            guard let self else { return }
+            self.recent.removeAll { $0 == self.liveIndex }; self.recent.insert(self.liveIndex, at: 0)
+            self.liveIndex = i; self.sources = []
+            self.loadLive(); self.start()
+        }
+        zapWork = w
+        DispatchQueue.main.asyncAfter(deadline: .now() + (now ? 0 : 1), execute: w)
+    }
+
+    /// « Source » du panneau : autre qualité ou autre fournisseur de la même chaîne
+    private func switchSource(_ i: Int) {
+        guard sources.indices.contains(i), i != sourceIndex else { return }
+        sourceIndex = i; ui.versionCur = i
+        start()
+        toast("Source : " + LiveSourceLabel.text(sources[i]))
+    }
+
+    /// Bascule automatique sur la source suivante quand celle-ci ne répond pas ; false s'il n'y en a plus.
+    private func trySource(after i: Int) -> Bool {
+        guard isLive, i + 1 < sources.count else { return false }
+        sourceIndex = i + 1; ui.versionCur = sourceIndex
+        toast("La source ne répond pas · " + LiveSourceLabel.text(sources[sourceIndex]))
+        start()
+        return true
     }
 
     // MARK: « Qu'a-t-il dit ? »
@@ -501,11 +655,14 @@ final class VodPlayerController: UIViewController, VLCMediaPlayerDelegate {
     }
 
     func mediaPlayerStateChanged(_ aNotification: Notification) {
+        // l'état et la lecture concernés sont relevés tout de suite (et non plus tard, quand l'état a déjà changé)
+        let st = (aNotification.object as? VLCMediaPlayer)?.state ?? player.state
+        let g = gen
         DispatchQueue.main.async { [weak self] in
-            guard let self else { return }
-            switch self.player.state {
+            guard let self, self.gen == g else { return }
+            switch st {
             case .playing:
-                self.ui.loading = false; self.ui.paused = false
+                self.ui.loading = false; self.ui.paused = false; self.stallWork?.cancel()
                 if self.ui.message != nil && !self.cutDone && !self.bedDone { self.ui.message = nil }
                 if let b = self.seekOnResume { self.seekOnResume = nil; self.player.time = VLCTime(int: Int32(b * 1000)) }
             case .paused:
@@ -513,9 +670,14 @@ final class VodPlayerController: UIViewController, VLCMediaPlayerDelegate {
             case .opening, .buffering:
                 if !self.player.isPlaying { self.ui.loading = true }
             case .error:
-                if !self.retried { self.retried = true; DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { self.player.play() }; return }
-                self.ui.loading = false
-                self.ui.message = "Lecture impossible.\nEssaie une autre version depuis la fiche, ou réessaie plus tard (ton abonnement est peut-être utilisé sur un autre appareil)."
+                if !self.retried { self.retried = true; DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { if self.gen == g { self.player.play() } }; return }
+                // en direct : la source suivante (autre qualité ou autre fournisseur), comme le simulateur
+                if self.isLive, self.trySource(after: self.sourceIndex) { return }
+                self.ui.loading = false; self.stallWork?.cancel()
+                self.ui.message = self.isLive ? "Cette chaîne ne répond pas.\nChoisis une autre chaîne ou une autre source, ou réessaie plus tard (ton abonnement est peut-être utilisé sur un autre appareil)."
+                    : "Lecture impossible.\nEssaie une autre version depuis la fiche, ou réessaie plus tard (ton abonnement est peut-être utilisé sur un autre appareil)."
+            case .ended where self.isLive:
+                self.ui.loading = false; self.ui.message = "La diffusion s'est arrêtée."
             case .ended:
                 self.ui.loading = false
                 self.savePosition()
