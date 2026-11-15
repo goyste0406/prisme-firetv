@@ -80,7 +80,7 @@ struct CrossRow: View {
 
     private func card(_ r: CrossPickResult) -> some View {
         VStack(alignment: .leading, spacing: 15) {
-            PosterButton(item: r.item, width: posterWidth) { open(r.item) }
+            PosterButton(item: r.item, width: posterWidth, bare: true) { open(r.item) }
                 .overlay(alignment: .topLeading) { pctBadge(r).padding(12).allowsHitTesting(false) }
                 .contextMenu {
                     Button("Pourquoi ce titre ?") { whyOf = r }

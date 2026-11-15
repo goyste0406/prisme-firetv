@@ -752,9 +752,10 @@ struct ResumeRow: View {
 struct PosterButton: View {
     let item: MediaItem
     var width: CGFloat = 220
+    var bare = false
     let action: () -> Void
     var body: some View {
-        Button(action: action) { PosterTile(item: item).frame(width: width, height: width * 1.5) }
+        Button(action: action) { PosterTile(item: item, bare: bare).frame(width: width, height: width * 1.5) }
             .buttonStyle(TileStyle())
             .accessibilityLabel(item.displayTitle)
     }
@@ -766,17 +767,19 @@ struct PosterButton: View {
 struct PosterTile: View {
     let item: MediaItem
     var showNew = true
+    /// rangée « Si tu hésites encore » : l'affiche seule (le pourcentage prend la place des bandeaux, comme le simulateur)
+    var bare = false
     @ObservedObject var watch = WatchStore.shared
     var body: some View {
         ZStack(alignment: .top) {
             Poster(url: item.posterURL, title: item.posterURL.isEmpty ? item.displayTitle : "")
-            if let n = newLabel {
+            if !bare, let n = newLabel {
                 Text(n).font(P.font(15, .heavy)).tracking(0.9).foregroundStyle(.white).lineLimit(1)
                     .padding(.vertical, 7).frame(maxWidth: .infinity)
                     .background(Color(red: 0.04, green: 0.52, blue: 1))
                     .shadow(color: .black.opacity(0.35), radius: 5, y: 2)
             }
-            if item.kind == .film, let rt = item.fiche?.runtime, rt > 0 {
+            if !bare, item.kind == .film, let rt = item.fiche?.runtime, rt > 0 {
                 let left = max(60, Double(rt * 60) - (watch.resume(item.id) ?? 0))
                 HStack(spacing: 5) {
                     Text("fin " + Fmt.hm(Date().addingTimeInterval(left)))

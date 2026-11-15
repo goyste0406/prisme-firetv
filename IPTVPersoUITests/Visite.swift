@@ -428,8 +428,8 @@ final class Visite: XCTestCase {
         shot("X8-vous-deux")
         // fiche série : onglet « Séries proches »
         relaunch(t + ["-prisme.debug.open", "series:demo:2001"], wait: 18)
-        press(.right, 2); Thread.sleep(forTimeInterval: 1); shot("X9-serie-onglets")
-        for _ in 0..<4 { if focused().contains("Séries proches") { break }; press(.right); Thread.sleep(forTimeInterval: 0.6) }
+        press(.right, 2); press(.up); Thread.sleep(forTimeInterval: 1); shot("X9-serie-onglets")
+        for _ in 0..<5 { if focused().contains("Séries proches") { break }; press(.right); Thread.sleep(forTimeInterval: 0.6) }
         press(.select); Thread.sleep(forTimeInterval: 2); press(.down); Thread.sleep(forTimeInterval: 1); shot("X9b-series-proches")
         press(.down); Thread.sleep(forTimeInterval: 1); shot("X9c-series-proches-affiche")
         back(); Thread.sleep(forTimeInterval: 1); shot("X9d-serie-retour")
