@@ -376,9 +376,17 @@ struct TasteTestView: View {
 
     private func loadPool() async {
         let pids = store.active.map(\.id)
-        let f = await MediaStore.ficheList(.film, pids: pids, cond: "f.vote>=6.3 AND f.poster!=''", order: "f.vote DESC", limit: 400)
-        let s = await MediaStore.ficheList(.series, pids: pids, cond: "f.vote>=6.8 AND f.poster!=''", order: "f.vote DESC", limit: 120)
-        pool = f + s
+        // 1.7 : les grands classiques du simulateur (connus de presque tout le monde, toutes époques et tous genres),
+        // et non plus les titres les mieux notés du catalogue (surtout des sorties récentes, souvent jamais vues)
+        let classics = await TasteClassics.load(pids: pids).filter { $0.allowedForProfile }
+        if classics.count >= 12 {
+            pool = classics
+        } else {
+            // sans TMDB (pas de clé, pas de réseau) : les titres les plus connus du catalogue, comme avant
+            let f = await MediaStore.ficheList(.film, pids: pids, cond: "f.vote>=6.3 AND f.poster!=''", order: "f.vote DESC", limit: 400)
+            let s = await MediaStore.ficheList(.series, pids: pids, cond: "f.vote>=6.8 AND f.poster!=''", order: "f.vote DESC", limit: 120)
+            pool = classics + (f + s).filter { it in !classics.contains { $0.workKey == it.workKey } }
+        }
         if let a = TasteStore.shared.answers(pid) { never = Set(a.never); kindPref = a.kindPref; weeknight = a.weeknight; moods = Set(a.moods) }
         lang = me.lang
         loading = false
