@@ -157,8 +157,7 @@ struct LiveFrontView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 34) {
-                if let h = head { header(h) }
-                else if let a = soon.first { soonHeader(a) }
+                headBlock
                 if !recent.isEmpty {
                     rowTitle("Pour toi, maintenant", "tes chaînes récentes, en ce moment")
                     row {
@@ -256,15 +255,26 @@ struct LiveFrontView: View {
         Button(prefs.isFavorite(ch) ? "Retirer des favoris" : "Ajouter aux favoris") { prefs.toggleFavorite(ch) }
     }
 
-    /// En-tête (simulateur) : la dernière chaîne regardée, son programme en cours et sa progression.
-    private func header(_ ch: Channel) -> some View {
-        Button { playHead(ch) } label: { headerLabel(ch) }
-            .buttonStyle(TextBlockStyle())
+    /// En-tête (simulateur) : la dernière chaîne regardée (son programme en cours et sa progression), sinon le prochain
+    /// programme qui commence. UN SEUL bouton, dont seul le contenu change, dans une zone de focus qui l'entoure :
+    /// avant, deux boutons différents (eux-mêmes zones de focus) se remplaçaient quand les listes se rechargeaient
+    /// pendant un import ; si l'un d'eux avait la sélection, tvOS plantait en recalculant les zones de focus.
+    @ViewBuilder private var headBlock: some View {
+        if head != nil || !soon.isEmpty {
+            VStack(alignment: .leading, spacing: 0) {
+                Button {
+                    if let h = head { playHead(h) } else if let a = soon.first { play([a.ch], 0) }
+                } label: {
+                    if let h = head { headerLabel(h) } else if let a = soon.first { soonLabel(a) }
+                }
+                .buttonStyle(TextBlockStyle())
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
             .focusSection()
+        }
     }
 
-    private func soonHeader(_ a: LiveStore.Airing) -> some View {
-        Button { play([a.ch], 0) } label: {
+    private func soonLabel(_ a: LiveStore.Airing) -> some View {
             VStack(alignment: .leading, spacing: 12) {
                 HStack(spacing: 14) {
                     Text("À VENIR").font(P.font(18, .heavy)).foregroundStyle(.white).padding(.horizontal, 12).padding(.vertical, 6).background(Color(red: 0.04, green: 0.52, blue: 1), in: RoundedRectangle(cornerRadius: 8))
@@ -275,9 +285,6 @@ struct LiveFrontView: View {
                     .font(P.font(22)).opacity(0.75).lineLimit(1)
             }
             .padding(.vertical, 14).frame(maxWidth: .infinity, alignment: .leading)
-        }
-        .buttonStyle(TextBlockStyle())
-        .focusSection()
     }
 
     private func playHead(_ ch: Channel) {
