@@ -273,9 +273,13 @@ struct TopBar: View {
         .contentShape(Rectangle())
         .focusSection()
         .defaultFocus($focus, nav.tab, priority: .userInitiated)
-        .onChange(of: focus) { _, f in if nav.barFocused != (f != nil) { nav.barFocused = f != nil } }
+        // une seule surveillance de la sélection (deux « onChange » sur le même état de focus faisaient planter tvOS
+        // pendant le recalcul des zones de focus, page TV en direct avec deux fournisseurs)
+        .onChange(of: focus) { _, f in
+            if f != nil { nav.wantBar = false }
+            if nav.barFocused != (f != nil) { nav.barFocused = f != nil }
+        }
         .onChange(of: nav.backToBar) { _, _ in claimBar() }
-        .onChange(of: focus) { _, f in if f != nil { nav.wantBar = false } }
         .onAppear {
             // barre recréée en remontant la page (rangées « paresseuses ») : elle reprend la demande en cours
             if nav.wantBar { claimBar(); return }
