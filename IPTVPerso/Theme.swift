@@ -211,6 +211,24 @@ final class Nav: ObservableObject {
     @Published var barFocused = false
     /// demande de ramener la sélection sur l'onglet de la barre du haut (Retour depuis le contenu d'une page)
     @Published var backToBar = 0
+    /// demande en cours : la barre la satisfait dès qu'elle est à l'écran (sur Films, Séries, Ma liste et Recherche
+    /// la barre défile avec la page ; hors de l'écran, tvOS refuse d'y poser la sélection, il faut d'abord remonter)
+    var wantBar = false
+    func goToBar() { wantBar = true; backToBar += 1 }
+}
+
+/// Page qui défile avec sa barre du haut : Retour (ou toute demande de retour à la barre) remonte d'abord la page en haut,
+/// puis la barre reprend la sélection (comme le simulateur : focus sur l'onglet et défilement en haut).
+struct BarScrollView<Content: View>: View {
+    static var top: String { "prisme-bar-top" }
+    @ObservedObject var nav = Nav.shared
+    @ViewBuilder let content: () -> Content
+    var body: some View {
+        ScrollViewReader { proxy in
+            ScrollView { content() }
+                .onChange(of: nav.backToBar) { _, _ in withAnimation(.easeOut(duration: 0.3)) { proxy.scrollTo(BarScrollView<EmptyView>.top, anchor: .top) } }
+        }
+    }
 }
 
 /// Barre du haut, en haut de chaque page (comme le simulateur : elle défile avec la page).
@@ -247,12 +265,22 @@ struct TopBar: View {
         .focusSection()
         .defaultFocus($focus, nav.tab, priority: .userInitiated)
         .onChange(of: focus) { _, f in if nav.barFocused != (f != nil) { nav.barFocused = f != nil } }
-        .onChange(of: nav.backToBar) { _, _ in focus = nav.tab }
+        .onChange(of: nav.backToBar) { _, _ in claimBar() }
+        .onChange(of: focus) { _, f in if f != nil { nav.wantBar = false } }
         .onAppear {
+            // barre recréée en remontant la page (rangées « paresseuses ») : elle reprend la demande en cours
+            if nav.wantBar { claimBar(); return }
             guard claimFocus else { return }
             let t = nav.tab
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { focus = t }
         }
+    }
+
+    /// Pose la sélection sur l'onglet de la page ; nouvel essai après le défilement vers le haut (barre alors à l'écran).
+    private func claimBar() {
+        focus = nav.tab
+        for d in [0.35, 0.7] { DispatchQueue.main.asyncAfter(deadline: .now() + d) { if nav.wantBar { focus = nav.tab } } }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) { nav.wantBar = false }
     }
 
     private func tab(_ t: AppTab, _ label: String) -> some View {

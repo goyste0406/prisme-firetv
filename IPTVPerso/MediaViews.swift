@@ -63,12 +63,13 @@ struct MediaHomeView: View {
     private var unit: String { kind == .film ? "films" : "séries" }
 
     var body: some View {
-        ScrollView {
+        BarScrollView {
             LazyVStack(alignment: .leading, spacing: 44) {
                 ZStack(alignment: .top) {
                     heroBlock
                     TopBar()
                 }
+                .id(BarScrollView<EmptyView>.top)
                 // ordre du simulateur — Films : Ce soir ? · Reprendre · Top 10 · Nouveau · Parce que tu as aimé · Ma liste · Explorer · Parcourir
                 //                       Séries : Ce soir ? · Reprendre · Top 10 · Nouveau · Ma liste · Parcourir
                 tonightBand
@@ -559,10 +560,13 @@ struct HeroView: View {
             LinearGradient(colors: [P.room.opacity(0.92), P.room.opacity(0.5), .clear], startPoint: .leading, endPoint: .trailing)
             LinearGradient(colors: [.black.opacity(0.6), .clear, .clear, P.room], startPoint: .top, endPoint: .bottom)
             content
-                .padding(.leading, 120).padding(.trailing, 120).padding(.top, 220)
-                // toute la largeur sous la barre : en descendant depuis n'importe quel onglet, on arrive sur le bouton
+                .padding(.leading, 120).padding(.trailing, 120)
+                // toute la largeur sous la barre : en descendant depuis n'importe quel onglet, on arrive sur le bouton.
+                // La zone commence SOUS la barre (marge du haut ajoutée après) : si elle la recouvrait, tvOS ne la voyait
+                // pas « en dessous » de l'onglet et la flèche bas sautait jusqu'à « Ce soir ? ».
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .focusSection()
+                .padding(.top, 220)
             if count > 1 {
                 HStack(spacing: 8) {
                     ForEach(0..<count, id: \.self) { i in Capsule().fill(.white.opacity(i == index ? 1 : 0.35)).frame(width: i == index ? 34 : 10, height: 10) }
@@ -869,9 +873,9 @@ struct MineView: View {
     @State private var loaded = false
 
     var body: some View {
-        ScrollView {
+        BarScrollView {
             LazyVStack(alignment: .leading, spacing: 30) {
-                TopBar(claimFocus: true)
+                TopBar(claimFocus: true).id(BarScrollView<EmptyView>.top)
                 VStack(alignment: .leading, spacing: 8) {
                     Text("Ma liste").font(P.font(64, .bold))
                     Text("Ce que tu as ajouté avec +, et ce que tu as commencé.").font(P.font(25)).foregroundStyle(P.dim)
@@ -913,9 +917,9 @@ struct SearchView: View {
     @State private var open: MediaItem?
 
     var body: some View {
-        ScrollView {
+        BarScrollView {
             LazyVStack(alignment: .leading, spacing: 30) {
-                TopBar(claimFocus: true)
+                TopBar(claimFocus: true).id(BarScrollView<EmptyView>.top)
                 VStack(alignment: .leading, spacing: 18) {
                     Text("Recherche").font(P.font(64, .bold))
                     TextField("Un film, une série…", text: $q).font(P.font(30)).frame(maxWidth: 1100)

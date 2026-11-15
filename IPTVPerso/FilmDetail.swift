@@ -85,6 +85,12 @@ struct FilmDetailView: View {
                     .padding(.bottom, 120)
                 }
                 .scrollClipDisabled()
+                // À l'ouverture, tvOS fait défiler la page pour éloigner du bord bas le bouton Lecture qui reçoit la sélection :
+                // la page descendait d'environ 60 px et la pastille du profil sortait de l'écran. On ramène la page en haut
+                // une fois la sélection posée (Lecture reste entièrement visible, rien ne bouge ensuite).
+                .onAppear {
+                    for d in [0.4, 0.8] { DispatchQueue.main.asyncAfter(deadline: .now() + d) { if playFocused { proxy.scrollTo("top", anchor: .top) } } }
+                }
             }
             .disabled(pickVersion || splitOpen)
             .defaultFocus($playFocused, true, priority: .userInitiated)
