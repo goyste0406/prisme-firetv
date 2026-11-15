@@ -412,8 +412,12 @@ final class VodPlayerController: UIViewController, VLCMediaPlayerDelegate {
         if !isLive { info.append(("Durée", PlayerUI.hms(duration))) }
         info.append(("Pistes audio", "\(max(1, ui.audio.count))"))
         info.append(("Sous-titres", "\(ui.subs.filter { $0.id >= 0 }.count)"))
-        let ch = player.numberOfChapters(forTitle: player.currentTitleIndex)
-        if ch > 0 { info.append(("Chapitres", "\(ch)")) }
+        // un direct n'a pas de « titre » (index -1) : ne jamais demander ses chapitres à VLC
+        let ti = player.currentTitleIndex
+        if !isLive, ti >= 0 {
+            let ch = player.numberOfChapters(forTitle: ti)
+            if ch > 0 { info.append(("Chapitres", "\(ch)")) }
+        }
         let url = req.versions.indices.contains(versionIndex) ? req.versions[versionIndex].url : req.url
         if isLive, sources.indices.contains(sourceIndex) {
             info.append(("Source", LiveSourceLabel.text(sources[sourceIndex])))
