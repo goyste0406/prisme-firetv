@@ -70,7 +70,7 @@ struct CrossRow: View {
     private var chips: some View {
         HStack(spacing: 12) {
             ForEach(CrossMode.allCases) { m in
-                Button { mode = m } label: { Text(m.label) }.buttonStyle(XModeStyle(selected: mode == m))
+                Button { mode = m } label: { Text(m == .film && kind == .series ? "Proche de cette série" : m.label) }.buttonStyle(XModeStyle(selected: mode == m))
             }
             Button { info = true } label: { Text("ⓘ Comment on choisit") }.buttonStyle(XModeStyle(selected: false)).padding(.leading, 9)
         }
