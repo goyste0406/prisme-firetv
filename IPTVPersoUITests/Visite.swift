@@ -88,6 +88,7 @@ final class Visite: XCTestCase {
         if ProcessInfo.processInfo.environment["ONLY"] == "nav" { navigation(); return }
         if ProcessInfo.processInfo.environment["ONLY"] == "multi" { multi(); return }
         if ProcessInfo.processInfo.environment["ONLY"] == "perf" { perf(); return }
+        if ProcessInfo.processInfo.environment["ONLY"] == "tvcrash" { tvCrash(); return }
         shot("01-films-ouverture")
         downUntil(["Catégories", "Licences et sagas"], prefix: "02-films-bas")
         if focused().contains("Catégories") { press(.right) }
@@ -350,6 +351,13 @@ final class Visite: XCTestCase {
         back()
         relaunch(["-prisme.debug.demoServer2", "http://127.0.0.1:8098", "-prisme.debug.demoDown", "http://127.0.0.1:8090", "-prisme.debug.open", "film:demo:1016"])
         shot("M4-fiche-interstellar")
+    }
+
+    func tvCrash() {
+        relaunch(["-prisme.debug.demoServer2", "http://127.0.0.1:8098", "-prisme.debug.tab", "live"], wait: 5)
+        for k in 0..<8 { shot(String(format: "C%02d-attente", k), focus: false); Thread.sleep(forTimeInterval: 15) }
+        press(.down); Thread.sleep(forTimeInterval: 2); shot("C9-bas")
+        Thread.sleep(forTimeInterval: 20); shot("C10-apres")
     }
 
     /// Gros catalogue (≈ 20 000 chaînes, 40 000 films, 20 000 séries) : mesures écrites par l'app dans mesures.txt
