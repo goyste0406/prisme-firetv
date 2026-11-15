@@ -516,7 +516,7 @@ final class Visite: XCTestCase {
     /// Lecteur de la TV en direct (1.7 : lecteur commun, variante TV) : bandeau, raccourcis, liste des chaînes,
     /// zapping en descendant la liste, sources de la chaîne, Retour couche par couche.
     func lecteurTV() {
-        relaunch(["-prisme.debug.demoServer2", "http://127.0.0.1:8098", "-prisme.debug.tab", "live"], wait: 45)
+        relaunch(["-prisme.debug.demoServer2", "http://127.0.0.1:8098", "-prisme.debug.tab", "live"], wait: 120)
         // depuis l'en-tête de la TV en direct (programme mis en avant)
         press(.down); Thread.sleep(forTimeInterval: 1); shot("T-entete")
         press(.select); Thread.sleep(forTimeInterval: 9); shot("T0-direct-bandeau", focus: false)
@@ -533,7 +533,7 @@ final class Visite: XCTestCase {
         back(); Thread.sleep(forTimeInterval: 1); back(); Thread.sleep(forTimeInterval: 1); back(); Thread.sleep(forTimeInterval: 2)
         shot("T8-direct-quitte")
         // depuis l'éventail d'un paquet « univers »
-        relaunch(["-prisme.debug.demoServer2", "http://127.0.0.1:8098", "-prisme.debug.tab", "live"], wait: 45)
+        relaunch(["-prisme.debug.demoServer2", "http://127.0.0.1:8098", "-prisme.debug.tab", "live"], wait: 60)
         press(.down, 2); press(.select); Thread.sleep(forTimeInterval: 2); shot("T9-eventail")
         press(.select); Thread.sleep(forTimeInterval: 9); shot("T9b-direct-depuis-eventail", focus: false)
         back(); Thread.sleep(forTimeInterval: 1); back(); Thread.sleep(forTimeInterval: 2); shot("T9c-retour-eventail")
