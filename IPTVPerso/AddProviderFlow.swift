@@ -85,6 +85,7 @@ struct AddProviderFlow: View {
                     }
                     .frame(width: 45, height: 45)
                     Text(AddProviderFlow.steps[i]).font(P.font(24, .semibold)).foregroundStyle(i <= step ? .white : .white.opacity(0.55))
+                        .lineLimit(1).fixedSize()
                 }
             }
         }
@@ -396,7 +397,7 @@ struct AddProviderFlow: View {
     }
 
     private func dupText(_ others: [String]) -> Text {
-        let who = others.joined(separator: " et ")
+        let who = others.count > 1 ? others.dropLast().joined(separator: ", ") + " et " + others.last! : others.joined()
         var parts: [String] = [], total = 0
         for t in AddProviderFlow.types where keep[t] ?? true {
             let n = dupN(t)

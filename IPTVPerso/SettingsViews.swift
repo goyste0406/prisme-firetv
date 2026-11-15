@@ -69,6 +69,10 @@ struct ProvidersSettingsView: View {
     @ObservedObject var pui = ProfileUI.shared
     @ObservedObject var fiches = FicheService.shared
     @FocusState private var catFocus: String?
+    /// Au retour d'un écran ouvert depuis Fournisseurs (Gérer, ajout, journal), la sélection revient sur la ligne d'origine
+    /// au lieu de retomber sur « Profils » (tvOS repose le focus sur le premier élément de la page).
+    @State private var holdSection = false
+    @State private var restoreRow: (String, Int)?
 
     private static let cats: [(String, String, String)] = [
         ("prof", "person", "Profils"), ("prov", "rectangle.stack", "Fournisseurs"), ("tmdb", "star.square", "Fiches et notes (TMDB)"),
@@ -92,7 +96,7 @@ struct ProvidersSettingsView: View {
                 }
                 .frame(width: 470)
                 .focusSection()
-                .onChange(of: catFocus) { f in if let f { section = f } }
+                .onChange(of: catFocus) { f in if let f, !holdSection { section = f } }
 
                 ScrollView {
                     VStack(alignment: .leading, spacing: 26) { panel }
@@ -116,11 +120,22 @@ struct ProvidersSettingsView: View {
         }
         .task(id: store.catalogVersion) { dbSize = await Database.shared.read { $0.fileSize } }
         .onChange(of: pui.editProfile) { _, e in if e != nil { section = "prof" } }
+        .onChange(of: managing) { old, now in if now == nil, let o = old { comeBack("pl-" + o) } }
+        .onChange(of: adding) { _, now in if !now { comeBack("add") } }
+        .onChange(of: showLog) { _, now in if !now { comeBack("log") } }
         .onAppear {
+            if let s = Debug.settingsSection { DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { catFocus = s } }
             // simulateur de test seulement (arguments de lancement)
             if Debug.addProvider { adding = true }
             if let n = Debug.manageProvider { managing = store.providers.first { $0.name == n }?.id }
         }
+    }
+
+    private func comeBack(_ row: String) {
+        holdSection = true
+        section = "prov"
+        restoreRow = (row, (restoreRow?.1 ?? 0) + 1)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) { holdSection = false }
     }
 
     @ViewBuilder private var panel: some View {
@@ -134,7 +149,7 @@ struct ProvidersSettingsView: View {
     }
 
     @ViewBuilder private var providersPanel: some View {
-        ProvidersPanel(manage: { managing = $0 }, add: { adding = true }, log: { showLog = true })
+        ProvidersPanel(manage: { managing = $0 }, add: { adding = true }, log: { showLog = true }, restore: restoreRow)
     }
 
     @ViewBuilder private var tmdbPanel: some View {

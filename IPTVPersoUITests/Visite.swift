@@ -365,7 +365,9 @@ final class Visite: XCTestCase {
         relaunch(two + ["-prisme.debug.settings", "prov", "-prisme.debug.manage", "Soleil"], wait: 45)
         shot("F2-gerer-soleil")
         for k in 1...10 { press(.down); shot(String(format: "F2b-gerer-bas-%02d", k)) }
-        back(); Thread.sleep(forTimeInterval: 1); shot("F2c-gerer-retour")
+        back(); Thread.sleep(forTimeInterval: 1.5); shot("F2c-gerer-retour")
+        press(.select); Thread.sleep(forTimeInterval: 1.5); shot("F2d-gerer-rouvert")
+        back(); Thread.sleep(forTimeInterval: 1.5); press(.down); shot("F2e-retour-puis-bas")
         // ajout : 1. connexion (trois façons)
         relaunch(two + ["-prisme.debug.settings", "prov", "-prisme.debug.addProvider", "1"], wait: 40)
         shot("F3-ajout-connexion")
@@ -382,7 +384,12 @@ final class Visite: XCTestCase {
         Thread.sleep(forTimeInterval: 6); shot("F5b-ajout-verification-finie")
         press(.select); Thread.sleep(forTimeInterval: 2); shot("F6-ajout-contenu")
         for k in 1...5 { press(.down); shot(String(format: "F6b-contenu-bas-%02d", k)) }
-        press(.up, 8); press(.select); Thread.sleep(forTimeInterval: 2); shot("F6c-contenu-ok")
+        press(.up, 8); press(.select); Thread.sleep(forTimeInterval: 1); shot("F6c-tv-decochee")
+        press(.select); Thread.sleep(forTimeInterval: 1)
+        press(.down, 3); press(.select); Thread.sleep(forTimeInterval: 2); shot("F6d-categories-francaises")
+        for k in 1...4 { press(.down); shot(String(format: "F6e-categories-bas-%02d", k)) }
+        back(); Thread.sleep(forTimeInterval: 1); shot("F6f-categories-retour")
+        press(.right); shot("F6g-importer"); press(.select); Thread.sleep(forTimeInterval: 2); shot("F6h-importation-lancee")
         Thread.sleep(forTimeInterval: 20); shot("F7-ajout-importation")
         Thread.sleep(forTimeInterval: 30); shot("F7b-ajout-importation-finie")
         press(.select); Thread.sleep(forTimeInterval: 3); shot("F8-apres-ajout")

@@ -11,6 +11,7 @@ struct ProvidersPanel: View {
     let manage: (String) -> Void
     let add: () -> Void
     let log: () -> Void
+    var restore: (String, Int)? = nil
     @State private var desc = "Choisis un réglage pour voir à quoi il sert."
     @State private var totals: (live: Int, vod: Int, series: Int, grouped: Int)?
     @State private var testing = false
@@ -42,6 +43,11 @@ struct ProvidersPanel: View {
             Text(desc).font(P.font(23)).foregroundStyle(.white.opacity(0.6)).padding(.top, 22).lineLimit(2)
         }
         .task(id: store.catalogVersion) { totals = await CatalogTotals.compute(pids: store.active.map(\.id)) }
+        .onChange(of: restore?.1) { _, _ in
+            guard let r = restore?.0 else { return }
+            let key = r.hasPrefix("pl-") && !store.providers.contains(where: { "pl-" + $0.id == r }) ? "add" : r   // fournisseur supprimé
+            for d in [0.15, 0.45] { DispatchQueue.main.asyncAfter(deadline: .now() + d) { focus = key } }
+        }
     }
 
     private func row<V: View>(_ key: String, _ label: V, _ d: String, _ act: @escaping () -> Void) -> some View {
@@ -471,8 +477,9 @@ struct PVSwitch: View {
     let on: Bool
     var body: some View {
         ZStack(alignment: on ? .trailing : .leading) {
-            Capsule().fill(on ? Color(red: 0.2, green: 0.78, blue: 0.35) : Color.white.opacity(0.22)).frame(width: 94, height: 56)
-            Circle().fill(.white).frame(width: 45, height: 45).padding(5.5)
+            // simulateur (.sw) : éteint = fond sombre translucide, visible aussi sur une ligne sélectionnée (blanche)
+            Capsule().fill(on ? Color(red: 0.2, green: 0.78, blue: 0.35) : Color.black.opacity(0.22)).frame(width: 94, height: 56)
+            Circle().fill(.white).frame(width: 45, height: 45).shadow(color: .black.opacity(0.3), radius: 4, y: 2).padding(5.5)
         }
         .animation(.easeOut(duration: 0.2), value: on)
     }
