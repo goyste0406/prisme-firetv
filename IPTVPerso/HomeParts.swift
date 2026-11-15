@@ -391,6 +391,7 @@ struct LicenceTile: View {
         let unit: String
         @Environment(\.isFocused) var f
         @State private var img: UIImage?
+        @State private var dark = false
         var body: some View {
             let hue = P.hue(c.name)
             ZStack {
@@ -402,9 +403,11 @@ struct LicenceTile: View {
                             if c.logoIsIcon {
                                 Image(uiImage: img).resizable().scaledToFit().clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
                                     .frame(maxWidth: 76, maxHeight: 76)
-                            } else if f {
+                            } else if f || !dark {
+                                // couleurs d'origine du logo (demande de Steven, 1.7) ; le simulateur les blanchissait hors sélection
                                 Image(uiImage: img).resizable().scaledToFit().frame(maxWidth: 244, maxHeight: 76)
                             } else {
+                                // logo presque noir : invisible sur le fond sombre, il reste en blanc tant qu'il n'est pas sélectionné
                                 Image(uiImage: img).renderingMode(.template).resizable().scaledToFit().foregroundStyle(.white.opacity(0.92)).frame(maxWidth: 244, maxHeight: 76)
                             }
                         }
@@ -431,9 +434,31 @@ struct LicenceTile: View {
             .animation(.easeOut(duration: 0.18), value: f)
             .task(id: c.logo) {
                 guard !c.logo.isEmpty else { return }
-                img = await ImageLoader.load(Fiche.img(c.logo, c.logoIsIcon ? "w92" : "w300"), maxPixel: 500)
+                let i = await ImageLoader.load(Fiche.img(c.logo, c.logoIsIcon ? "w92" : "w300"), maxPixel: 500)
+                dark = i.map(LogoTone.isDark) ?? false
+                img = i
             }
         }
+    }
+}
+
+/// Teinte d'un logo : moyenne de luminosité de ses pixels visibles (sur une petite copie 24 × 24).
+enum LogoTone {
+    static func isDark(_ img: UIImage) -> Bool {
+        guard let cg = img.cgImage else { return false }
+        let w = 24, h = 24
+        var px = [UInt8](repeating: 0, count: w * h * 4)
+        guard let ctx = CGContext(data: &px, width: w, height: h, bitsPerComponent: 8, bytesPerRow: w * 4,
+                                  space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return false }
+        ctx.draw(cg, in: CGRect(x: 0, y: 0, width: w, height: h))
+        var sum = 0.0, n = 0.0
+        for i in stride(from: 0, to: px.count, by: 4) {
+            let a = Double(px[i + 3]); guard a > 40 else { continue }
+            // couleurs prémultipliées : on rapporte à l'opacité
+            let r = Double(px[i]) / a, g = Double(px[i + 1]) / a, b = Double(px[i + 2]) / a
+            sum += 0.2126 * r + 0.7152 * g + 0.0722 * b; n += 1
+        }
+        return n > 0 && sum / n < 0.28
     }
 }
 
