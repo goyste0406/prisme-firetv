@@ -346,9 +346,11 @@ final class Visite: XCTestCase {
         for k in 1...6 { press(.down); shot(String(format: "M2b-fournisseurs-bas-%02d", k)) }
         tab(2); shot("M3-tv-deux-fournisseurs")
         // TF1 : une seule vignette, ses sources dans le menu « OK maintenu »
-        press(.down, 3); shot("M3b-tv-bas")
+        // « Explorer par univers » › Généraliste (éventail), puis OK maintenu sur TF1 : ses sources (qualité · fournisseur)
+        press(.down, 2); shot("M3b-tv-univers")
+        press(.select); Thread.sleep(forTimeInterval: 2); shot("M3b2-generaliste-eventail")
         remote.press(.select, forDuration: 1.2); Thread.sleep(forTimeInterval: 1.5); shot("M3c-tv-sources")
-        back()
+        back(); back()
         relaunch(["-prisme.debug.demoServer2", "http://127.0.0.1:8098", "-prisme.debug.demoDown", "http://127.0.0.1:8090", "-prisme.debug.open", "film:demo:1016"])
         shot("M4-fiche-interstellar")
     }
@@ -389,7 +391,7 @@ final class Visite: XCTestCase {
         press(.down, 3); press(.select); Thread.sleep(forTimeInterval: 2); shot("F6d-categories-francaises")
         for k in 1...4 { press(.down); shot(String(format: "F6e-categories-bas-%02d", k)) }
         back(); Thread.sleep(forTimeInterval: 1); shot("F6f-categories-retour")
-        press(.right); shot("F6g-importer"); press(.select); Thread.sleep(forTimeInterval: 2); shot("F6h-importation-lancee")
+        press(.right); press(.down, 2); shot("F6g-importer"); press(.select); Thread.sleep(forTimeInterval: 2); shot("F6h-importation-lancee")
         Thread.sleep(forTimeInterval: 20); shot("F7-ajout-importation")
         Thread.sleep(forTimeInterval: 30); shot("F7b-ajout-importation-finie")
         press(.select); Thread.sleep(forTimeInterval: 3); shot("F8-apres-ajout")
