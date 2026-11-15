@@ -88,6 +88,10 @@ final class Visite: XCTestCase {
         if ProcessInfo.processInfo.environment["ONLY"] == "nav" { navigation(); return }
         if ProcessInfo.processInfo.environment["ONLY"] == "multi" { multi(); return }
         if ProcessInfo.processInfo.environment["ONLY"] == "perf" { perf(); return }
+        if ProcessInfo.processInfo.environment["ONLY"] == "tvidle" {
+            relaunch(["-prisme.debug.demoServer2", "http://127.0.0.1:8098", "-prisme.debug.tab", "live"], wait: 150)
+            shot("I1-apres-150s"); press(.down); Thread.sleep(forTimeInterval: 2); shot("I2-bas"); return
+        }
         if ProcessInfo.processInfo.environment["ONLY"] == "fournisseurs" { fournisseurs(); return }
         shot("01-films-ouverture")
         downUntil(["Catégories", "Licences et sagas"], prefix: "02-films-bas")
