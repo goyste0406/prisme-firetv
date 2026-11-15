@@ -107,7 +107,7 @@ struct TasteTestView: View {
         VStack(spacing: 0) {
             ProfileAvatar(p: me, size: 144).padding(.top, 150)
             Text("Apprenons tes goûts, \(me.name)").font(P.font(64, .bold)).padding(.top, 40)
-            Text("Quelques minutes, des titres de ton catalogue que beaucoup ont vus : prisme saura quoi te proposer dès ce soir. Ce que tu regardes ensuite comptera de plus en plus. Tu pourras le refaire dans Réglages › Profils.")
+            Text("Une minute, une dizaine de grands classiques du cinéma et des séries que presque tout le monde a vus : prisme saura quoi te proposer dès ce soir. Tu pourras le refaire dans Réglages › Profils.")
                 .font(P.font(28)).foregroundStyle(.white.opacity(0.75)).multilineTextAlignment(.center).frame(width: 1140).padding(.top, 22)
             HStack(spacing: 24) {
                 introCard("rectangle.on.rectangle", "\(TasteTestView.cardsTotal) titres", "J'aime, pas pour moi, pas vu : la suite s'adapte à tes réponses")
