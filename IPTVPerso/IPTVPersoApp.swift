@@ -14,8 +14,9 @@ struct IPTVPersoApp: App {
     var body: some Scene {
         WindowGroup {
             Group {
-                if store.providers.isEmpty {
-                    AddProviderView(firstLaunch: true)
+                if store.providers.isEmpty || store.onboarding {
+                    AddProviderFlow(firstLaunch: true, close: { store.onboarding = false }, watchTV: { store.onboarding = false; Nav.shared.tab = .live })
+                        .onAppear { store.onboarding = true }
                 } else {
                     MainTabView()
                 }

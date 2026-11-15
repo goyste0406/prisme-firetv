@@ -23,6 +23,8 @@ targets:
         LSApplicationQueriesSchemes: [nflx, disneyplus, aiv, videos, mycanal, hbomax, paramountplus, youtube, arte, francetv, m6plus, tf1plus, rakutentv]
         NSAppTransportSecurity:
           NSAllowsArbitraryLoads: true
+        # ajout d'un fournisseur « Avec mon iPhone » : la TV ouvre une petite page sur le Wi-Fi de la maison
+        NSLocalNetworkUsageDescription: "prisme reçoit sur ton Wi-Fi le lien ou les identifiants envoyés depuis ton iPhone, quand tu ajoutes un fournisseur."
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.steven.iptvperso

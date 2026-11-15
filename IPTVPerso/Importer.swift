@@ -45,6 +45,8 @@ struct CatalogImporter {
             for (pos, c) in arr.enumerated() {
                 let cid = str(c["category_id"]), name = str(c["category_name"])
                 if Self.isAdult(name) { blocked.insert(type + ":" + cid); continue }
+                // catégorie masquée dans « Gérer » : gardée dans la liste des catégories, ses contenus ne sont pas chargés
+                if (provider.hidden ?? []).contains(type + ":" + cid) { blocked.insert(type + ":" + cid) }
                 rows.append([pid, type, cid, name, pos])
             }
             await db.read { db in
@@ -59,7 +61,7 @@ struct CatalogImporter {
 
         // ---- chaînes
         progress(0.12, "Chaînes de TV…")
-        let live = (try await json("get_live_streams")) as? [[String: Any]] ?? []
+        let live = skipped("live") ? [] : ((try await json("get_live_streams")) as? [[String: Any]] ?? [])
         var lrows: [[Any?]] = []; lrows.reserveCapacity(live.count)
         var epgIDs = Set<String>()
         for s in live {
@@ -70,11 +72,11 @@ struct CatalogImporter {
             let arch = str(s["tv_archive"]) == "1" ? (Int(str(s["tv_archive_duration"])) ?? 1) : 0
             lrows.append([pid, str(s["stream_id"]), name, Int(str(s["num"])) ?? 0, str(s["stream_icon"]), cid, epg, arch])
         }
-        res.counts["live"] = await keepOrReplace("live", lrows, &res)
+        res.counts["live"] = await keepOrReplace("live", lrows, received: live.count, &res)
 
         // ---- films
         progress(0.30, "Films…")
-        let vod = (try await json("get_vod_streams")) as? [[String: Any]] ?? []
+        let vod = skipped("vod") ? [] : ((try await json("get_vod_streams")) as? [[String: Any]] ?? [])
         var vrows: [[Any?]] = []; vrows.reserveCapacity(vod.count)
         for s in vod {
             let cid = str(s["category_id"]), name = str(s["name"])
@@ -84,11 +86,11 @@ struct CatalogImporter {
                           str(s["container_extension"]).isEmpty ? "mp4" : str(s["container_extension"]),
                           Double(str(s["rating"])) ?? 0, Int(str(s["added"])) ?? 0, tmdb])
         }
-        res.counts["vod"] = await keepOrReplace("vod", vrows, &res)
+        res.counts["vod"] = await keepOrReplace("vod", vrows, received: vod.count, &res)
 
         // ---- séries
         progress(0.50, "Séries…")
-        let ser = (try await json("get_series")) as? [[String: Any]] ?? []
+        let ser = skipped("series") ? [] : ((try await json("get_series")) as? [[String: Any]] ?? [])
         var srows: [[Any?]] = []; srows.reserveCapacity(ser.count)
         for s in ser {
             let cid = str(s["category_id"]), name = str(s["name"])
@@ -97,7 +99,7 @@ struct CatalogImporter {
             srows.append([pid, str(s["series_id"]), name, Int(rel.prefix(4)) ?? Self.year(in: name), str(s["cover"]), cid, str(s["plot"]),
                           Double(str(s["rating"])) ?? 0, Int(str(s["last_modified"])) ?? 0, str(s["tmdb"])])
         }
-        res.counts["series"] = await keepOrReplace("series", srows, &res)
+        res.counts["series"] = await keepOrReplace("series", srows, received: ser.count, &res)
 
         // ---- guide des programmes (XMLTV), lu au fil de l'eau : jamais tout en mémoire
         progress(0.62, "Guide des programmes…")
@@ -122,12 +124,19 @@ struct CatalogImporter {
 
     /// Remplace d'un seul coup (une transaction) le contenu d'une table pour ce fournisseur.
     /// Une liste reçue vide alors qu'il y avait du contenu n'efface rien : c'est presque toujours une panne passagère du serveur.
-    private func keepOrReplace(_ table: String, _ rows: [[Any?]], _ res: inout Result) async -> Int {
+    private func skipped(_ type: String) -> Bool { (provider.skip ?? []).contains(type) }
+
+    private func keepOrReplace(_ table: String, _ rows: [[Any?]], received: Int, _ res: inout Result) async -> Int {
         let pid = provider.id
+        // type non importé (choisi à l'ajout) : son contenu éventuel est retiré
+        if skipped(table) {
+            await Database.shared.read { db in db.replaceProvider(table: table, pid: pid, sql: "", rows: []) }
+            return 0
+        }
         let cols = rows.first?.count ?? 0
         let kept = await Database.shared.read { db -> Int in
             let before = db.intValue("SELECT COUNT(*) FROM \(table) WHERE pid=?", [pid]) ?? 0
-            if rows.isEmpty && before > 0 { return before }
+            if received == 0 && before > 0 { return before }
             db.replaceProvider(table: table, pid: pid, sql: "INSERT OR REPLACE INTO \(table) VALUES(" + Array(repeating: "?", count: cols).joined(separator: ",") + ")", rows: rows)
             return -1
         }

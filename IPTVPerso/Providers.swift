@@ -29,6 +29,10 @@ struct Provider: Codable, Identifiable, Equatable {
     var ping: Int?
     var maxConn: Int?
     var subStatus: String?
+    /// catégories masquées (« live:12 », « vod:40 ») : leurs contenus ne sont pas chargés
+    var hidden: [String]?
+    /// types non importés (« live », « vod », « series »), choisis à l'ajout
+    var skip: [String]?
 
     var account: XtreamAccount { XtreamAccount(server: server, username: username, password: password) }
 
@@ -64,6 +68,8 @@ final class ProviderStore: ObservableObject {
     var lastError: String? { providers.first { $0.on && $0.lastError != nil }.map { "\($0.name) : \($0.lastError!)" } }
     /// Change à chaque import terminé : les écrans se rechargent.
     @Published var catalogVersion = 0
+    /// premier lancement : le parcours d'ajout reste affiché jusqu'au bout, même une fois le fournisseur créé
+    @Published var onboarding = false
     /// résultat de la migration du mot de passe vers le trousseau (simulateur de test : écrit dans donnees.txt)
     private(set) var keychainNote = ""
 
@@ -139,6 +145,30 @@ final class ProviderStore: ObservableObject {
         if Keychain.set(pass, for: p.id), Keychain.get(p.id) == pass { q.pwKeychain = true }
         providers.append(q)
         refresh(q.id)
+    }
+
+    /// Ajoute un fournisseur déjà vérifié (parcours en 4 étapes) et lance son import. Renvoie son identifiant.
+    @discardableResult
+    func addVerified(name: String, server: String, user: String, pass: String, color: Int, hidden: [String], skip: [String], ping: Int?, maxConn: Int?, expires: Date?) -> String {
+        var p = Provider(id: "p" + String(Int(Date().timeIntervalSince1970)), name: name, server: server, username: user, password: pass,
+                         expires: expires, color: color, ping: ping, maxConn: maxConn, hidden: hidden.isEmpty ? nil : hidden, skip: skip.isEmpty ? nil : skip)
+        if Keychain.set(pass, for: p.id), Keychain.get(p.id) == pass { p.pwKeychain = true }
+        providers.append(p)
+        refresh(p.id)
+        return p.id
+    }
+
+    /// Temps de réponse de chaque fournisseur actif (sans ouvrir aucun flux)
+    func testServers() async {
+        for p in active {
+            let t0 = Date()
+            do {
+                try await XtreamAPI(account: p.account).authenticate()
+                if let i = providers.firstIndex(where: { $0.id == p.id }) { providers[i].ping = Int(Date().timeIntervalSince(t0) * 1000) }
+            } catch {
+                if let i = providers.firstIndex(where: { $0.id == p.id }) { providers[i].ping = nil; providers[i].lastError = ProviderStore.message(error); providers[i].lastTry = Date() }
+            }
+        }
     }
 
     /// Change le nom, la couleur ou les identifiants d'un fournisseur (sans toucher à son catalogue).

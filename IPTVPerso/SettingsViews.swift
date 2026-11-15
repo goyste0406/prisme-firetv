@@ -53,11 +53,15 @@ struct AddProviderView: View {
     }
 }
 
+private struct ManagedID: Identifiable { let id: String }
+
 // MARK: - Réglages (simulateur : catégories à gauche, panneau en verre à droite)
 
 struct ProvidersSettingsView: View {
     @EnvironmentObject var store: ProviderStore
     @State private var adding = false
+    @State private var managing: String?
+    @State private var showLog = false
     @State private var confirmDelete: Provider?
     @State private var dbSize: Int64 = 0
     @State private var tmdbKey = TmdbKey.value ?? ""
@@ -103,7 +107,9 @@ struct ProvidersSettingsView: View {
             .padding(.horizontal, 90).padding(.bottom, 60)
         }
         .ignoresSafeArea(edges: .top)
-        .sheet(isPresented: $adding) { AddProviderView() }
+        .fullScreenCover(isPresented: $adding) { AddProviderFlow(close: { adding = false }, watchTV: { adding = false; Nav.shared.tab = .live }) }
+        .fullScreenCover(item: Binding(get: { managing.map { ManagedID(id: $0) } }, set: { managing = $0?.id })) { m in ProviderManageView(pid: m.id, close: { managing = nil }) }
+        .overlay { if showLog { IncidentLogView(close: { showLog = false }) } }
         .alert(item: $confirmDelete) { p in
             Alert(title: Text("Supprimer \(p.name) ?"), message: Text("Ses chaînes, films et séries seront retirés de prisme."),
                   primaryButton: .destructive(Text("Supprimer")) { store.remove(p.id) }, secondaryButton: .cancel(Text("Annuler")))
@@ -123,25 +129,7 @@ struct ProvidersSettingsView: View {
     }
 
     @ViewBuilder private var providersPanel: some View {
-        Text("Fournisseurs").font(P.font(44, .bold))
-        ForEach(store.providers) { p in
-            VStack(alignment: .leading, spacing: 14) {
-                HStack(spacing: 14) {
-                    Circle().fill(p.on ? Color(red: 0.19, green: 0.82, blue: 0.35) : P.faint).frame(width: 14, height: 14)
-                    Text(p.name).font(P.font(30, .bold))
-                    Spacer()
-                    if store.importing == p.id { ProgressView(value: store.progress).tint(.white).frame(width: 240) }
-                }
-                Text(summary(p)).font(P.font(21)).foregroundStyle(P.dim)
-                VStack(spacing: 10) {
-                    settingRow(p.on ? "Utilisé dans prisme" : "Pas utilisé", value: p.on ? "Oui" : "Non", icon: p.on ? "checkmark.circle.fill" : "circle") { store.toggle(p.id) }
-                    settingRow("Actualiser le catalogue", value: store.importing != nil ? "en cours…" : "", icon: "arrow.clockwise") { if store.importing == nil { store.refresh(p.id) } }
-                    settingRow("Supprimer ce fournisseur", value: "", icon: "trash") { confirmDelete = p }
-                }
-            }
-            .padding(24).background(Color.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 24))
-        }
-        settingRow("Ajouter un fournisseur", value: "", icon: "plus") { adding = true }
+        ProvidersPanel(manage: { managing = $0 }, add: { adding = true }, log: { showLog = true })
     }
 
     @ViewBuilder private var tmdbPanel: some View {
