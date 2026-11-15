@@ -90,6 +90,7 @@ final class Visite: XCTestCase {
         if ProcessInfo.processInfo.environment["ONLY"] == "perf" { perf(); return }
         if ProcessInfo.processInfo.environment["ONLY"] == "fournisseurs" { fournisseurs(); return }
         if ProcessInfo.processInfo.environment["ONLY"] == "fiches" { fiches(); return }
+        if ProcessInfo.processInfo.environment["ONLY"] == "tvlecteur" { lecteurTV(); return }
         shot("01-films-ouverture")
         downUntil(["Catégories", "Licences et sagas"], prefix: "02-films-bas")
         if focused().contains("Catégories") { press(.right) }

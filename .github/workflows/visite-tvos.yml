@@ -9,7 +9,7 @@ on:
   workflow_dispatch:
     inputs:
       seulement:
-        description: "Partie à visiter seule (lecteur, serie, tv, nav, multi, perf, fournisseurs, fiches), vide = visite complète"
+        description: "Partie à visiter seule (lecteur, serie, tv, nav, multi, perf, fournisseurs, fiches, tvlecteur), vide = visite complète"
         required: false
         default: ""
 
@@ -78,6 +78,8 @@ jobs:
           [ -n "$C" ] && cp "$C/Documents/mesures.txt" jpg/ 2>/dev/null || true
           [ -n "$C" ] && cp "$C/Documents/donnees.txt" jpg/ 2>/dev/null || true
           grep -E "error:|Test Case|passed|failed" test.log > jpg/test-resume.txt 2>/dev/null || true
+          # rapports de plantage de l'appli dans le simulateur (s'il y en a), pour trouver la ligne en cause
+          for f in ~/Library/Logs/DiagnosticReports/IPTVPerso*.ips ~/Library/Logs/DiagnosticReports/prisme*.ips; do [ -f "$f" ] && head -c 60000 "$f" > "jpg/plantage-$(basename "$f" .ips).txt"; done 2>/dev/null || true
           (cd jpg && zip -q ../visite.zip *)
           ls -lh visite.zip
           if gh release view visite-latest >/dev/null 2>&1; then gh release upload visite-latest visite.zip --clobber
