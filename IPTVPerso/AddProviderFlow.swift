@@ -333,71 +333,96 @@ struct AddProviderFlow: View {
         HStack(alignment: .top, spacing: 56) {
             VStack(alignment: .leading, spacing: 8) {
                 Text("CE QUE PRISME VA IMPORTER").font(P.font(22, .bold)).tracking(3).foregroundStyle(.white.opacity(0.66)).padding(.leading, 30).padding(.bottom, 8)
-                ForEach(AddProviderFlow.types, id: \.self) { t in
-                    let none = tot(t) == 0
-                    Button { if !none { keep[t] = !(keep[t] ?? true) } } label: {
-                        HStack(spacing: 26) {
-                            VStack(alignment: .leading, spacing: 6) {
-                                Text(AddProviderFlow.TN[t]!.0).font(P.font(32, .bold))
-                                Text(none ? "rien reçu de ce fournisseur" : "\(Fmt.n(kept(t))) \(AddProviderFlow.TN[t]!.1) en français sur \(Fmt.n(tot(t))) · \(keptN(t)) catégorie" + (keptN(t) > 1 ? "s" : ""))
-                                    .font(P.font(24)).opacity(0.66).lineLimit(1)
-                            }
-                            Spacer()
-                            PVSwitch(on: (keep[t] ?? true) && !none)
-                        }
-                    }
-                    .buttonStyle(PVItemStyle()).focused($focus, equals: "c-" + t)
-                }
-                Button { sub = true; catTab = "live"; focusSoon("ct-live") } label: {
-                    HStack(spacing: 26) {
-                        VStack(alignment: .leading, spacing: 6) {
-                            Text("Catégories françaises").font(P.font(32, .bold))
-                            let chk = cats.filter { $0.lang.g == .chk }.count
-                            Text((chk > 0 ? "\(chk) catégorie" + (chk > 1 ? "s" : "") + " sans langue vérifiée" + (chk > 1 ? "s" : "") + " sur leurs titres · " : "") + "voir et ajuster").font(P.font(24)).opacity(0.66).lineLimit(1)
-                        }
-                        Spacer()
-                        Text("\(cats.filter(\.on).count) gardées ›").font(P.font(28)).opacity(0.78)
-                    }
-                }
-                .buttonStyle(PVItemStyle())
-                HStack(spacing: 26) {
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text("Contenus pour adultes").font(P.font(32, .bold))
-                        Text("jamais chargés").font(P.font(24)).opacity(0.66)
-                    }
-                    Spacer()
-                    Text("toujours masqués 🔒").font(P.font(28)).opacity(0.78)
-                }
-                .padding(.horizontal, 30).frame(minHeight: 101)
-                let others = store.active.filter { $0.id != newID }.map(\.name)
-                if !others.isEmpty {
-                    let dups = AddProviderFlow.types.filter { keep[$0] ?? true }.map { (dupN($0), $0) }.filter { $0.0 > 0 }
-                    Group {
-                        if dups.isEmpty { Text("Aucun doublon avec \(others.joined(separator: " et ")) : tout ce contenu est nouveau.") }
-                        else {
-                            Text(dups.map { "\(Fmt.n($0.0)) \($0.0 > 1 ? AddProviderFlow.TN[$0.1]!.1 : AddProviderFlow.TN[$0.1]!.2)" }.joined(separator: ", ") + " existe\(dups.reduce(0) { $0 + $1.0 } > 1 ? "nt" : "") déjà chez \(others.joined(separator: " et ")).").bold()
-                            + Text(" prisme les réunit : une seule fiche avec les deux sources, la meilleure d'abord, l'autre si la première coupe.")
-                        }
-                    }
-                    .font(P.font(28)).lineSpacing(6).padding(.horizontal, 34).padding(.vertical, 26).pvGlass(34).padding(.top, 11)
-                }
+                ForEach(AddProviderFlow.types, id: \.self) { t in typeRow(t) }
+                langRow
+                adultRow
+                dupNote
             }
             .frame(maxWidth: .infinity).focusSection()
-            VStack(alignment: .leading, spacing: 26) {
-                Text("NOM ET COULEUR").font(P.font(22, .bold)).tracking(3).foregroundStyle(.white.opacity(0.66))
-                TextField(LinkInfo.serverName(url).ifEmpty("Mon fournisseur"), text: $name).font(P.font(38))
-                HStack(spacing: 22) {
-                    ForEach(0..<Provider.colors.count, id: \.self) { i in
-                        Button { color = i } label: { Circle().fill(Provider.colors[i]).frame(width: 56, height: 56) }
-                            .buttonStyle(ColorDotStyle(selected: i == color))
-                    }
+            nameColor.frame(width: 675).focusSection()
+        }
+    }
+
+    private func typeRow(_ t: String) -> some View {
+        let none = tot(t) == 0
+        let subtitle: String = none ? "rien reçu de ce fournisseur" : "\(Fmt.n(kept(t))) \(AddProviderFlow.TN[t]!.1) en français sur \(Fmt.n(tot(t))) · \(keptN(t)) catégorie" + (keptN(t) > 1 ? "s" : "")
+        return Button { if !none { keep[t] = !(keep[t] ?? true) } } label: {
+            HStack(spacing: 26) {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(AddProviderFlow.TN[t]!.0).font(P.font(32, .bold))
+                    Text(subtitle).font(P.font(24)).opacity(0.66).lineLimit(1)
                 }
-                .padding(.vertical, 8).focusSection()
-                Text("La couleur repère ce fournisseur dans les réglages et les sources.").font(P.font(26)).foregroundStyle(.white.opacity(0.72))
-                Button("Importer") { startImport() }.buttonStyle(PVButtonStyle(primary: true)).padding(.top, 19)
-                    .disabled(!AddProviderFlow.types.contains { (keep[$0] ?? true) && keptN($0) > 0 })
+                Spacer()
+                PVSwitch(on: (keep[t] ?? true) && !none)
             }
-            .frame(width: 675).focusSection()
+        }
+        .buttonStyle(PVItemStyle()).focused($focus, equals: "c-" + t)
+    }
+
+    private var langRow: some View {
+        let chk = cats.filter { $0.lang.g == .chk }.count
+        let subtitle: String = (chk > 0 ? "\(chk) catégorie" + (chk > 1 ? "s" : "") + " sans langue vérifiée" + (chk > 1 ? "s" : "") + " sur leurs titres · " : "") + "voir et ajuster"
+        let n = cats.filter(\.on).count
+        return Button { sub = true; catTab = "live"; focusSoon("ct-live") } label: {
+            HStack(spacing: 26) {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Catégories françaises").font(P.font(32, .bold))
+                    Text(subtitle).font(P.font(24)).opacity(0.66).lineLimit(1)
+                }
+                Spacer()
+                Text("\(n) gardées ›").font(P.font(28)).opacity(0.78)
+            }
+        }
+        .buttonStyle(PVItemStyle())
+    }
+
+    private var adultRow: some View {
+        HStack(spacing: 26) {
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Contenus pour adultes").font(P.font(32, .bold))
+                Text("jamais chargés").font(P.font(24)).opacity(0.66)
+            }
+            Spacer()
+            Text("toujours masqués 🔒").font(P.font(28)).opacity(0.78)
+        }
+        .padding(.horizontal, 30).frame(minHeight: 101)
+    }
+
+    @ViewBuilder private var dupNote: some View {
+        let others: [String] = store.active.filter { $0.id != newID }.map(\.name)
+        if !others.isEmpty {
+            dupText(others).font(P.font(28)).lineSpacing(6).padding(.horizontal, 34).padding(.vertical, 26).pvGlass(34).padding(.top, 11)
+        }
+    }
+
+    private func dupText(_ others: [String]) -> Text {
+        let who = others.joined(separator: " et ")
+        var parts: [String] = [], total = 0
+        for t in AddProviderFlow.types where keep[t] ?? true {
+            let n = dupN(t)
+            guard n > 0 else { continue }
+            total += n
+            parts.append("\(Fmt.n(n)) " + (n > 1 ? AddProviderFlow.TN[t]!.1 : AddProviderFlow.TN[t]!.2))
+        }
+        if parts.isEmpty { return Text("Aucun doublon avec \(who) : tout ce contenu est nouveau.") }
+        let head = Text(parts.joined(separator: ", ") + " existe" + (total > 1 ? "nt" : "") + " déjà chez \(who).").bold()
+        return head + Text(" prisme les réunit : une seule fiche avec les deux sources, la meilleure d'abord, l'autre si la première coupe.")
+    }
+
+    private var nameColor: some View {
+        let can = AddProviderFlow.types.contains { (keep[$0] ?? true) && keptN($0) > 0 }
+        return VStack(alignment: .leading, spacing: 26) {
+            Text("NOM ET COULEUR").font(P.font(22, .bold)).tracking(3).foregroundStyle(.white.opacity(0.66))
+            TextField(LinkInfo.serverName(url).ifEmpty("Mon fournisseur"), text: $name).font(P.font(38))
+            HStack(spacing: 22) {
+                ForEach(0..<Provider.colors.count, id: \.self) { i in
+                    Button { color = i } label: { Circle().fill(Provider.colors[i]).frame(width: 56, height: 56) }
+                        .buttonStyle(ColorDotStyle(selected: i == color))
+                }
+            }
+            .padding(.vertical, 8).focusSection()
+            Text("La couleur repère ce fournisseur dans les réglages et les sources.").font(P.font(26)).foregroundStyle(.white.opacity(0.72))
+            Button("Importer") { startImport() }.buttonStyle(PVButtonStyle(primary: true)).padding(.top, 19).disabled(!can)
         }
     }
 
