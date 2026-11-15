@@ -214,6 +214,8 @@ final class Nav: ObservableObject {
     /// demande en cours : la barre la satisfait dès qu'elle est à l'écran (sur Films, Séries, Ma liste et Recherche
     /// la barre défile avec la page ; hors de l'écran, tvOS refuse d'y poser la sélection, il faut d'abord remonter)
     var wantBar = false
+    /// numéro de la dernière tentative : seule la plus récente peut clore la demande (la barre peut réapparaître tard)
+    var barTry = 0
     func goToBar() { wantBar = true; backToBar += 1 }
 }
 
@@ -279,8 +281,10 @@ struct TopBar: View {
     /// Pose la sélection sur l'onglet de la page ; nouvel essai après le défilement vers le haut (barre alors à l'écran).
     private func claimBar() {
         focus = nav.tab
-        for d in [0.35, 0.7] { DispatchQueue.main.asyncAfter(deadline: .now() + d) { if nav.wantBar { focus = nav.tab } } }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) { nav.wantBar = false }
+        nav.barTry += 1
+        let t = nav.barTry
+        for d in [0.2, 0.45, 0.8, 1.2] { DispatchQueue.main.asyncAfter(deadline: .now() + d) { if nav.wantBar { focus = nav.tab } } }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.6) { if nav.barTry == t { nav.wantBar = false } }
     }
 
     private func tab(_ t: AppTab, _ label: String) -> some View {

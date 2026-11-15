@@ -324,7 +324,12 @@ final class Visite: XCTestCase {
             press(.right, 25); shot("N\(i)g-\(n)-bout-de-rangee")
             back(); shot("N\(i)h-\(n)-retour-depuis-rangee")
             press(.down, 30); shot("N\(i)i-\(n)-tout-en-bas")
-            back(); shot("N\(i)j-\(n)-retour-depuis-le-bas")
+            if i < 2 {
+                // « Parcourir » › Licences et sagas (Films) / Chaînes (Séries) : logos en couleurs d'origine
+                press(.up); press(.right); press(.select); Thread.sleep(forTimeInterval: 1.5); press(.down); Thread.sleep(forTimeInterval: 2)
+                shot("N\(i)k-\(n)-logos"); press(.right); shot("N\(i)l-\(n)-logo-selectionne")
+            }
+            back(); Thread.sleep(forTimeInterval: 2); shot("N\(i)j-\(n)-retour-depuis-le-bas")
         }
         // fiches : position à l'ouverture (profil visible ?) et Retour
         relaunch(["-prisme.debug.open", "film:demo:1006"])

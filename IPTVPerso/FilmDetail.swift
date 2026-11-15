@@ -85,12 +85,6 @@ struct FilmDetailView: View {
                     .padding(.bottom, 120)
                 }
                 .scrollClipDisabled()
-                // À l'ouverture, tvOS fait défiler la page pour éloigner du bord bas le bouton Lecture qui reçoit la sélection :
-                // la page descendait d'environ 60 px et la pastille du profil sortait de l'écran. On ramène la page en haut
-                // une fois la sélection posée (Lecture reste entièrement visible, rien ne bouge ensuite).
-                .onAppear {
-                    for d in [0.4, 0.8] { DispatchQueue.main.asyncAfter(deadline: .now() + d) { if playFocused { proxy.scrollTo("top", anchor: .top) } } }
-                }
             }
             .disabled(pickVersion || splitOpen)
             .defaultFocus($playFocused, true, priority: .userInitiated)
@@ -170,7 +164,9 @@ struct FilmDetailView: View {
         .animation(.easeInOut(duration: 0.45), value: peek)
         .padding(.leading, 120)
         .padding(.bottom, 18)
-        .frame(width: 1920, height: 1002, alignment: .bottomLeading)
+        // 942 et non 1 002 : à l'ouverture, Lecture reçoit la sélection ; à 60 px plus bas, il entrait dans la marge que tvOS
+        // garde sous l'élément sélectionné, et tvOS faisait descendre toute la page (la pastille du profil sortait de l'écran).
+        .frame(width: 1920, height: 942, alignment: .bottomLeading)
         // pastille du profil en haut à gauche (simulateur « who ») : OK pour changer de profil
         .overlay(alignment: .topLeading) { ProfileChip().padding(.leading, 120).padding(.top, 45).opacity(peek ? 0.14 : 1).focusSection() }
         .padding(.bottom, -60)
