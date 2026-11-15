@@ -228,7 +228,14 @@ struct BarScrollView<Content: View>: View {
     var body: some View {
         ScrollViewReader { proxy in
             ScrollView { content() }
-                .onChange(of: nav.backToBar) { _, _ in withAnimation(.easeOut(duration: 0.3)) { proxy.scrollTo(BarScrollView<EmptyView>.top, anchor: .top) } }
+                .onChange(of: nav.backToBar) { _, _ in
+                    withAnimation(.easeOut(duration: 0.3)) { proxy.scrollTo(BarScrollView<EmptyView>.top, anchor: .top) }
+                    // rangées « paresseuses » : depuis le bas d'une longue page, la position du haut n'est qu'estimée et le
+                    // premier défilement s'arrête en chemin ; on recommence tant que la barre n'a pas repris la sélection
+                    for d in [0.35, 0.7, 1.05] {
+                        DispatchQueue.main.asyncAfter(deadline: .now() + d) { if nav.wantBar { proxy.scrollTo(BarScrollView<EmptyView>.top, anchor: .top) } }
+                    }
+                }
         }
     }
 }
@@ -283,8 +290,8 @@ struct TopBar: View {
         focus = nav.tab
         nav.barTry += 1
         let t = nav.barTry
-        for d in [0.2, 0.45, 0.8, 1.2] { DispatchQueue.main.asyncAfter(deadline: .now() + d) { if nav.wantBar { focus = nav.tab } } }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.6) { if nav.barTry == t { nav.wantBar = false } }
+        for d in [0.2, 0.45, 0.8, 1.2, 1.5] { DispatchQueue.main.asyncAfter(deadline: .now() + d) { if nav.wantBar { focus = nav.tab } } }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.9) { if nav.barTry == t { nav.wantBar = false } }
     }
 
     private func tab(_ t: AppTab, _ label: String) -> some View {

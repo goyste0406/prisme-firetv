@@ -18,6 +18,7 @@ struct FilmDetailView: View {
     @State private var sagaAvail: [Int: MediaItem] = [:]
     @State private var universe: [MediaItem] = []
     @State private var similar: [SimilarItem] = []
+    @State private var simSkip: Set<String> = []
     @State private var airings: [LiveStore.Airing] = []
     @State private var openOther: MediaItem?
     @State private var launchMsg: String?
@@ -76,7 +77,9 @@ struct FilmDetailView: View {
                             MediaRow(title: "Dans le même univers", sub: "\(universe.count) film\(universe.count > 1 ? "s" : "") chez tes fournisseurs · même franchise selon TMDB", items: universe, open: { openOther = $0 })
                         }
                         castSection
-                        if !similar.isEmpty { similarRow }
+                        // « Si tu hésites encore » (simulateur) : modes, pourcentage selon le profil actif, raison principale
+                        CrossRow(kind: .film, base: fiche, title: title, cands: similar.map(\.item), skip: simSkip, open: { openOther = $0 })
+                            .padding(.horizontal, 120)
                         WhereSection(kind: .film, fiche: fiche, airings: airings, versions: versions,
                                      onTV: { live = LiveLaunch(ch: $0.ch) },
                                      onApp: { name in if let f = fiche { Task { launchMsg = await AppLauncher.open(providerName: name, tmdb: f.tmdb, tv: false) } } })
@@ -436,24 +439,6 @@ struct FilmDetailView: View {
         }
     }
 
-    private var similarRow: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            SectionTitle(title: "Si tu hésites encore").padding(.horizontal, 120)
-            ScrollView(.horizontal) {
-                LazyHStack(alignment: .top, spacing: 34) {
-                    ForEach(similar) { pair in
-                        VStack(alignment: .leading, spacing: 12) {
-                            PosterButton(item: pair.item) { openOther = pair.item }
-                            if !pair.common.isEmpty {
-                                Text("Thèmes communs : " + pair.common.prefix(2).joined(separator: ", ").lowercased()).font(P.font(17)).foregroundStyle(P.dim).lineLimit(2).frame(width: 210, alignment: .leading)
-                            }
-                        }
-                    }
-                }.padding(.horizontal, 120).padding(.vertical, 34)
-            }.scrollClipDisabled()
-        }.focusSection()
-    }
-
     // MARK: données
 
     private func load() async {
@@ -485,7 +470,8 @@ struct FilmDetailView: View {
         var it = item; it.fiche = fiche
         universe = await MediaStore.universe(of: it, pids: pids, exclude: exclude)
         let skip = Set(universe.map(\.workKey)).union(sagaAvail.values.map(\.workKey)).union(exclude.map { "t\($0)" })
-        similar = await MediaStore.similar(of: it, genres: genres, pids: pids, limit: 16).filter { !skip.contains($0.0.workKey) }.map { SimilarItem(item: $0.0, common: $0.1) }
+        simSkip = skip
+        similar = await MediaStore.similar(of: it, genres: genres, pids: pids, limit: 60).filter { !skip.contains($0.0.workKey) }.map { SimilarItem(item: $0.0, common: $0.1) }
         why = await WhyBuilder.reasons(fiche: fiche, rating: shownRating, item: item, pids: pids)
         await loadFits()
         loaded = true

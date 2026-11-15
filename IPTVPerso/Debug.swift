@@ -98,6 +98,25 @@ extension Debug {
         if arg("prisme.debug.taste") == "1" { ProfileUI.shared.taste = "p1" }
         // « Vous deux » dès l'ouverture (Steven + Léa), pour photographier les écrans en mode à deux
         if arg("prisme.debug.duo") == "1", let b = ProfileStore.shared.profiles.first(where: { $0.id != "p1" }) { ProfileStore.shared.useDuo("p1", b.id) }
+        // goûts opposés (Steven : science-fiction et action ; Léa : comédie et animation), pour vérifier que les
+        // recommandations des fiches dépendent bien du profil actif
+        if arg("prisme.debug.tastes") == "1" {
+            func info(_ g: [String], _ t: String) -> TasteAnswers.JudgedInfo { .init(genres: g, kw: [], dir: "", cast: [], title: t) }
+            var a = TasteAnswers()
+            a.judged = ["t9001": 1, "t9002": 1, "t9003": -1]; a.count = 3
+            a.judgedInfo = ["t9001": info(["Science-Fiction", "Aventure"], "Interstellar"), "t9002": info(["Action", "Science-Fiction"], "Matrix"),
+                            "t9003": info(["Comédie", "Romance"], "Love Actually")]
+            TasteStore.shared.save(a, for: "p1")
+            if let b = ProfileStore.shared.profiles.first(where: { $0.id != "p1" }) {
+                var c = TasteAnswers()
+                c.judged = ["t9004": 1, "t9005": 1, "t9006": -1]; c.count = 3
+                c.judgedInfo = ["t9004": info(["Comédie", "Familial"], "Intouchables"), "t9005": info(["Animation", "Familial"], "Le Roi lion"),
+                                "t9006": info(["Science-Fiction", "Action"], "Matrix")]
+                TasteStore.shared.save(c, for: b.id)
+            }
+        }
+        // profil actif = le deuxième profil (Léa) dès l'ouverture
+        if arg("prisme.debug.second") == "1", let b = ProfileStore.shared.profiles.first(where: { $0.id != "p1" }) { ProfileStore.shared.use(b.id) }
         // « 6 » : le maximum de profils, pour vérifier les listes et le défilement
         if profiles == "6", ProfileStore.shared.profiles.count == 2 {
             for (i, n) in ["Tom", "Inès", "Noah", "Mamie"].enumerated() {

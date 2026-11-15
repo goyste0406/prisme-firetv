@@ -537,18 +537,12 @@ struct SeriesDetailView: View {
     }
 
     @ViewBuilder private var simTab: some View {
-        SectionTitle(title: "Séries proches")
+        // même rangée que la fiche film (modes, pourcentage selon le profil, raison), en grille dans le panneau
         if similar.isEmpty {
+            SectionTitle(title: "Séries proches")
             Text("Pas encore de séries proches.").font(P.font(22)).foregroundStyle(P.dim)
         } else {
-            LazyVGrid(columns: Array(repeating: GridItem(.fixed(190), spacing: 28), count: 4), alignment: .leading, spacing: 34) {
-                ForEach(similar) { s in
-                    VStack(alignment: .leading, spacing: 8) {
-                        PosterButton(item: s.item, width: 190) { openOther = s.item }
-                        if !s.common.isEmpty { Text(s.common.prefix(2).joined(separator: ", ")).font(P.font(16)).foregroundStyle(P.dim).lineLimit(1).frame(width: 190, alignment: .leading) }
-                    }
-                }
-            }.padding(.vertical, 10)
+            CrossRow(kind: .series, base: fiche, title: title, cands: similar.map(\.item), skip: [], posterWidth: 190, columns: 4, open: { openOther = $0 })
         }
     }
 
@@ -612,7 +606,7 @@ struct SeriesDetailView: View {
         let y = (fiche?.year ?? 0) > 0 ? fiche!.year : (item.clean.year > 0 ? item.clean.year : info.year)
         trailer = await TrailerStore.find(title: title, year: y, minutes: 0, tmdb: fiche?.tmdb ?? info.tmdb, tv: true)
         var it = item; it.fiche = fiche
-        similar = await MediaStore.similar(of: it, genres: genres, pids: pids, limit: 16).map { SimilarItem(item: $0.0, common: $0.1) }
+        similar = await MediaStore.similar(of: it, genres: genres, pids: pids, limit: 60).map { SimilarItem(item: $0.0, common: $0.1) }
     }
 
     private var trailerPlay: (() -> Void)? {

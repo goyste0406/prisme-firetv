@@ -407,6 +407,18 @@ def tmdb(path, q):
             hit = [i for i, f in enumerate(FILMS) if f[0].lower() == qq] or ([ALIASES[qq]] if qq in ALIASES else [])
             return {"results": [{"id": fid(i), "title": FILMS[i][0], "original_title": FILMS[i][0], "release_date": f"{FILMS[i][1]}-03-01", "popularity": 50} for i in hit]}
         return {"results": [{"id": sid(i), "name": f[0], "original_name": f[0], "first_air_date": f"{f[1]}-01-01", "popularity": 50} for i, f in enumerate(SERIES) if f[0].lower() == qq]}
+    # recommandations TMDB (« Les fans de … l'adorent ») : titres qui partagent le premier genre, les mieux notés d'abord
+    m = re.match(r"^/(movie|tv)/(\d+)/recommendations$", path)
+    if m:
+        if m.group(1) == "movie":
+            i = int(m.group(2)) - 1000
+            if not (0 <= i < len(FILMS)): return {"results": []}
+            g0 = FILMS[i][4][0] if FILMS[i][4] else ""
+            hits = [j for j, f in enumerate(FILMS) if j != i and f[4] and g0 in f[4]][:8]
+            return {"results": [{"id": fid(j)} for j in hits]}
+        i = int(m.group(2)) - 2000
+        if not (0 <= i < len(SERIES)): return {"results": []}
+        return {"results": [{"id": sid(j)} for j in range(len(SERIES)) if j != i][:6]}
     m = re.match(r"^/movie/(\d+)(/videos)?$", path)
     if m:
         i = int(m.group(1)) - 1000

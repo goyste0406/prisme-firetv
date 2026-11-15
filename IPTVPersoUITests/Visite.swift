@@ -89,6 +89,7 @@ final class Visite: XCTestCase {
         if ProcessInfo.processInfo.environment["ONLY"] == "multi" { multi(); return }
         if ProcessInfo.processInfo.environment["ONLY"] == "perf" { perf(); return }
         if ProcessInfo.processInfo.environment["ONLY"] == "fournisseurs" { fournisseurs(); return }
+        if ProcessInfo.processInfo.environment["ONLY"] == "fiches" { fiches(); return }
         shot("01-films-ouverture")
         downUntil(["Catégories", "Licences et sagas"], prefix: "02-films-bas")
         if focused().contains("Catégories") { press(.right) }
@@ -400,6 +401,38 @@ final class Visite: XCTestCase {
         Thread.sleep(forTimeInterval: 20); shot("F7-ajout-importation")
         Thread.sleep(forTimeInterval: 30); shot("F7b-ajout-importation-finie")
         press(.select); Thread.sleep(forTimeInterval: 3); shot("F8-apres-ajout")
+    }
+
+    /// Fiches : position à l'ouverture, « Si tu hésites encore » (modes, pourcentages, options, « Comment on choisit »),
+    /// selon le profil (Steven aime la science-fiction, Léa la comédie et l'animation), puis à deux ; séries proches.
+    func fiches() {
+        let t = ["-prisme.debug.profiles", "2", "-prisme.debug.tastes", "1"]
+        relaunch(t + ["-prisme.debug.open", "film:demo:1006"], wait: 18)
+        shot("X0-fiche-ouverture")
+        press(.down, 4); Thread.sleep(forTimeInterval: 1.5); shot("X1-steven-mix")
+        for k in 1...4 { press(.down); Thread.sleep(forTimeInterval: 1); shot(String(format: "X1b-descente-%02d", k)) }
+        relaunch(t + ["-prisme.debug.open", "film:demo:1006"], wait: 18)
+        // jusqu'aux pastilles de mode
+        for _ in 0..<12 { press(.down); Thread.sleep(forTimeInterval: 0.6); if focused().contains("Le meilleur mix") { break } }
+        shot("X2-pastilles")
+        press(.right, 2); press(.select); Thread.sleep(forTimeInterval: 2); shot("X3-steven-selon-tes-gouts")
+        press(.right); press(.select); Thread.sleep(forTimeInterval: 1.5); shot("X4-comment-on-choisit")
+        back(); Thread.sleep(forTimeInterval: 1); press(.down); Thread.sleep(forTimeInterval: 1); shot("X5-affiche")
+        remote.press(.select, forDuration: 1.2); Thread.sleep(forTimeInterval: 1.5); shot("X6-options"); back()
+        // même fiche, profil de Léa, puis « Vous deux »
+        relaunch(t + ["-prisme.debug.second", "1", "-prisme.debug.open", "film:demo:1006"], wait: 18)
+        for _ in 0..<12 { press(.down); Thread.sleep(forTimeInterval: 0.6); if focused().contains("Le meilleur mix") { break } }
+        press(.right, 2); press(.select); Thread.sleep(forTimeInterval: 2); shot("X7-lea-selon-tes-gouts")
+        relaunch(t + ["-prisme.debug.duo", "1", "-prisme.debug.open", "film:demo:1006"], wait: 18)
+        for _ in 0..<12 { press(.down); Thread.sleep(forTimeInterval: 0.6); if focused().contains("Le meilleur mix") { break } }
+        shot("X8-vous-deux")
+        // fiche série : onglet « Séries proches »
+        relaunch(t + ["-prisme.debug.open", "series:demo:2001"], wait: 18)
+        press(.right, 2); Thread.sleep(forTimeInterval: 1); shot("X9-serie-onglets")
+        for _ in 0..<4 { if focused().contains("Séries proches") { break }; press(.right); Thread.sleep(forTimeInterval: 0.6) }
+        press(.select); Thread.sleep(forTimeInterval: 2); press(.down); Thread.sleep(forTimeInterval: 1); shot("X9b-series-proches")
+        press(.down); Thread.sleep(forTimeInterval: 1); shot("X9c-series-proches-affiche")
+        back(); Thread.sleep(forTimeInterval: 1); shot("X9d-serie-retour")
     }
 
     /// Envoi du formulaire de la page iPhone (POST), comme le ferait Safari sur l'iPhone
