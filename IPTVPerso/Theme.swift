@@ -273,29 +273,13 @@ struct TopBar: View {
         .contentShape(Rectangle())
         .focusSection()
         .defaultFocus($focus, nav.tab, priority: .userInitiated)
-        // une seule surveillance de la sélection (deux « onChange » sur le même état de focus faisaient planter tvOS
-        // pendant le recalcul des zones de focus, page TV en direct avec deux fournisseurs)
-        .onChange(of: focus) { _, f in
-            if f != nil { nav.wantBar = false }
-            if nav.barFocused != (f != nil) { nav.barFocused = f != nil }
-        }
-        .onChange(of: nav.backToBar) { _, _ in claimBar() }
+        .onChange(of: focus) { _, f in if nav.barFocused != (f != nil) { nav.barFocused = f != nil } }
+        .onChange(of: nav.backToBar) { _, _ in focus = nav.tab }
         .onAppear {
-            // barre recréée en remontant la page (rangées « paresseuses ») : elle reprend la demande en cours
-            if nav.wantBar { claimBar(); return }
             guard claimFocus else { return }
             let t = nav.tab
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { focus = t }
         }
-    }
-
-    /// Pose la sélection sur l'onglet de la page ; nouvel essai après le défilement vers le haut (barre alors à l'écran).
-    private func claimBar() {
-        focus = nav.tab
-        nav.barTry += 1
-        let t = nav.barTry
-        for d in [0.2, 0.45, 0.8, 1.2, 1.5] { DispatchQueue.main.asyncAfter(deadline: .now() + d) { if nav.wantBar { focus = nav.tab } } }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.9) { if nav.barTry == t { nav.wantBar = false } }
     }
 
     private func tab(_ t: AppTab, _ label: String) -> some View {
