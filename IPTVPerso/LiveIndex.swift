@@ -145,7 +145,7 @@ enum ChannelTools {
     private static let tailSymbols = try! NSRegularExpression(pattern: #"[\s◉●★☆✦✪⚡Ⓢ⓪-⓿•·|▎┃│*]+$"#)
     /// lettres en exposant (« ᴴᴰ », « ᶠᴴᴰ », « ᵁᴴᴰ », « ⁴ᴷ », « ᴿᴬᵂ ») : traduites en texte normal
     private static let superMap: [(String, String)] = [("ᵁᴴᴰ", " UHD"), ("ᶠᴴᴰ", " FHD"), ("ᴴᴰᴿ", " HDR"), ("ᴴᴰ", " HD"), ("⁴ᴷ", " 4K"), ("ᴿᴬᵂ", " RAW"), ("ˢᴰ", " SD"), ("ᴴᴱⱽᶜ", " HEVC")]
-    private static let supers = try! NSRegularExpression(pattern: "[\u1D2C-\u1D6A\u02B0-\u02FF\u2070-\u209F\u2C7D]+")
+    private static let supers = try! NSRegularExpression(pattern: #"[\u1D2C-\u1D6A\u02B0-\u02FF\u2070-\u209F\u2C7D]+"#)
 
     static func plain(_ raw: String) -> String {
         var s = raw
