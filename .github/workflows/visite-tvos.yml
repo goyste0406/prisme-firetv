@@ -9,7 +9,7 @@ on:
   workflow_dispatch:
     inputs:
       seulement:
-        description: "Partie à visiter seule (lecteur, serie, tv), vide = visite complète"
+        description: "Partie à visiter seule (lecteur, serie, tv, nav, multi, perf), vide = visite complète"
         required: false
         default: ""
 
@@ -48,8 +48,10 @@ jobs:
 
       - name: Faux fournisseur local
         run: |
-          nohup python3 ci/fake_server.py 8099 > fake.log 2>&1 &
-          sleep 2
+          nohup python3 ci/fake_server.py 8099 main > fake.log 2>&1 &
+          nohup python3 ci/fake_server.py 8098 second > fake2.log 2>&1 &
+          nohup python3 ci/fake_server.py 8097 big > fake3.log 2>&1 &
+          sleep 3
           curl -s "http://127.0.0.1:8099/player_api.php?username=demo&password=demo" | head -c 200
 
       - name: Visite (télécommande + captures)
@@ -74,6 +76,7 @@ jobs:
           C=$(xcrun simctl get_app_container booted com.steven.iptvperso data 2>/dev/null || true)
           [ -n "$C" ] && cp "$C/Documents/classement-tv.txt" jpg/ 2>/dev/null || true
           [ -n "$C" ] && cp "$C/Documents/mesures.txt" jpg/ 2>/dev/null || true
+          [ -n "$C" ] && cp "$C/Documents/donnees.txt" jpg/ 2>/dev/null || true
           grep -E "error:|Test Case|passed|failed" test.log > jpg/test-resume.txt 2>/dev/null || true
           (cd jpg && zip -q ../visite.zip *)
           ls -lh visite.zip

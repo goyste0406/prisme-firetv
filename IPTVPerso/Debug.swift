@@ -24,6 +24,30 @@ enum Debug {
     /// historique de visionnage factice (pour voir « Reprendre », « Résumé 60 s »)
     static var seed: Bool { arg("prisme.debug.seed") == "1" }
     static var imgBase: String { arg("prisme.debug.imgBase") ?? "https://image.tmdb.org" }
+    /// 2e faux fournisseur (« Soleil ») et fournisseur injoignable (« Étoile ») : tests multi-fournisseurs
+    static var demoServer2: String? { arg("prisme.debug.demoServer2") }
+    static var demoDown: String? { arg("prisme.debug.demoDown") }
+}
+
+/// Simulateur de test seulement : comptage des données personnelles (profils, Ma liste, historique, favoris TV),
+/// écrit dans Documents/donnees.txt pour vérifier qu'une mise à jour n'en perd aucune.
+enum DataCount {
+    @MainActor static func write(_ moment: String) {
+        guard Debug.demoServer != nil else { return }
+        let ud = UserDefaults.standard
+        var lines = ["[\(moment)] fournisseurs=\(ProviderStore.shared.providers.map { "\($0.name)(\($0.on ? "actif" : "inactif"))" }.joined(separator: ","))"]
+        for p in ProfileStore.shared.profiles {
+            let favs = ud.stringArray(forKey: ProfileStore.storageKey("prisme.media.favs", for: p.id))?.count ?? 0
+            let live = ud.stringArray(forKey: ProfileStore.storageKey("prisme.live.favs", for: p.id))?.count ?? 0
+            let rec = ud.stringArray(forKey: ProfileStore.storageKey("prisme.live.recent", for: p.id))?.count ?? 0
+            let hist = WatchStore.entries(for: p.id).count
+            lines.append("  profil \(p.name) : Ma liste=\(favs) historique=\(hist) favoris TV=\(live) chaînes récentes=\(rec)")
+        }
+        guard let d = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first else { return }
+        let f = d.appendingPathComponent("donnees.txt")
+        let prev = (try? String(contentsOf: f, encoding: .utf8)) ?? ""
+        try? (prev + lines.joined(separator: "\n") + "\n").write(to: f, atomically: true, encoding: .utf8)
+    }
 }
 
 extension Debug {
@@ -83,6 +107,14 @@ extension Debug {
 /// (récupéré par la visite automatique). Jamais utilisé dans l'appli installée.
 enum PerfLog {
     nonisolated(unsafe) static var newParts: (Double, Int) = (0, 0)
+
+    /// une ligne de mesure libre (simulateur de test seulement)
+    nonisolated static func note(_ line: String) {
+        guard Debug.demoServer != nil, let d = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first else { return }
+        let f = d.appendingPathComponent("mesures.txt")
+        let prev = (try? String(contentsOf: f, encoding: .utf8)) ?? ""
+        try? (prev + line + "\n").write(to: f, atomically: true, encoding: .utf8)
+    }
 
     @MainActor static func home(kind: MediaKind, first: Double, full: Double, q1: Int, q2: Int, cached: Bool, old: () async -> (Double, Int)) async {
         let parts = newParts

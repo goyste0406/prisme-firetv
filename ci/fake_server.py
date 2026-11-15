@@ -1,12 +1,17 @@
 #!/usr/bin/env python3
 """Faux fournisseur Xtream + fausse TMDB, pour tester la vraie app prisme dans le simulateur Apple TV
 de la compilation en ligne. Données inventées POUR LES TESTS UNIQUEMENT (jamais livrées dans l'app).
-Lancement : python3 ci/fake_server.py 8099
+Lancement : python3 ci/fake_server.py 8099 [main|second|big]
+  main   : le fournisseur de test habituel (« Lune »), avec la fausse TMDB
+  second : un deuxième fournisseur (« Soleil ») : mêmes chaînes sous d'autres noms et d'autres qualités,
+           une partie des mêmes films, des contenus à lui seul (tests multi-fournisseurs)
+  big    : un très gros catalogue (≈ 20 000 chaînes, 40 000 films, 20 000 séries) pour mesurer la fluidité
 """
 import http.server, json, sys, time, random, hashlib, io, os, re, urllib.parse
 from functools import lru_cache
 
 PORT = int(sys.argv[1]) if len(sys.argv) > 1 else 8099
+PROFILE = sys.argv[2] if len(sys.argv) > 2 else "main"
 BASE = f"http://127.0.0.1:{PORT}"
 NOW = int(time.time())
 DAY = 86400
@@ -235,8 +240,8 @@ def vod_info(vid):
                      "releasedate": f"{y}-03-01", "rating": str(v), "country": "France", "age": "12+"},
             "movie_data": {"stream_id": vid, "container_extension": "mkv"}}
 
-def series_info(sidv):
-    i = 1 if sidv == LUPIN_ALT else sidv - 2000
+def series_info(sidv, idx=None):
+    i = idx if idx is not None else (1 if sidv == LUPIN_ALT else sidv - 2000)
     t, y, v, g, ns, ne, rt, ago = SERIES[i]
     eps = {}
     holes = HOLES.get(sidv, set())
@@ -270,6 +275,68 @@ def xmltv():
             t += d * 60
     lines.append("</tv>")
     return "\n".join(lines)
+
+# ---------------------------------------------------------------- 2e fournisseur et gros catalogue
+if PROFILE == "second":
+    # Mêmes chaînes que « Lune » écrites autrement, en 720p / 1080p / 4K, rangées dans d'autres groupes
+    # (TF1 dans un groupe « sport » : elle doit rester Généraliste), + quelques chaînes à lui seul.
+    CHANNELS = [
+        ("FR: TF1 HD", "1", "TF1.fr"), ("FR: TF1 720p", "1", "TF1.fr"), ("FR - TF1 4K HEVC", "6", "TF1.fr"), ("[FR] TF1 ᴴᴰ", "5", ""),
+        ("FR: France 2 1080p", "1", "France2.fr"), ("FR: France 2 720p", "1", "France2.fr"), ("FR: France 3 HD", "1", "France3.fr"),
+        ("FR: M6 FHD", "1", "M6.fr"), ("FR: M6 4K", "6", "M6.fr"), ("FR: Canal+ HD", "1", "CanalPlus.fr"), ("FR: Arte", "1", "Arte.fr"),
+        ("FR: BFM TV HD", "2", "BFMTV.fr"), ("FR: CNews", "2", "CNews.fr"), ("FR: LCI HD", "2", "LCI.fr"),
+        ("FR: beIN Sports 1 HD", "3", "beIN1.fr"), ("FR: beIN Sports 1 4K", "6", "beIN1.fr"), ("FR: RMC Sport 1 HD", "3", "RMCSport1.fr"),
+        ("FR: Eurosport 1 HD", "3", "Eurosport1.fr"), ("FR: Canal+ Sport HD", "3", "CanalSport.fr"),
+        ("FR: Gulli", "4", "Gulli.fr"), ("FR: Disney Channel HD", "4", "Disney.fr"), ("FR: OCS Max HD", "5", "OCSMax.fr"), ("FR: Ciné+ Premier HD", "5", "CinePremier.fr"),
+        ("FR: Planète+ HD", "7", "Planete.fr"), ("FR: Ushuaïa TV", "7", "Ushuaia.fr"), ("FR: MTV Hits", "8", "MTVHits.fr"),
+        ("FR: Toonami", "4", "Toonami.fr"), ("FR: Crime District", "5", "CrimeDistrict.fr"), ("FR: Novelas TV HD", "5", "Novelas.fr"),
+        ("FR: France 3 Alsace", "1", "France3Alsace.fr"), ("FR: TF1 +1", "1", "TF1p1.fr"), ("BE: La Une HD", "9", "LaUne.be"),
+    ]
+    LIVE_CATS = [("1", "FRANCE ᴴᴰ"), ("2", "FRANCE INFOS"), ("3", "FRANCE SPORTS"), ("4", "FRANCE KIDS"), ("5", "FRANCE CINÉ / SÉRIES"),
+                 ("6", "FRANCE SPORTS 4K ÉVÉNEMENTS"), ("7", "FRANCE DOCUMENTAIRES"), ("8", "FRANCE MUSIC"), ("9", "BELGIQUE")]
+    VOD_CATS = [("40", "VOD | FILMS FRANÇAIS"), ("41", "VOD | 4K")]
+    SER_CATS = [("50", "SÉRIES | FR")]
+    # une partie des films de Lune (même TMDB, autre nom, autre qualité) + deux films à lui seul
+    _SECOND_FILMS = [(0, "Dune Part Two (2024) MULTI 4K"), (6, "Inception (2010) VFF 1080p"), (7, "Intouchables (2011) HD"), (16, "Interstellar (2014) 4K HDR"),
+                     (29, "Le Roi Lion (1994) VF"), (20, "Le Parrain (1972) VOSTFR")]
+    def vod_streams():
+        out = []
+        for k, (i, name) in enumerate(_SECOND_FILMS):
+            t, y, rt, v, g, col, ago = FILMS[i]
+            out.append({"num": k + 1, "name": name, "stream_id": 5000 + i, "stream_icon": img_url("p", f"m{fid(i)}", t), "rating": str(v),
+                        "added": str(NOW - (ago + 1) * DAY), "category_id": "41" if "4K" in name else "40", "container_extension": "mkv", "tmdb": str(fid(i))})
+        for k, (t, y) in enumerate([("Le Grand Bain", 2018), ("Les Petits Mouchoirs", 2010)]):
+            out.append({"num": 50 + k, "name": f"{t} ({y})", "stream_id": 5900 + k, "stream_icon": img_url("p", f"x{k}", t), "rating": "6.8",
+                        "added": str(NOW - 30 * DAY), "category_id": "40", "container_extension": "mkv", "tmdb": ""})
+        return out
+    def series_list():
+        return [{"num": 1, "name": "Lupin (2021) MULTI", "series_id": 6001, "cover": img_url("p", "s2001", "Lupin"), "plot": "Lupin : résumé.", "releaseDate": "2021-01-01",
+                 "rating": "7.5", "last_modified": str(NOW - 20 * DAY), "category_id": "50", "tmdb": "2001"},
+                {"num": 2, "name": "Kaamelott (2005)", "series_id": 6002, "cover": img_url("p", "s6002", "Kaamelott"), "plot": "Kaamelott : résumé.", "releaseDate": "2005-01-01",
+                 "rating": "8.4", "last_modified": str(NOW - 50 * DAY), "category_id": "50", "tmdb": ""}]
+    _series_info_main = series_info
+    def series_info(sidv):
+        return _series_info_main(sidv, 1 if sidv == 6001 else 7)
+    def vod_info(vid):
+        i = vid - 5000 if vid < 5900 else 7
+        r = {"info": {"plot": "Résumé fourni par Soleil.", "duration_secs": FILMS[i][2] * 60, "tmdb_id": str(fid(i)) if vid < 5900 else ""}, "movie_data": {"stream_id": vid, "container_extension": "mkv"}}
+        return r
+
+elif PROFILE == "big":
+    # gros catalogue : noms réalistes répétés, qualités et pays variés, catégories nombreuses
+    _B = ["TF1", "France 2", "France 3", "M6", "Canal+", "Arte", "BFM TV", "CNews", "beIN Sports", "RMC Sport", "Eurosport", "Gulli", "OCS", "Ciné+", "Planète+", "MTV", "Disney Channel"]
+    _Q = ["", " HD", " FHD", " 4K", " HEVC", " SD", " (Backup)"]
+    _C = ["FR", "BE", "CH", "CA", "UK", "ES", "IT", "DE", "PT", "AR"]
+    CHANNELS = [(f"{_C[i % len(_C)]}| {_B[i % len(_B)]} {i // len(_B)}{_Q[i % len(_Q)]}", str(1 + i % 60), (f"big{i}.x" if i < 600 else "")) for i in range(20000)]
+    LIVE_CATS = [(str(k), f"{_C[k % len(_C)]}| BOUQUET {k}") for k in range(1, 61)]
+    VOD_CATS = [(str(100 + k), f"FR| FILMS {k}") for k in range(40)]
+    SER_CATS = [(str(200 + k), f"FR| SÉRIES {k}") for k in range(20)]
+    def vod_streams():
+        return [{"num": i, "name": f"FR| Film de test {i} ({1960 + i % 65})", "stream_id": 100000 + i, "stream_icon": "", "rating": str(5 + (i % 50) / 10),
+                 "added": str(NOW - (i % 900) * DAY), "category_id": str(100 + i % 40), "container_extension": "mkv", "tmdb": ""} for i in range(40000)]
+    def series_list():
+        return [{"num": i, "name": f"FR| Série de test {i} ({1990 + i % 35})", "series_id": 300000 + i, "cover": "", "plot": "", "releaseDate": f"{1990 + i % 35}-01-01",
+                 "rating": str(5 + (i % 50) / 10), "last_modified": str(NOW - (i % 900) * DAY), "category_id": str(200 + i % 20), "tmdb": ""} for i in range(20000)]
 
 # ---------------------------------------------------------------- TMDB
 PROV = [("Netflix", "nf"), ("Disney Plus", "dp"), ("Canal+", "cp"), ("Amazon Prime Video", "pv"), ("Apple TV", "atv"), ("Max", "mx")]

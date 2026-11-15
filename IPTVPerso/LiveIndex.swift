@@ -209,6 +209,7 @@ enum LiveIndex {
         if let m = memo, m.0 == mk { return m.1 }
         guard !pids.isEmpty else { return [] }
         let ph = pids.map { _ in "?" }.joined(separator: ",")
+        let t0 = Date()
         let res = await Database.shared.read { db -> [Entry] in
             var cats: [String: String] = [:]
             db.query("SELECT pid,cid,name FROM category WHERE type='live' AND pid IN (\(ph))", pids.map { $0 as Any? }) { r in cats[r.str(0) + ":" + r.str(1)] = r.str(2) }
@@ -224,6 +225,7 @@ enum LiveIndex {
             }
         }
         memo = (mk, res)
+        PerfLog.note("Index des chaînes : \(res.count) chaînes en \(Int(Date().timeIntervalSince(t0) * 1000)) ms")
         if Debug.demoServer != nil { dump(res) }
         return res
     }

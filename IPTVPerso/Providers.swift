@@ -48,6 +48,14 @@ final class ProviderStore: ObservableObject {
         if providers.isEmpty, let demo = Debug.demoServer {
             providers = [Provider(id: "demo", name: "Lune", server: demo, username: "demo", password: "demo")]
         }
+        if Debug.demoServer != nil {
+            if let s2 = Debug.demoServer2, provider("demo2") == nil {
+                providers.append(Provider(id: "demo2", name: "Soleil", server: s2, username: "demo", password: "demo"))
+            }
+            if let down = Debug.demoDown, provider("demo3") == nil {
+                providers.append(Provider(id: "demo3", name: "Étoile", server: down, username: "demo", password: "demo"))
+            }
+        }
     }
 
     private func save() {
@@ -85,6 +93,7 @@ final class ProviderStore: ObservableObject {
         guard let p = provider(id) else { return }
         if importing != nil { if !pending.contains(id) && importing != id { pending.append(id) }; return }
         importing = id; progress = 0; status = "Connexion…"; lastError = nil
+        let t0 = Date()
         Task.detached(priority: .utility) {
             do {
                 let res = try await CatalogImporter(provider: p).run { pct, msg in
@@ -96,6 +105,7 @@ final class ProviderStore: ObservableObject {
                         s.providers[i].lastImport = Date(); s.providers[i].counts = res.counts; s.providers[i].expires = res.expires; if let tz = res.tz { s.providers[i].tz = tz }
                     }
                     s.importing = nil; s.status = ""; s.catalogVersion += 1
+                    PerfLog.note("Import \(p.name) : \(Int(Date().timeIntervalSince(t0) * 1000)) ms · \(res.counts)")
                     s.next()
                 }
             } catch {

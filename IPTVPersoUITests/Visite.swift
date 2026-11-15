@@ -85,6 +85,9 @@ final class Visite: XCTestCase {
         if ProcessInfo.processInfo.environment["ONLY"] == "lecteur" { lecteur(); return }
         if ProcessInfo.processInfo.environment["ONLY"] == "serie" { ficheSerie(); return }
         if ProcessInfo.processInfo.environment["ONLY"] == "tv" { tvUnivers(); return }
+        if ProcessInfo.processInfo.environment["ONLY"] == "nav" { navigation(); return }
+        if ProcessInfo.processInfo.environment["ONLY"] == "multi" { multi(); return }
+        if ProcessInfo.processInfo.environment["ONLY"] == "perf" { perf(); return }
         shot("01-films-ouverture")
         downUntil(["Catégories", "Licences et sagas"], prefix: "02-films-bas")
         if focused().contains("Catégories") { press(.right) }
@@ -308,6 +311,56 @@ final class Visite: XCTestCase {
     }
 
     /// Fiche série : états du simulateur (complété depuis une autre version, manquant, à venir annoncé par TMDB)
+    /// Navigation depuis la barre du haut et Retour, sur les trois accueils (parcours que la visite complète ne faisait pas)
+    func navigation() {
+        for (i, n) in [(0, "films"), (1, "series"), (2, "tv")] {
+            tab(i); shot("N\(i)a-\(n)-ouverture")
+            press(.up, 8); shot("N\(i)b-\(n)-barre")
+            press(.down); shot("N\(i)c-\(n)-bas-depuis-barre")
+            press(.down); shot("N\(i)d-\(n)-bas-2")
+            back(); shot("N\(i)e-\(n)-retour-1")
+            press(.down, 5); shot("N\(i)f-\(n)-bas-5")
+            press(.right, 25); shot("N\(i)g-\(n)-bout-de-rangee")
+            back(); shot("N\(i)h-\(n)-retour-depuis-rangee")
+            press(.down, 30); shot("N\(i)i-\(n)-tout-en-bas")
+            back(); shot("N\(i)j-\(n)-retour-depuis-le-bas")
+        }
+        // fiches : position à l'ouverture (profil visible ?) et Retour
+        relaunch(["-prisme.debug.open", "film:demo:1006"])
+        shot("N3a-fiche-film-ouverture")
+        press(.down, 4); back(); shot("N3b-fiche-film-retour-1")
+        back(); shot("N3c-fiche-film-retour-2")
+        relaunch(["-prisme.debug.open", "series:demo:2001"])
+        shot("N4a-fiche-serie-ouverture")
+        press(.right, 2); press(.down, 3); back(); shot("N4b-fiche-serie-retour-1")
+        back(); shot("N4c-fiche-serie-retour-2")
+    }
+
+    /// Deux fournisseurs (Lune + Soleil) et un fournisseur injoignable (Étoile)
+    func multi() {
+        relaunch(["-prisme.debug.demoServer2", "http://127.0.0.1:8098", "-prisme.debug.demoDown", "http://127.0.0.1:8090"], wait: 60)
+        shot("M1-films-deux-fournisseurs")
+        tab(5); press(.down); shot("M2-reglages-fournisseurs")
+        press(.right); for k in 1...6 { press(.down); shot(String(format: "M2b-fournisseurs-bas-%02d", k)) }
+        tab(2); shot("M3-tv-deux-fournisseurs")
+        relaunch(["-prisme.debug.demoServer2", "http://127.0.0.1:8098", "-prisme.debug.demoDown", "http://127.0.0.1:8090", "-prisme.debug.open", "film:demo:1016"])
+        shot("M4-fiche-interstellar")
+    }
+
+    /// Gros catalogue (≈ 20 000 chaînes, 40 000 films, 20 000 séries) : mesures écrites par l'app dans mesures.txt
+    func perf() {
+        app.terminate()
+        app.launchArguments = ["-prisme.debug.demoServer", "http://127.0.0.1:8097", "-prisme.debug.tmdbKey", "demo",
+                               "-prisme.debug.tmdbBase", "http://127.0.0.1:8099/tmdb/3", "-prisme.debug.imgBase", "http://127.0.0.1:8099/img",
+                               "-prisme.debug.itunesBase", "http://127.0.0.1:8099/itunes", "-prisme.debug.bgTrailer", "off"]
+        app.launch(); Thread.sleep(forTimeInterval: 150)
+        shot("P1-films-gros-catalogue")
+        tab(1); shot("P2-series-gros-catalogue")
+        tab(2); shot("P3-tv-gros-catalogue")
+        press(.down, 3); press(.right, 10); shot("P4-tv-gros-catalogue-bas")
+        tab(0); shot("P5-films-retour")
+    }
+
     /// TV en direct : paquets « univers » et leur éventail, « En ce moment à la télé »
     func tvUnivers() {
         // TV en direct : catégories fixes (Explorer par univers), « En ce moment à la télé », colonne d'icônes

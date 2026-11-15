@@ -22,7 +22,7 @@ struct IPTVPersoApp: App {
             }
             .environmentObject(store)
             .preferredColorScheme(.dark)
-            .onAppear { Debug.seedIfNeeded(); store.refreshIfStale(); FicheService.shared.start() }
+            .onAppear { Debug.seedIfNeeded(); DataCount.write("ouverture"); store.refreshIfStale(); FicheService.shared.start() }
             .onChange(of: store.catalogVersion) { _ in FicheService.shared.restart() }
         }
     }
