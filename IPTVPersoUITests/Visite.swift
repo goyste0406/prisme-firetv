@@ -88,6 +88,7 @@ final class Visite: XCTestCase {
         if ProcessInfo.processInfo.environment["ONLY"] == "nav" { navigation(); return }
         if ProcessInfo.processInfo.environment["ONLY"] == "multi" { multi(); return }
         if ProcessInfo.processInfo.environment["ONLY"] == "perf" { perf(); return }
+        if ProcessInfo.processInfo.environment["ONLY"] == "fournisseurs" { fournisseurs(); return }
         shot("01-films-ouverture")
         downUntil(["Catégories", "Licences et sagas"], prefix: "02-films-bas")
         if focused().contains("Catégories") { press(.right) }
@@ -350,6 +351,61 @@ final class Visite: XCTestCase {
         back()
         relaunch(["-prisme.debug.demoServer2", "http://127.0.0.1:8098", "-prisme.debug.demoDown", "http://127.0.0.1:8090", "-prisme.debug.open", "film:demo:1016"])
         shot("M4-fiche-interstellar")
+    }
+
+    /// Réglages › Fournisseurs (simulateur) : liste, « Gérer », parcours d'ajout en 4 étapes (iPhone par code QR, lien, identifiants)
+    func fournisseurs() {
+        let two = ["-prisme.debug.demoServer2", "http://127.0.0.1:8098", "-prisme.debug.demoDown", "http://127.0.0.1:8090", "-prisme.debug.tab", "settings"]
+        relaunch(two + ["-prisme.debug.settings", "prov"], wait: 60)
+        shot("F1-fournisseurs")
+        press(.right); shot("F1a-fournisseurs-panneau")
+        for k in 1...9 { press(.down); shot(String(format: "F1b-fournisseurs-bas-%02d", k)) }
+        press(.up, 12); press(.left); press(.up, 3); shot("F1c-retour-categories")
+        // « Gérer » : actif, serveur, catégories à masquer, actualiser, supprimer
+        relaunch(two + ["-prisme.debug.settings", "prov", "-prisme.debug.manage", "Soleil"], wait: 45)
+        shot("F2-gerer-soleil")
+        for k in 1...10 { press(.down); shot(String(format: "F2b-gerer-bas-%02d", k)) }
+        back(); Thread.sleep(forTimeInterval: 1); shot("F2c-gerer-retour")
+        // ajout : 1. connexion (trois façons)
+        relaunch(two + ["-prisme.debug.settings", "prov", "-prisme.debug.addProvider", "1"], wait: 40)
+        shot("F3-ajout-connexion")
+        press(.right); shot("F3a-ajout-lien")
+        press(.right); shot("F3b-ajout-identifiants")
+        press(.select); Thread.sleep(forTimeInterval: 1); shot("F3c-ajout-identifiants-formulaire")
+        back(); Thread.sleep(forTimeInterval: 1); press(.left, 2); press(.select); Thread.sleep(forTimeInterval: 3)
+        shot("F4-ajout-iphone-code")
+        // l'iPhone envoie le formulaire de la page ouverte par le code QR
+        let addr = app.staticTexts.allElementsBoundByIndex.map(\.label).first { $0.hasPrefix("http://") } ?? ""
+        attach("adresse-iphone", addr)
+        if !addr.isEmpty { post(addr, "server=http%3A%2F%2F127.0.0.1%3A8098&user=demo&pass=demo&name=Test") }
+        Thread.sleep(forTimeInterval: 6); shot("F5-ajout-verification")
+        Thread.sleep(forTimeInterval: 6); shot("F5b-ajout-verification-finie")
+        press(.select); Thread.sleep(forTimeInterval: 2); shot("F6-ajout-contenu")
+        for k in 1...5 { press(.down); shot(String(format: "F6b-contenu-bas-%02d", k)) }
+        press(.up, 8); press(.select); Thread.sleep(forTimeInterval: 2); shot("F6c-contenu-ok")
+        Thread.sleep(forTimeInterval: 20); shot("F7-ajout-importation")
+        Thread.sleep(forTimeInterval: 30); shot("F7b-ajout-importation-finie")
+        press(.select); Thread.sleep(forTimeInterval: 3); shot("F8-apres-ajout")
+    }
+
+    /// Envoi du formulaire de la page iPhone (POST), comme le ferait Safari sur l'iPhone
+    func post(_ url: String, _ body: String) {
+        guard let u = URL(string: url) else { return }
+        var r = URLRequest(url: u); r.httpMethod = "POST"; r.httpBody = Data(body.utf8)
+        r.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
+        let sem = DispatchSemaphore(value: 0)
+        URLSession.shared.dataTask(with: r) { _, resp, err in
+            self.attach("envoi-iphone", "\((resp as? HTTPURLResponse)?.statusCode ?? 0) \(err?.localizedDescription ?? "")"); sem.signal()
+        }.resume()
+        _ = sem.wait(timeout: .now() + 10)
+    }
+
+    func attach(_ name: String, _ text: String) {
+        let a = XCTAttachment(string: text); a.name = name; a.lifetime = .keepAlways; add(a)
+        do {
+            let f = URL(fileURLWithPath: dir).appendingPathComponent("focus.txt")
+            if let h = try? FileHandle(forWritingTo: f) { h.seekToEndOfFile(); h.write(Data("\(name) → \(text)\n".utf8)); try? h.closeFile() }
+        }
     }
 
     /// Gros catalogue (≈ 20 000 chaînes, 40 000 films, 20 000 séries) : mesures écrites par l'app dans mesures.txt

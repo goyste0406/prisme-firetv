@@ -20,6 +20,11 @@ enum Debug {
     /// onglet au lancement (« live », « series »…)
     static var tab: String? { arg("prisme.debug.tab") }
     /// saison affichée à l'ouverture d'une fiche série (visite automatique)
+    /// Réglages : section ouverte au lancement (prof, prov, tmdb, store, about)
+    static var settingsSection: String? { arg("prisme.debug.settings") }
+    /// Réglages › Fournisseurs : ouvre le parcours d'ajout (« 1 ») ou l'écran « Gérer » du fournisseur nommé
+    static var addProvider: Bool { arg("prisme.debug.addProvider") == "1" }
+    static var manageProvider: String? { arg("prisme.debug.manage") }
     static var season: Int? { arg("prisme.debug.season").flatMap { Int($0) } }
     /// historique de visionnage factice (pour voir « Reprendre », « Résumé 60 s »)
     static var seed: Bool { arg("prisme.debug.seed") == "1" }

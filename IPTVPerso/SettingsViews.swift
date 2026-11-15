@@ -65,7 +65,7 @@ struct ProvidersSettingsView: View {
     @State private var confirmDelete: Provider?
     @State private var dbSize: Int64 = 0
     @State private var tmdbKey = TmdbKey.value ?? ""
-    @State private var section = "prof"
+    @State private var section = Debug.settingsSection ?? "prof"
     @ObservedObject var pui = ProfileUI.shared
     @ObservedObject var fiches = FicheService.shared
     @FocusState private var catFocus: String?
@@ -116,6 +116,11 @@ struct ProvidersSettingsView: View {
         }
         .task(id: store.catalogVersion) { dbSize = await Database.shared.read { $0.fileSize } }
         .onChange(of: pui.editProfile) { _, e in if e != nil { section = "prof" } }
+        .onAppear {
+            // simulateur de test seulement (arguments de lancement)
+            if Debug.addProvider { adding = true }
+            if let n = Debug.manageProvider { managing = store.providers.first { $0.name == n }?.id }
+        }
     }
 
     @ViewBuilder private var panel: some View {
