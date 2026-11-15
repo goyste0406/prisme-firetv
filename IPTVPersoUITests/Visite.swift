@@ -92,6 +92,11 @@ final class Visite: XCTestCase {
         if ProcessInfo.processInfo.environment["ONLY"] == "fiches" { fiches(); return }
         if ProcessInfo.processInfo.environment["ONLY"] == "tvlecteur" { lecteurTV(); return }
         if ProcessInfo.processInfo.environment["ONLY"] == "tvcrash" { tvCrash(); return }
+        if ProcessInfo.processInfo.environment["ONLY"] == "tvidle" {
+            // TV en direct au lancement avec deux fournisseurs, 150 s sans aucune interaction, puis une capture
+            relaunch(["-prisme.debug.demoServer2", "http://127.0.0.1:8098", "-prisme.debug.tab", "live"], wait: 150)
+            shot("I1-apres-150s"); press(.down); Thread.sleep(forTimeInterval: 2); shot("I2-bas"); return
+        }
         shot("01-films-ouverture")
         downUntil(["Catégories", "Licences et sagas"], prefix: "02-films-bas")
         if focused().contains("Catégories") { press(.right) }
