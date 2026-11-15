@@ -142,7 +142,6 @@ struct ProvidersSettingsView: View {
             .padding(24).background(Color.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 24))
         }
         settingRow("Ajouter un fournisseur", value: "", icon: "plus") { adding = true }
-        if let e = store.lastError { Text("Dernière erreur : " + e).font(P.font(21, .semibold)).foregroundStyle(P.live) }
     }
 
     @ViewBuilder private var tmdbPanel: some View {
@@ -205,6 +204,7 @@ struct ProvidersSettingsView: View {
         if let c = p.counts["epg"] { parts.append(c > 0 ? "\(c) programmes au guide" : "pas de guide") }
         if let d = p.lastImport { parts.append("mis à jour le " + Fmt.dateTime(d)) }
         if let e = p.expires { parts.append("expire le " + Fmt.date(e)) }
+        if let e = p.lastError { parts.append("⚠︎ " + e) }
         return parts.isEmpty ? "Catalogue pas encore chargé" : parts.joined(separator: " · ")
     }
 }

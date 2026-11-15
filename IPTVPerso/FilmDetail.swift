@@ -356,7 +356,7 @@ struct FilmDetailView: View {
 
     private var alsoParts: [String] {
         var p: [String] = []
-        if let a = airings.first { p.append(a.ch.name + (a.p.startDate <= Date() ? " en direct" : " ce soir " + Fmt.hm(a.p.startDate))) }
+        if let a = airings.first { p.append(ChannelTools.clean(a.ch.name) + (a.p.startDate <= Date() ? " en direct" : " ce soir " + Fmt.hm(a.p.startDate))) }
         if let f = fiche {
             p += Array(Array(Set((f.wp.f + f.wp.g).map(\.n))).sorted().prefix(2))
             if !f.wp.r.isEmpty { p.append("location") }

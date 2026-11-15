@@ -417,7 +417,7 @@ struct WhereSection: View {
     }
 
     private func tvButton(_ a: LiveStore.Airing) -> some View {
-        Button { onTV(a) } label: { card(icon: AnyView(Image(systemName: "tv").font(P.font(24))), title: a.ch.name, sub: airText(a), tail: tvTail(a)) }
+        Button { onTV(a) } label: { card(icon: AnyView(Image(systemName: "tv").font(P.font(24))), title: ChannelTools.clean(a.ch.name), sub: airText(a), tail: tvTail(a)) }
             .buttonStyle(WhereCardStyle())
     }
 

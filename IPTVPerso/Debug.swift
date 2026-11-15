@@ -35,7 +35,7 @@ enum DataCount {
     @MainActor static func write(_ moment: String) {
         guard Debug.demoServer != nil else { return }
         let ud = UserDefaults.standard
-        var lines = ["[\(moment)] fournisseurs=\(ProviderStore.shared.providers.map { "\($0.name)(\($0.on ? "actif" : "inactif"))" }.joined(separator: ","))"]
+        var lines = ["[\(moment)] trousseau : \(ProviderStore.shared.keychainNote)", "[\(moment)] fournisseurs=\(ProviderStore.shared.providers.map { "\($0.name)(\($0.on ? "actif" : "inactif"))" }.joined(separator: ","))"]
         for p in ProfileStore.shared.profiles {
             let favs = ud.stringArray(forKey: ProfileStore.storageKey("prisme.media.favs", for: p.id))?.count ?? 0
             let live = ud.stringArray(forKey: ProfileStore.storageKey("prisme.live.favs", for: p.id))?.count ?? 0

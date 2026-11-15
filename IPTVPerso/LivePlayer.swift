@@ -107,7 +107,7 @@ final class LivePlayerController: UIViewController, VLCMediaPlayerDelegate {
 
     private func play() {
         let ch = current
-        Task { @MainActor in LivePrefs.shared.played(ch.id) }
+        Task { @MainActor in LivePrefs.shared.played(ch) }
         showCard()
         guard let prov = ProviderStore.sharedProvider(ch.pid), let url = prov.liveURL(ch) else {
             message.text = "Ce fournisseur n'est plus disponible."; message.isHidden = false; return
@@ -195,11 +195,4 @@ final class LivePlayerController: UIViewController, VLCMediaPlayerDelegate {
     }
 }
 
-extension ProviderStore {
-    /// Lecture des fournisseurs depuis n'importe quel fil (le lecteur n'est pas sur l'acteur principal).
-    nonisolated static func sharedProvider(_ id: String) -> Provider? {
-        guard let d = UserDefaults.standard.data(forKey: "prisme.providers"),
-              let list = try? JSONDecoder().decode([Provider].self, from: d) else { return nil }
-        return list.first { $0.id == id }
-    }
-}
+

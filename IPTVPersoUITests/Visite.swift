@@ -340,9 +340,14 @@ final class Visite: XCTestCase {
     func multi() {
         relaunch(["-prisme.debug.demoServer2", "http://127.0.0.1:8098", "-prisme.debug.demoDown", "http://127.0.0.1:8090"], wait: 60)
         shot("M1-films-deux-fournisseurs")
-        tab(5); press(.down); shot("M2-reglages-fournisseurs")
-        press(.right); for k in 1...6 { press(.down); shot(String(format: "M2b-fournisseurs-bas-%02d", k)) }
+        tab(5); press(.down); press(.left, 2); press(.up, 6); press(.down); shot("M2-reglages-fournisseurs")
+        press(.right); shot("M2a-fournisseurs-panneau")
+        for k in 1...6 { press(.down); shot(String(format: "M2b-fournisseurs-bas-%02d", k)) }
         tab(2); shot("M3-tv-deux-fournisseurs")
+        // TF1 : une seule vignette, ses sources dans le menu « OK maintenu »
+        press(.down, 3); shot("M3b-tv-bas")
+        remote.press(.select, forDuration: 1.2); Thread.sleep(forTimeInterval: 1.5); shot("M3c-tv-sources")
+        back()
         relaunch(["-prisme.debug.demoServer2", "http://127.0.0.1:8098", "-prisme.debug.demoDown", "http://127.0.0.1:8090", "-prisme.debug.open", "film:demo:1016"])
         shot("M4-fiche-interstellar")
     }

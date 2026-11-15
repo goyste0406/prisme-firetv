@@ -105,8 +105,8 @@ struct LiveHomeView: View {
 
     /// Guide depuis la colonne : tes favoris, sinon tes chaînes récentes, sinon toutes les chaînes.
     private func guideFromRail() async {
-        if !prefs.favorites.isEmpty { openGuide(ChannelTools.dedupe(await LiveStore.channels(ids: prefs.favorites)), "Favoris"); return }
-        if !prefs.recent.isEmpty { openGuide(ChannelTools.dedupe(await LiveStore.channels(ids: prefs.recent)), "Récentes"); return }
+        if !prefs.favorites.isEmpty { openGuide(await LiveIndex.resolve(ids: prefs.favorites), "Favoris"); return }
+        if !prefs.recent.isEmpty { openGuide(await LiveIndex.resolve(ids: prefs.recent), "Récentes"); return }
         openGuide(Array(index.prefix(200).map(\.ch)), "Toutes les chaînes")
     }
 }
@@ -152,7 +152,7 @@ struct LiveFrontView: View {
     @State private var nowShown = false
 
     private var head: Channel? { recent.first ?? favs.first }
-    private func entry(_ c: Channel) -> LiveIndex.Entry? { index.first { ChannelTools.key($0.ch) == ChannelTools.key(c) } }
+    private func entry(_ c: Channel) -> LiveIndex.Entry? { LiveIndex.byKey[ChannelTools.key(c)] }
 
     var body: some View {
         ScrollView {
@@ -164,8 +164,8 @@ struct LiveFrontView: View {
                     row {
                         ForEach(Array(recent.prefix(10).enumerated()), id: \.element.id) { i, ch in
                             VStack(alignment: .leading, spacing: 10) {
-                                ChannelCard(ch: ch, fav: prefs.favorites.contains(ch.id)) { play(recent, i) }
-                                    .contextMenu { favButton(ch) }
+                                ChannelCard(ch: ch, fav: prefs.isFavorite(ch)) { play(recent, i) }
+                                    .contextMenu { favButton(ch); SourceButtons(ch: ch) { c in play([c], 0) } }
                                 Text("Tu l'as regardée récemment").font(P.font(17)).foregroundStyle(P.faint)
                             }
                         }
@@ -209,16 +209,16 @@ struct LiveFrontView: View {
         }
         .clipped()
         .navigationDestination(isPresented: $openFav) {
-            CategoryChannelsView(title: "Favoris", loader: { ChannelTools.dedupe(await LiveStore.channels(ids: LivePrefs.shared.favorites)) }, play: play, guide: guide)
+            CategoryChannelsView(title: "Favoris", loader: { await LiveIndex.resolve(ids: LivePrefs.shared.favorites) }, play: play, guide: guide)
         }
         .navigationDestination(isPresented: $nowShown) {
             let u = nowOpen ?? .divert
             CategoryChannelsView(title: u.label + " en ce moment", loader: { nowGenres.first { $0.0 == u }?.1 ?? [] }, play: play, guide: guide)
         }
         .navigationDestination(isPresented: $openRecent) {
-            CategoryChannelsView(title: "Reprendre", loader: { ChannelTools.dedupe(await LiveStore.channels(ids: LivePrefs.shared.recent)) }, play: play, guide: guide)
+            CategoryChannelsView(title: "Reprendre", loader: { await LiveIndex.resolve(ids: LivePrefs.shared.recent) }, play: play, guide: guide)
         }
-        .task(id: "\(store.catalogVersion)|\(prefs.recent.first ?? "")|\(prefs.favorites.count)") { await load() }
+        .task(id: "\(store.catalogVersion)|\(prefs.recent.first ?? "")|\(prefs.favorites.count)|\(index.count)") { await load() }
         .onChange(of: deckOpen) { _, o in
             if !o, let k = lastDeck { DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { deckFocus = k } }
         }
@@ -237,15 +237,13 @@ struct LiveFrontView: View {
 
     private func load() async {
         let pids = store.active.map(\.id)
-        let active = Set(pids)
-        async let r = LiveStore.channels(ids: prefs.recent)
-        async let f = LiveStore.channels(ids: prefs.favorites)
         async let s = LiveStore.startingSoon(providers: pids)
         async let g = LiveStore.airingNowByGenre(providers: pids)
-        let (r1, f1, s1, g1) = await (r, f, s, g)
+        let r1 = await LiveIndex.resolve(ids: prefs.recent), f1 = await LiveIndex.resolve(ids: prefs.favorites)
+        let (s1, g1) = await (s, g)
         nowGenres = g1
-        recent = ChannelTools.dedupe(r1.filter { active.contains($0.pid) })
-        favs = ChannelTools.dedupe(f1.filter { active.contains($0.pid) })
+        recent = r1
+        favs = f1
         var seen = Set<String>()
         soon = s1.filter { seen.insert(ChannelTools.key($0.ch) + "|\($0.p.start)").inserted }
         if let h = head { let nn = await LiveStore.nowNext(h); headNow = nn.0; headNext = nn.1 }
@@ -255,7 +253,7 @@ struct LiveFrontView: View {
     private func rowTitle(_ t: String, _ sub: String) -> some View { SectionTitle(title: t, sub: sub).padding(.leading, 18) }
 
     private func favButton(_ ch: Channel) -> some View {
-        Button(prefs.favorites.contains(ch.id) ? "Retirer des favoris" : "Ajouter aux favoris") { prefs.toggleFavorite(ch.id) }
+        Button(prefs.isFavorite(ch) ? "Retirer des favoris" : "Ajouter aux favoris") { prefs.toggleFavorite(ch) }
     }
 
     /// En-tête (simulateur) : la dernière chaîne regardée, son programme en cours et sa progression.
@@ -410,6 +408,27 @@ struct DeckLayer: View {
 }
 
 /// Paquet ouvert (simulateur : .lfan) : fond sombre flouté, nom de l'univers, ses chaînes en éventail, « Refermer ».
+/// Dans le menu « OK maintenu » d'une chaîne : une ligne par source (qualité · fournisseur), quand il y en a plusieurs.
+struct SourceButtons: View {
+    let ch: Channel
+    let play: (Channel) -> Void
+    var body: some View {
+        if let e = LiveIndex.entry(ch), e.sources > 1 {
+            ForEach(e.copies, id: \.id) { c in
+                Button("Regarder · " + LiveSourceLabel.text(c)) { play(c) }
+            }
+        }
+    }
+}
+
+enum LiveSourceLabel {
+    /// « 1080p · Lune » (la qualité seulement si le nom chez le fournisseur l'indique)
+    @MainActor static func text(_ c: Channel) -> String {
+        let p = ProviderStore.shared.provider(c.pid)?.name ?? "fournisseur"
+        return [ChannelTools.qualityLabel(c.name), p].compactMap { $0 }.joined(separator: " · ")
+    }
+}
+
 struct ChannelFan: View {
     let title: String
     let icon: String
@@ -441,8 +460,11 @@ struct ChannelFan: View {
                 ScrollView(.horizontal) {
                     LazyHStack(alignment: .top, spacing: 33) {
                         ForEach(Array(channels.prefix(120).enumerated()), id: \.element.id) { i, ch in
-                            FanCard(ch: ch, sources: sources[ChannelTools.key(ch)] ?? 1, fav: prefs.favorites.contains(ch.id)) { play(channels, i) }
-                                .contextMenu { Button(prefs.favorites.contains(ch.id) ? "Retirer des favoris" : "Ajouter aux favoris") { prefs.toggleFavorite(ch.id) } }
+                            FanCard(ch: ch, sources: sources[ChannelTools.key(ch)] ?? 1, fav: prefs.isFavorite(ch)) { play(channels, i) }
+                                .contextMenu {
+                                    Button(prefs.isFavorite(ch) ? "Retirer des favoris" : "Ajouter aux favoris") { prefs.toggleFavorite(ch) }
+                                    SourceButtons(ch: ch) { c in play([c], 0) }
+                                }
                                 .focused($foc, equals: i)
                                 // entrée en éventail du simulateur (lfanin) : de la gauche, légèrement tournée, l'une après l'autre
                                 .opacity(shown ? 1 : 0)
@@ -594,8 +616,7 @@ struct ChannelListView: View {
                     empty: mode == .fav ? "Aucune chaîne en favori pour l'instant. Maintiens le clic sur une chaîne pour l'ajouter." : "Les chaînes que tu regardes apparaîtront ici.",
                     play: play, guide: guide)
             .task(id: mode == .fav ? prefs.favorites.joined() : prefs.recent.joined()) {
-                let active = Set(store.active.map(\.id))
-                channels = await LiveStore.channels(ids: mode == .fav ? prefs.favorites : prefs.recent).filter { active.contains($0.pid) }
+                channels = await LiveIndex.resolve(ids: mode == .fav ? prefs.favorites : prefs.recent)
                 loaded = true
             }
     }
@@ -708,10 +729,11 @@ struct ChannelGrid: View {
                 ScrollView {
                     LazyVGrid(columns: Array(repeating: GridItem(.fixed(ChannelCard.size.width), spacing: 28), count: columns), alignment: .leading, spacing: 36) {
                         ForEach(Array(channels.enumerated()), id: \.element.id) { i, ch in
-                            ChannelCard(ch: ch, fav: prefs.favorites.contains(ch.id)) { play(channels, i) }
+                            ChannelCard(ch: ch, fav: prefs.isFavorite(ch)) { play(channels, i) }
                                 .focused($gridFocus, equals: i)
                                 .contextMenu {
-                                    Button(prefs.favorites.contains(ch.id) ? "Retirer des favoris" : "Ajouter aux favoris") { prefs.toggleFavorite(ch.id) }
+                                    Button(prefs.isFavorite(ch) ? "Retirer des favoris" : "Ajouter aux favoris") { prefs.toggleFavorite(ch) }
+                                    SourceButtons(ch: ch) { c in play([c], 0) }
                                 }
                         }
                     }.padding(.vertical, 24).padding(.horizontal, 18).padding(.bottom, 60)

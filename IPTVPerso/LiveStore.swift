@@ -244,6 +244,40 @@ final class LivePrefs: ObservableObject {
         recent.insert(id, at: 0)
         if recent.count > 20 { recent.removeLast(recent.count - 20) }
     }
+
+    // MARK: identité des chaînes (1.7)
+    // Les favoris et les chaînes récentes restent enregistrés comme avant (fournisseur:flux) — rien n'est réécrit —,
+    // mais ils sont reconnus par l'IDENTITÉ de la chaîne : TF1 en favori chez Lune l'est aussi chez Soleil.
+    // La table « flux → identité » (commune à tous les profils) permet de retrouver un favori même si son fournisseur
+    // a été supprimé.
+    private static let keysKey = "prisme.live.idkeys"
+    private var idKeys: [String: String] = UserDefaults.standard.dictionary(forKey: LivePrefs.keysKey) as? [String: String] ?? [:]
+
+    func remember(_ keys: [String: String]) {
+        var changed = false
+        for (id, k) in keys where idKeys[id] != k { idKeys[id] = k; changed = true }
+        if changed { UserDefaults.standard.set(idKeys, forKey: LivePrefs.keysKey) }
+    }
+    func knownKey(_ id: String) -> String? { idKeys[id] }
+
+    func isFavorite(_ ch: Channel) -> Bool {
+        if favorites.contains(ch.id) { return true }
+        let k = ChannelTools.key(ch)
+        return favorites.contains { idKeys[$0] == k }
+    }
+    /// Ajoute ou retire la CHAÎNE des favoris (toutes ses copies, chez tous les fournisseurs).
+    func toggleFavorite(_ ch: Channel) {
+        let k = ChannelTools.key(ch)
+        remember([ch.id: k])
+        if isFavorite(ch) { favorites.removeAll { $0 == ch.id || idKeys[$0] == k } } else { favorites.append(ch.id) }
+    }
+    func played(_ ch: Channel) {
+        let k = ChannelTools.key(ch)
+        remember([ch.id: k])
+        recent.removeAll { $0 == ch.id || idKeys[$0] == k }
+        recent.insert(ch.id, at: 0)
+        if recent.count > 20 { recent.removeLast(recent.count - 20) }
+    }
 }
 
 extension Provider {

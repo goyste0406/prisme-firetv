@@ -137,35 +137,54 @@ enum ChannelTools {
         fold(s).replacingOccurrences(of: "+", with: "plus").replacingOccurrences(of: "&", with: "et")
             .replacingOccurrences(of: #"[^a-z0-9]+"#, with: "", options: .regularExpression)
     }
-    private static let lead = try! NSRegularExpression(pattern: #"^\s*(?:[\[(|]?\s*(?:fr|fra|france|be|ch|ca|qc|uk|us|vip|4k|hd|fhd|uhd)\s*[\])|:\-–]+\s*)+"#, options: [.caseInsensitive])
-    private static let tail = try! NSRegularExpression(pattern: #"(?:\s*[\[(|\-–]?\s*(?:fhd|uhd|hd|sd|4k|hevc|h\.?26[45]|1080p?|720p?|2160p?|50 ?fps|60 ?fps|raw|backup|secours|alt|vip|low|multi)\s*[\])]?)+\s*$"#, options: [.caseInsensitive])
-    private static let supers = try! NSRegularExpression(pattern: "[ᴴᴰᶠᵁ⁴ᴷˢ³⁴]+")
+    private static let lead = try! NSRegularExpression(pattern: #"^\s*(?:[\[(|]?\s*(?:fr|fra|france|be|ch|ca|qc|uk|us|vip|4k|hd|fhd|uhd)\s*[\])|:\-–—•·▎┃│★✦◉●_/]+\s*)+"#, options: [.caseInsensitive])
+    /// « FR TF1 » : pays en majuscules suivi d'un simple espace (jamais « BE IN SPORTS »)
+    private static let leadSpace = try! NSRegularExpression(pattern: #"^\s*(?:VIP\s+)?(?:FR|FRA|BE|CH|CA|QC|UK|US)\s+(?!IN\b)(?=\S)"#)
+    private static let tail = try! NSRegularExpression(pattern: #"(?:\s*[\[(|\-–—]?\s*(?:fhd|uhd|ultra ?hd|hdr10?\+?|hdr|dolby(?: vision| atmos)?|hd\+?|sd|hq|lq|4k|8k|hevc|h\.?26[45]|1080[pi]?|720p?|2160p?|576p?|\d{2} ?fps|raw|backup(?: ?\d)?|secours(?: ?\d)?|alt|vip|low|multi(?:[ -]?audio)?|\(fr\)|\[fr\])\s*[\])]?)+\s*$"#, options: [.caseInsensitive])
+    /// symboles décoratifs en fin de nom (« ◉ », « ★ », « Ⓢ »)
+    private static let tailSymbols = try! NSRegularExpression(pattern: #"[\s◉●★☆✦✪⚡Ⓢ⓪-⓿•·|▎┃│*]+$"#)
+    /// lettres en exposant (« ᴴᴰ », « ᶠᴴᴰ », « ᵁᴴᴰ », « ⁴ᴷ », « ᴿᴬᵂ ») : traduites en texte normal
+    private static let superMap: [(String, String)] = [("ᵁᴴᴰ", " UHD"), ("ᶠᴴᴰ", " FHD"), ("ᴴᴰᴿ", " HDR"), ("ᴴᴰ", " HD"), ("⁴ᴷ", " 4K"), ("ᴿᴬᵂ", " RAW"), ("ˢᴰ", " SD"), ("ᴴᴱⱽᶜ", " HEVC")]
+    private static let supers = try! NSRegularExpression(pattern: "[\u1D2C-\u1D6A\u02B0-\u02FF\u2070-\u209F\u2C7D]+")
+
+    static func plain(_ raw: String) -> String {
+        var s = raw
+        for (a, b) in superMap { s = s.replacingOccurrences(of: a, with: b) }
+        return supers.stringByReplacingMatches(in: s, range: NSRange(s.startIndex..., in: s), withTemplate: " ")
+    }
 
     /// Vrai nom de la chaîne : « FR| TF1 FHD » → « TF1 ».
     static func clean(_ raw: String) -> String {
-        var s = supers.stringByReplacingMatches(in: raw, range: NSRange(raw.startIndex..., in: raw), withTemplate: " ")
+        var s = plain(raw)
         s = lead.stringByReplacingMatches(in: s, range: NSRange(s.startIndex..., in: s), withTemplate: "")
+        s = leadSpace.stringByReplacingMatches(in: s, range: NSRange(s.startIndex..., in: s), withTemplate: "")
         var prev = ""
-        while prev != s { prev = s; s = tail.stringByReplacingMatches(in: s, range: NSRange(s.startIndex..., in: s), withTemplate: "") }
+        while prev != s {
+            prev = s
+            s = tailSymbols.stringByReplacingMatches(in: s, range: NSRange(s.startIndex..., in: s), withTemplate: "")
+            s = tail.stringByReplacingMatches(in: s, range: NSRange(s.startIndex..., in: s), withTemplate: "")
+        }
         s = s.replacingOccurrences(of: #"\s{2,}"#, with: " ", options: .regularExpression).trimmingCharacters(in: CharacterSet(charactersIn: " -–|:"))
         return s.count >= 1 ? s : raw
     }
 
     /// Qualité, pour garder la meilleure copie comme chaîne principale.
     static func quality(_ raw: String) -> Int {
-        let r = fold(raw)
-        if r.range(of: #"\b(4k|uhd|2160)"#, options: .regularExpression) != nil { return 4 }
+        let r = fold(plain(raw))
+        if r.range(of: #"\b(4k|8k|uhd|ultra ?hd|2160)"#, options: .regularExpression) != nil { return 4 }
         if r.range(of: #"\b(fhd|1080)"#, options: .regularExpression) != nil { return 3 }
-        if r.range(of: #"\b(hd|720)\b"#, options: .regularExpression) != nil { return 2 }
-        if r.range(of: #"\b(sd|low)\b"#, options: .regularExpression) != nil { return 0 }
+        if r.range(of: #"\b(hd|720p?)\b"#, options: .regularExpression) != nil { return 2 }
+        if r.range(of: #"\b(sd|low|576p?|480p?)\b"#, options: .regularExpression) != nil { return 0 }
         if r.range(of: #"secours|backup|alt\b"#, options: .regularExpression) != nil { return -1 }
         return 1
     }
 
     /// Pays indiqué devant le nom (« BE| », « CH: », « UK - ») ; rien (ou FR) = France.
-    private static let leadCountry = try! NSRegularExpression(pattern: #"^\s*[\[(|]?\s*(fr|fra|france|be|ch|ca|qc|uk|us)\s*[\])|:\-–]"#, options: [.caseInsensitive])
+    private static let leadCountry = try! NSRegularExpression(pattern: #"^\s*[\[(|]?\s*(?:vip\s*)?(fr|fra|france|be|ch|ca|qc|uk|us)\s*[\])|:\-–—•·▎┃│★✦◉●_/]"#, options: [.caseInsensitive])
+    private static let leadCountrySpace = try! NSRegularExpression(pattern: #"^\s*(?:VIP\s+)?(FR|FRA|BE|CH|CA|QC|UK|US)\s+(?!IN\b)(?=\S)"#)
     static func country(_ raw: String) -> String {
-        guard let m = leadCountry.firstMatch(in: raw, range: NSRange(raw.startIndex..., in: raw)), let r = Range(m.range(at: 1), in: raw) else { return "fr" }
+        let m = leadCountry.firstMatch(in: raw, range: NSRange(raw.startIndex..., in: raw)) ?? leadCountrySpace.firstMatch(in: raw, range: NSRange(raw.startIndex..., in: raw))
+        guard let m, let r = Range(m.range(at: 1), in: raw) else { return "fr" }
         let c = raw[r].lowercased()
         return c == "fra" || c == "france" ? "fr" : (c == "qc" ? "ca" : c)
     }
@@ -200,11 +219,35 @@ enum ChannelTools {
 }
 
 /// Toutes les chaînes des fournisseurs actifs, sans doublon, avec leur univers (gardé en mémoire par version du catalogue).
+/// Une chaîne = une identité (pays + vrai nom) avec TOUTES ses copies chez TOUS les fournisseurs actifs (« sources ») :
+/// différentes qualités (720p, 1080p, 4K…), différents fournisseurs. La meilleure est jouée d'abord, les autres restent
+/// accessibles (choix de la source, bascule automatique si la première ne répond pas).
 enum LiveIndex {
-    struct Entry: Identifiable, Hashable { let ch: Channel; let name: String; let univers: Univers; let sources: Int; var id: String { ch.id } }
+    struct Entry: Identifiable, Hashable {
+        /// copie jouée par défaut (meilleure qualité, avec un identifiant de guide)
+        let ch: Channel
+        let name: String
+        let univers: Univers
+        /// toutes les copies, la meilleure d'abord
+        let copies: [Channel]
+        let key: String
+        var sources: Int { copies.count }
+        var id: String { ch.id }
+    }
     private static var memo: (String, [Entry])?
+    /// dernière liste construite, par identité (lecture depuis le fil principal seulement)
+    nonisolated(unsafe) private(set) static var byKey: [String: Entry] = [:]
 
-    static func all(pids: [String], version: Int) async -> [Entry] {
+    /// Ordre des sources : qualité (secours en dernier), puis l'ordre des fournisseurs dans les réglages.
+    static func ordered(_ L: [Channel], providerOrder: [String]) -> [Channel] {
+        func rank(_ c: Channel) -> Int { providerOrder.firstIndex(of: c.pid) ?? 99 }
+        return L.sorted { a, b in
+            let qa = ChannelTools.quality(a.name), qb = ChannelTools.quality(b.name)
+            return qa != qb ? qa > qb : (rank(a) != rank(b) ? rank(a) < rank(b) : a.num < b.num)
+        }
+    }
+
+    @MainActor static func all(pids: [String], version: Int) async -> [Entry] {
         let mk = pids.joined(separator: ",") + "|\(version)"
         if let m = memo, m.0 == mk { return m.1 }
         guard !pids.isEmpty else { return [] }
@@ -213,21 +256,66 @@ enum LiveIndex {
         let res = await Database.shared.read { db -> [Entry] in
             var cats: [String: String] = [:]
             db.query("SELECT pid,cid,name FROM category WHERE type='live' AND pid IN (\(ph))", pids.map { $0 as Any? }) { r in cats[r.str(0) + ":" + r.str(1)] = r.str(2) }
-            var chans: [Channel] = []
+            var groups: [String: [Channel]] = [:], order: [String] = []
             db.query("SELECT pid,sid,name,num,icon,cid,epg,archive FROM live WHERE pid IN (\(ph)) ORDER BY num, name", pids.map { $0 as Any? }) { r in
-                chans.append(Channel(pid: r.str(0), sid: r.str(1), name: r.str(2), num: r.int(3), icon: r.str(4), cid: r.str(5), epg: r.str(6), archive: r.int(7)))
+                let c = Channel(pid: r.str(0), sid: r.str(1), name: r.str(2), num: r.int(3), icon: r.str(4), cid: r.str(5), epg: r.str(6), archive: r.int(7))
+                let k = ChannelTools.key(c)
+                if groups[k] == nil { order.append(k) }
+                groups[k, default: []].append(c)
             }
-            var count: [String: Int] = [:]
-            for c in chans { count[ChannelTools.key(c), default: 0] += 1 }
-            return ChannelTools.dedupe(chans).map { c in
-                let n = ChannelTools.clean(c.name)
-                return Entry(ch: c, name: n, univers: Univers.of(name: n, category: cats[c.pid + ":" + c.cid] ?? ""), sources: count[ChannelTools.key(c)] ?? 1)
+            return order.compactMap { k -> Entry? in
+                guard let L0 = groups[k] else { return nil }
+                let L = ordered(L0, providerOrder: pids)
+                var best = L[0]
+                // la copie jouée reprend le guide, le logo et le replay d'une autre copie s'il lui en manque
+                if best.epg.isEmpty || best.icon.isEmpty || best.archive == 0 {
+                    let g = L.first { !$0.epg.isEmpty }?.epg ?? best.epg, ic = L.first { !$0.icon.isEmpty }?.icon ?? best.icon
+                    best = Channel(pid: best.pid, sid: best.sid, name: best.name, num: best.num, icon: best.icon.isEmpty ? ic : best.icon, cid: best.cid, epg: best.epg.isEmpty ? g : best.epg, archive: best.archive)
+                }
+                let n = ChannelTools.clean(best.name)
+                // univers : décidé sur le nom ; à défaut, le groupe le plus précis parmi les copies
+                var u = Univers.of(name: n, category: cats[best.pid + ":" + best.cid] ?? "")
+                if u == .autres || u == .generaliste {
+                    for c in L.dropFirst() {
+                        let v = Univers.of(name: n, category: cats[c.pid + ":" + c.cid] ?? "")
+                        if v != .autres && v != u { if u == .autres { u = v }; break }
+                    }
+                }
+                return Entry(ch: best, name: n, univers: u, copies: L, key: k)
             }
         }
         memo = (mk, res)
-        PerfLog.note("Index des chaînes : \(res.count) chaînes en \(Int(Date().timeIntervalSince(t0) * 1000)) ms")
+        byKey = Dictionary(res.map { ($0.key, $0) }, uniquingKeysWith: { a, _ in a })
+        PerfLog.note("Index des chaînes : \(res.count) chaînes (\(res.reduce(0) { $0 + $1.sources }) sources) en \(Int(Date().timeIntervalSince(t0) * 1000)) ms")
         if Debug.demoServer != nil { dump(res) }
         return res
+    }
+
+    /// Chaînes enregistrées (favoris, récentes) retrouvées par leur IDENTITÉ chez les fournisseurs actifs :
+    /// un favori enregistré chez un fournisseur désactivé ou supprimé reste affiché s'il existe chez un autre.
+    @MainActor static func resolve(ids: [String]) async -> [Channel] {
+        guard !ids.isEmpty else { return [] }
+        let st = ProviderStore.shared
+        if byKey.isEmpty { _ = await all(pids: st.active.map(\.id), version: st.catalogVersion) }
+        let rows = await LiveStore.channels(ids: ids)
+        var keys: [String: String] = [:]
+        for c in rows { keys[c.id] = ChannelTools.key(c) }
+        LivePrefs.shared.remember(keys)
+        var out: [Channel] = [], seen = Set<String>()
+        for id in ids {
+            guard let k = keys[id] ?? LivePrefs.shared.knownKey(id), seen.insert(k).inserted, let e = byKey[k] else { continue }
+            out.append(e.ch)
+        }
+        return out
+    }
+
+    @MainActor static func entry(_ ch: Channel) -> Entry? { byKey[ChannelTools.key(ch)] }
+}
+
+extension ChannelTools {
+    /// Étiquette de qualité lue dans le nom chez le fournisseur ; nil si le nom n'en dit rien.
+    static func qualityLabel(_ raw: String) -> String? {
+        switch quality(raw) { case 4: return "4K"; case 3: return "1080p"; case 2: return "720p"; case 0: return "SD"; case -1: return "secours"; default: return nil }
     }
 }
 
@@ -236,7 +324,7 @@ extension LiveIndex {
     /// dans Documents/classement-tv.txt, récupéré par la visite automatique pour vérification ligne par ligne.
     static func dump(_ L: [Entry]) {
         let lines = L.sorted { ($0.univers.label, $0.name) < ($1.univers.label, $1.name) }
-            .map { "\($0.univers.label)\t\($0.sources) copie(s)\t\(ChannelTools.key($0.ch))\t\($0.ch.name)\tguide=\($0.ch.epg)" }
+            .map { e in "\(e.univers.label)\t\(e.sources) copie(s)\t\(e.key)\t\(e.ch.name)\tguide=\(e.ch.epg)\tsources: " + e.copies.map { "\($0.pid)/\($0.name)" }.joined(separator: " | ") }
         let txt = "\(L.count) chaînes après dédoublonnage\n" + lines.joined(separator: "\n") + "\n"
         if let d = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first {
             try? txt.write(to: d.appendingPathComponent("classement-tv.txt"), atomically: true, encoding: .utf8)

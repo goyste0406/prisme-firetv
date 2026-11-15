@@ -5,7 +5,13 @@ import Foundation
 struct CatalogImporter {
     let provider: Provider
 
-    struct Result { var counts: [String: Int] = [:]; var expires: Date?; var tz: String? }
+    struct Result {
+        var counts: [String: Int] = [:]; var expires: Date?; var tz: String?
+        /// temps de réponse, connexions autorisées, état de l'abonnement (réglages › Fournisseurs)
+        var ping: Int?; var maxConn: Int?; var subStatus: String?
+        /// avertissement sans échec (une liste vide gardée à l'identique, par exemple)
+        var warning: String?
+    }
 
     static let adult = try! NSRegularExpression(pattern: #"adult|xxx|porn|\+ ?18|18 ?\+|for adults|erotic|\bsex|\bhot\b"#, options: [.caseInsensitive])
     static func isAdult(_ s: String) -> Bool {
@@ -20,9 +26,12 @@ struct CatalogImporter {
         let pid = provider.id
 
         progress(0.02, "Connexion à \(provider.name)…")
-        let info = try await json(nil) as? [String: Any]
+        let t0 = Date()
+        let info = try await json(nil, timeout: 20) as? [String: Any]
+        res.ping = Int(Date().timeIntervalSince(t0) * 1000)
         let ui = info?["user_info"] as? [String: Any]
         guard str(ui?["auth"]) == "1" else { throw XtreamError.authFailed }
+        res.maxConn = Int(str(ui?["max_connections"])); res.subStatus = str(ui?["status"]).isEmpty ? nil : str(ui?["status"])
         if let e = Double(str(ui?["exp_date"])), e > 0 { res.expires = Date(timeIntervalSince1970: e) }
         // fuseau horaire du serveur : les adresses de replay (timeshift) s'écrivent à l'heure du serveur
         if let si = info?["server_info"] as? [String: Any], let tz = si["timezone"] as? String, TimeZone(identifier: tz) != nil { res.tz = tz }
@@ -39,8 +48,12 @@ struct CatalogImporter {
                 rows.append([pid, type, cid, name, pos])
             }
             await db.read { db in
+                // liste vide (panne passagère du serveur) : les catégories déjà connues sont gardées
+                if rows.isEmpty, (db.intValue("SELECT COUNT(*) FROM category WHERE pid=? AND type=?", [pid, type]) ?? 0) > 0 { return }
+                // une seule transaction : l'effacement et la nouvelle liste ensemble (le COMMIT de insertMany clôt les deux)
+                db.exec("BEGIN IMMEDIATE")
                 db.run("DELETE FROM category WHERE pid=? AND type=?", [pid, type])
-                db.insertMany("INSERT OR REPLACE INTO category VALUES(?,?,?,?,?)", rows)
+                if rows.isEmpty { db.exec("COMMIT") } else { db.insertMany("INSERT OR REPLACE INTO category VALUES(?,?,?,?,?)", rows) }
             }
         }
 
@@ -57,11 +70,7 @@ struct CatalogImporter {
             let arch = str(s["tv_archive"]) == "1" ? (Int(str(s["tv_archive_duration"])) ?? 1) : 0
             lrows.append([pid, str(s["stream_id"]), name, Int(str(s["num"])) ?? 0, str(s["stream_icon"]), cid, epg, arch])
         }
-        await db.read { db in
-            db.run("DELETE FROM live WHERE pid=?", [pid])
-            db.insertMany("INSERT OR REPLACE INTO live VALUES(?,?,?,?,?,?,?,?)", lrows)
-        }
-        res.counts["live"] = lrows.count
+        res.counts["live"] = await keepOrReplace("live", lrows, &res)
 
         // ---- films
         progress(0.30, "Films…")
@@ -75,11 +84,7 @@ struct CatalogImporter {
                           str(s["container_extension"]).isEmpty ? "mp4" : str(s["container_extension"]),
                           Double(str(s["rating"])) ?? 0, Int(str(s["added"])) ?? 0, tmdb])
         }
-        await db.read { db in
-            db.run("DELETE FROM vod WHERE pid=?", [pid])
-            db.insertMany("INSERT OR REPLACE INTO vod VALUES(?,?,?,?,?,?,?,?,?,?)", vrows)
-        }
-        res.counts["vod"] = vrows.count
+        res.counts["vod"] = await keepOrReplace("vod", vrows, &res)
 
         // ---- séries
         progress(0.50, "Séries…")
@@ -92,11 +97,7 @@ struct CatalogImporter {
             srows.append([pid, str(s["series_id"]), name, Int(rel.prefix(4)) ?? Self.year(in: name), str(s["cover"]), cid, str(s["plot"]),
                           Double(str(s["rating"])) ?? 0, Int(str(s["last_modified"])) ?? 0, str(s["tmdb"])])
         }
-        await db.read { db in
-            db.run("DELETE FROM series WHERE pid=?", [pid])
-            db.insertMany("INSERT OR REPLACE INTO series VALUES(?,?,?,?,?,?,?,?,?,?)", srows)
-        }
-        res.counts["series"] = srows.count
+        res.counts["series"] = await keepOrReplace("series", srows, &res)
 
         // ---- guide des programmes (XMLTV), lu au fil de l'eau : jamais tout en mémoire
         progress(0.62, "Guide des programmes…")
@@ -119,6 +120,25 @@ struct CatalogImporter {
 
     // MARK: outils
 
+    /// Remplace d'un seul coup (une transaction) le contenu d'une table pour ce fournisseur.
+    /// Une liste reçue vide alors qu'il y avait du contenu n'efface rien : c'est presque toujours une panne passagère du serveur.
+    private func keepOrReplace(_ table: String, _ rows: [[Any?]], _ res: inout Result) async -> Int {
+        let pid = provider.id
+        let cols = rows.first?.count ?? 0
+        let kept = await Database.shared.read { db -> Int in
+            let before = db.intValue("SELECT COUNT(*) FROM \(table) WHERE pid=?", [pid]) ?? 0
+            if rows.isEmpty && before > 0 { return before }
+            db.replaceProvider(table: table, pid: pid, sql: "INSERT OR REPLACE INTO \(table) VALUES(" + Array(repeating: "?", count: cols).joined(separator: ",") + ")", rows: rows)
+            return -1
+        }
+        if kept >= 0 {
+            let w = ["live": "chaînes", "vod": "films", "series": "séries"][table] ?? table
+            res.warning = "Liste des \(w) reçue vide : l'ancienne est gardée."
+            return kept
+        }
+        return rows.count
+    }
+
     private func xmltvURL() -> URL? {
         var c = URLComponents(string: provider.account.baseURL + "/xmltv.php")
         c?.queryItems = [URLQueryItem(name: "username", value: provider.username), URLQueryItem(name: "password", value: provider.password)]
@@ -126,14 +146,14 @@ struct CatalogImporter {
         return c?.url
     }
 
-    private func json(_ action: String?) async throws -> Any {
+    private func json(_ action: String?, timeout: Double = 120) async throws -> Any {
         var c = URLComponents(string: provider.account.baseURL + "/player_api.php")
         var q = [URLQueryItem(name: "username", value: provider.username), URLQueryItem(name: "password", value: provider.password)]
         if let action { q.append(URLQueryItem(name: "action", value: action)) }
         c?.queryItems = q
         let q0 = c?.percentEncodedQuery; c?.percentEncodedQuery = q0?.replacingOccurrences(of: "+", with: "%2B")
         guard let url = c?.url else { throw XtreamError.badURL }
-        var req = URLRequest(url: url); req.timeoutInterval = 120
+        var req = URLRequest(url: url); req.timeoutInterval = timeout
         let (data, resp) = try await URLSession.shared.data(for: req)
         if let h = resp as? HTTPURLResponse, !(200..<300).contains(h.statusCode) { throw XtreamError.badStatus(h.statusCode) }
         return try JSONSerialization.jsonObject(with: data, options: [.fragmentsAllowed])

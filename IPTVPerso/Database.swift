@@ -130,6 +130,21 @@ final class Database: @unchecked Sendable {
         exec("COMMIT")
     }
 
+    /// Remplace toutes les lignes d'un fournisseur dans une table, en une seule transaction :
+    /// si l'appli s'arrête au milieu, l'ancien contenu reste intact.
+    func replaceProvider(table: String, pid: String, sql: String, rows: [[Any?]]) {
+        exec("BEGIN IMMEDIATE")
+        run("DELETE FROM \(table) WHERE pid=?", [pid])
+        if !rows.isEmpty {
+            var st: OpaquePointer?
+            if sqlite3_prepare_v2(db, sql, -1, &st, nil) == SQLITE_OK, let st {
+                for r in rows { bind(st, r); sqlite3_step(st); sqlite3_reset(st); sqlite3_clear_bindings(st) }
+                sqlite3_finalize(st)
+            }
+        }
+        exec("COMMIT")
+    }
+
     func run(_ sql: String, _ args: [Any?] = []) {
         var st: OpaquePointer?
         guard sqlite3_prepare_v2(db, sql, -1, &st, nil) == SQLITE_OK, let st else { return }
