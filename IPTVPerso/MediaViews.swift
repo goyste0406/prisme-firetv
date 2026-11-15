@@ -63,7 +63,7 @@ struct MediaHomeView: View {
     private var unit: String { kind == .film ? "films" : "séries" }
 
     var body: some View {
-        BarScrollView {
+        ScrollView {
             LazyVStack(alignment: .leading, spacing: 44) {
                 ZStack(alignment: .top) {
                     heroBlock
@@ -876,7 +876,7 @@ struct MineView: View {
     @State private var loaded = false
 
     var body: some View {
-        BarScrollView {
+        ScrollView {
             LazyVStack(alignment: .leading, spacing: 30) {
                 TopBar(claimFocus: true).id(BarScrollView<EmptyView>.top)
                 VStack(alignment: .leading, spacing: 8) {
@@ -920,7 +920,7 @@ struct SearchView: View {
     @State private var open: MediaItem?
 
     var body: some View {
-        BarScrollView {
+        ScrollView {
             LazyVStack(alignment: .leading, spacing: 30) {
                 TopBar(claimFocus: true).id(BarScrollView<EmptyView>.top)
                 VStack(alignment: .leading, spacing: 18) {
