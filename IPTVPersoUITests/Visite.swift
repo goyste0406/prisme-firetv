@@ -91,6 +91,7 @@ final class Visite: XCTestCase {
         if ProcessInfo.processInfo.environment["ONLY"] == "fournisseurs" { fournisseurs(); return }
         if ProcessInfo.processInfo.environment["ONLY"] == "fiches" { fiches(); return }
         if ProcessInfo.processInfo.environment["ONLY"] == "tvlecteur" { lecteurTV(); return }
+        if ProcessInfo.processInfo.environment["ONLY"] == "tvcrash" { tvCrash(); return }
         shot("01-films-ouverture")
         downUntil(["Catégories", "Licences et sagas"], prefix: "02-films-bas")
         if focused().contains("Catégories") { press(.right) }
@@ -501,6 +502,15 @@ final class Visite: XCTestCase {
         relaunch(["-prisme.debug.open", "series:demo:2001", "-prisme.debug.season", "2"])
         Thread.sleep(forTimeInterval: 3)
         press(.right, 2); press(.down, 6); Thread.sleep(forTimeInterval: 1); shot("16e-saison2-complete")
+    }
+
+    /// Observation : TV en direct ouverte au lancement avec deux fournisseurs, sans toucher à la télécommande,
+    /// une capture toutes les 15 s (l'heure de chaque capture dans focus.txt), puis une seule flèche bas.
+    func tvCrash() {
+        relaunch(["-prisme.debug.demoServer2", "http://127.0.0.1:8098", "-prisme.debug.tab", "live"], wait: 5)
+        for k in 0..<8 { shot(String(format: "C%02d-attente", k), focus: false); attach("heure", "\(Date())"); Thread.sleep(forTimeInterval: 15) }
+        press(.down); Thread.sleep(forTimeInterval: 2); shot("C9-bas")
+        Thread.sleep(forTimeInterval: 20); shot("C10-apres")
     }
 
     /// Lecteur de la TV en direct (1.7 : lecteur commun, variante TV) : bandeau, raccourcis, liste des chaînes,
