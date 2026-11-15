@@ -423,7 +423,11 @@ struct AddProviderFlow: View {
             }
             .padding(.vertical, 8).focusSection()
             Text("La couleur repère ce fournisseur dans les réglages et les sources.").font(P.font(26)).foregroundStyle(.white.opacity(0.72))
-            Button("Importer") { startImport() }.buttonStyle(PVButtonStyle(primary: true)).padding(.top, 19).disabled(!can)
+            // zone de focus sur toute la largeur de la colonne : « bas » depuis n'importe quelle pastille de couleur
+            // (même celles de droite, qui ne sont pas au-dessus du bouton) arrive sur « Importer »
+            Button("Importer") { startImport() }.buttonStyle(PVButtonStyle(primary: true)).disabled(!can)
+                .focused($focus, equals: "import")
+                .frame(maxWidth: .infinity, alignment: .leading).padding(.top, 19).focusSection()
         }
     }
 
