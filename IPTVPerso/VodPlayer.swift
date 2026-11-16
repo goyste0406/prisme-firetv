@@ -357,9 +357,9 @@ final class VodPlayerController: UIViewController, VLCMediaPlayerDelegate {
         if ui.sleepLeft != nil { ui.stillWatching(); return }
         if ui.interactive { ui.back("lecteur"); return }
         if ui.message != nil && (cutDone || bedDone) { quit(); return }
-        // tvOS réserve « Retour maintenu » à l'écran d'accueil de l'Apple TV : on quitte donc par Retour court,
-        // couche par couche (panneau, puis bandeau, puis lecteur), comme le lecteur d'Apple
-        if ui.osd { ui.osd = false } else { quit() }
+        // comportement validé (1.7) : 1re pression = fermer le panneau ouvert (ci-dessus), 2e pression = quitter la vidéo,
+        // bandeau affiché ou non (tvOS réserve « Retour maintenu » à l'écran d'accueil de l'Apple TV)
+        quit()
     }
 
     private func quit() { ui.log("quit"); stop(); onClose() }

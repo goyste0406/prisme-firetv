@@ -310,6 +310,17 @@ enum LiveIndex {
     }
 
     @MainActor static func entry(_ ch: Channel) -> Entry? { byKey[ChannelTools.key(ch)] }
+
+    /// Chaîne lancée seule (en-tête, « Commence bientôt », choix d'une source) : la liste du lecteur reprend les chaînes
+    /// de son univers, pour zapper depuis le panneau Chaînes ; la copie choisie reste celle qui est jouée.
+    @MainActor static func withNeighbors(_ ch: Channel) -> ([Channel], Int) {
+        let k = ChannelTools.key(ch)
+        guard let all = memo?.1, let e = byKey[k] else { return ([ch], 0) }
+        var list = all.filter { $0.univers == e.univers }.map(\.ch)
+        guard let i = list.firstIndex(where: { ChannelTools.key($0) == k }) else { return ([ch], 0) }
+        list[i] = ch
+        return (list, i)
+    }
 }
 
 extension ChannelTools {

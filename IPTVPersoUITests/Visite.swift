@@ -532,16 +532,16 @@ final class Visite: XCTestCase {
         Thread.sleep(forTimeInterval: 4); shot("T3b-direct-zappe", focus: false)
         back(); Thread.sleep(forTimeInterval: 1); shot("T4-direct-retour-raccourcis", focus: false)
         press(.down, 2); press(.select); Thread.sleep(forTimeInterval: 1.5); shot("T5-direct-sources", focus: false)
-        back(); Thread.sleep(forTimeInterval: 1); back(); Thread.sleep(forTimeInterval: 1); back(); Thread.sleep(forTimeInterval: 1)
-        shot("T6-direct-panneaux-fermes", focus: false)
+        back(); Thread.sleep(forTimeInterval: 1); back(); Thread.sleep(forTimeInterval: 1)
+        shot("T6-direct-panneau-ferme", focus: false)
         press(.down); Thread.sleep(forTimeInterval: 1.5); shot("T7-direct-bas-chaines", focus: false)
-        back(); Thread.sleep(forTimeInterval: 1); back(); Thread.sleep(forTimeInterval: 1); back(); Thread.sleep(forTimeInterval: 2)
-        shot("T8-direct-quitte")
+        back(); Thread.sleep(forTimeInterval: 1); shot("T7b-direct-retour-1-panneau-ferme", focus: false)
+        back(); Thread.sleep(forTimeInterval: 2); shot("T8-direct-retour-2-quitte")
         // depuis l'éventail d'un paquet « univers »
         relaunch(["-prisme.debug.demoServer2", "http://127.0.0.1:8098", "-prisme.debug.tab", "live"], wait: 60)
         press(.down, 2); press(.select); Thread.sleep(forTimeInterval: 2); shot("T9-eventail")
         press(.select); Thread.sleep(forTimeInterval: 9); shot("T9b-direct-depuis-eventail", focus: false)
-        back(); Thread.sleep(forTimeInterval: 1); back(); Thread.sleep(forTimeInterval: 2); shot("T9c-retour-eventail")
+        back(); Thread.sleep(forTimeInterval: 2); shot("T9c-retour-eventail")
     }
 
     func lecteur() {
@@ -557,12 +557,12 @@ final class Visite: XCTestCase {
         press(.down, 4); press(.select); Thread.sleep(forTimeInterval: 1); shot("E4-son-de-nuit", focus: false)
         press(.down); press(.select); Thread.sleep(forTimeInterval: 6); shot("E5-son-de-nuit-toujours", focus: false)
         press(.down, 3); Thread.sleep(forTimeInterval: 1); shot("E5b-lecture-bas", focus: false)
-        back(); shot("E6a-retour-1", focus: false); back(); shot("E6b-retour-2", focus: false); back(); Thread.sleep(forTimeInterval: 1); shot("E6-ferme", focus: false)
+        back(); shot("E6a-retour-1-sous-liste", focus: false); back(); Thread.sleep(forTimeInterval: 1); shot("E6b-retour-2-panneau-ferme", focus: false)
         press(.down); Thread.sleep(forTimeInterval: 1); shot("E7-options", focus: false)
         press(.select); Thread.sleep(forTimeInterval: 1); shot("E7b-qu-a-t-il-dit", focus: false)
         press(.up); Thread.sleep(forTimeInterval: 1); shot("E7c-raccourcis-appris", focus: false)
-        back(); back(); Thread.sleep(forTimeInterval: 1); shot("E7d-retour-court-sans-panneau", focus: false)
-        back(); Thread.sleep(forTimeInterval: 1); shot("E7e-retour-quitte", focus: false)
+        back(); Thread.sleep(forTimeInterval: 1); shot("E7d-retour-1-panneau-ferme", focus: false)
+        back(); Thread.sleep(forTimeInterval: 1.5); shot("E7e-retour-2-quitte", focus: false)
         relaunch(["-prisme.debug.open", "film:demo:1016", "-prisme.debug.sleepAfter", "25"])
         press(.select); Thread.sleep(forTimeInterval: 34); shot("E8-tu-regardes-toujours", focus: false)
         Thread.sleep(forTimeInterval: 17); shot("E9-pause-place-gardee", focus: false)
@@ -570,6 +570,6 @@ final class Visite: XCTestCase {
         press(.select); Thread.sleep(forTimeInterval: 6)
         press(.up); press(.up); Thread.sleep(forTimeInterval: 1); press(.down, 5); press(.left); Thread.sleep(forTimeInterval: 1); shot("E10-arret-coucher-choix", focus: false)
         press(.select); Thread.sleep(forTimeInterval: 1); shot("E10b-arret-coucher-active", focus: false)
-        back(); back(); Thread.sleep(forTimeInterval: 75); shot("E11-arret-coucher", focus: false)
+        back(); Thread.sleep(forTimeInterval: 75); shot("E11-arret-coucher", focus: false)
     }
 }

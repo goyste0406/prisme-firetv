@@ -129,7 +129,8 @@ final class PlayerUI: ObservableObject {
         touch()
         switch panel {
         case .sub: panel = .full
-        case .full: panel = .shortcuts
+        // comportement validé : Retour ferme le panneau ouvert (une sous-liste revient d'abord à sa liste)
+        case .full: panel = .none
         case .shortcuts: panel = .none
         case .none: options = false
         }

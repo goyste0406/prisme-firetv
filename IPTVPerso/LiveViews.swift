@@ -194,7 +194,7 @@ struct LiveFrontView: View {
                 }
                 if !soon.isEmpty {
                     rowTitle("Commence bientôt", "dans l'heure · OK pour regarder la chaîne")
-                    row { ForEach(soon) { a in SoonCard(a: a) { play([a.ch], 0) } } }
+                    row { ForEach(soon) { a in SoonCard(a: a) { playOne(a.ch) } } }
                 }
                 if loaded && index.isEmpty {
                     VStack(spacing: 14) {
@@ -251,6 +251,8 @@ struct LiveFrontView: View {
         loaded = true
     }
 
+    private func playOne(_ ch: Channel) { let (l, i) = LiveIndex.withNeighbors(ch); play(l, i) }
+
     private func rowTitle(_ t: String, _ sub: String) -> some View { SectionTitle(title: t, sub: sub).padding(.leading, 18) }
 
     private func favButton(_ ch: Channel) -> some View {
@@ -265,7 +267,7 @@ struct LiveFrontView: View {
         if head != nil || !soon.isEmpty {
             VStack(alignment: .leading, spacing: 0) {
                 Button {
-                    if let h = head { playHead(h) } else if let a = soon.first { play([a.ch], 0) }
+                    if let h = head { playHead(h) } else if let a = soon.first { playOne(a.ch) }
                 } label: {
                     if let h = head { headerLabel(h) } else if let a = soon.first { soonLabel(a) }
                 }
@@ -290,7 +292,7 @@ struct LiveFrontView: View {
     }
 
     private func playHead(_ ch: Channel) {
-        if let i = recent.firstIndex(of: ch) { play(recent, i) } else { play([ch], 0) }
+        if let i = recent.firstIndex(of: ch) { play(recent, i) } else { playOne(ch) }
     }
 
     private func headKicker(_ ch: Channel) -> String {
