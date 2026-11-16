@@ -8,6 +8,10 @@ on:
     paths: ["IPTVPerso/**", "IPTVPersoUITests/**", "ci/**", "project.yml", "Podfile", ".github/workflows/visite-tvos.yml"]
   workflow_dispatch:
     inputs:
+      machine:
+        description: "Type de Mac GitHub (macos-15-intel par défaut ; essais : macos-15, macos-26)"
+        required: false
+        default: ""
       seulement:
         description: "Partie à visiter seule (lecteur, serie, tv, nav, multi, perf, fournisseurs, fiches, tvlecteur, tvcrash, tvidle, gouts), vide = visite complète"
         required: false
@@ -18,7 +22,7 @@ permissions:
 
 jobs:
   visite:
-    runs-on: macos-15-intel
+    runs-on: ${{ inputs.machine || 'macos-15-intel' }}
     timeout-minutes: 110
     steps:
       - uses: actions/checkout@v4

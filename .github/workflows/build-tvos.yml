@@ -6,6 +6,11 @@ on:
     # seulement quand l'appli elle-même change (pas le simulateur)
     paths: ["IPTVPerso/**", "project.yml", "Podfile", ".github/workflows/**"]
   workflow_dispatch:
+    inputs:
+      machine:
+        description: "Type de Mac GitHub (macos-15-intel par défaut ; essais : macos-15, macos-26)"
+        required: false
+        default: ""
 
 permissions:
   contents: write
@@ -13,7 +18,7 @@ permissions:
 jobs:
   build:
     # Les Mac arm64 (macos-15, macos-14) ne sont jamais attribués : on utilise le Mac Intel
-    runs-on: macos-15-intel
+    runs-on: ${{ inputs.machine || 'macos-15-intel' }}
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
