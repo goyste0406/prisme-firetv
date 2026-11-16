@@ -38,6 +38,7 @@ struct CatalogImporter {
 
         // ---- catégories
         var blocked = Set<String>()
+        var liveCats: [String: String] = [:]
         for (i, (type, action)) in [("live", "get_live_categories"), ("vod", "get_vod_categories"), ("series", "get_series_categories")].enumerated() {
             progress(0.04 + Double(i) * 0.02, "Catégories…")
             let arr = (try? await json(action)) as? [[String: Any]] ?? []
@@ -48,6 +49,7 @@ struct CatalogImporter {
                 // catégorie masquée dans « Gérer » : gardée dans la liste des catégories, ses contenus ne sont pas chargés
                 if (provider.hidden ?? []).contains(type + ":" + cid) { blocked.insert(type + ":" + cid) }
                 rows.append([pid, type, cid, name, pos])
+                if type == "live" { liveCats[cid] = name }
             }
             await db.read { db in
                 // liste vide (panne passagère du serveur) : les catégories déjà connues sont gardées
@@ -70,7 +72,10 @@ struct CatalogImporter {
             let epg = str(s["epg_channel_id"])
             if !epg.isEmpty { epgIDs.insert(epg) }
             let arch = str(s["tv_archive"]) == "1" ? (Int(str(s["tv_archive_duration"])) ?? 1) : 0
-            lrows.append([pid, str(s["stream_id"]), name, Int(str(s["num"])) ?? 0, str(s["stream_icon"]), cid, epg, arch])
+            // identité de la chaîne calculée ici, une fois (lue telle quelle par l'index des chaînes)
+            let id = LiveIndex.identity(name: name, category: liveCats[cid] ?? "")
+            lrows.append([pid, str(s["stream_id"]), name, Int(str(s["num"])) ?? 0, str(s["stream_icon"]), cid, epg, arch,
+                          id.name, id.key, id.q, id.u.rawValue, LiveIndex.rulesVersion])
         }
         res.counts["live"] = await keepOrReplace("live", lrows, received: live.count, &res)
 

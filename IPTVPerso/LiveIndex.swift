@@ -295,17 +295,21 @@ enum LiveIndex {
         let t0 = Date()
         // 1. lecture seule dans la base (rapide) ; 2. calcul HORS de la file de la base : avant, ce calcul la bloquait
         // et retardait toutes les autres pages (accueil Films, en-tête de la TV) pendant des secondes
-        let rows = await Database.shared.read { db -> ([String: String], [Channel]) in
-            var cats: [String: String] = [:], list: [Channel] = []
+        let rows = await Database.shared.read { db -> ([String: String], [Channel], [Identity?]) in
+            var cats: [String: String] = [:], list: [Channel] = [], ids: [Identity?] = []
             db.query("SELECT pid,cid,name FROM category WHERE type='live' AND pid IN (\(ph))", pids.map { $0 as Any? }) { r in cats[r.str(0) + ":" + r.str(1)] = r.str(2) }
-            db.query("SELECT pid,sid,name,num,icon,cid,epg,archive FROM live WHERE pid IN (\(ph)) ORDER BY num, name", pids.map { $0 as Any? }) { r in
+            db.query("SELECT pid,sid,name,num,icon,cid,epg,archive,iname,ikey,iq,iu,iv FROM live WHERE pid IN (\(ph)) ORDER BY num, name", pids.map { $0 as Any? }) { r in
                 list.append(Channel(pid: r.str(0), sid: r.str(1), name: r.str(2), num: r.int(3), icon: r.str(4), cid: r.str(5), epg: r.str(6), archive: r.int(7)))
+                // identité enregistrée à l'import (règles de cette version) ; sinon calculée comme avant
+                if r.int(12) == rulesVersion, !r.str(9).isEmpty, let u = Univers(rawValue: r.str(11)) {
+                    ids.append(Identity(name: r.str(8), key: r.str(9), q: r.int(10), u: u))
+                } else { ids.append(nil) }
             }
-            return (cats, list)
+            return (cats, list, ids)
         }
         let tRead = Date().timeIntervalSince(t0)
-        let res = await Task.detached(priority: .userInitiated) { build(cats: rows.0, list: rows.1, pids: pids) }.value
-        PerfLog.note("  lecture de la base : \(Int(tRead * 1000)) ms (\(rows.1.count) lignes)")
+        let res = await Task.detached(priority: .userInitiated) { build(cats: rows.0, list: rows.1, ids: rows.2, pids: pids) }.value
+        PerfLog.note("  lecture de la base : \(Int(tRead * 1000)) ms (\(rows.1.count) lignes, \(rows.2.filter { $0 != nil }.count) identités enregistrées)")
         memo = (mk, res)
         byKey = Dictionary(res.map { ($0.key, $0) }, uniquingKeysWith: { a, _ in a })
         PerfLog.note("Index des chaînes : \(res.count) chaînes (\(res.reduce(0) { $0 + $1.sources }) sources) en \(Int(Date().timeIntervalSince(t0) * 1000)) ms")
@@ -314,23 +318,39 @@ enum LiveIndex {
     }
 
     /// Regroupement par identité : nom nettoyé, clé et qualité calculés UNE fois par copie (et non à chaque comparaison).
-    private static func build(cats: [String: String], list: [Channel], pids: [String]) -> [Entry] {
-        struct Info { let c: Channel; let clean: String; let q: Int; let rank: Int }
+    /// Version des règles (nettoyage du nom, clé, qualité, univers) : une identité enregistrée avec d'autres règles est recalculée.
+    static let rulesVersion = 1
+
+    struct Identity { let name: String; let key: String; let q: Int; let u: Univers }
+
+    /// Identité d'une copie de chaîne, d'après son nom et le groupe du fournisseur (calculée à l'import).
+    static func identity(name: String, category: String) -> Identity {
+        let n = ChannelTools.clean(name)
+        return Identity(name: n, key: ChannelTools.country(name) + "|" + ChannelTools.nkey(n), q: ChannelTools.quality(name),
+                        u: Univers.of(clean: n, category: category))
+    }
+
+    private static func build(cats: [String: String], list: [Channel], ids: [Identity?], pids: [String]) -> [Entry] {
+        struct Info { let c: Channel; let clean: String; let q: Int; let rank: Int; let u: Univers? }
         var groups: [String: [Info]] = [:], order: [String] = []
         let measure = Debug.demoServer != nil
         var tc = 0.0, tk = 0.0, tq = 0.0, tu = 0.0
         func clock() -> Double { measure ? CFAbsoluteTimeGetCurrent() : 0 }
-        for c in list {
-            let a = clock()
-            let n = ChannelTools.clean(c.name)
-            let b = clock()
-            let k = ChannelTools.country(c.name) + "|" + ChannelTools.nkey(n)
-            let d = clock()
-            let q = ChannelTools.quality(c.name)
-            let e = clock()
-            tc += b - a; tk += d - b; tq += e - d
+        for (i, c) in list.enumerated() {
+            let n: String, k: String, q: Int
+            if i < ids.count, let id = ids[i] {
+                n = id.name; k = id.key; q = id.q
+            } else {
+                let a = clock()
+                n = ChannelTools.clean(c.name)
+                let b = clock()
+                k = ChannelTools.country(c.name) + "|" + ChannelTools.nkey(n)
+                let d = clock()
+                q = ChannelTools.quality(c.name)
+                tc += b - a; tk += d - b; tq += clock() - d
+            }
             if groups[k] == nil { order.append(k) }
-            groups[k, default: []].append(Info(c: c, clean: n, q: q, rank: pids.firstIndex(of: c.pid) ?? 99))
+            groups[k, default: []].append(Info(c: c, clean: n, q: q, rank: pids.firstIndex(of: c.pid) ?? 99, u: i < ids.count ? ids[i]?.u : nil))
         }
         defer { if measure { PerfLog.note("  détail index : nettoyage \(Int(tc * 1000)) ms · clé \(Int(tk * 1000)) ms · qualité \(Int(tq * 1000)) ms · univers \(Int(tu * 1000)) ms") } }
         return order.compactMap { k -> Entry? in
@@ -347,10 +367,11 @@ enum LiveIndex {
             let n = G[0].clean
             // univers : décidé sur le nom ; à défaut, le groupe le plus précis parmi les copies
             let t1 = clock()
-            var u = Univers.of(clean: n, category: cats[best.pid + ":" + best.cid] ?? "")
+            // (univers de chaque copie enregistré à l'import quand il existe)
+            var u = G[0].u ?? Univers.of(clean: n, category: cats[best.pid + ":" + best.cid] ?? "")
             if u == .autres || u == .generaliste {
-                for c in L.dropFirst() {
-                    let v = Univers.of(clean: n, category: cats[c.pid + ":" + c.cid] ?? "")
+                for x in G.dropFirst() {
+                    let v = x.u ?? Univers.of(clean: n, category: cats[x.c.pid + ":" + x.c.cid] ?? "")
                     if v != .autres && v != u { if u == .autres { u = v }; break }
                 }
             }

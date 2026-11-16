@@ -85,6 +85,17 @@ final class Database: @unchecked Sendable {
             exec("ALTER TABLE fiche ADD COLUMN keywords TEXT")
             exec("PRAGMA user_version=6")
         }
+        if v < 7 {
+            // 1.7 : identité de chaque chaîne calculée UNE fois à l'import (vrai nom, clé, qualité, univers) au lieu de
+            // l'être à chaque ouverture de la TV (plus de 20 s avec 20 000 chaînes). Colonnes ajoutées, rien n'est effacé :
+            // vides jusqu'à la prochaine mise à jour du catalogue (l'appli les calcule alors comme avant).
+            exec("ALTER TABLE live ADD COLUMN iname TEXT")
+            exec("ALTER TABLE live ADD COLUMN ikey TEXT")
+            exec("ALTER TABLE live ADD COLUMN iq INTEGER")
+            exec("ALTER TABLE live ADD COLUMN iu TEXT")
+            exec("ALTER TABLE live ADD COLUMN iv INTEGER")
+            exec("PRAGMA user_version=7")
+        }
     }
 
     // MARK: Requêtes
