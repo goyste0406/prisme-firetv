@@ -44,11 +44,16 @@ enum Univers: String, CaseIterable, Identifiable {
     }
 
     static func of(name: String, category: String) -> Univers {
-        let k = ChannelTools.nkey(ChannelTools.clean(name))
+        of(clean: ChannelTools.clean(name), category: category)
+    }
+
+    /// Même décision, pour un nom déjà nettoyé (index des chaînes : chaque nom n'est nettoyé qu'une fois)
+    static func of(clean c: String, category: String) -> Univers {
+        let k = ChannelTools.nkey(c)
         if let u = known(k) { return u }
-        let g = fromWords(ChannelTools.fold(category), group: true)
+        let g = groupOf(category)
         if let u = g, u != .generaliste { return u }
-        if let u = fromWords(ChannelTools.fold(ChannelTools.clean(name)), group: false) { return u }
+        if let u = fromWords(ChannelTools.fold(c), group: false) { return u }
         // groupe « Régions » / « Généralistes » du fournisseur : seulement si le nom ne dit rien d'autre
         if let u = g { return u }
         return .autres
@@ -104,23 +109,33 @@ enum Univers: String, CaseIterable, Identifiable {
         return nil
     }
 
+    /// univers d'un groupe du fournisseur (quelques centaines de groupes pour des dizaines de milliers de chaînes)
+    private static let groupLock = NSLock()
+    nonisolated(unsafe) private static var groupMemo: [String: Univers?] = [:]
+    private static func groupOf(_ category: String) -> Univers? {
+        groupLock.lock(); if let v = groupMemo[category] { groupLock.unlock(); return v }; groupLock.unlock()
+        let v = fromWords(ChannelTools.fold(category), group: true)
+        groupLock.lock(); groupMemo[category] = v; groupLock.unlock()
+        return v
+    }
+
     // MARK: 2–3. Mots entiers (groupe du fournisseur, puis nom) — seulement si UNE catégorie ressort
 
-    private static let words: [(Univers, String)] = [
-        (.sport, #"\b(sports?|foot|football|soccer|rugby|tennis|golf|basket|nba|nfl|ufc|boxe|boxing|cyclisme|motorsport)\b"#),
-        (.info, #"\b(info|infos|news|actualites?|journal)\b"#),
-        (.cinema, #"\b(cinema|cine|films?|movies?)\b"#),
-        (.series, #"\b(series?|feuilletons?|novelas?)\b"#),
-        (.jeunesse, #"\b(enfants?|kids|jeunesse|junior|cartoons?|dessins? animes?|anime)\b"#),
-        (.decouverte, #"\b(docu|docus|documentaires?|documentary|documentaries|decouvertes?|discovery|nature|histoire|history)\b"#),
-        (.musique, #"\b(musiques?|music|musik|clips?|radios?|hits)\b"#),
-        (.divert, #"\b(divertissements?|entertainment|varietes?|humour|comedy)\b"#),
-        (.generaliste, #"\b(generalistes?|regionales?|regions|locales?)\b"#),
+    private static let words: [(Univers, NSRegularExpression)] = [
+        (.sport, ChannelTools.rx(#"\b(sports?|foot|football|soccer|rugby|tennis|golf|basket|nba|nfl|ufc|boxe|boxing|cyclisme|motorsport)\b"#)),
+        (.info, ChannelTools.rx(#"\b(info|infos|news|actualites?|journal)\b"#)),
+        (.cinema, ChannelTools.rx(#"\b(cinema|cine|films?|movies?)\b"#)),
+        (.series, ChannelTools.rx(#"\b(series?|feuilletons?|novelas?)\b"#)),
+        (.jeunesse, ChannelTools.rx(#"\b(enfants?|kids|jeunesse|junior|cartoons?|dessins? animes?|anime)\b"#)),
+        (.decouverte, ChannelTools.rx(#"\b(docu|docus|documentaires?|documentary|documentaries|decouvertes?|discovery|nature|histoire|history)\b"#)),
+        (.musique, ChannelTools.rx(#"\b(musiques?|music|musik|clips?|radios?|hits)\b"#)),
+        (.divert, ChannelTools.rx(#"\b(divertissements?|entertainment|varietes?|humour|comedy)\b"#)),
+        (.generaliste, ChannelTools.rx(#"\b(generalistes?|regionales?|regions|locales?)\b"#)),
     ]
 
     static func fromWords(_ s: String, group: Bool) -> Univers? {
         guard !s.isEmpty else { return nil }
-        let hits = Set(words.filter { s.range(of: $0.1, options: .regularExpression) != nil }.map(\.0))
+        let hits = Set(words.filter { ChannelTools.has($0.1, s) }.map(\.0))
         // « Films & Séries » : deux catégories → on ne décide pas d'après ce groupe
         if hits.count == 1 { return hits.first }
         if group, hits == [.cinema, .series] { return nil }
@@ -129,13 +144,26 @@ enum Univers: String, CaseIterable, Identifiable {
 }
 
 enum ChannelTools {
+    /// expression compilée une seule fois (la compiler à chaque appel coûtait plusieurs secondes sur 20 000 chaînes)
+    static func rx(_ p: String) -> NSRegularExpression { try! NSRegularExpression(pattern: p) }
+    static func has(_ r: NSRegularExpression, _ s: String) -> Bool {
+        r.firstMatch(in: s, range: NSRange(s.startIndex..., in: s)) != nil
+    }
+    private static let spaces = rx(#"\s{2,}"#)
+    private static let q4 = rx(#"\b(4k|8k|uhd|ultra ?hd|2160)"#), q3 = rx(#"\b(fhd|1080)"#), q2 = rx(#"\b(hd|720p?)\b"#),
+                       q0 = rx(#"\b(sd|low|576p?|480p?)\b"#), qm = rx(#"secours|backup|alt\b"#)
+
+    private static let fr = Locale(identifier: "fr_FR")
     static func fold(_ s: String) -> String {
-        s.folding(options: [.diacriticInsensitive, .caseInsensitive], locale: Locale(identifier: "fr_FR"))
+        s.folding(options: [.diacriticInsensitive, .caseInsensitive], locale: fr)
     }
     /// Clé de comparaison : minuscules, sans accents, « + » → « plus », « & » → « et », rien que lettres et chiffres.
     static func nkey(_ s: String) -> String {
-        fold(s).replacingOccurrences(of: "+", with: "plus").replacingOccurrences(of: "&", with: "et")
-            .replacingOccurrences(of: #"[^a-z0-9]+"#, with: "", options: .regularExpression)
+        let f = fold(s).replacingOccurrences(of: "+", with: "plus").replacingOccurrences(of: "&", with: "et")
+        // rien que a–z et 0–9 (comme l'ancienne expression [^a-z0-9]+, sans la compiler à chaque fois)
+        var out = String.UnicodeScalarView()
+        for u in f.unicodeScalars where (u.value >= 97 && u.value <= 122) || (u.value >= 48 && u.value <= 57) { out.append(u) }
+        return String(out)
     }
     private static let lead = try! NSRegularExpression(pattern: #"^\s*(?:[\[(|]?\s*(?:fr|fra|france|be|ch|ca|qc|uk|us|vip|4k|hd|fhd|uhd)\s*[\])|:\-–—•·▎┃│★✦◉●_/]+\s*)+"#, options: [.caseInsensitive])
     /// « FR TF1 » : pays en majuscules suivi d'un simple espace (jamais « BE IN SPORTS »)
@@ -164,18 +192,18 @@ enum ChannelTools {
             s = tailSymbols.stringByReplacingMatches(in: s, range: NSRange(s.startIndex..., in: s), withTemplate: "")
             s = tail.stringByReplacingMatches(in: s, range: NSRange(s.startIndex..., in: s), withTemplate: "")
         }
-        s = s.replacingOccurrences(of: #"\s{2,}"#, with: " ", options: .regularExpression).trimmingCharacters(in: CharacterSet(charactersIn: " -–|:"))
+        s = spaces.stringByReplacingMatches(in: s, range: NSRange(s.startIndex..., in: s), withTemplate: " ").trimmingCharacters(in: CharacterSet(charactersIn: " -–|:"))
         return s.count >= 1 ? s : raw
     }
 
     /// Qualité, pour garder la meilleure copie comme chaîne principale.
     static func quality(_ raw: String) -> Int {
         let r = fold(plain(raw))
-        if r.range(of: #"\b(4k|8k|uhd|ultra ?hd|2160)"#, options: .regularExpression) != nil { return 4 }
-        if r.range(of: #"\b(fhd|1080)"#, options: .regularExpression) != nil { return 3 }
-        if r.range(of: #"\b(hd|720p?)\b"#, options: .regularExpression) != nil { return 2 }
-        if r.range(of: #"\b(sd|low|576p?|480p?)\b"#, options: .regularExpression) != nil { return 0 }
-        if r.range(of: #"secours|backup|alt\b"#, options: .regularExpression) != nil { return -1 }
+        if has(q4, r) { return 4 }
+        if has(q3, r) { return 3 }
+        if has(q2, r) { return 2 }
+        if has(q0, r) { return 0 }
+        if has(qm, r) { return -1 }
         return 1
     }
 
@@ -247,48 +275,74 @@ enum LiveIndex {
         }
     }
 
+    /// calcul en cours : un deuxième demandeur (page TV + favoris au même moment) attend le même résultat
+    @MainActor private static var running: (String, Task<[Entry], Never>)?
+
     @MainActor static func all(pids: [String], version: Int) async -> [Entry] {
         let mk = pids.joined(separator: ",") + "|\(version)"
         if let m = memo, m.0 == mk { return m.1 }
         guard !pids.isEmpty else { return [] }
+        if let r = running, r.0 == mk { return await r.1.value }
+        let t = Task { @MainActor in await compute(pids: pids, mk: mk) }
+        running = (mk, t)
+        let res = await t.value
+        if running?.0 == mk { running = nil }
+        return res
+    }
+
+    @MainActor private static func compute(pids: [String], mk: String) async -> [Entry] {
         let ph = pids.map { _ in "?" }.joined(separator: ",")
         let t0 = Date()
-        let res = await Database.shared.read { db -> [Entry] in
-            var cats: [String: String] = [:]
+        // 1. lecture seule dans la base (rapide) ; 2. calcul HORS de la file de la base : avant, ce calcul la bloquait
+        // et retardait toutes les autres pages (accueil Films, en-tête de la TV) pendant des secondes
+        let rows = await Database.shared.read { db -> ([String: String], [Channel]) in
+            var cats: [String: String] = [:], list: [Channel] = []
             db.query("SELECT pid,cid,name FROM category WHERE type='live' AND pid IN (\(ph))", pids.map { $0 as Any? }) { r in cats[r.str(0) + ":" + r.str(1)] = r.str(2) }
-            var groups: [String: [Channel]] = [:], order: [String] = []
             db.query("SELECT pid,sid,name,num,icon,cid,epg,archive FROM live WHERE pid IN (\(ph)) ORDER BY num, name", pids.map { $0 as Any? }) { r in
-                let c = Channel(pid: r.str(0), sid: r.str(1), name: r.str(2), num: r.int(3), icon: r.str(4), cid: r.str(5), epg: r.str(6), archive: r.int(7))
-                let k = ChannelTools.key(c)
-                if groups[k] == nil { order.append(k) }
-                groups[k, default: []].append(c)
+                list.append(Channel(pid: r.str(0), sid: r.str(1), name: r.str(2), num: r.int(3), icon: r.str(4), cid: r.str(5), epg: r.str(6), archive: r.int(7)))
             }
-            return order.compactMap { k -> Entry? in
-                guard let L0 = groups[k] else { return nil }
-                let L = ordered(L0, providerOrder: pids)
-                var best = L[0]
-                // la copie jouée reprend le guide, le logo et le replay d'une autre copie s'il lui en manque
-                if best.epg.isEmpty || best.icon.isEmpty || best.archive == 0 {
-                    let g = L.first { !$0.epg.isEmpty }?.epg ?? best.epg, ic = L.first { !$0.icon.isEmpty }?.icon ?? best.icon
-                    best = Channel(pid: best.pid, sid: best.sid, name: best.name, num: best.num, icon: best.icon.isEmpty ? ic : best.icon, cid: best.cid, epg: best.epg.isEmpty ? g : best.epg, archive: best.archive)
-                }
-                let n = ChannelTools.clean(best.name)
-                // univers : décidé sur le nom ; à défaut, le groupe le plus précis parmi les copies
-                var u = Univers.of(name: n, category: cats[best.pid + ":" + best.cid] ?? "")
-                if u == .autres || u == .generaliste {
-                    for c in L.dropFirst() {
-                        let v = Univers.of(name: n, category: cats[c.pid + ":" + c.cid] ?? "")
-                        if v != .autres && v != u { if u == .autres { u = v }; break }
-                    }
-                }
-                return Entry(ch: best, name: n, univers: u, copies: L, key: k)
-            }
+            return (cats, list)
         }
+        let res = await Task.detached(priority: .userInitiated) { build(cats: rows.0, list: rows.1, pids: pids) }.value
         memo = (mk, res)
         byKey = Dictionary(res.map { ($0.key, $0) }, uniquingKeysWith: { a, _ in a })
         PerfLog.note("Index des chaînes : \(res.count) chaînes (\(res.reduce(0) { $0 + $1.sources }) sources) en \(Int(Date().timeIntervalSince(t0) * 1000)) ms")
         if Debug.demoServer != nil { dump(res) }
         return res
+    }
+
+    /// Regroupement par identité : nom nettoyé, clé et qualité calculés UNE fois par copie (et non à chaque comparaison).
+    private static func build(cats: [String: String], list: [Channel], pids: [String]) -> [Entry] {
+        struct Info { let c: Channel; let clean: String; let q: Int; let rank: Int }
+        var groups: [String: [Info]] = [:], order: [String] = []
+        for c in list {
+            let n = ChannelTools.clean(c.name)
+            let k = ChannelTools.country(c.name) + "|" + ChannelTools.nkey(n)
+            if groups[k] == nil { order.append(k) }
+            groups[k, default: []].append(Info(c: c, clean: n, q: ChannelTools.quality(c.name), rank: pids.firstIndex(of: c.pid) ?? 99))
+        }
+        return order.compactMap { k -> Entry? in
+            guard let G0 = groups[k] else { return nil }
+            // même ordre que ordered(_:providerOrder:) : qualité (secours en dernier), ordre des fournisseurs, numéro
+            let G = G0.count == 1 ? G0 : G0.sorted { a, b in a.q != b.q ? a.q > b.q : (a.rank != b.rank ? a.rank < b.rank : a.c.num < b.c.num) }
+            let L = G.map(\.c)
+            var best = L[0]
+            // la copie jouée reprend le guide, le logo et le replay d'une autre copie s'il lui en manque
+            if best.epg.isEmpty || best.icon.isEmpty || best.archive == 0 {
+                let g = L.first { !$0.epg.isEmpty }?.epg ?? best.epg, ic = L.first { !$0.icon.isEmpty }?.icon ?? best.icon
+                best = Channel(pid: best.pid, sid: best.sid, name: best.name, num: best.num, icon: best.icon.isEmpty ? ic : best.icon, cid: best.cid, epg: best.epg.isEmpty ? g : best.epg, archive: best.archive)
+            }
+            let n = G[0].clean
+            // univers : décidé sur le nom ; à défaut, le groupe le plus précis parmi les copies
+            var u = Univers.of(clean: n, category: cats[best.pid + ":" + best.cid] ?? "")
+            if u == .autres || u == .generaliste {
+                for c in L.dropFirst() {
+                    let v = Univers.of(clean: n, category: cats[c.pid + ":" + c.cid] ?? "")
+                    if v != .autres && v != u { if u == .autres { u = v }; break }
+                }
+            }
+            return Entry(ch: best, name: n, univers: u, copies: L, key: k)
+        }
     }
 
     /// Chaînes enregistrées (favoris, récentes) retrouvées par leur IDENTITÉ chez les fournisseurs actifs :

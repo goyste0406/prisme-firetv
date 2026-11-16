@@ -128,17 +128,30 @@ enum LiveStore {
 
     /// Genre d'un programme d'après la catégorie du guide (règle « pgen » du simulateur ; « dessin animé »
     /// et « animation » vont en Jeunesse, « animaux » reste en Découverte).
+    private static let genreRx: [(Univers, NSRegularExpression)] = [
+        (.cinema, ChannelTools.rx(#"film|cinema|telefilm|movie"#)),
+        (.series, ChannelTools.rx(#"serie|feuilleton|fiction|drama|soap|sitcom"#)),
+        (.sport, ChannelTools.rx(#"sport|foot|rugby|tennis|cyclisme|match|basket|golf|moteur|\bf1\b"#)),
+        (.info, ChannelTools.rx(#"info|journal|politique|debat|actualite|news|meteo"#)),
+        (.jeunesse, ChannelTools.rx(#"dessin|animation|\banime\b|jeunesse|enfant|kids|children|cartoon"#)),
+        (.decouverte, ChannelTools.rx(#"docu|decouverte|nature|histoire|science|voyage|animaux"#)),
+        (.musique, ChannelTools.rx(#"musique|music|concert|clip"#)),
+    ]
+    /// une catégorie du guide revient des milliers de fois : décidée une seule fois
+    private static let genreLock = NSLock()
+    nonisolated(unsafe) private static var genreMemo: [String: Univers?] = [:]
+
     static func genre(ofGuideCategory g0: String) -> Univers? {
+        genreLock.lock(); if let v = genreMemo[g0] { genreLock.unlock(); return v }; genreLock.unlock()
+        let v = genre0(g0)
+        genreLock.lock(); genreMemo[g0] = v; genreLock.unlock()
+        return v
+    }
+
+    private static func genre0(_ g0: String) -> Univers? {
         let g = ChannelTools.fold(g0)
         guard !g.trimmingCharacters(in: .whitespaces).isEmpty else { return nil }
-        func has(_ p: String) -> Bool { g.range(of: p, options: .regularExpression) != nil }
-        if has(#"film|cinema|telefilm|movie"#) { return .cinema }
-        if has(#"serie|feuilleton|fiction|drama|soap|sitcom"#) { return .series }
-        if has(#"sport|foot|rugby|tennis|cyclisme|match|basket|golf|moteur|\bf1\b"#) { return .sport }
-        if has(#"info|journal|politique|debat|actualite|news|meteo"#) { return .info }
-        if has(#"dessin|animation|\banime\b|jeunesse|enfant|kids|children|cartoon"#) { return .jeunesse }
-        if has(#"docu|decouverte|nature|histoire|science|voyage|animaux"#) { return .decouverte }
-        if has(#"musique|music|concert|clip"#) { return .musique }
+        for (u, r) in genreRx where ChannelTools.has(r, g) { return u }
         return .divert
     }
 
