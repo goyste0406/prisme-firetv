@@ -208,7 +208,13 @@ final class ProviderStore: ObservableObject {
         Task.detached(priority: .utility) {
             do {
                 let res = try await CatalogImporter(provider: p).run { pct, msg in
-                    Task { @MainActor in ProviderStore.shared.progress = pct; ProviderStore.shared.status = msg }
+                    Task { @MainActor in
+                        // seulement quand le pourcentage affiché ou le message change : chaque publication redessine
+                        // toutes les pages qui suivent les fournisseurs (des centaines de fois par import sinon)
+                        let s = ProviderStore.shared
+                        if Int(s.progress * 100) != Int(pct * 100) { s.progress = pct }
+                        if s.status != msg { s.status = msg }
+                    }
                 }
                 await MainActor.run {
                     let s = ProviderStore.shared

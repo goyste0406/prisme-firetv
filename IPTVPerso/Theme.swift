@@ -252,12 +252,6 @@ struct TopBar: View {
 
     var body: some View {
         ZStack {
-            HStack(alignment: .top) {
-                Brand().padding(.top, 22)
-                Spacer()
-                VStack(alignment: .trailing, spacing: 8) { Clock().padding(.top, 16); ImportBadge() }
-            }
-            .padding(.horizontal, 84)
             HStack(spacing: 6) {
                 tab(.films, "Films"); tab(.series, "Séries"); tab(.live, "TV en direct"); tab(.mine, "Ma liste")
                 icon(.search, "magnifyingglass"); icon(.settings, "gearshape.fill")
@@ -273,6 +267,21 @@ struct TopBar: View {
         .contentShape(Rectangle())
         .focusSection()
         .defaultFocus($focus, nav.tab, priority: .userInitiated)
+        // logo, heure et progression d'import : MÊME position qu'avant, mais posés par-dessus la zone de focus et non dedans.
+        // Dedans, chaque avancée de l'import (barre de progression, message) faisait recalculer la zone de focus de la
+        // barre par tvOS, qui plantait de temps en temps pendant ce recalcul (page TV en direct, deux fournisseurs).
+        .overlay(alignment: .top) {
+            HStack(alignment: .top) {
+                Brand().padding(.top, 22)
+                Spacer()
+                VStack(alignment: .trailing, spacing: 8) { Clock().padding(.top, 16); ImportBadge() }
+            }
+            .padding(.horizontal, 84)
+            .frame(maxWidth: .infinity)
+            .frame(height: 140)
+            .padding(.top, 39)
+            .allowsHitTesting(false)
+        }
         // une seule surveillance de la sélection (deux « onChange » sur le même état de focus faisaient planter tvOS
         // pendant le recalcul des zones de focus, page TV en direct avec deux fournisseurs)
         .onChange(of: focus) { _, f in
