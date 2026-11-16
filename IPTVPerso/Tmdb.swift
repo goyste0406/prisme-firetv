@@ -281,20 +281,26 @@ struct FicheWorker {
         guard !pids.isEmpty else { return [] }
         let table = kind == .film ? "vod" : "series"
         let cols = kind == .film ? "pid,sid,name,year,icon,cid,ext,rating,added,tmdb,''" : "pid,sid,name,year,cover,cid,'',rating,added,tmdb,plot"
-        return await Database.shared.read { db in
-            var have = Set<String>(), old = Set<String>()
+        // lecture seule dans la base ; le nettoyage des titres (des dizaines de milliers) se fait APRÈS, hors de la file
+        // de la base : avant, il la bloquait plusieurs secondes après chaque mise à jour du catalogue (TV, accueils en attente)
+        let got = await Database.shared.read { db -> (Set<String>, Set<String>, [MediaItem]) in
+            var have = Set<String>(), old = Set<String>(), all: [MediaItem] = []
             db.query("SELECT ckey, country IS NULL FROM fiche WHERE kind=?", [kind.rawValue]) { r in have.insert(r.str(0)); if r.int(1) == 1 { old.insert(r.str(0)) } }
             let weekAgo = Int(Date().timeIntervalSince1970) - 7 * 86400
             db.query("SELECT ckey FROM fmiss WHERE kind=? AND at>?", [kind.rawValue, weekAgo]) { r in have.insert(r.str(0)) }
-            var out: [MediaItem] = [], refresh: [MediaItem] = []
             db.query("SELECT \(cols) FROM \(table) WHERE pid IN (" + pids.map { _ in "?" }.joined(separator: ",") + ") ORDER BY added DESC", pids) { r in
-                let m = MediaItem(kind: kind, pid: r.str(0), sid: r.str(1), name: r.str(2), year: r.int(3), icon: r.str(4), cid: r.str(5),
-                                  ext: r.str(6), rating: r.double(7), added: r.int(8), tmdb: r.str(9), plot: r.str(10))
-                let k = m.clean.key
-                if have.insert(k).inserted { out.append(m) } else if old.remove(k) != nil { refresh.append(m) }
+                all.append(MediaItem(kind: kind, pid: r.str(0), sid: r.str(1), name: r.str(2), year: r.int(3), icon: r.str(4), cid: r.str(5),
+                                     ext: r.str(6), rating: r.double(7), added: r.int(8), tmdb: r.str(9), plot: r.str(10)))
             }
-            return out + refresh
+            return (have, old, all)
         }
+        var have = got.0, old = got.1, out: [MediaItem] = [], refresh: [MediaItem] = []
+        for m in got.2 {
+            if Task.isCancelled { return [] }
+            let k = m.clean.key
+            if have.insert(k).inserted { out.append(m) } else if old.remove(k) != nil { refresh.append(m) }
+        }
+        return out + refresh
     }
 
     /// Une fiche : l'identifiant TMDB du fournisseur s'il existe, sinon recherche par titre et année.
