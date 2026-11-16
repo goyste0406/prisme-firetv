@@ -61,7 +61,7 @@ jobs:
           TEST_RUNNER_SHOTS="$PWD/shots" TEST_RUNNER_ONLY="${{ inputs.seulement }}" xcodebuild -workspace IPTVPerso.xcworkspace -scheme IPTVPerso -configuration Debug \
             -destination "id=$UDID" -derivedDataPath build-sim -resultBundlePath visite.xcresult \
             CODE_SIGNING_ALLOWED=NO test 2>&1 | tee test.log | grep -E "error:|Test Case|passed|failed|TEST (SUCCEEDED|FAILED)" || true
-          ls -la shots | head -80
+          ls -la shots | head -80 || true
 
       - name: Captures (publiées dans la release « visite-latest »)
         if: always()
