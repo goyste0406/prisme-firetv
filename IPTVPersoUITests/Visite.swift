@@ -92,6 +92,7 @@ final class Visite: XCTestCase {
         if ProcessInfo.processInfo.environment["ONLY"] == "fiches" { fiches(); return }
         if ProcessInfo.processInfo.environment["ONLY"] == "tvlecteur" { lecteurTV(); return }
         if ProcessInfo.processInfo.environment["ONLY"] == "tvcrash" { tvCrash(); return }
+        if ProcessInfo.processInfo.environment["ONLY"] == "gouts" { gouts(); return }
         if ProcessInfo.processInfo.environment["ONLY"] == "tvidle" {
             // TV en direct au lancement avec deux fournisseurs, 150 s sans aucune interaction, puis une capture
             relaunch(["-prisme.debug.demoServer2", "http://127.0.0.1:8098", "-prisme.debug.tab", "live"], wait: 150)
@@ -264,31 +265,7 @@ final class Visite: XCTestCase {
         press(.up, 2); shot("C3c-vers-steven")
         press(.select); Thread.sleep(forTimeInterval: 3); shot("C4-steven-seul")
 
-        // MES GOÛTS : le test en entier (8 titres, 5 duels, ambiances, « jamais de… »), puis ses effets
-        relaunch(["-prisme.debug.taste", "1", "-prisme.debug.tab", "films"], wait: 12)
-        shot("D0-gouts-intro")
-        press(.select); Thread.sleep(forTimeInterval: 1.5); shot("D1-gouts-carte-01")
-        let verdicts = [0, 0, 2, 1, 0, 2, 0, 0]   // 0 j'aime, 1 pas vu, 2 pas pour moi
-        for (i, v) in verdicts.enumerated() {
-            if v > 0 { press(.left, v) }
-            press(.select); Thread.sleep(forTimeInterval: 1.2)
-            shot(String(format: "D1-gouts-carte-%02d", i + 2))
-        }
-        for i in 1...5 { if i % 2 == 0 { press(.right) }; press(.select); Thread.sleep(forTimeInterval: 1.2); shot(String(format: "D2-gouts-duel-%02d", i)) }
-        press(.select); press(.right); press(.select); shot("D3-gouts-ambiances")
-        press(.down, 3); press(.select); Thread.sleep(forTimeInterval: 1); shot("D4-gouts-jamais")
-        press(.up, 4); press(.select); shot("D4b-gouts-jamais-horreur")
-        press(.down, 5); press(.select); Thread.sleep(forTimeInterval: 3); shot("D5-gouts-resultat")
-        press(.select); Thread.sleep(forTimeInterval: 2); shot("D6-gouts-fini")
-        relaunch(["-prisme.debug.open", "film:demo:1000"])
-        shot("D7-gouts-fiche-score")
-        relaunch(["-prisme.debug.tab", "films"])
-        for i in 1...4 { press(.down); shot(String(format: "D8-gouts-pour-toi-%02d", i)) }
-        relaunch(["-prisme.debug.tab", "settings"])
-        press(.down); Thread.sleep(forTimeInterval: 1); press(.up); Thread.sleep(forTimeInterval: 0.5)
-        for _ in 0..<3 where !focused().contains("Steven") { press(.left) }
-        press(.select); Thread.sleep(forTimeInterval: 1.5)
-        for i in 1...9 { press(.down); shot(String(format: "D9-gouts-reglages-%02d", i)) }
+        gouts()
 
         // 6 PROFILS (le maximum) : « Qui regarde ? », fenêtre « Choisis un profil », Réglages › Profils (défilement dans le cadre)
         relaunch(["-prisme.debug.profiles", "6", "-prisme.debug.whoHold", "1"], wait: 2)
@@ -545,6 +522,35 @@ final class Visite: XCTestCase {
         downUntil(["Généraliste"], max: 5, prefix: "T9-bas"); press(.select); Thread.sleep(forTimeInterval: 2); shot("T9-eventail")
         press(.select); Thread.sleep(forTimeInterval: 9); shot("T9b-direct-depuis-eventail", focus: false)
         back(); Thread.sleep(forTimeInterval: 2); shot("T9c-retour-eventail")
+    }
+
+    /// Test des goûts (grands classiques), puis ses effets sur la fiche, l'accueil et les réglages.
+    func gouts() {
+        // MES GOÛTS : le test en entier (8 titres, 5 duels, ambiances, « jamais de… »), puis ses effets
+        relaunch(["-prisme.debug.taste", "1", "-prisme.debug.tab", "films"], wait: 12)
+        shot("D0-gouts-intro")
+        press(.select); Thread.sleep(forTimeInterval: 1.5); shot("D1-gouts-carte-01")
+        let verdicts = [0, 0, 2, 1, 0, 2, 0, 0]   // 0 j'aime, 1 pas vu, 2 pas pour moi
+        for (i, v) in verdicts.enumerated() {
+            if v > 0 { press(.left, v) }
+            press(.select); Thread.sleep(forTimeInterval: 1.2)
+            shot(String(format: "D1-gouts-carte-%02d", i + 2))
+        }
+        for i in 1...5 { if i % 2 == 0 { press(.right) }; press(.select); Thread.sleep(forTimeInterval: 1.2); shot(String(format: "D2-gouts-duel-%02d", i)) }
+        press(.select); press(.right); press(.select); shot("D3-gouts-ambiances")
+        press(.down, 3); press(.select); Thread.sleep(forTimeInterval: 1); shot("D4-gouts-jamais")
+        press(.up, 4); press(.select); shot("D4b-gouts-jamais-horreur")
+        press(.down, 5); press(.select); Thread.sleep(forTimeInterval: 3); shot("D5-gouts-resultat")
+        press(.select); Thread.sleep(forTimeInterval: 2); shot("D6-gouts-fini")
+        relaunch(["-prisme.debug.open", "film:demo:1000"])
+        shot("D7-gouts-fiche-score")
+        relaunch(["-prisme.debug.tab", "films"])
+        for i in 1...4 { press(.down); shot(String(format: "D8-gouts-pour-toi-%02d", i)) }
+        relaunch(["-prisme.debug.tab", "settings"])
+        press(.down); Thread.sleep(forTimeInterval: 1); press(.up); Thread.sleep(forTimeInterval: 0.5)
+        for _ in 0..<3 where !focused().contains("Steven") { press(.left) }
+        press(.select); Thread.sleep(forTimeInterval: 1.5)
+        for i in 1...9 { press(.down); shot(String(format: "D9-gouts-reglages-%02d", i)) }
     }
 
     func lecteur() {

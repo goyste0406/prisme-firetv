@@ -403,6 +403,11 @@ def tmdb(path, q):
     m = re.match(r"^/search/(movie|tv)$", path)
     if m:
         qq = (q.get("query") or [""])[0].lower()
+        c = CLASSICS.get((m.group(1), qq))
+        if c and not any(f[0].lower() == qq for f in (FILMS if m.group(1) == "movie" else SERIES)):
+            k = "title" if m.group(1) == "movie" else "name"
+            d = "release_date" if m.group(1) == "movie" else "first_air_date"
+            return {"results": [{"id": c[0], k: c[1], d: f"{c[2]}-06-01", "poster_path": tmdb_path("p", f"c{c[0]}"), "vote_average": 7.5, "popularity": 80}]}
         if m.group(1) == "movie":
             hit = [i for i, f in enumerate(FILMS) if f[0].lower() == qq] or ([ALIASES[qq]] if qq in ALIASES else [])
             return {"results": [{"id": fid(i), "title": FILMS[i][0], "original_title": FILMS[i][0], "release_date": f"{FILMS[i][1]}-03-01", "popularity": 50} for i in hit]}
@@ -452,6 +457,23 @@ def tmdb(path, q):
 
 TITLES = {f"m{fid(i)}": f[0] for i, f in enumerate(FILMS)}
 TITLES.update({f"s{sid(i)}": f[0] for i, f in enumerate(SERIES)})
+
+# grands classiques du test des goûts (lus dans TasteClassics.swift) : trouvés par la recherche TMDB même s'ils ne sont
+# pas dans le catalogue du faux fournisseur, avec une affiche à leur titre (comme le vrai TMDB pour ces titres connus)
+def _classics():
+    import os
+    try:
+        src = open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "IPTVPerso", "TasteClassics.swift"), encoding="utf-8").read()
+    except OSError:
+        return {}
+    films_part, _, series_part = src.partition("static let series")
+    out = {}
+    for part, kind, base in ((films_part, "movie", 7000), (series_part, "tv", 8000)):
+        for n, (t, y) in enumerate(re.findall(r'\("((?:[^"\\]|\\.)*)", (\d{4}),', part)):
+            out[(kind, t.lower())] = (base + n, t, int(y))
+    return out
+CLASSICS = _classics()
+for (_k, _t), (_id, _title, _y) in CLASSICS.items(): TITLES[f"c{_id}"] = _title
 
 class H(http.server.BaseHTTPRequestHandler):
     def log_message(self, *a): pass
