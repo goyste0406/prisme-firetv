@@ -20,7 +20,8 @@ struct LiveHomeView: View {
     struct GuideRequest: Identifiable { let id = UUID(); let list: [Channel]; let title: String }
 
     /// sources de chaque chaîne, pour l'éventail
-    private var sourceCounts: [String: Int] { Dictionary(index.map { (ChannelTools.key($0.ch), $0.sources) }, uniquingKeysWith: max) }
+    /// nombre de sources par chaîne : calculé une fois par chargement de l'index (et non à chaque affichage de l'éventail)
+    @State private var sourceCounts: [String: Int] = [:]
 
     private var rail: [(String, String, String)] {
         var r: [(String, String, String)] = [("home", "house.fill", "Accueil"), ("guide", "tablecells", "Guide TV"), ("search", "magnifyingglass", "Rechercher"), ("replay", "clock.arrow.circlepath", "Replay")]
@@ -57,7 +58,7 @@ struct LiveHomeView: View {
         .fullScreenCover(item: $playing) { r in LivePlayerView(channels: r.list, start: r.index) }
         .fullScreenCover(item: $guide) { g in GuideView(channels: g.list, title: g.title) }
         .fullScreenCover(item: $replay) { r in VodPlayerView(request: r) }
-        .task(id: store.catalogVersion) { PerfLog.ev("TV index début v\(store.catalogVersion)"); index = await LiveIndex.all(pids: store.active.map(\.id), version: store.catalogVersion); PerfLog.ev("TV index fin \(index.count)") }
+        .task(id: store.catalogVersion) { PerfLog.ev("TV index début v\(store.catalogVersion)"); index = await LiveIndex.all(pids: store.active.map(\.id), version: store.catalogVersion); sourceCounts = Dictionary(index.map { ($0.key, $0.sources) }, uniquingKeysWith: max); PerfLog.ev("TV index fin \(index.count)") }
     }
 
     @ViewBuilder private var content: some View {

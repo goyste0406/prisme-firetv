@@ -451,6 +451,15 @@ final class Visite: XCTestCase {
         tab(2); shot("P3-tv-gros-catalogue")
         press(.down, 3); press(.right, 10); shot("P4-tv-gros-catalogue-bas")
         tab(0); shot("P5-films-retour")
+        // deux fournisseurs (gros catalogue + Lune) : dédoublonnage de ≈ 20 000 chaînes, TV en direct, éventail
+        app.terminate()
+        app.launchArguments += ["-prisme.debug.demoServer2", "http://127.0.0.1:8099", "-prisme.debug.tab", "live"]
+        app.launch(); Thread.sleep(forTimeInterval: 120)
+        shot("P6-tv-deux-fournisseurs")
+        press(.down, 2); press(.select); Thread.sleep(forTimeInterval: 2); shot("P7-tv-deux-eventail")
+        back(); Thread.sleep(forTimeInterval: 1)
+        tab(0); shot("P8-films-deux-fournisseurs")
+        tab(1); shot("P9-series-deux-fournisseurs")
     }
 
     /// TV en direct : paquets « univers » et leur éventail, « En ce moment à la télé »
