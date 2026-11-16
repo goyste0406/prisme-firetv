@@ -62,6 +62,7 @@ struct ProvidersSettingsView: View {
     @State private var adding = false
     @State private var managing: String?
     @State private var showLog = false
+    @State private var showClass = false
     @State private var confirmDelete: Provider?
     @State private var dbSize: Int64 = 0
     @State private var tmdbKey = TmdbKey.value ?? ""
@@ -111,9 +112,12 @@ struct ProvidersSettingsView: View {
             .padding(.horizontal, 90).padding(.bottom, 60)
         }
         .ignoresSafeArea(edges: .top)
+        // écran de classement ouvert : la sélection reste dedans (rien derrière n'est sélectionnable)
+        .disabled(showClass)
         .fullScreenCover(isPresented: $adding) { AddProviderFlow(close: { adding = false }, watchTV: { adding = false; Nav.shared.tab = .live }) }
         .fullScreenCover(item: Binding(get: { managing.map { ManagedID(id: $0) } }, set: { managing = $0?.id })) { m in ProviderManageView(pid: m.id, close: { managing = nil }) }
         .overlay { if showLog { IncidentLogView(close: { showLog = false }) } }
+        .overlay { if showClass { ChannelClassView(close: { showClass = false }) } }
         .alert(item: $confirmDelete) { p in
             Alert(title: Text("Supprimer \(p.name) ?"), message: Text("Ses chaînes, films et séries seront retirés de prisme."),
                   primaryButton: .destructive(Text("Supprimer")) { store.remove(p.id) }, secondaryButton: .cancel(Text("Annuler")))
@@ -123,10 +127,12 @@ struct ProvidersSettingsView: View {
         .onChange(of: managing) { old, now in if now == nil, let o = old { comeBack("pl-" + o) } }
         .onChange(of: adding) { _, now in if !now { comeBack("add") } }
         .onChange(of: showLog) { _, now in if !now { comeBack("log") } }
+        .onChange(of: showClass) { _, now in if !now { comeBack("class") } }
         .onAppear {
             if let s = Debug.settingsSection { DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { catFocus = s } }
             // simulateur de test seulement (arguments de lancement)
             if Debug.addProvider { adding = true }
+            if Debug.classify { DispatchQueue.main.asyncAfter(deadline: .now() + 1) { showClass = true } }
             if let n = Debug.manageProvider { managing = store.providers.first { $0.name == n }?.id }
         }
     }
@@ -149,7 +155,7 @@ struct ProvidersSettingsView: View {
     }
 
     @ViewBuilder private var providersPanel: some View {
-        ProvidersPanel(manage: { managing = $0 }, add: { adding = true }, log: { showLog = true }, restore: restoreRow)
+        ProvidersPanel(manage: { managing = $0 }, add: { adding = true }, log: { showLog = true }, classify: { showClass = true }, restore: restoreRow)
     }
 
     @ViewBuilder private var tmdbPanel: some View {

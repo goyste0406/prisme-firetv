@@ -25,6 +25,8 @@ enum Debug {
     /// Réglages › Fournisseurs : ouvre le parcours d'ajout (« 1 ») ou l'écran « Gérer » du fournisseur nommé
     static var addProvider: Bool { arg("prisme.debug.addProvider") == "1" }
     static var manageProvider: String? { arg("prisme.debug.manage") }
+    /// ouvre Réglages › Fournisseurs › Classement des chaînes TV
+    static var classify: Bool { arg("prisme.debug.classify") == "1" }
     static var season: Int? { arg("prisme.debug.season").flatMap { Int($0) } }
     /// historique de visionnage factice (pour voir « Reprendre », « Résumé 60 s »)
     static var seed: Bool { arg("prisme.debug.seed") == "1" }

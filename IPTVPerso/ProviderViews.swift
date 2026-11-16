@@ -11,6 +11,7 @@ struct ProvidersPanel: View {
     let manage: (String) -> Void
     let add: () -> Void
     let log: () -> Void
+    var classify: () -> Void = {}
     var restore: (String, Int)? = nil
     @State private var desc = "Choisis un réglage pour voir à quoi il sert."
     @State private var totals: (live: Int, vod: Int, series: Int, grouped: Int)?
@@ -32,6 +33,8 @@ struct ProvidersPanel: View {
             SettingLine(title: "Fournisseurs actifs", value: "\(store.active.count) / \(store.providers.count)")
             SettingLine(title: "Contenu total", value: totals.map { "\(Fmt.n($0.live)) chaînes · \(Fmt.n($0.vod)) films · \(Fmt.n($0.series)) séries" } ?? "…")
             SettingLine(title: "Titres et chaînes avec plusieurs sources", value: totals.map { "\(Fmt.n($0.grouped)) regroupés" } ?? "…")
+            row("class", SettingLine(title: "Classement des chaînes TV", value: "vérifier ›"),
+                "Chaque chaîne avec sa catégorie (Généraliste, Sport…), la raison de ce classement et toutes ses sources.", classify)
             row("test", SettingLine(title: "Tester mes serveurs", value: testing ? "mesure en cours…" : pings()),
                 "Mesure le temps de réponse de chaque fournisseur, sans ouvrir aucun flux.") {
                 guard !testing else { return }
@@ -134,6 +137,89 @@ extension Fmt {
     static func n(_ x: Int) -> String {
         let f = NumberFormatter(); f.numberStyle = .decimal; f.locale = Locale(identifier: "fr_FR")
         return (f.string(from: NSNumber(value: x)) ?? "\(x)").replacingOccurrences(of: "\u{202F}", with: " ")
+    }
+}
+
+// MARK: - Classement des chaînes TV (diagnostic)
+
+/// Chaque chaîne de la TV en direct avec sa catégorie, la raison de ce classement et toutes ses sources :
+/// pour vérifier le classement avec les vraies chaînes de tes fournisseurs (TF1 en Généraliste, etc.).
+struct ChannelClassView: View {
+    @EnvironmentObject var store: ProviderStore
+    let close: () -> Void
+    struct Row: Identifiable { let id: String; let name: String; let why: String; let sources: String }
+    @State private var byUnivers: [Univers: [Row]] = [:]
+    @State private var selected: Univers = .generaliste
+    @State private var loaded = false
+    @FocusState private var focus: String?
+
+    var body: some View {
+        ZStack {
+            Color.black.opacity(0.6).ignoresSafeArea()
+            VStack(alignment: .leading, spacing: 16) {
+                Text("RÉGLAGES › FOURNISSEURS").font(P.font(21, .bold)).tracking(3).foregroundStyle(.white.opacity(0.6))
+                Text("Classement des chaînes TV").font(P.font(52, .bold))
+                Text("catégorie de chaque chaîne, raison du classement et sources · Retour pour fermer").font(P.font(23)).foregroundStyle(P.dim)
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 12) {
+                        ForEach(Univers.allCases) { u in
+                            Button { selected = u } label: { Text("\(u.label) · \(byUnivers[u]?.count ?? 0)") }
+                                .buttonStyle(XModeStyle(selected: selected == u))
+                                .focused($focus, equals: "u-" + u.rawValue)
+                        }
+                    }
+                    .padding(.vertical, 14).padding(.horizontal, 6)
+                }
+                .focusSection()
+                ScrollView {
+                    LazyVStack(alignment: .leading, spacing: 6) {
+                        if !loaded { Text("Lecture des chaînes…").font(P.font(26)).foregroundStyle(P.dim).padding(.vertical, 30) }
+                        else if (byUnivers[selected] ?? []).isEmpty { Text("Aucune chaîne dans cette catégorie.").font(P.font(26)).foregroundStyle(P.dim).padding(.vertical, 30) }
+                        ForEach(byUnivers[selected] ?? []) { r in
+                            Button {} label: {
+                                VStack(alignment: .leading, spacing: 5) {
+                                    Text(r.name).font(P.font(27, .semibold))
+                                    Text("Classée : " + r.why).font(P.font(21)).opacity(0.7)
+                                    Text(r.sources).font(P.font(21)).opacity(0.7).lineLimit(2)
+                                }
+                                .padding(.vertical, 12).padding(.horizontal, 20)
+                            }
+                            .buttonStyle(SettingRowStyle(radius: 18))
+                        }
+                    }
+                    .padding(.horizontal, 6)
+                }
+                .frame(maxHeight: 600)
+                .focusSection()
+            }
+            .padding(54).frame(width: 1500).glass(40)
+        }
+        .onExitCommand(perform: close)
+        .task {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { focus = "u-" + selected.rawValue }
+            let pids = store.active.map(\.id)
+            let index = await LiveIndex.all(pids: pids, version: store.catalogVersion)
+            let cats = await Database.shared.read { db -> [String: String] in
+                var c: [String: String] = [:]
+                db.query("SELECT pid,cid,name FROM category WHERE type='live'", []) { r in c[r.str(0) + ":" + r.str(1)] = r.str(2) }
+                return c
+            }
+            var out: [Univers: [Row]] = [:]
+            for e in index {
+                let cat0 = cats[e.ch.pid + ":" + e.ch.cid] ?? ""
+                var why = Univers.reason(clean: e.name, category: cat0)
+                // univers venu du groupe d'une autre source de la même chaîne
+                if Univers.of(clean: e.name, category: cat0) != e.univers,
+                   let c = e.copies.first(where: { Univers.of(clean: e.name, category: cats[$0.pid + ":" + $0.cid] ?? "") == e.univers }) {
+                    why = "groupe « \(cats[c.pid + ":" + c.cid] ?? "") » chez " + (store.provider(c.pid)?.name ?? "un autre fournisseur")
+                }
+                let src = e.copies.map { LiveSourceLabel.text($0) + " (« " + $0.name + " »)" }.joined(separator: ", ")
+                out[e.univers, default: []].append(Row(id: e.id, name: e.name, why: why,
+                                                       sources: "\(e.sources) source" + (e.sources > 1 ? "s" : "") + " : " + src))
+            }
+            byUnivers = out
+            loaded = true
+        }
     }
 }
 

@@ -385,6 +385,14 @@ final class Visite: XCTestCase {
         Thread.sleep(forTimeInterval: 20); shot("F7-ajout-importation")
         Thread.sleep(forTimeInterval: 30); shot("F7b-ajout-importation-finie")
         press(.select); Thread.sleep(forTimeInterval: 3); shot("F8-apres-ajout")
+        // Classement des chaînes TV (diagnostic) : catégories, raison, sources ; Retour le referme sur sa ligne
+        relaunch(two + ["-prisme.debug.settings", "prov", "-prisme.debug.classify", "1"], wait: 40)
+        shot("F9-classement")
+        press(.right, 2); press(.select); Thread.sleep(forTimeInterval: 1); shot("F9b-classement-sport")
+        for k in 1...4 { press(.down); shot(String(format: "F9c-classement-bas-%02d", k)) }
+        press(.up, 8); press(.left, 2); press(.select); Thread.sleep(forTimeInterval: 1); shot("F9d-classement-generaliste")
+        press(.down); shot("F9e-generaliste-tf1")
+        back(); Thread.sleep(forTimeInterval: 1.5); shot("F9f-classement-ferme")
     }
 
     /// Fiches : position à l'ouverture, « Si tu hésites encore » (modes, pourcentages, options, « Comment on choisit »),

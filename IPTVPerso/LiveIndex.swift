@@ -109,6 +109,16 @@ enum Univers: String, CaseIterable, Identifiable {
         return nil
     }
 
+    /// Raison du classement (écran de diagnostic) : même ordre de décision que of(clean:category:).
+    static func reason(clean c: String, category: String) -> String {
+        if known(ChannelTools.nkey(c)) != nil { return "chaîne connue (liste de prisme)" }
+        let g = groupOf(category)
+        if let u = g, u != .generaliste { return "groupe « \(category) » chez le fournisseur" }
+        if fromWords(ChannelTools.fold(c), group: false) != nil { return "un mot du nom" }
+        if g != nil { return "groupe « \(category) » (régions, généralistes)" }
+        return "aucun indice fiable"
+    }
+
     /// univers d'un groupe du fournisseur (quelques centaines de groupes pour des dizaines de milliers de chaînes)
     private static let groupLock = NSLock()
     nonisolated(unsafe) private static var groupMemo: [String: Univers?] = [:]
