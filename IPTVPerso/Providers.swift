@@ -203,6 +203,7 @@ final class ProviderStore: ObservableObject {
         guard let p = provider(id) else { return }
         if importing != nil { if !pending.contains(id) && importing != id { pending.append(id) }; return }
         importing = id; progress = 0; status = "Connexion à \(p.name)…"
+        PerfLog.ev("Import \(p.name) début")
         let t0 = Date()
         Task.detached(priority: .utility) {
             do {
@@ -220,7 +221,7 @@ final class ProviderStore: ObservableObject {
                         s.providers[i] = x
                     }
                     s.importing = nil; s.status = ""; s.catalogVersion += 1
-                    PerfLog.note("Import \(p.name) : \(Int(Date().timeIntervalSince(t0) * 1000)) ms · \(res.counts)\(res.warning.map { " · " + $0 } ?? "")")
+                    PerfLog.ev("Import \(p.name) : \(Int(Date().timeIntervalSince(t0) * 1000)) ms · \(res.counts)\(res.warning.map { " · " + $0 } ?? "")")
                     s.next()
                 }
             } catch {
@@ -230,7 +231,7 @@ final class ProviderStore: ObservableObject {
                         s.providers[i].lastTry = Date(); s.providers[i].lastError = ProviderStore.message(error)
                     }
                     s.importing = nil; s.status = ""; s.catalogVersion += 1
-                    PerfLog.note("Import \(p.name) : échec · \(ProviderStore.message(error))")
+                    PerfLog.ev("Import \(p.name) : échec · \(ProviderStore.message(error))")
                     s.next()
                 }
             }

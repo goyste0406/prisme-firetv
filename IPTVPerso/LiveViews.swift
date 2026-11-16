@@ -57,7 +57,7 @@ struct LiveHomeView: View {
         .fullScreenCover(item: $playing) { r in LivePlayerView(channels: r.list, start: r.index) }
         .fullScreenCover(item: $guide) { g in GuideView(channels: g.list, title: g.title) }
         .fullScreenCover(item: $replay) { r in VodPlayerView(request: r) }
-        .task(id: store.catalogVersion) { index = await LiveIndex.all(pids: store.active.map(\.id), version: store.catalogVersion) }
+        .task(id: store.catalogVersion) { PerfLog.ev("TV index début v\(store.catalogVersion)"); index = await LiveIndex.all(pids: store.active.map(\.id), version: store.catalogVersion); PerfLog.ev("TV index fin \(index.count)") }
     }
 
     @ViewBuilder private var content: some View {
@@ -236,6 +236,8 @@ struct LiveFrontView: View {
 
     private func load() async {
         let pids = store.active.map(\.id)
+        PerfLog.ev("Front load début")
+        defer { PerfLog.ev("Front load fin soon=\(soon.count) genres=\(nowGenres.count) head=\(head != nil)") }
         async let s = LiveStore.startingSoon(providers: pids)
         async let g = LiveStore.airingNowByGenre(providers: pids)
         let r1 = await LiveIndex.resolve(ids: prefs.recent), f1 = await LiveIndex.resolve(ids: prefs.favorites)

@@ -132,6 +132,12 @@ extension Debug {
 enum PerfLog {
     nonisolated(unsafe) static var newParts: (Double, Int) = (0, 0)
 
+    nonisolated(unsafe) static let t0 = Date()
+    /// journal horodaté (secondes depuis le lancement) — simulateur de test seulement
+    nonisolated static func ev(_ what: String) {
+        note(String(format: "[%7.2f] ", Date().timeIntervalSince(t0)) + what)
+    }
+
     /// une ligne de mesure libre (simulateur de test seulement)
     nonisolated static func note(_ line: String) {
         guard Debug.demoServer != nil, let d = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first else { return }

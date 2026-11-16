@@ -145,7 +145,7 @@ struct FicheWorker {
                     db.insertMany("INSERT OR REPLACE INTO fmiss VALUES(?,?,?)", misses)
                 }
                 let n = batch.count
-                await MainActor.run { FicheService.shared.done += n; FicheService.shared.version += 1 }
+                await MainActor.run { FicheService.shared.done += n; FicheService.shared.version += 1; PerfLog.ev("Fiches +\(n) v\(FicheService.shared.version)") }
             }
         }
         await fillCerts(api)
