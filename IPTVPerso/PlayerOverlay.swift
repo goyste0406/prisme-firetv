@@ -158,7 +158,8 @@ struct PlayerOverlay: View {
                     .frame(maxHeight: .infinity, alignment: .top).padding(.top, 70)
             }
             if let s = m.sleepLeft { sleepModal(s) }
-            if let msg = m.message, m.sleepLeft == nil { messageCard(msg) }
+            // message masqué tant qu'un panneau est ouvert (il le recouvrait) ; il revient à la fermeture
+            if let msg = m.message, m.sleepLeft == nil, m.panel == .none { messageCard(msg) }
         }
         .foregroundStyle(.white)
         .animation(.easeOut(duration: 0.25), value: m.panel)
