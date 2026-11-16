@@ -303,7 +303,9 @@ enum LiveIndex {
             }
             return (cats, list)
         }
+        let tRead = Date().timeIntervalSince(t0)
         let res = await Task.detached(priority: .userInitiated) { build(cats: rows.0, list: rows.1, pids: pids) }.value
+        PerfLog.note("  lecture de la base : \(Int(tRead * 1000)) ms (\(rows.1.count) lignes)")
         memo = (mk, res)
         byKey = Dictionary(res.map { ($0.key, $0) }, uniquingKeysWith: { a, _ in a })
         PerfLog.note("Index des chaînes : \(res.count) chaînes (\(res.reduce(0) { $0 + $1.sources }) sources) en \(Int(Date().timeIntervalSince(t0) * 1000)) ms")
@@ -315,12 +317,22 @@ enum LiveIndex {
     private static func build(cats: [String: String], list: [Channel], pids: [String]) -> [Entry] {
         struct Info { let c: Channel; let clean: String; let q: Int; let rank: Int }
         var groups: [String: [Info]] = [:], order: [String] = []
+        let measure = Debug.demoServer != nil
+        var tc = 0.0, tk = 0.0, tq = 0.0, tu = 0.0
+        func clock() -> Double { measure ? CFAbsoluteTimeGetCurrent() : 0 }
         for c in list {
+            let a = clock()
             let n = ChannelTools.clean(c.name)
+            let b = clock()
             let k = ChannelTools.country(c.name) + "|" + ChannelTools.nkey(n)
+            let d = clock()
+            let q = ChannelTools.quality(c.name)
+            let e = clock()
+            tc += b - a; tk += d - b; tq += e - d
             if groups[k] == nil { order.append(k) }
-            groups[k, default: []].append(Info(c: c, clean: n, q: ChannelTools.quality(c.name), rank: pids.firstIndex(of: c.pid) ?? 99))
+            groups[k, default: []].append(Info(c: c, clean: n, q: q, rank: pids.firstIndex(of: c.pid) ?? 99))
         }
+        defer { if measure { PerfLog.note("  détail index : nettoyage \(Int(tc * 1000)) ms · clé \(Int(tk * 1000)) ms · qualité \(Int(tq * 1000)) ms · univers \(Int(tu * 1000)) ms") } }
         return order.compactMap { k -> Entry? in
             guard let G0 = groups[k] else { return nil }
             // même ordre que ordered(_:providerOrder:) : qualité (secours en dernier), ordre des fournisseurs, numéro
@@ -334,6 +346,7 @@ enum LiveIndex {
             }
             let n = G[0].clean
             // univers : décidé sur le nom ; à défaut, le groupe le plus précis parmi les copies
+            let t1 = clock()
             var u = Univers.of(clean: n, category: cats[best.pid + ":" + best.cid] ?? "")
             if u == .autres || u == .generaliste {
                 for c in L.dropFirst() {
@@ -341,6 +354,7 @@ enum LiveIndex {
                     if v != .autres && v != u { if u == .autres { u = v }; break }
                 }
             }
+            tu += clock() - t1
             return Entry(ch: best, name: n, univers: u, copies: L, key: k)
         }
     }
