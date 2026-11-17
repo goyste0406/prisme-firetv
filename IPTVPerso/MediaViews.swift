@@ -859,7 +859,7 @@ struct PosterTile: View {
     var bare = false
     /// place laissée au-dessus de l'heure de fin (Top 10 : l'évolution du classement occupe le coin)
     var endBadgeTop: CGFloat = 0
-    /// Top 10 (simulateur) : titre et une ligne d'information posés en bas de l'affiche (année, « S2 · É4 », « 8 saisons »)
+    /// Top 10 (simulateur) : une ligne d'information posée en bas de l'affiche (titre ajouté seulement sans affiche) (année, « S2 · É4 », « 8 saisons »)
     var caption: String? = nil
     @ObservedObject var watch = WatchStore.shared
     var body: some View {
@@ -867,11 +867,12 @@ struct PosterTile: View {
             Poster(url: item.posterURL, title: item.posterURL.isEmpty && caption == nil ? item.displayTitle : "")
             if let caption {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(item.displayTitle).font(P.font(24, .heavy)).lineLimit(2).minimumScaleFactor(0.8)
+                    // le titre n'est écrit que sans affiche : une vraie affiche porte déjà le titre du film
+                    if item.posterURL.isEmpty { Text(item.displayTitle).font(P.font(24, .heavy)).lineLimit(2).minimumScaleFactor(0.8) }
                     if !caption.isEmpty { Text(caption).font(P.font(16, .bold)).opacity(0.78).lineLimit(1) }
                 }
                 .foregroundStyle(.white).shadow(color: .black.opacity(0.6), radius: 5)
-                .padding(.horizontal, 14).padding(.bottom, 16).padding(.top, 60)
+                .padding(.horizontal, 14).padding(.bottom, 16).padding(.top, item.posterURL.isEmpty ? 60 : 40)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .background(LinearGradient(colors: [.clear, .black.opacity(0.82)], startPoint: .top, endPoint: .bottom))
                 .frame(maxHeight: .infinity, alignment: .bottom)

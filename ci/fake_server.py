@@ -184,6 +184,12 @@ def make_png(kind, key, w, h, label):
             font = ImageFont.load_default()
         txt = (label or key).upper()[:22]
         tw = d.textlength(txt, font=font)
+        if tw > w * 0.94:  # texte réduit pour tenir dans l'image (comme un vrai logo)
+            try:
+                font = ImageFont.truetype("/System/Library/Fonts/Supplemental/Arial Black.ttf", max(10, int(h / 3 * w * 0.94 / tw)))
+                tw = d.textlength(txt, font=font)
+            except Exception:
+                pass
         d.text(((w - tw) / 2, h * 0.3), txt, font=font, fill=color_for(key) + (255,))
         out = io.BytesIO(); img.save(out, "PNG"); return out.getvalue()
     c = color_for(key)

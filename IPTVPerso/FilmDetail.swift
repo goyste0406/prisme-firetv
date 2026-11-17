@@ -531,7 +531,8 @@ struct FilmDetailView: View {
         if t.contains("VO") { lang.append("Version originale") }
         // détails techniques présents dans le nom (HDR, Dolby Vision…) : affichés pour distinguer deux sources de même qualité
         let names = ["HDR": "HDR", "DV": "Dolby Vision", "HEVC": "HEVC", "ATMOS": "Dolby Atmos", "5.1": "Son 5.1"]
-        let extra = t.compactMap { names[$0] }
+        let words = Set(raw.components(separatedBy: CharacterSet.alphanumerics.union(CharacterSet(charactersIn: ".")).inverted))
+        let extra = ["HDR", "DV", "HEVC", "ATMOS", "5.1"].filter { t.contains($0) || words.contains($0) }.compactMap { names[$0] }
         if !extra.isEmpty { lang.append(extra.joined(separator: " · ")) }
         return .init(quality: q, provider: store.provider(v.pid)?.name ?? "Fournisseur", raw: v.name,
                      audio: lang, isDefault: v.id == (versions.first?.id ?? ""))

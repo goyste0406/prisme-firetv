@@ -138,7 +138,10 @@ struct ProvidersSettingsView: View {
         .onChange(of: showLog) { _, now in if !now { comeBack("log") } }
         .onChange(of: showClass) { _, now in if !now { comeBack("class") } }
         .onAppear {
-            if let s = Debug.settingsSection { DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { catFocus = s } }
+            if let s = Debug.settingsSection {
+                // simulateur de test : le focus peut arriver plus tard sur la colonne ; on insiste quelques fois
+                for d in [0.6, 1.5, 3.0, 5.0] { DispatchQueue.main.asyncAfter(deadline: .now() + d) { if catFocus != s { catFocus = s; section = s } } }
+            }
             // simulateur de test seulement (arguments de lancement)
             if Debug.addProvider { adding = true }
             if Debug.classify { DispatchQueue.main.asyncAfter(deadline: .now() + 1) { showClass = true } }
