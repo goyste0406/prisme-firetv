@@ -221,8 +221,10 @@ struct ProviderAnalysis {
         // catégories, contenus, langue des catégories et doublons avec les autres fournisseurs
         let otherKeys = await ProviderAnalysis.existingKeys(others)
         for (type, catAction, listAction) in [("live", "get_live_categories", "get_live_streams"), ("vod", "get_vod_categories", "get_vod_streams"), ("series", "get_series_categories", "get_series")] {
+            PerfLog.mem("vérification \(type) : avant")
             let cats = (try? await json(catAction, 60)) as? [[String: Any]] ?? []
             let list = (try? await json(listAction, 120)) as? [[String: Any]] ?? []
+            PerfLog.mem("vérification \(type) : liste reçue (\(cats.count) catégories, \(list.count) lignes)")
             var byCat: [String: [String]] = [:], dup: [String: Int] = [:]
             for x in list {
                 let cid = str(x["category_id"]), name = str(x["name"])
@@ -239,6 +241,7 @@ struct ProviderAnalysis {
                 a.cats.append(Cat(id: id, type: type, name: name, count: items.count, lang: lang, dup: dup[id] ?? 0, on: lang.g != .adult && lang.proposed(name)))
             }
             a.totals[type] = list.count
+            PerfLog.mem("vérification \(type) : analysée")
             await step(a)
         }
         return a

@@ -90,6 +90,7 @@ final class Visite: XCTestCase {
         if ProcessInfo.processInfo.environment["ONLY"] == "perf" { perf(); return }
         if ProcessInfo.processInfo.environment["ONLY"] == "fournisseurs" { fournisseurs(); return }
         if ProcessInfo.processInfo.environment["ONLY"] == "fiches" { fiches(); return }
+        if ProcessInfo.processInfo.environment["ONLY"] == "geant" { geant(port: "8096", tag: "G"); geant(port: "8095", tag: "K"); return }
         if ProcessInfo.processInfo.environment["ONLY"] == "tvlecteur" { lecteurTV(); return }
         if ProcessInfo.processInfo.environment["ONLY"] == "tvcrash" { tvCrash(); return }
         if ProcessInfo.processInfo.environment["ONLY"] == "gouts" { gouts(); return }
@@ -445,6 +446,41 @@ final class Visite: XCTestCase {
             let f = URL(fileURLWithPath: dir).appendingPathComponent("focus.txt")
             if let h = try? FileHandle(forWritingTo: f) { h.seekToEndOfFile(); h.write(Data("\(name) → \(text)\n".utf8)); try? h.closeFile() }
         }
+    }
+
+    /// Ajout d'un fournisseur géant (8096 : 1 500 catégories, 150 000 films, 40 000 séries, 30 000 chaînes)
+    /// ou aux réponses incomplètes (8095 : films coupés, séries en erreur), par la page iPhone, jusqu'au bout :
+    /// l'appli ne doit pas se fermer ; elle note sa mémoire à chaque étape dans mesures.txt.
+    func geant(port: String, tag: String) {
+        relaunch(["-prisme.debug.tab", "settings", "-prisme.debug.settings", "prov", "-prisme.debug.addProvider", "1"], wait: 30)
+        press(.select); Thread.sleep(forTimeInterval: 3); shot("\(tag)0-iphone")
+        let addr = app.staticTexts.allElementsBoundByIndex.map(\.label).first { $0.hasPrefix("http://") } ?? ""
+        attach("\(tag)-adresse-iphone", addr)
+        guard !addr.isEmpty else { return }
+        post(addr, "server=http%3A%2F%2F127.0.0.1%3A\(port)&user=demo&pass=demo&name=Geant\(tag)")
+        var t = 0
+        while t < 600 {
+            Thread.sleep(forTimeInterval: 10); t += 10
+            attach("\(tag)-verification-\(t)s", app.state == .runningForeground ? "appli ouverte" : "APPLI FERMÉE")
+            if app.state != .runningForeground { shot("\(tag)1-appli-fermee-verification"); return }
+            if t % 30 == 0 { shot(String(format: "\(tag)1-verification-%03ds", t)) }
+            if app.buttons["Continuer"].exists || app.buttons["Recommencer"].exists { break }
+        }
+        shot("\(tag)2-verification-finie")
+        press(.select); Thread.sleep(forTimeInterval: 2); shot("\(tag)3-contenu")
+        press(.right); press(.down, 2); shot("\(tag)3b-importer"); press(.select)
+        t = 0
+        while t < 900 {
+            Thread.sleep(forTimeInterval: 10); t += 10
+            attach("\(tag)-import-\(t)s", app.state == .runningForeground ? "appli ouverte" : "APPLI FERMÉE")
+            if app.state != .runningForeground { shot("\(tag)4-appli-fermee-import"); return }
+            if t % 30 == 0 { shot(String(format: "\(tag)4-import-%03ds", t)) }
+            if app.buttons["Terminer"].exists || app.buttons["Revenir au contenu"].exists { break }
+        }
+        shot("\(tag)5-import-fini")
+        // redémarrage : le catalogue et les données sont toujours là
+        relaunch(["-prisme.debug.tab", "films"], wait: 40); shot("\(tag)6-films-apres-redemarrage")
+        relaunch(["-prisme.debug.tab", "settings", "-prisme.debug.settings", "prov"], wait: 30); press(.right); shot("\(tag)7-fournisseurs-apres-redemarrage")
     }
 
     /// Gros catalogue (≈ 20 000 chaînes, 40 000 films, 20 000 séries) : mesures écrites par l'app dans mesures.txt

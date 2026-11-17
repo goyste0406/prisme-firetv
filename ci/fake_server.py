@@ -6,6 +6,8 @@ Lancement : python3 ci/fake_server.py 8099 [main|second|big]
   second : un deuxième fournisseur (« Soleil ») : mêmes chaînes sous d'autres noms et d'autres qualités,
            une partie des mêmes films, des contenus à lui seul (tests multi-fournisseurs)
   big    : un très gros catalogue (≈ 20 000 chaînes, 40 000 films, 20 000 séries) pour mesurer la fluidité
+  giant  : un fournisseur géant (1 500 catégories, 150 000 films, 40 000 séries, 30 000 chaînes) : ajout sans plantage
+  cut    : comme « main », mais la liste des films arrive coupée et celle des séries en erreur (réponses incomplètes)
 """
 import http.server, json, sys, time, random, hashlib, io, os, re, urllib.parse
 from functools import lru_cache
@@ -13,6 +15,7 @@ from functools import lru_cache
 PORT = int(sys.argv[1]) if len(sys.argv) > 1 else 8099
 PROFILE = sys.argv[2] if len(sys.argv) > 2 else "main"
 BASE = f"http://127.0.0.1:{PORT}"
+MEDIA = os.path.join(os.path.dirname(os.path.abspath(__file__)), "media")
 NOW = int(time.time())
 DAY = 86400
 
@@ -132,10 +135,16 @@ PROG_CAT = {"Le 20h": "Journal", "Journal de 13h": "Journal", "Météo": "Mété
             "Des chiffres et des lettres": "Jeu", "Questions pour un champion": "Jeu", "Top Chef": "Divertissement", "Zone interdite": "Magazine", "Quotidien": "Talk-show",
             "Le Grand Match": "Sport", "Ligue des champions": "Football", "Football : Ligue 1": "Football", "Rugby : Top 14": "Rugby", "Bob l'éponge": "Dessin animé",
             "Les Simpson": "Dessin animé", "Capital": "Magazine", "Envoyé spécial": "Magazine d'information", "Thalassa": "Documentaire", "Cash Investigation": "Magazine d'information",
-            "Le Bureau des légendes": "Série dramatique", "Dune": "Film", "Inception": "Film"}
+            "Le Bureau des légendes": "Série dramatique", "Dune": "Film", "Inception": "Film",
+            "Intouchables": "Film", "Lupin": "Série policière", "HPI": "Série policière", "Le Parrain": "Film", "Interstellar": "Film"}
+# programmes avec une image dans le guide (<icon>) : les autres n'en ont pas (comme beaucoup de vrais guides)
+PROG_ICON = {"Koh-Lanta", "Top Chef", "Zone interdite", "Thalassa", "Le Bureau des légendes", "Intouchables"}
+# année donnée par le guide (<date>) pour certains films
+PROG_YEAR = {"Inception": 2010, "Intouchables": 2011, "Le Parrain": 1972}
 PROGS = ["Le 20h", "Koh-Lanta", "Journal de 13h", "Des chiffres et des lettres", "Questions pour un champion", "Top Chef", "Zone interdite",
          "C dans l'air", "Quotidien", "Le Grand Match", "Ligue des champions", "Bob l'éponge", "Les Simpson", "Météo", "Capital",
-         "Envoyé spécial", "Thalassa", "Cash Investigation", "Le Bureau des légendes", "Dune", "Inception", "Football : Ligue 1", "Rugby : Top 14"]
+         "Envoyé spécial", "Thalassa", "Cash Investigation", "Le Bureau des légendes", "Dune", "Inception", "Football : Ligue 1", "Rugby : Top 14",
+         "Intouchables", "Lupin", "HPI", "Le Parrain", "Interstellar"]
 
 def fid(i): return 1000 + i
 def sid(i): return 2000 + i
@@ -271,7 +280,9 @@ def xmltv():
             title = r.choice(PROGS)
             cat = PROG_CAT.get(title, "")
             ct = f'<category lang="fr">{cat}</category>' if cat else ""
-            lines.append(f'<programme start="{a}" stop="{b}" channel="{e}"><title>{title}</title><desc>{title} : description.</desc>{ct}</programme>')
+            ic = f'<icon src="{BASE}/gen/b/prog_{urllib.parse.quote(title)}.png?l={urllib.parse.quote(title)}" />' if title in PROG_ICON else ""
+            dt = f"<date>{PROG_YEAR[title]}</date>" if title in PROG_YEAR else ""
+            lines.append(f'<programme start="{a}" stop="{b}" channel="{e}"><title>{title}</title><desc>{title} : description.</desc>{ct}{dt}{ic}</programme>')
             t += d * 60
     lines.append("</tv>")
     return "\n".join(lines)
@@ -337,6 +348,44 @@ elif PROFILE == "big":
     def series_list():
         return [{"num": i, "name": f"FR| Série de test {i} ({1990 + i % 35})", "series_id": 300000 + i, "cover": "", "plot": "", "releaseDate": f"{1990 + i % 35}-01-01",
                  "rating": str(5 + (i % 50) / 10), "last_modified": str(NOW - (i % 900) * DAY), "category_id": str(200 + i % 20), "tmdb": ""} for i in range(20000)]
+
+elif PROFILE == "giant":
+    # fournisseur géant (comme certains abonnements internationaux) : 1 500 catégories et des centaines de milliers de lignes.
+    # Sert à vérifier que l'ajout (vérification + import) ne ferme pas l'appli et que la mémoire reste stable.
+    _B = ["TF1", "France 2", "France 3", "M6", "Canal+", "Arte", "BFM TV", "CNews", "beIN Sports", "RMC Sport", "Eurosport", "Gulli", "OCS", "Ciné+", "Planète+", "MTV", "Disney Channel"]
+    _Q = ["", " HD", " FHD", " 4K", " HEVC", " SD"]
+    _C = ["FR", "BE", "CH", "CA", "UK", "ES", "IT", "DE", "PT", "AR", "TR", "PL", "NL", "US", "IN"]
+    _L = {"FR": "FR", "BE": "BE", "CH": "CH", "CA": "QC"}
+    LIVE_CATS = [(str(k), f"{_C[k % len(_C)]}| BOUQUET {k}") for k in range(1, 301)]
+    VOD_CATS = [(str(1000 + k), (f"{_C[k % len(_C)]}| FILMS " if k % 3 else "VOD | ") + f"{k}") for k in range(800)]
+    SER_CATS = [(str(5000 + k), (f"{_C[k % len(_C)]}| SÉRIES " if k % 3 else "SÉRIES | ") + f"{k}") for k in range(400)]
+    CHANNELS = [(f"{_C[i % len(_C)]}| {_B[i % len(_B)]} {i // len(_B)}{_Q[i % len(_Q)]}", str(1 + i % 300), (f"giant{i}.x" if i < 800 else "")) for i in range(30000)]
+    _CACHE = {}
+    def _once(k, f):
+        if k not in _CACHE: _CACHE[k] = json.dumps(f(), ensure_ascii=False).encode()
+        return _CACHE[k]
+    def vod_streams():
+        return _once("vod", lambda: [{"num": i, "name": f"{_C[i % len(_C)]}| Film de test numéro {i} ({1950 + i % 76})" + (" 4K" if i % 9 == 0 else ""),
+                 "stream_id": 1000000 + i, "stream_icon": f"{BASE}/gen/p/g{i % 500}.png", "rating": str(5 + (i % 50) / 10),
+                 "added": str(NOW - (i % 1500) * DAY), "category_id": str(1000 + i % 800), "container_extension": "mkv",
+                 "plot": "Résumé du film de test, assez long pour peser comme un vrai catalogue. " * 2, "tmdb": ""} for i in range(150000)])
+    def series_list():
+        return _once("ser", lambda: [{"num": i, "name": f"{_C[i % len(_C)]}| Série de test numéro {i} ({1980 + i % 46})", "series_id": 3000000 + i,
+                 "cover": f"{BASE}/gen/p/gs{i % 500}.png", "plot": "Résumé de la série de test. " * 4, "releaseDate": f"{1980 + i % 46}-01-01",
+                 "rating": str(5 + (i % 50) / 10), "last_modified": str(NOW - (i % 1500) * DAY), "category_id": str(5000 + i % 400), "tmdb": "",
+                 "cast": "Acteur Un, Actrice Deux, Acteur Trois", "genre": "Drame, Comédie"} for i in range(40000)])
+    _live_base = live_streams
+    def live_streams():
+        return _once("live", _live_base)
+
+elif PROFILE == "cut":
+    # réponses incomplètes : la liste des films est coupée au milieu, la liste des séries répond en erreur
+    _vod_base = vod_streams
+    def vod_streams():
+        b = json.dumps(_vod_base(), ensure_ascii=False).encode()
+        return b[: len(b) // 2]
+    def series_list():
+        raise RuntimeError("panne simulée")
 
 # ---------------------------------------------------------------- TMDB
 PROV = [("Netflix", "nf"), ("Disney Plus", "dp"), ("Canal+", "cp"), ("Amazon Prime Video", "pv"), ("Apple TV", "atv"), ("Max", "mx")]
@@ -484,6 +533,41 @@ class H(http.server.BaseHTTPRequestHandler):
         self.send_response(code); self.send_header("Content-Type", ctype); self.send_header("Content-Length", str(len(body)))
         self.send_header("Cache-Control", "max-age=86400"); self.end_headers(); self.wfile.write(body)
 
+    def send_file(self, path):
+        # fichier vidéo avec reprise à un endroit précis (en-tête Range), comme un vrai serveur : VLC s'en sert pour avancer et reculer
+        size = os.path.getsize(path); a, b = 0, size - 1
+        rg = self.headers.get("Range")
+        mm = re.match(r"bytes=(\d*)-(\d*)", rg or "")
+        if mm:
+            if mm.group(1): a = int(mm.group(1))
+            if mm.group(2): b = min(size - 1, int(mm.group(2)))
+            self.send_response(206); self.send_header("Content-Range", f"bytes {a}-{b}/{size}")
+        else:
+            self.send_response(200)
+        self.send_header("Content-Type", "video/x-matroska"); self.send_header("Accept-Ranges", "bytes"); self.send_header("Content-Length", str(b - a + 1)); self.end_headers()
+        with open(path, "rb") as f:
+            f.seek(a); left = b - a + 1
+            try:
+                while left > 0:
+                    d = f.read(min(65536, left))
+                    if not d: break
+                    self.wfile.write(d); left -= len(d)
+            except (BrokenPipeError, ConnectionResetError): pass
+
+    def send_loop(self, path):
+        # direct sans fin : le même extrait de 30 s en boucle, au rythme de la lecture
+        data = open(path, "rb").read()
+        self.send_response(200); self.send_header("Content-Type", "video/mp2t"); self.end_headers()
+        rate = len(data) / 30.0
+        try:
+            t0 = time.time(); sent = 0
+            while True:
+                for k in range(0, len(data), 65536):
+                    self.wfile.write(data[k:k + 65536]); sent += min(65536, len(data) - k)
+                    ahead = sent / rate - (time.time() - t0) - 4   # 4 s d'avance au plus
+                    if ahead > 0: time.sleep(ahead)
+        except (BrokenPipeError, ConnectionResetError): pass
+
     def do_GET(self):
         u = urllib.parse.urlparse(self.path); q = urllib.parse.parse_qs(u.query); p = u.path
         if p.endswith("/player_api.php"):
@@ -494,7 +578,9 @@ class H(http.server.BaseHTTPRequestHandler):
             if a == "get_series_categories": return self.send(200, [{"category_id": c, "category_name": n} for c, n in SER_CATS])
             if a == "get_live_streams": return self.send(200, live_streams())
             if a == "get_vod_streams": return self.send(200, vod_streams())
-            if a == "get_series": return self.send(200, series_list())
+            if a == "get_series":
+                try: return self.send(200, series_list())
+                except RuntimeError: return self.send(500, {"error": "panne simulée"})
             if a == "get_vod_info": return self.send(200, vod_info(int((q.get("vod_id") or ["1000"])[0])))
             if a == "get_series_info": return self.send(200, series_info(int((q.get("series_id") or ["2000"])[0])))
             return self.send(200, [])
@@ -523,9 +609,24 @@ class H(http.server.BaseHTTPRequestHandler):
             label = (q.get("l") or [""])[0]
             w, h = {"p": (400, 600), "b": (1280, 720), "l": (300, 170)}.get(kind, (300, 300))
             return self.send(200, make_png(kind, key, w, h, label), "image/png")
-        # vraie vidéo (bande-annonce iTunes) pour tester le lecteur : Dune : Deuxième partie, Interstellar et une autre version
+        # vidéos de test (ci/media) : film sous-titré FR + EN + FR forcés (Dune : Deuxième partie, épisodes de Lupin),
+        # film sans sous-titres français (Drive), chaînes en 720p / 1080p / 4K selon le nom (en boucle, comme un direct)
         m = re.match(r"^/movie/[^/]+/[^/]+/(\d+)\.\w+$", p)
-        if m and int(m.group(1)) in (fid(0), fid(16), 1901):
+        if m and int(m.group(1)) == fid(0): return self.send_file(MEDIA + "/film-sous-titres.mkv")
+        if m and int(m.group(1)) == fid(11): return self.send_file(MEDIA + "/film-sans-fr.mkv")
+        m = re.match(r"^/series/[^/]+/[^/]+/(\d+)\.\w+$", p)
+        if m and (m.group(1).startswith(str(sid(1))) or m.group(1).startswith(str(LUPIN_ALT))): return self.send_file(MEDIA + "/film-sous-titres.mkv")
+        m = re.match(r"^/live/[^/]+/[^/]+/(\d+)\.\w+$", p)
+        if m and PROFILE in ("main", "second"):
+            i = int(m.group(1)) - 300
+            if 0 <= i < len(CHANNELS):
+                n = CHANNELS[i][0]
+                if re.search(r"backup", n, re.I): return self.send(404, "")
+                q = "2160" if re.search(r"4k|uhd", n, re.I) else ("1080" if re.search(r"fhd|1080", n, re.I) else "720")
+                return self.send_loop(MEDIA + f"/live-{q}.ts")
+        # vraie vidéo (bande-annonce iTunes) pour tester le lecteur : Interstellar et une autre version
+        m = re.match(r"^/movie/[^/]+/[^/]+/(\d+)\.\w+$", p)
+        if m and int(m.group(1)) in (fid(16), 1901):
             self.send_response(302); self.send_header("Location", APPLE_PREVIEW); self.send_header("Content-Length", "0"); self.end_headers(); return
         if p.startswith("/movie/") or p.startswith("/series/") or p.startswith("/live/"):
             return self.send(404, "")

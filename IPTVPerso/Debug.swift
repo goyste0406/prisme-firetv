@@ -140,12 +140,39 @@ enum PerfLog {
         note(String(format: "[%7.2f] ", Date().timeIntervalSince(t0)) + what)
     }
 
+    private static let noteLock = NSLock()
     /// une ligne de mesure libre (simulateur de test seulement)
     nonisolated static func note(_ line: String) {
         guard Debug.demoServer != nil, let d = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first else { return }
+        noteLock.lock(); defer { noteLock.unlock() }
         let f = d.appendingPathComponent("mesures.txt")
         let prev = (try? String(contentsOf: f, encoding: .utf8)) ?? ""
         try? (prev + line + "\n").write(to: f, atomically: true, encoding: .utf8)
+    }
+
+    // MARK: mémoire (simulateur de test seulement) : empreinte réelle de l'appli, celle que tvOS surveille
+    nonisolated static func memMB() -> Double {
+        var info = task_vm_info_data_t()
+        var count = mach_msg_type_number_t(MemoryLayout<task_vm_info_data_t>.size / MemoryLayout<natural_t>.size)
+        let kr = withUnsafeMutablePointer(to: &info) { $0.withMemoryRebound(to: integer_t.self, capacity: Int(count)) { task_info(mach_task_self_, task_flavor_t(TASK_VM_INFO), $0, &count) } }
+        return kr == KERN_SUCCESS ? Double(info.phys_footprint) / 1_048_576 : 0
+    }
+    nonisolated(unsafe) private static var peak = 0.0
+    nonisolated(unsafe) private static var sampler: DispatchSourceTimer?
+    /// relève la mémoire 4 fois par seconde pour garder le pic entre deux repères
+    nonisolated static func startMemSampler() {
+        guard Debug.demoServer != nil, sampler == nil else { return }
+        let t = DispatchSource.makeTimerSource(queue: DispatchQueue(label: "prisme.mem"))
+        t.schedule(deadline: .now(), repeating: 0.25)
+        t.setEventHandler { let m = memMB(); noteLock.lock(); if m > peak { peak = m }; noteLock.unlock() }
+        t.resume(); sampler = t
+    }
+    /// repère : mémoire maintenant et pic depuis le repère précédent
+    nonisolated static func mem(_ label: String) {
+        guard Debug.demoServer != nil else { return }
+        let m = memMB()
+        noteLock.lock(); let p = max(peak, m); peak = m; noteLock.unlock()
+        ev(String(format: "MÉMOIRE %@ : %.0f Mo (pic depuis le repère précédent %.0f Mo)", label, m, p))
     }
 
     @MainActor static func home(kind: MediaKind, first: Double, full: Double, q1: Int, q2: Int, cached: Bool, old: () async -> (Double, Int)) async {

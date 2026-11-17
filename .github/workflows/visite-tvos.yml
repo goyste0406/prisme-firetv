@@ -13,7 +13,7 @@ on:
         required: false
         default: ""
       seulement:
-        description: "Partie à visiter seule (lecteur, serie, tv, nav, multi, perf, fournisseurs, fiches, tvlecteur, tvcrash, tvidle, gouts), vide = visite complète"
+        description: "Partie à visiter seule (lecteur, serie, tv, nav, multi, perf, fournisseurs, fiches, tvlecteur, tvcrash, tvidle, gouts, geant), vide = visite complète"
         required: false
         default: ""
 
@@ -55,6 +55,8 @@ jobs:
           nohup python3 ci/fake_server.py 8099 main > fake.log 2>&1 &
           nohup python3 ci/fake_server.py 8098 second > fake2.log 2>&1 &
           nohup python3 ci/fake_server.py 8097 big > fake3.log 2>&1 &
+          nohup python3 ci/fake_server.py 8096 giant > fake4.log 2>&1 &
+          nohup python3 ci/fake_server.py 8095 cut > fake5.log 2>&1 &
           sleep 3
           curl -s "http://127.0.0.1:8099/player_api.php?username=demo&password=demo" | head -c 200
 

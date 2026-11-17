@@ -77,7 +77,9 @@ struct CatalogImporter {
             lrows.append([pid, str(s["stream_id"]), name, Int(str(s["num"])) ?? 0, str(s["stream_icon"]), cid, epg, arch,
                           id.name, id.key, id.q, id.u.rawValue, LiveIndex.rulesVersion])
         }
+        PerfLog.mem("import chaînes : reçues et préparées (\(live.count))")
         res.counts["live"] = await keepOrReplace("live", lrows, received: live.count, &res)
+        PerfLog.mem("import chaînes : enregistrées")
 
         // ---- films
         progress(0.30, "Films…")
@@ -91,7 +93,9 @@ struct CatalogImporter {
                           str(s["container_extension"]).isEmpty ? "mp4" : str(s["container_extension"]),
                           Double(str(s["rating"])) ?? 0, Int(str(s["added"])) ?? 0, tmdb])
         }
+        PerfLog.mem("import films : reçus et préparés (\(vod.count))")
         res.counts["vod"] = await keepOrReplace("vod", vrows, received: vod.count, &res)
+        PerfLog.mem("import films : enregistrés")
 
         // ---- séries
         progress(0.50, "Séries…")
@@ -104,7 +108,9 @@ struct CatalogImporter {
             srows.append([pid, str(s["series_id"]), name, Int(rel.prefix(4)) ?? Self.year(in: name), str(s["cover"]), cid, str(s["plot"]),
                           Double(str(s["rating"])) ?? 0, Int(str(s["last_modified"])) ?? 0, str(s["tmdb"])])
         }
+        PerfLog.mem("import séries : reçues et préparées (\(ser.count))")
         res.counts["series"] = await keepOrReplace("series", srows, received: ser.count, &res)
+        PerfLog.mem("import séries : enregistrées")
 
         // ---- guide des programmes (XMLTV), lu au fil de l'eau : jamais tout en mémoire
         progress(0.62, "Guide des programmes…")
