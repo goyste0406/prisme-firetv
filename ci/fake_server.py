@@ -65,6 +65,13 @@ FILMS = [
     ("Aquaman", 2018, 143, 6.9, ["Action", "Aventure", "Fantastique"], (573693, "Aquaman - Saga"), 47),
     ("Wonder Wheel", 2017, 101, 6.2, ["Drame", "Romance"], None, 48),
     ("Dune", 1984, 137, 6.3, ["Science-Fiction", "Aventure"], None, 49),
+    # 1.8 phase 0 : titres asiatiques très populaires dans le monde et très bien notés (« Ce soir ? » ne doit pas en être envahi)
+    ("Your Name", 2016, 106, 8.5, ["Animation", "Romance"], None, 12),
+    ("Suzume", 2022, 122, 7.9, ["Animation", "Aventure"], None, 8),
+    ("Godzilla Minus One", 2023, 125, 7.7, ["Science-Fiction", "Action"], None, 6),
+    ("Exhuma", 2024, 134, 7.4, ["Horreur", "Mystère"], None, 4),
+    ("12.12 : The Day", 2023, 141, 7.8, ["Histoire", "Drame"], None, 5),
+    ("Concrete Utopia", 2023, 130, 7.1, ["Drame", "Thriller"], None, 9),
 ]
 KW = {"Wonder Woman": [(229266, "dc extended universe (dceu)"), (9715, "superhero")], "Aquaman": [(229266, "dc extended universe (dceu)"), (9715, "superhero")],
       "Spider-Man : No Way Home": [(180547, "marvel cinematic universe (mcu)"), (9715, "superhero")], "Spider-Man : Far From Home": [(180547, "marvel cinematic universe (mcu)"), (9715, "superhero")],
@@ -72,6 +79,10 @@ KW = {"Wonder Woman": [(229266, "dc extended universe (dceu)"), (9715, "superher
       "Dune": [(3386, "space opera"), (818, "based on novel or book")], "Dune : Deuxième partie": [(3386, "space opera")]}
 # mêmes films sous d'autres noms chez le fournisseur (test du dédoublonnage par identifiant TMDB)
 EXTRA_VOD = [(1901, 16, "FR| Interstellaire (2014) MULTI"), (1902, 16, "EN| Interstellar 4K"), (1903, 16, "Interstellar 2014 VOSTFR")]
+# 1.8 phase 0 : un film à 25 sources (fenêtre de choix des sources)
+_MI_TAGS = ["MULTI", "VF", "VFF", "VFQ", "VOSTFR", "4K", "FHD", "HD", "1080p", "720p", "HDR", "4K HDR", "MULTI 4K", "VF 1080p", "VFF 4K",
+            "VOSTFR 1080p", "VF HD", "MULTI FHD", "VFQ 1080p", "VF 720p", "MULTI HDR", "VOSTFR 4K", "VF HEVC", "MULTI 1080p"]
+EXTRA_VOD += [(1910 + k, 27, f"FR| Mission: Impossible - Dead Reckoning (2023) {t}") for k, t in enumerate(_MI_TAGS)]
 ALIASES = {"interstellaire": 16}
 # vraie bande-annonce de l'iTunes Store (le simulateur de test a Internet) : sert à tester la lecture dans l'app
 APPLE_PREVIEW = "https://video-ssl.itunes.apple.com/itunes-assets/Video111/v4/54/b7/37/54b737f0-63c2-77ed-44b3-4f7e2d34f386/mzvf_806821658861734960.640x354.h264lc.U.p.m4v"
@@ -89,7 +100,14 @@ SERIES = [
     ("Breaking Bad", 2008, 8.9, ["Drame", "Crime"], 5, 13, 47, 200),
     ("The Crown", 2016, 8.2, ["Drame"], 6, 10, 58, 120),
     ("Arcane", 2021, 8.7, ["Animation", "Science-Fiction & Fantastique"], 2, 9, 40, 4),
+    # 1.8 phase 0 : séries asiatiques très populaires
+    ("Squid Game", 2021, 7.9, ["Action & Adventure", "Mystère"], 2, 7, 55, 5),
+    ("L'Attaque des Titans", 2013, 8.7, ["Animation", "Action & Adventure"], 4, 10, 24, 7),
+    ("Moving", 2023, 8.4, ["Action & Adventure", "Science-Fiction & Fantastique"], 1, 10, 50, 3),
 ]
+# langue d'origine TMDB (sinon fr pour les films français, en pour les autres)
+OLANG = {"Your Name": "ja", "Suzume": "ja", "Godzilla Minus One": "ja", "Exhuma": "ko", "12.12 : The Day": "ko", "Concrete Utopia": "ko",
+         "Squid Game": "ko", "L'Attaque des Titans": "ja", "Moving": "ko", "Parasite": "ko"}
 CHANNELS = [
     # (nom chez le fournisseur, catégorie, epg)
     ("FR| TF1 FHD", "1", "tf1.fr"), ("FR| TF1 HD", "1", "tf1.fr"), ("FR| France 2 FHD", "1", "france2.fr"), ("FR| France 3", "1", "france3.fr"),
@@ -428,8 +446,10 @@ CERTS = {"Joker": "16", "Drive": "16", "Parasite": "12", "Le Parrain": "12", "La
 # 1.7.1 « Ce soir ? » : vraies dates de sortie en France (cinéma = type 3, numérique = type 4) et popularité TMDB.
 # « Projet dernière chance » sort en salles il y a 2 mois et en VOD il y a 3 semaines (récent) ; « Un p'tit truc en plus »
 # est ajouté hier chez le fournisseur mais sorti en 2024 (ne doit pas passer pour récent).
-RECENT = {"Projet dernière chance": (-60, -20), "Gladiator II": (-150, -90)}
-POP = {"Projet dernière chance": 310.0, "Gladiator II": 180.0, "Un p'tit truc en plus": 12.0}
+RECENT = {"Projet dernière chance": (-60, -20), "Gladiator II": (-150, -90), "Suzume": (-120, -40), "Exhuma": (-90, -30),
+          "12.12 : The Day": (-100, -45), "Godzilla Minus One": (-160, -70)}
+POP = {"Projet dernière chance": 310.0, "Gladiator II": 180.0, "Un p'tit truc en plus": 12.0, "Your Name": 620.0, "Suzume": 840.0,
+       "Godzilla Minus One": 900.0, "Exhuma": 700.0, "12.12 : The Day": 560.0, "Concrete Utopia": 480.0}
 def movie_dates(t, y):
     L = []
     if t in RECENT:
@@ -452,7 +472,7 @@ def movie(i):
             "images": {"logos": [{"iso_639_1": "fr", "file_path": tmdb_path("g", f"m{m}")}] if i % 3 != 2 else []},
             "watch/providers": providers_for(t),
             "release_dates": {"results": [{"iso_3166_1": "FR", "release_dates": movie_dates(t, y)}]},
-            "popularity": POP.get(t, round(v * 6, 1)),
+            "popularity": POP.get(t, round(v * 6, 1)), "original_language": OLANG.get(t, "fr" if i in FRENCH else "en"),
             "keywords": {"keywords": [{"id": a, "name": b} for a, b in KW.get(t, [])]}}
 
 def tv(i):
@@ -466,8 +486,9 @@ def tv(i):
             "watch/providers": providers_for(t),
             # Lupin : un 6e épisode de la saison 3 annoncé dans 3 jours (« à venir »)
             "next_episode_to_air": ({"season_number": ns, "episode_number": ne + 1, "name": "Le dernier coup", "air_date": day(3)} if i == 1 else None),
-            "last_episode_to_air": {"air_date": day(-10) if i in (1, 11) else f"{y + ns - 1}-05-01"}, "number_of_seasons": ns,
-            "popularity": 150.0 if i in (1, 11) else round(v * 5, 1)}
+            "last_episode_to_air": {"air_date": day(-10) if i in (1, 11, 12, 14) else f"{y + ns - 1}-05-01"}, "number_of_seasons": ns,
+            "popularity": 150.0 if i in (1, 11) else (900.0 if i >= 12 else round(v * 5, 1)),
+            "original_language": OLANG.get(t, "fr" if i in (0, 1, 2, 6, 8) else "en")}
 
 def day(n):
     return time.strftime("%Y-%m-%d", time.localtime(NOW + n * DAY))

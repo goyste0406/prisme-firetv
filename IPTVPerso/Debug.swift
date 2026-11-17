@@ -92,6 +92,10 @@ extension Debug {
 
     @MainActor static func seedIfNeeded() {
         guard seed, demoServer != nil else { return }
+        defer {
+            // visite « sauvegarde » : Ma liste vidée avant de restaurer la sauvegarde (vérifie qu'elle revient bien)
+            if arg("prisme.debug.wipeFavs") == "1" { WatchStore.shared.favorites = []; DataCount.write("Ma liste vidée pour le test") }
+        }
         if (profiles == "2" || profiles == "6"), ProfileStore.shared.profiles.count == 1, let p = ProfileStore.shared.add() {
             var x = p; x.name = "Léa"; x.color = 1; x.maxAge = 12; x.bed = 22 * 60 + 30; x.lang = "VOSTFR"
             ProfileStore.shared.update(x)

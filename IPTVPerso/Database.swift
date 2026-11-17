@@ -119,6 +119,11 @@ final class Database: @unchecked Sendable {
             exec("CREATE TABLE IF NOT EXISTS xfrch(id TEXT PRIMARY KEY, n TEXT)")
             exec("PRAGMA user_version=9")
         }
+        if v < 10 {
+            // 1.8 (phase 0) : langue d'origine TMDB (« Ce soir ? » varie les origines). Ajout seulement ; NULL = à compléter.
+            exec("ALTER TABLE fiche ADD COLUMN olang TEXT")
+            exec("PRAGMA user_version=10")
+        }
     }
 
     // MARK: Requêtes

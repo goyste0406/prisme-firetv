@@ -35,28 +35,43 @@ enum Tonight {
             let days = Date().timeIntervalSince(d) / 86400
             rec = days < recentDays ? 1 - days / recentDays * 0.6 : max(0, 0.4 - (days - recentDays) / 1500)
         }
+        // popularité TMDB : mondiale, donc pesée moins fort (1.8 : elle faisait monter les animés et titres asiatiques)
         let pop = min(1, log10(max(1, f.pop)) / 2.3)
         let vote = max(0, min(1, (f.vote - 6) / 2.8))
-        return 0.4 * rec + 0.3 * pop + 0.3 * vote
+        // sortie française connue (cinéma ou VOD en France) : un titre qui a vécu en France
+        let fr = f.relFR.isEmpty && f.relVOD.isEmpty ? 0.0 : 0.05
+        return 0.45 * rec + 0.2 * pop + 0.35 * vote + fr
     }
     static func base(_ L: [MediaItem]) -> [MediaItem] { L.map { ($0, baseScore($0)) }.sorted { $0.1 > $1.1 }.map(\.0) }
-    /// classement final : 70 % récence/popularité/note, 30 % goûts du profil (s'ils sont connus), puis des genres variés
-    static func rank(_ L: [MediaItem], fit: [String: Int]) -> [MediaItem] {
+    /// langues d'origine toujours « familières » (le reste dépend de ce que le profil regarde)
+    static let homeLangs: Set<String> = ["fr", "en"]
+    /// Classement final :
+    /// - 70 % récence / popularité / note, 30 % goûts du profil (s'ils sont connus) ;
+    /// - une langue d'origine que le profil n'a jamais regardée passe après (sans être retirée) ;
+    /// - pas plus de 2 titres d'affilée de la même langue d'origine (hors français et anglais), ni du même genre principal.
+    static func rank(_ L: [MediaItem], fit: [String: Int], langs: Set<String> = []) -> [MediaItem] {
+        let known = homeLangs.union(langs)
         let scored = L.map { it -> (MediaItem, Double) in
-            let b = baseScore(it)
+            var b = baseScore(it)
+            if let o = it.fiche?.olang, !o.isEmpty, !known.contains(o) { b *= 0.6 }
             guard let t = fit[it.id] else { return (it, b) }
             return (it, 0.7 * b + 0.3 * Double(t) / 100 + (t < 40 ? -0.2 : 0))
         }.sorted { $0.1 > $1.1 }
         var out: [MediaItem] = [], rest = scored
-        var lastGenres: [String] = []
+        var lastGenres: [String] = [], lastLangs: [String] = []
+        func ok(_ it: MediaItem) -> Bool {
+            let g = it.fiche?.genres.components(separatedBy: ", ").first ?? ""
+            let l = it.fiche?.olang ?? ""
+            let gOK = g.isEmpty || lastGenres.suffix(2).filter { $0 == g }.count < 2
+            let lOK = l.isEmpty || homeLangs.contains(l) || lastLangs.suffix(2).filter { $0 == l }.count < 2
+            return gOK && lOK
+        }
         while !rest.isEmpty {
-            // pas plus de deux titres de suite du même genre principal
-            let i = rest.firstIndex { x in
-                let g = x.0.fiche?.genres.components(separatedBy: ", ").first ?? ""
-                return g.isEmpty || lastGenres.suffix(2).filter { $0 == g }.count < 2
-            } ?? 0
+            let i = rest.firstIndex { ok($0.0) } ?? 0
             let x = rest.remove(at: i)
-            out.append(x.0); lastGenres.append(x.0.fiche?.genres.components(separatedBy: ", ").first ?? "")
+            out.append(x.0)
+            lastGenres.append(x.0.fiche?.genres.components(separatedBy: ", ").first ?? "")
+            lastLangs.append(x.0.fiche?.olang ?? "")
         }
         return out
     }
@@ -94,6 +109,8 @@ struct MediaHomeView: View {
     @State private var forYou: [MediaItem] = []
     /// goût du profil (0-100, le moins favorable des deux à deux) pour les titres de « Ce soir ? »
     @State private var tonightFit: [String: Int] = [:]
+    /// langues d'origine des titres que le profil a regardés (au moins la moitié)
+    @State private var tonightLangs: Set<String> = []
     @ObservedObject var ps = ProfileStore.shared
     @ObservedObject var tasteStore = TasteStore.shared
     @FocusState private var heroFocus: Bool
@@ -190,7 +207,7 @@ struct MediaHomeView: View {
     private var tonightList: [MediaItem] {
         let maxD = Tonight.durations.first { $0.0 == dur }?.2 ?? 0
         let rx = Tonight.moods.first { $0.0 == mood }?.2
-        let ranked = Tonight.rank(snap.tonight, fit: tonightFit)
+        let ranked = Tonight.rank(snap.tonight, fit: tonightFit, langs: tonightLangs)
         return ranked.filter { it in
             let rt = it.fiche?.runtime ?? 0
             if maxD > 0 && (rt == 0 || rt > maxD) { return false }
@@ -461,7 +478,8 @@ struct MediaHomeView: View {
                 let id = sg.id
                 out.append(CollInfo(id: "col:\(id)", icon: "square.stack.3d.up", name: sg.name.isEmpty ? "Saga" : sg.name.replacingOccurrences(of: " - Saga", with: "").replacingOccurrences(of: " - Collection", with: ""),
                                     why: "Saga complète (collection TMDB), dans l'ordre", count: sg.count, preview: [],
-                                    loader: { await MediaStore.ficheList(.film, pids: p, cond: "f.coll=?", args: [id], order: "f.year", limit: 60) }, kind: "Saga", logo: sg.logo))
+                                    loader: { await MediaStore.ficheList(.film, pids: p, cond: "f.coll=?", args: [id], order: "f.year", limit: 60) }, kind: "Saga", logo: sg.logo,
+                                    covers: { await MediaStore.ficheList(.film, pids: p, cond: "f.coll=?", args: [id], order: "f.vote DESC", limit: 8) }))
             }
         }
         // plateformes : catégories du fournisseur qui portent le nom d'un service (logo : icône TMDB du service)
@@ -477,14 +495,18 @@ struct MediaHomeView: View {
                 var all: [MediaItem] = []
                 for c in cats { all += await MediaStore.page(k, cat: c, offset: 0, limit: 300) }
                 return all
-            }, kind: "Plateforme", logo: logo, logoIsIcon: true))
+            }, kind: "Plateforme", logo: logo, logoIsIcon: true, covers: {
+                if let c0 = cats.first { return await MediaStore.covers(k, cat: c0) }
+                return []
+            }))
         }
         // studios (films) ou chaînes d'origine (séries) d'après les fiches TMDB, avec leur logo
         for st in await MediaStore.studios(k, pids: p, min: 3) {
             let like1 = "%\"id\":\(st.id),%", like2 = "%\"id\":\(st.id)}%"
             out.append(CollInfo(id: "co:\(st.id)", icon: "building.2", name: st.name, why: (k == .film ? "Studio" : "Chaîne d'origine") + " · \(st.count) titres chez ton fournisseur",
                                 count: st.count, preview: [], loader: { await MediaStore.ficheList(k, pids: p, cond: "(f.companies LIKE ? OR f.companies LIKE ?)", args: [like1, like2], order: "f.vote DESC", limit: 300) },
-                                kind: k == .film ? "Studio" : "Chaîne", logo: st.logo))
+                                kind: k == .film ? "Studio" : "Chaîne", logo: st.logo,
+                                covers: { await MediaStore.ficheList(k, pids: p, cond: "(f.companies LIKE ? OR f.companies LIKE ?) AND f.backdrop<>''", args: [like1, like2], order: "f.vote DESC", limit: 12) }))
         }
         // pastille 🔥 : seulement si un de ses titres est dans le Top 10 de la semaine (donnée réelle).
         // Calculée à partir des 10 titres du Top (leur saga, leurs studios, leurs catégories chez le fournisseur),
@@ -524,6 +546,10 @@ struct MediaHomeView: View {
     /// « Pour toi » : titres pas encore vus, hors « jamais de… », les plus proches des goûts du profil
     /// (à deux : le goût le moins favorable des deux doit rester bon).
     private func loadForYou() async {
+        // langues d'origine que le profil regarde vraiment (historique réel, 80 derniers titres)
+        let seenIDs = watch.entries.values.filter { $0.dur > 0 && $0.pos / $0.dur >= 0.5 }.sorted { $0.at > $1.at }.prefix(80).map(\.item)
+        let seenItems = await MediaStore.items(ids: Array(Set(seenIDs.map { $0.components(separatedBy: ":e").first ?? $0 })))
+        tonightLangs = Set(seenItems.compactMap { $0.fiche?.olang }.filter { !$0.isEmpty })
         let watchers = ps.watchers.filter { $0.id != ProfileStore.guestID }
         guard !watchers.isEmpty else { forYou = []; tonightFit = [:]; return }
         var models: [TasteModel] = []

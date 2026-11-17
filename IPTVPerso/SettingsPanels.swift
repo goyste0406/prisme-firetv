@@ -338,6 +338,20 @@ struct DataPanel: View {
                 if s == "send" { sender.start() } else { sender.stop(); sender.state = nil }
             }
             .onDisappear { phone.stop(); inbox.stop(); sender.stop() }
+            .onAppear {
+                // visite « envoi » (deux simulateurs) : cette Apple TV se met d'elle-même en réception
+                if Debug.demoServer != nil, Debug.arg("prisme.debug.receive") == "1" { show = "receive" }
+            }
+            .onReceive(inbox.$received) { r in
+                // visite « envoi » : la fenêtre de confirmation reste affichée N secondes (capture), puis la restauration est acceptée
+                guard let r, Debug.demoServer != nil, let n = Debug.arg("prisme.debug.acceptAfter").flatMap(Double.init) else { return }
+                DataCount.write("sauvegarde reçue de \(r.device) (\(r.profiles.joined(separator: ", ")))")
+                DispatchQueue.main.asyncAfter(deadline: .now() + n) {
+                    done = Backup.restore(r) ? Self.restartMsg : "Restauration impossible."
+                    inbox.received = nil
+                    DataCount.write("restauration acceptée")
+                }
+            }
             .alert(item: Binding(get: { (phone.received ?? inbox.received).map { Pending(s: $0) } }, set: { if $0 == nil { phone.received = nil; inbox.received = nil } })) { p in
                 Alert(title: Text("Restaurer cette sauvegarde ?"),
                       message: Text("Sauvegarde du \(p.s.date) (\(p.s.device)) · profils : \(p.s.profiles.joined(separator: ", ")).\n\nLes profils, Ma liste, les reprises, les goûts, les réglages et les fournisseurs de cette Apple TV seront remplacés. Une copie de ceux d'aujourd'hui est gardée pour annuler."),

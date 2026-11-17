@@ -98,6 +98,10 @@ final class Visite: XCTestCase {
         if ProcessInfo.processInfo.environment["ONLY"] == "reglages" { reglages(); return }
         if ProcessInfo.processInfo.environment["ONLY"] == "dit" { quATilDit(); return }
         if ProcessInfo.processInfo.environment["ONLY"] == "sauvegarde" { sauvegarde(); return }
+        if ProcessInfo.processInfo.environment["ONLY"] == "accueil" { accueils(); return }
+        if ProcessInfo.processInfo.environment["ONLY"] == "duo" { duo(); return }
+        if ProcessInfo.processInfo.environment["ONLY"] == "sources" { sources(); return }
+        if ProcessInfo.processInfo.environment["ONLY"] == "envoi" { envoi(); return }
         if ProcessInfo.processInfo.environment["ONLY"] == "tvidle" {
             // TV en direct au lancement avec deux fournisseurs, 150 s sans aucune interaction, puis une capture
             relaunch(["-prisme.debug.demoServer2", "http://127.0.0.1:8098", "-prisme.debug.tab", "live"], wait: 150)
@@ -656,13 +660,70 @@ final class Visite: XCTestCase {
         _ = sem.wait(timeout: .now() + 15)
         if let o = try? JSONSerialization.jsonObject(with: backup) as? [String: Any] { attach("sauvegarde-contenu", "profils \(o["profiles"] ?? "?") · appareil \(o["device"] ?? "?") · date \(o["date"] ?? "?")") }
         Thread.sleep(forTimeInterval: 2); shot("R3b-sauvegarde-telechargee")
-        var r = URLRequest(url: URL(string: addr)!); r.httpMethod = "POST"; r.httpBody = backup
+        // Ma liste vidée (donnees.txt le montre), puis la sauvegarde est renvoyée et doit la rétablir
+        relaunch(["-prisme.debug.tab", "settings", "-prisme.debug.settings", "data", "-prisme.debug.wipeFavs", "1"], wait: 14)
+        press(.right); press(.up, 14); press(.down); press(.select); Thread.sleep(forTimeInterval: 3); shot("R3c-code-apres-vidage")
+        let addr2 = app.staticTexts.allElementsBoundByIndex.map(\.label).first { $0.hasPrefix("http://") } ?? addr
+        var r = URLRequest(url: URL(string: addr2)!); r.httpMethod = "POST"; r.httpBody = backup
         let sem2 = DispatchSemaphore(value: 0)
         URLSession.shared.dataTask(with: r) { _, resp, err in self.attach("renvoi-sauvegarde", "\((resp as? HTTPURLResponse)?.statusCode ?? 0) \(err?.localizedDescription ?? "")"); sem2.signal() }.resume()
         _ = sem2.wait(timeout: .now() + 15)
         Thread.sleep(forTimeInterval: 3); shot("R4-restaurer-confirmation")
         press(.select); Thread.sleep(forTimeInterval: 2); shot("R4b-restauree")
-        relaunch(["-prisme.debug.tab", "films"], wait: 20); shot("R5-apres-restauration")
+        relaunch(["-prisme.debug.tab", "mine"], wait: 20); shot("R5-ma-liste-apres-restauration")
+        // annuler la dernière restauration (remet Ma liste vidée)
+        relaunch(["-prisme.debug.tab", "settings", "-prisme.debug.settings", "data"], wait: 14)
+        press(.right); press(.up, 14); press(.down, 4); shot("R6-annuler-ligne"); press(.select); press(.select); Thread.sleep(forTimeInterval: 2); shot("R6b-annulee")
+        relaunch(["-prisme.debug.tab", "mine"], wait: 20); shot("R7-ma-liste-apres-annulation")
+    }
+
+    /// 1.8 phase 0 — accueils Films et Séries de haut en bas (Ce soir ?, Top 10, Explorer, Parcourir et ses onglets).
+    func accueils() {
+        for (k, tab) in [("F", "films"), ("S", "series")] {
+            relaunch(["-prisme.debug.tab", tab, "-prisme.debug.demoServer2", "http://127.0.0.1:8098"], wait: 40)
+            shot("A\(k)00-ouverture")
+            for i in 1...12 { press(.down); shot(String(format: "A\(k)%02d-bas", i)) }
+            // Parcourir : chaque onglet, puis ses tuiles vers la droite
+            downUntil(["Catégories", "Licences et sagas", "Collections", "Chaînes"], max: 6, prefix: "A\(k)P-cherche")
+            for t in 0..<3 {
+                press(.select); Thread.sleep(forTimeInterval: 1.5); shot("A\(k)P\(t)-onglet")
+                press(.down); Thread.sleep(forTimeInterval: 1.5); shot("A\(k)P\(t)-tuiles")
+                press(.right, 3); Thread.sleep(forTimeInterval: 1.5); shot("A\(k)P\(t)-tuiles-droite")
+                press(.up); press(.left, 8); press(.right, t + 1)
+            }
+        }
+    }
+
+    /// 1.8 phase 0 — « Selon vos goûts » / « Pour vous deux » : fiches film et série en mode à deux, puis seul.
+    func duo() {
+        for (k, extra) in [("D", ["-prisme.debug.duo", "1"]), ("S", [])] {
+            for (n, id) in [("film", "film:demo:1000"), ("serie", "series:demo:2001")] {
+                relaunch(["-prisme.debug.profiles", "2", "-prisme.debug.tastes", "1", "-prisme.debug.open", id] + extra, wait: 16)
+                for i in 1...10 { press(.down); shot(String(format: "\(k)-\(n)-%02d", i)) }
+                if n == "film" { press(.right, 2); shot("\(k)-\(n)-pastilles") }
+            }
+        }
+    }
+
+    /// 1.8 phase 0 — fenêtre de choix des sources avec 25 sources (Mission: Impossible).
+    func sources() {
+        relaunch(["-prisme.debug.demoServer2", "http://127.0.0.1:8098", "-prisme.debug.open", "film:demo:1027"], wait: 30)
+        shot("V0-fiche")
+        for i in 1...4 { press(.right); shot("V0-droite-\(i)"); if focused().lowercased().contains("version") { break } }
+        press(.select); Thread.sleep(forTimeInterval: 1.5); shot("V1-ouverte")
+        for i in 1...26 { press(.down); if i % 5 == 0 || i > 22 { shot(String(format: "V2-bas-%02d", i)) } }
+        for i in 1...26 { press(.up); if i % 8 == 0 || i > 23 { shot(String(format: "V3-haut-%02d", i)) } }
+        back(); Thread.sleep(forTimeInterval: 1); shot("V4-retour")
+    }
+
+    /// 1.8 phase 0 — envoi vers une autre Apple TV : un 2e simulateur (lancé par le workflow) est en réception.
+    func envoi() {
+        relaunch(["-prisme.debug.profiles", "2", "-prisme.debug.tab", "settings", "-prisme.debug.settings", "data"], wait: 20)
+        press(.right); press(.up, 14); press(.down, 3); shot("E1-ligne-envoyer"); press(.select)
+        Thread.sleep(forTimeInterval: 12); shot("E2-apple-tv-trouvees")
+        press(.down); shot("E3-pret"); press(.select)
+        Thread.sleep(forTimeInterval: 8); shot("E4-envoye")
+        Thread.sleep(forTimeInterval: 40); shot("E5-fin")
     }
 
     /// 1.7.1 — langue du contenu de Soleil : Français uniquement, Privilégier, puis retour à Tout garder.

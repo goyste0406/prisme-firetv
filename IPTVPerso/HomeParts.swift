@@ -259,6 +259,8 @@ struct CollInfo: Identifiable {
     var logoIsIcon = false
     /// meilleure place d'un de ses titres dans le Top 10 de la semaine (pastille 🔥), 0 = aucun
     var trend = 0
+    /// quelques titres pour l'image de la tuile (requête légère) ; sinon les premiers titres de la collection
+    var covers: (() async -> [MediaItem])? = nil
 }
 
 /// Images des tuiles de « Parcourir » et « Explorer » (1.7.1) : une affiche en plein cadre par tuile,
@@ -420,70 +422,59 @@ struct CollectionGridView: View {
 }
 
 /// Services reconnus dans les noms de catégories des fournisseurs (« FR| NETFLIX », « Disney+ »…).
-/// Tuile « Licences et sagas » du simulateur (lic2) : logo en silhouette blanche, en couleurs quand la tuile est
-/// sélectionnée ; nom dessous ; « Saga · 5 films » affiché à la sélection ; liseré de couleur en bas.
-/// Sans logo connu (TMDB n'en a pas), le nom seul, en grand.
+/// Tuile « Licences et sagas » (films) et « Chaînes » (séries) : même forme que les tuiles de catégories,
+/// logo en couleur à la place du nom ; sans logo connu (TMDB n'en a pas), le nom.
 struct LicenceTile: View {
     let c: CollInfo
     let unit: String
     let action: () -> Void
+    @State private var img: UIImage?
+    @State private var dark = false
+    @State private var cover: MediaItem?
     var body: some View {
-        Button(action: action) { Inner(c: c, unit: unit) }.buttonStyle(PlainNoFocusStyle())
-    }
-    private struct Inner: View {
-        let c: CollInfo
-        let unit: String
-        @Environment(\.isFocused) var f
-        @State private var img: UIImage?
-        @State private var dark = false
-        var body: some View {
-            let hue = P.hue(c.name)
-            ZStack {
-                RoundedRectangle(cornerRadius: 26, style: .continuous).fill(Color.white.opacity(f ? 0.12 : 0.04))
-                RoundedRectangle(cornerRadius: 26, style: .continuous).stroke(f ? Color.white : Color.white.opacity(0.08), lineWidth: f ? 4 : 1.5)
-                VStack(spacing: 6) {
-                    if let img {
-                        Group {
-                            if c.logoIsIcon {
-                                Image(uiImage: img).resizable().scaledToFit().clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-                                    .frame(maxWidth: 76, maxHeight: 76)
-                            } else if !dark {
-                                // logo toujours dans ses couleurs d'origine (1.7.1), plus grand
-                                Image(uiImage: img).resizable().scaledToFit().frame(maxWidth: 300, maxHeight: 100)
-                            } else {
-                                // logo très sombre : couleurs d'origine sur un fond clair léger, pour rester lisible sur le fond sombre
-                                Image(uiImage: img).resizable().scaledToFit().frame(maxWidth: 270, maxHeight: 82)
-                                    .padding(.horizontal, 14).padding(.vertical, 8)
-                                    .background(Color.white.opacity(0.78), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-                            }
-                        }
-                        Text(c.name).font(P.font(22, .semibold)).lineLimit(1).minimumScaleFactor(0.7).padding(.horizontal, 16)
-                    } else {
-                        Text(c.name).font(P.font(32, .semibold)).multilineTextAlignment(.center).lineLimit(2).minimumScaleFactor(0.6).padding(.horizontal, 18)
-                    }
-                    Text("\(c.kind) · \(c.count) \(unit)").font(P.font(20)).opacity(f ? 0.65 : 0)
-                }
-                .foregroundStyle(.white)
+        // 1.7.1 (Phase 0, demande de Steven) : même tuile que les autres catégories — affiche en plein cadre, dégradé
+        // en bas — avec le logo en couleur à la place du nom ; sans logo connu, le nom comme les autres tuiles
+        Button(action: action) {
+            ZStack(alignment: .bottomLeading) {
+                CoverBackground(item: cover, hue: P.hue(c.name))
                 if c.trend > 0 && c.trend <= 3 {
-                    Text(c.trend == 1 ? "🔥 N° 1" : "🔥 Top \(c.trend)").font(P.font(19, .heavy)).foregroundStyle(Color(red: 1, green: 0.69, blue: 0.54))
-                        .padding(.horizontal, 12).padding(.vertical, 4)
-                        .background(Color(red: 1, green: 0.47, blue: 0.24).opacity(0.22), in: RoundedRectangle(cornerRadius: 12))
-                        .padding(14).frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                    Text(c.trend == 1 ? "🔥 N° 1" : "🔥 Top \(c.trend)").font(P.font(15, .heavy)).padding(.horizontal, 9).padding(.vertical, 4)
+                        .background(.black.opacity(0.55), in: RoundedRectangle(cornerRadius: 7)).padding(12)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
                 }
-                Capsule().fill(Color(hue: hue, saturation: 0.6, brightness: 0.85).opacity(0.6)).frame(width: 142, height: 4)
-                    .frame(maxHeight: .infinity, alignment: .bottom)
+                VStack(alignment: .leading, spacing: 6) {
+                    if let img {
+                        if c.logoIsIcon {
+                            Image(uiImage: img).resizable().scaledToFit().frame(width: 56, height: 56)
+                                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                        } else {
+                            // logo dans ses couleurs d'origine ; un logo très sombre garde un halo clair discret pour rester lisible
+                            Image(uiImage: img).resizable().scaledToFit().frame(maxWidth: 230, maxHeight: 64, alignment: .leading)
+                                .shadow(color: dark ? .white.opacity(0.55) : .black.opacity(0.5), radius: dark ? 5 : 6)
+                        }
+                    } else {
+                        Text(c.name).font(P.font(28, .heavy)).lineLimit(2).minimumScaleFactor(0.7)
+                    }
+                    Text("\(c.kind) · \(c.count) \(unit)").font(P.font(17)).opacity(0.8).lineLimit(1)
+                }
+                .shadow(color: .black.opacity(0.6), radius: 6)
+                .padding(20)
             }
-            .frame(width: 356, height: 180)
-            .clipShape(RoundedRectangle(cornerRadius: 26, style: .continuous))
-            .scaleEffect(f ? 1.07 : 1)
-            .shadow(color: .black.opacity(f ? 0.5 : 0), radius: 26, y: 14)
-            .animation(.easeOut(duration: 0.18), value: f)
-            .task(id: c.logo) {
-                guard !c.logo.isEmpty else { return }
-                let i = await ImageLoader.load(Fiche.img(c.logo, c.logoIsIcon ? "w92" : "w300"), maxPixel: 500)
-                dark = i.map(LogoTone.isDark) ?? false
-                img = i
-            }
+            .frame(width: 320, height: 180)
+            .clipped()
+            .foregroundStyle(.white)
+        }
+        .buttonStyle(TileStyle(radius: 20, zoom: 1.06))
+        .task(id: c.logo) {
+            guard !c.logo.isEmpty else { return }
+            let i = await ImageLoader.load(Fiche.img(c.logo, c.logoIsIcon ? "w92" : "w300"), maxPixel: 500)
+            dark = i.map(LogoTone.isDark) ?? false
+            img = i
+        }
+        .task(id: c.id) {
+            var list: [MediaItem] = []
+            if let f = c.covers { list = await f() } else { list = Array(await c.loader().prefix(24)) }
+            withAnimation(.easeOut(duration: 0.25)) { cover = CoverPick.choose("l:" + c.id, from: MediaStore.coverCandidates(list)) }
         }
     }
 }
