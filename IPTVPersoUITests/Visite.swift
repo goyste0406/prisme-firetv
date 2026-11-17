@@ -95,6 +95,7 @@ final class Visite: XCTestCase {
         if ProcessInfo.processInfo.environment["ONLY"] == "tvcrash" { tvCrash(); return }
         if ProcessInfo.processInfo.environment["ONLY"] == "gouts" { gouts(); return }
         if ProcessInfo.processInfo.environment["ONLY"] == "langue" { langue(); return }
+        if ProcessInfo.processInfo.environment["ONLY"] == "reglages" { reglages(); return }
         if ProcessInfo.processInfo.environment["ONLY"] == "tvidle" {
             // TV en direct au lancement avec deux fournisseurs, 150 s sans aucune interaction, puis une capture
             relaunch(["-prisme.debug.demoServer2", "http://127.0.0.1:8098", "-prisme.debug.tab", "live"], wait: 150)
@@ -596,6 +597,39 @@ final class Visite: XCTestCase {
         downUntil(["Généraliste"], max: 5, prefix: "T9-bas"); press(.select); Thread.sleep(forTimeInterval: 2); shot("T9-eventail")
         press(.select); Thread.sleep(forTimeInterval: 9); shot("T9b-direct-depuis-eventail", focus: false)
         back(); Thread.sleep(forTimeInterval: 2); shot("T9c-retour-eventail")
+    }
+
+    /// 1.7.1 — les 9 rubriques des Réglages, puis la sauvegarde par l'iPhone (télécharger, renvoyer, confirmer sur la TV).
+    func reglages() {
+        for sec in ["prof", "prov", "lang", "play", "live", "epg", "homes", "par", "data"] {
+            relaunch(["-prisme.debug.tab", "settings", "-prisme.debug.settings", sec], wait: 14)
+            shot("R-\(sec)")
+            press(.right); shot("R-\(sec)-panneau")
+            for k in 1...7 { press(.down); shot("R-\(sec)-bas-\(k)") }
+        }
+        // réglage changé (Lecture › saut) puis relu après relance
+        relaunch(["-prisme.debug.tab", "settings", "-prisme.debug.settings", "play"], wait: 14)
+        press(.right); press(.down, 3); press(.select); Thread.sleep(forTimeInterval: 1); shot("R2-saut-change")
+        relaunch(["-prisme.debug.tab", "settings", "-prisme.debug.settings", "play"], wait: 14); shot("R2b-saut-relu")
+        // sauvegarde sur l'iPhone : code, téléchargement, renvoi, confirmation sur la TV
+        relaunch(["-prisme.debug.tab", "settings", "-prisme.debug.settings", "data"], wait: 14)
+        press(.right); press(.select); Thread.sleep(forTimeInterval: 3); shot("R3-sauvegarde-code")
+        let addr = app.staticTexts.allElementsBoundByIndex.map(\.label).first { $0.hasPrefix("http://") } ?? ""
+        attach("adresse-sauvegarde", addr)
+        guard !addr.isEmpty, let u = URL(string: addr + "/prisme-sauvegarde.json") else { return }
+        let sem = DispatchSemaphore(value: 0)
+        var backup = Data()
+        URLSession.shared.dataTask(with: u) { d, r, e in backup = d ?? Data(); self.attach("sauvegarde-recue", "\((r as? HTTPURLResponse)?.statusCode ?? 0) · \(backup.count) octets \(e?.localizedDescription ?? "")"); sem.signal() }.resume()
+        _ = sem.wait(timeout: .now() + 15)
+        if let o = try? JSONSerialization.jsonObject(with: backup) as? [String: Any] { attach("sauvegarde-contenu", "profils \(o["profiles"] ?? "?") · appareil \(o["device"] ?? "?") · date \(o["date"] ?? "?")") }
+        Thread.sleep(forTimeInterval: 2); shot("R3b-sauvegarde-telechargee")
+        var r = URLRequest(url: URL(string: addr)!); r.httpMethod = "POST"; r.httpBody = backup
+        let sem2 = DispatchSemaphore(value: 0)
+        URLSession.shared.dataTask(with: r) { _, resp, err in self.attach("renvoi-sauvegarde", "\((resp as? HTTPURLResponse)?.statusCode ?? 0) \(err?.localizedDescription ?? "")"); sem2.signal() }.resume()
+        _ = sem2.wait(timeout: .now() + 15)
+        Thread.sleep(forTimeInterval: 3); shot("R4-restaurer-confirmation")
+        press(.select); Thread.sleep(forTimeInterval: 2); shot("R4b-restauree")
+        relaunch(["-prisme.debug.tab", "films"], wait: 20); shot("R5-apres-restauration")
     }
 
     /// 1.7.1 — langue du contenu de Soleil : Français uniquement, Privilégier, puis retour à Tout garder.

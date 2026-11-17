@@ -253,6 +253,20 @@ struct CatalogImporter {
         return c?.url
     }
 
+    /// Guide seul (Réglages › Guide TV : « Actualiser maintenant » et téléchargement au démarrage) : le catalogue n'est pas touché.
+    func runGuide() async -> Int? {
+        let pid = provider.id, db = Database.shared
+        var ids = Set<String>()
+        await db.read { db in db.query("SELECT DISTINCT epg FROM live WHERE pid=? AND epg<>''", [pid]) { r in ids.insert(r.str(0)) } }
+        guard !ids.isEmpty, let url = xmltvURL() else { return nil }
+        guard let (file, _) = try? await URLSession.shared.download(from: url) else { return nil }
+        defer { try? FileManager.default.removeItem(at: file) }
+        let keep = ids
+        let n = await db.read { db in EPGParser(file: file, keep: keep, db: db).run() }
+        await db.read { db in db.run("DELETE FROM epg WHERE stop<?", [Int(Date().timeIntervalSince1970) - 3 * 86400]) }
+        return n
+    }
+
     private func xmltvURL() -> URL? {
         var c = URLComponents(string: provider.account.baseURL + "/xmltv.php")
         c?.queryItems = [URLQueryItem(name: "username", value: provider.username), URLQueryItem(name: "password", value: provider.password)]
@@ -299,6 +313,8 @@ final class EPGParser: NSObject, XMLParserDelegate {
     private var inTitle = false, inDesc = false, inCat = false, catFr = false, curFr = false, inImg = false, imgPoster = false
     private var count = 0
     private var cleared = false
+    /// Réglages › Guide TV : décalage horaire (quand le guide du fournisseur n'est pas à la bonne heure)
+    private let shift = AppPrefs.epgShift * 3600
     private let from = Int(Date().timeIntervalSince1970) - 2 * 86400
     private let to = Int(Date().timeIntervalSince1970) + 2 * 86400
 
@@ -351,7 +367,7 @@ final class EPGParser: NSObject, XMLParserDelegate {
         case "programme":
             let ch = a["channel"] ?? ""
             guard keep.contains(ch) else { cur = nil; return }
-            let st = Self.time(a["start"] ?? ""), sp = Self.time(a["stop"] ?? "")
+            let st = Self.time(a["start"] ?? "") + shift, sp = Self.time(a["stop"] ?? "") + shift
             cur = (sp > from && st < to && sp > st) ? (ch, st, sp) : nil
             title = ""; descr = ""; cat = ""; img = ""; catFr = false
         case "title": if cur != nil { inTitle = true; text = "" }

@@ -233,6 +233,9 @@ final class VodPlayerController: UIViewController, VLCMediaPlayerDelegate {
         }
         let media = VLCMedia(url: url)
         media.addOption(isLive ? ":network-caching=1500" : ":network-caching=2000")
+        // Réglages (1.7.1) : apparence des sous-titres, décodage matériel
+        for o in AppPrefs.subOptions { media.addOption(o) }
+        if !AppPrefs.hwDecode { media.addOption(":avcodec-hw=none") }
         if ui.nightActive {
             // son de nuit : compresseur de VLC (sons forts adoucis) — se règle au démarrage de la lecture
             for o in [":audio-filter=compressor", ":compressor-rms-peak=0.2", ":compressor-attack=25", ":compressor-release=100",
@@ -252,13 +255,15 @@ final class VodPlayerController: UIViewController, VLCMediaPlayerDelegate {
         let g = gen
         let w = DispatchWorkItem { [weak self] in
             guard let self, self.gen == g, self.ui.loading, self.ui.message == nil else { return }
-            if self.isLive, self.trySource(after: self.sourceIndex) { return }
+            if self.isLive, AppPrefs.failover > 0, self.trySource(after: self.sourceIndex) { return }
             self.ui.loading = false
             self.ui.message = self.isLive ? "Cette chaîne ne répond pas.\nChoisis une autre chaîne ou une autre source, ou réessaie plus tard."
                                           : "La lecture ne démarre pas.\nEssaie une autre version depuis la fiche, ou réessaie plus tard."
         }
         stallWork = w
-        DispatchQueue.main.asyncAfter(deadline: .now() + 25, execute: w)
+        // Réglages › TV en direct : délai de bascule vers la source suivante (25 s par défaut, comme avant)
+        let delay = isLive && AppPrefs.failover > 0 ? Double(AppPrefs.failover) : 25
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: w)
     }
 
     private var duration: Double { Double(player.media?.length.intValue ?? 0) / 1000 }
@@ -332,8 +337,8 @@ final class VodPlayerController: UIViewController, VLCMediaPlayerDelegate {
         switch press.type {
         case .menu: return   // Retour : traité par shortBack() (via SwiftUI)
         case .leftArrow where isLive, .rightArrow where isLive: showOSD()
-        case .leftArrow: seek(-10)
-        case .rightArrow: seek(10)
+        case .leftArrow: seek(-Double(AppPrefs.skip))
+        case .rightArrow: seek(Double(AppPrefs.skip))
         case .upArrow: ui.panel = .shortcuts; ui.osd = true
         case .downArrow where isLive: ui.panel = .full; ui.osd = true     // TV : la liste des chaînes
         case .downArrow: ui.options = true; ui.osd = true
@@ -390,7 +395,7 @@ final class VodPlayerController: UIViewController, VLCMediaPlayerDelegate {
                 self.restartAt = nil
                 self.lastInputPos = to ?? 0
             }
-            if !self.shownTracks, self.duration > 0 { self.shownTracks = true; self.readTracks() }
+            if !self.shownTracks, self.duration > 0 { self.shownTracks = true; self.readTracks(); self.defaultSubs() }
             if self.ui.osd || self.ui.interactive { self.refresh() } else { self.ui.pos = self.position }
             if var r = self.saidRestore, !r.armed, self.position < r.until - min(3, r.until * 0.5) { r.armed = true; self.saidRestore = r }
             if let r = self.saidRestore, r.armed, self.position >= r.until {
@@ -430,6 +435,23 @@ final class VodPlayerController: UIViewController, VLCMediaPlayerDelegate {
         }       // jamais l'adresse complète (elle contient tes identifiants)
         info.append(("Son de nuit", ui.nightActive ? "actif" : "inactif"))
         ui.info = info
+    }
+
+    /// Sous-titres au démarrage (1.7.1) : réglage du profil (« Toujours en français » / « Jamais »), sinon réglages
+    /// généraux (« Sous-titres français par défaut », « … si seule la VO existe »). Rien ne change si aucun n'est activé.
+    private func defaultSubs() {
+        let prof = ProfileStore.shared.me.subs
+        let fr = ui.subs.filter { $0.id >= 0 }.first { n in
+            let x = n.name.lowercased()
+            return !x.contains("forc") && (x.contains("fran") || x.contains("french") || x.range(of: #"\b(fr|fre|fra)\b"#, options: .regularExpression) != nil)
+        }
+        func frAudio() -> Bool { ui.audio.contains { a in let x = a.name.lowercased(); return x.contains("fran") || x.contains("french") || x.range(of: #"\b(fr|fre|fra|vf|vff)\b"#, options: .regularExpression) != nil } }
+        var want: Int32?
+        if prof == 2 { want = -1 }
+        else if prof == 1 || AppPrefs.subsFR { want = fr?.id }
+        else if AppPrefs.subsIfVO, !ui.audio.isEmpty, !frAudio() { want = fr?.id }
+        guard let w = want, w != ui.subCur else { return }
+        player.currentVideoSubTitleIndex = w; ui.subCur = w
     }
 
     // MARK: image, versions
@@ -511,6 +533,9 @@ final class VodPlayerController: UIViewController, VLCMediaPlayerDelegate {
             let copies = LiveIndex.entry(ch)?.copies ?? [ch]
             sources = copies.isEmpty ? [ch] : copies
             sourceIndex = max(0, sources.firstIndex { $0.id == ch.id } ?? 0)
+            // Réglages › Lecture : qualité maximale (la meilleure source sous la limite, si la chaîne a été prise « au mieux »)
+            if sourceIndex == 0, AppPrefs.maxQuality > 0,
+               let i = sources.firstIndex(where: { ChannelTools.quality($0.name) <= AppPrefs.maxRank }) { sourceIndex = i }
         }
         ui.versions = sources.map { LiveSourceLabel.text($0) }
         ui.versionCur = sourceIndex

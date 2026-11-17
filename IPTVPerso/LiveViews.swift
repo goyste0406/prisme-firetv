@@ -3,6 +3,8 @@ import SwiftUI
 // MARK: - TV en direct (structure du simulateur) : colonne d'icônes à gauche, en-tête sur la dernière chaîne,
 // « Pour toi, maintenant », « Explorer par univers », « Commence bientôt ».
 
+enum LiveAutoStart { @MainActor static var done = false }
+
 struct LiveHomeView: View {
     @EnvironmentObject var store: ProviderStore
     @ObservedObject var prefs = LivePrefs.shared
@@ -250,6 +252,8 @@ struct LiveFrontView: View {
         soon = s1.filter { seen.insert(ChannelTools.key($0.ch) + "|\($0.p.start)").inserted }
         if let h = head { let nn = await LiveStore.nowNext(h); headNow = nn.0; headNext = nn.1 }
         loaded = true
+        // Réglages › TV en direct : à l'ouverture de prisme, la dernière chaîne regardée s'allume tout de suite (une fois)
+        if AppPrefs.openOnLive, !LiveAutoStart.done, let h = recent.first { LiveAutoStart.done = true; playHead(h) }
     }
 
     private func playOne(_ ch: Channel) { let (l, i) = LiveIndex.withNeighbors(ch); play(l, i) }

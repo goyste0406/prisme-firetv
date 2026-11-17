@@ -120,12 +120,23 @@ final class FicheService: ObservableObject {
     @Published var lastError: String?
     private var task: Task<Void, Never>?
 
+    /// Réglages › Accueils et notes : pause demandée (jusqu'à la reprise), ou mode « Jamais » (une fiche arrive quand on l'ouvre)
+    @Published var paused = false
     func start() {
-        guard task == nil, TmdbKey.value != nil else { return }
+        guard task == nil, TmdbKey.value != nil, !paused, AppPrefs.ficheMode == 0 else { return }
         running = true
         task = Task.detached(priority: .background) { await FicheWorker().run() ; await MainActor.run { FicheService.shared.task = nil; FicheService.shared.running = false } }
     }
     func restart() { task?.cancel(); task = nil; start() }
+    func pause() { paused = true; task?.cancel(); task = nil; running = false }
+    func resume() { paused = false; start() }
+    /// « Tout retélécharger » : efface les fiches téléchargées par prisme (pas Ma liste, ni l'historique, ni les réglages) et recommence
+    func redownloadAll() async {
+        task?.cancel(); task = nil; running = false
+        await Database.shared.read { db in db.run("DELETE FROM fiche"); db.run("DELETE FROM fmiss") }
+        done = 0; total = 0; version += 1
+        start()
+    }
 }
 
 /// Va chercher les fiches manquantes, 4 à la fois, les titres les plus récents d'abord.

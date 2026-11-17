@@ -237,6 +237,7 @@ final class ProviderStore: ObservableObject {
                         s.providers[i] = x
                     }
                     s.importing = nil; s.status = ""; s.catalogVersion += 1
+                    if (res.counts["epg"] ?? 0) > 0 { UserDefaults.standard.set(Date(), forKey: "prisme.guide.last") }
                     PerfLog.ev("Import \(p.name) : \(Int(Date().timeIntervalSince(t0) * 1000)) ms · \(res.counts)\(res.warning.map { " · " + $0 } ?? "")")
                     s.next()
                 }
@@ -274,6 +275,31 @@ final class ProviderStore: ObservableObject {
     func refreshIfStale() {
         for p in active where !tried.contains(p.id) && (p.lastImport == nil || Date().timeIntervalSince(p.lastImport!) > 86400) {
             tried.insert(p.id); refresh(p.id); break
+        }
+        // Réglages › Guide TV : guide retéléchargé au démarrage s'il a plus de 12 h (le catalogue, lui, suit sa règle des 24 h)
+        if AppPrefs.epgAuto, importing == nil, !guideTried, Date().timeIntervalSince(guideLast) > 12 * 3600 { guideTried = true; refreshGuide() }
+    }
+
+    // MARK: guide seul (1.7.1)
+    @Published var guideBusy = false
+    private var guideTried = false
+    var guideLast: Date { UserDefaults.standard.object(forKey: "prisme.guide.last") as? Date ?? (active.compactMap(\.lastImport).max() ?? .distantPast) }
+
+    /// Retélécharge le guide des fournisseurs actifs, l'un après l'autre (le catalogue n'est pas touché).
+    func refreshGuide() {
+        guard !guideBusy, importing == nil else { return }
+        guideBusy = true
+        let list = active
+        Task.detached(priority: .utility) {
+            var counts: [String: Int] = [:]
+            for p in list { if let n = await CatalogImporter(provider: p).runGuide() { counts[p.id] = n } }
+            await MainActor.run {
+                let s = ProviderStore.shared
+                for (id, n) in counts { if let i = s.providers.firstIndex(where: { $0.id == id }) { s.providers[i].counts["epg"] = n } }
+                UserDefaults.standard.set(Date(), forKey: "prisme.guide.last")
+                s.guideBusy = false; s.catalogVersion += 1
+                PerfLog.ev("Guide seul : \(counts)")
+            }
         }
     }
 }

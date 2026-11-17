@@ -24,11 +24,13 @@ targets:
         NSAppTransportSecurity:
           NSAllowsArbitraryLoads: true
         # ajout d'un fournisseur « Avec mon iPhone » : la TV ouvre une petite page sur le Wi-Fi de la maison
-        NSLocalNetworkUsageDescription: "prisme reçoit sur ton Wi-Fi le lien ou les identifiants envoyés depuis ton iPhone, quand tu ajoutes un fournisseur."
+        NSLocalNetworkUsageDescription: "prisme reçoit sur ton Wi-Fi le lien ou les identifiants envoyés depuis ton iPhone, et échange ta sauvegarde avec ton iPhone ou tes autres Apple TV."
+        # synchronisation entre Apple TV (1.7.1) : une Apple TV « en réception » est visible des autres sur le Wi-Fi
+        NSBonjourServices: [_prisme._tcp]
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.steven.iptvperso
-        MARKETING_VERSION: "1.7"
+        MARKETING_VERSION: "1.7.1"
         CURRENT_PROJECT_VERSION: "1"
         CODE_SIGN_STYLE: Automatic
         SWIFT_VERSION: "5.0"

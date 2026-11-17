@@ -76,13 +76,21 @@ struct ProvidersSettingsView: View {
     @State private var restoreRow: (String, Int)?
 
     private static let cats: [(String, String, String)] = [
-        ("prof", "person", "Profils"), ("prov", "rectangle.stack", "Fournisseurs"), ("tmdb", "star.square", "Fiches et notes (TMDB)"),
-        ("store", "internaldrive", "Stockage"), ("about", "info.circle", "À propos"),
+        // les 9 rubriques du simulateur (1.7.1)
+        ("prof", "person", "Profils"), ("prov", "rectangle.stack", "Fournisseurs"), ("lang", "captions.bubble", "Langues et sous-titres"),
+        ("play", "play.rectangle", "Lecture et image"), ("live", "tv", "TV en direct"), ("epg", "list.bullet.rectangle", "Guide TV"),
+        ("homes", "house", "Accueils et notes"), ("par", "lock", "Contrôle parental"), ("data", "icloud.and.arrow.up", "Sauvegarde et mises à jour"),
     ]
+
+    /// Contrôle parental : réglages verrouillés par le code (demandé à chaque entrée dans les Réglages)
+    @State private var unlocked = false
 
     var body: some View {
         VStack(spacing: 0) {
             TopBar(claimFocus: true)
+            if AppPrefs.lockSettings && !unlocked {
+                SettingsLock { unlocked = true }.focusSection()
+            } else {
             HStack(alignment: .top, spacing: 34) {
                 VStack(alignment: .leading, spacing: 8) {
                     ForEach(0..<ProvidersSettingsView.cats.count, id: \.self) { i in
@@ -110,6 +118,7 @@ struct ProvidersSettingsView: View {
                 .focusSection()
             }
             .padding(.horizontal, 90).padding(.bottom, 60)
+            }
         }
         .ignoresSafeArea(edges: .top)
         // écran de classement ouvert : la sélection reste dedans (rien derrière n'est sélectionnable)
@@ -146,9 +155,13 @@ struct ProvidersSettingsView: View {
 
     @ViewBuilder private var panel: some View {
         switch section {
-        case "tmdb": tmdbPanel
-        case "store": storePanel
-        case "about": aboutPanel
+        case "lang": LangPanel()
+        case "play": PlayPanel()
+        case "live": LivePanel()
+        case "epg": EPGPanel()
+        case "homes", "tmdb": HomesPanel()
+        case "par": ParentalPanel()
+        case "data", "store", "about": DataPanel()
         case "prof": ProfilesPanel()
         default: providersPanel
         }

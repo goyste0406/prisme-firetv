@@ -205,7 +205,8 @@ enum AppTab: String, CaseIterable { case films, series, live, mine, search, sett
 final class Nav: ObservableObject {
     static let shared = Nav()
     @Published var tab: AppTab = {
-        AppTab(rawValue: UserDefaults.standard.string(forKey: "prisme.tab") ?? "") ?? .films
+        // Réglages › TV en direct : « Ouvrir prisme sur la TV en direct »
+        AppPrefs.openOnLive ? .live : AppTab(rawValue: UserDefaults.standard.string(forKey: "prisme.tab") ?? "") ?? .films
     }() { didSet { UserDefaults.standard.set(tab.rawValue, forKey: "prisme.tab") } }
     /// la sélection est dans la barre du haut (Retour y quitte prisme ; ailleurs, Retour y ramène d'abord)
     @Published var barFocused = false

@@ -574,6 +574,11 @@ enum MediaStore {
             case "VOSTFR": if t.contains("VOSTFR") { s += 100 } else if t.contains("MULTI") { s += 50 }
             default: break
             }
+            // Réglages › Lecture : qualité maximale choisie d'office (une version au-dessus de la limite passe après)
+            let rank = t.contains("4K") ? 4 : t.contains("1080p") ? 3 : 2
+            if rank > AppPrefs.maxRank { s -= 60 }
+            // « Privilégier le français » (fournisseur) : une version marquée d'une autre langue passe après
+            if LangRules.preferPids.contains(m.pid), LangRules.foreign(m.name) { s -= 80 }
             return s
         }
         return same.sorted { score($0) > score($1) }
