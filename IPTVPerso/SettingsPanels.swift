@@ -368,7 +368,7 @@ struct DataPanel: View {
             if let img = l.qr { Image(uiImage: img).interpolation(.none).resizable().frame(width: 260, height: 260).clipShape(RoundedRectangle(cornerRadius: 18)) }
             VStack(alignment: .leading, spacing: 10) {
                 Text(l.failed ?? (l.address == nil ? "Préparation…" : "Scanne ce code avec l'appareil photo de l'iPhone (même Wi-Fi).")).font(P.font(22))
-                if let a = l.address { Text(a).font(P.font(19)).foregroundStyle(P.faint) }
+                if let a = l.address { Text(a).font(P.font(19)).foregroundStyle(P.faint).accessibilityIdentifier("backup-address").accessibilityLabel(a) }
                 if l.downloads > 0 { Text("Sauvegarde téléchargée ✓").font(P.font(21, .semibold)).foregroundStyle(P.gold) }
             }
         }

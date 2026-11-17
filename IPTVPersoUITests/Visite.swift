@@ -648,11 +648,18 @@ final class Visite: XCTestCase {
     }
 
     /// Sauvegarde sur l'iPhone : code, téléchargement, renvoi, confirmation sur la TV.
+    /// Adresse affichée sous le code de la sauvegarde (élément « backup-address »), ou à défaut tout texte en http://
+    func backupAddress() -> String {
+        let e = app.descendants(matching: .any)["backup-address"]
+        if e.waitForExistence(timeout: 6), e.label.hasPrefix("http") { return e.label }
+        return app.descendants(matching: .any).allElementsBoundByIndex.map(\.label).first { $0.hasPrefix("http://") } ?? ""
+    }
+
     func sauvegarde() {
         relaunch(["-prisme.debug.tab", "settings", "-prisme.debug.settings", "data"], wait: 14)
         press(.right); press(.up, 14); press(.down); Thread.sleep(forTimeInterval: 1); shot("R3a-sauvegarde-ligne"); press(.select); Thread.sleep(forTimeInterval: 3); shot("R3-sauvegarde-code")
-        let addr = app.staticTexts.allElementsBoundByIndex.map(\.label).first { $0.hasPrefix("http://") } ?? ""
-        attach("adresse-sauvegarde", addr)
+        let addr = backupAddress()
+        attach("adresse-sauvegarde", addr.isEmpty ? "introuvable · textes : " + app.staticTexts.allElementsBoundByIndex.prefix(40).map(\.label).joined(separator: " | ") : addr)
         guard !addr.isEmpty, let u = URL(string: addr + "/prisme-sauvegarde.json") else { return }
         let sem = DispatchSemaphore(value: 0)
         var backup = Data()
@@ -663,7 +670,8 @@ final class Visite: XCTestCase {
         // Ma liste vidée (donnees.txt le montre), puis la sauvegarde est renvoyée et doit la rétablir
         relaunch(["-prisme.debug.tab", "settings", "-prisme.debug.settings", "data", "-prisme.debug.wipeFavs", "1"], wait: 14)
         press(.right); press(.up, 14); press(.down); press(.select); Thread.sleep(forTimeInterval: 3); shot("R3c-code-apres-vidage")
-        let addr2 = app.staticTexts.allElementsBoundByIndex.map(\.label).first { $0.hasPrefix("http://") } ?? addr
+        let a2 = backupAddress(); let addr2 = a2.isEmpty ? addr : a2
+        attach("adresse-apres-vidage", addr2)
         var r = URLRequest(url: URL(string: addr2)!); r.httpMethod = "POST"; r.httpBody = backup
         let sem2 = DispatchSemaphore(value: 0)
         URLSession.shared.dataTask(with: r) { _, resp, err in self.attach("renvoi-sauvegarde", "\((resp as? HTTPURLResponse)?.statusCode ?? 0) \(err?.localizedDescription ?? "")"); sem2.signal() }.resume()
