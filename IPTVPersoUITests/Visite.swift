@@ -97,6 +97,7 @@ final class Visite: XCTestCase {
         if ProcessInfo.processInfo.environment["ONLY"] == "langue" { langue(); return }
         if ProcessInfo.processInfo.environment["ONLY"] == "reglages" { reglages(); return }
         if ProcessInfo.processInfo.environment["ONLY"] == "dit" { quATilDit(); return }
+        if ProcessInfo.processInfo.environment["ONLY"] == "sauvegarde" { sauvegarde(); return }
         if ProcessInfo.processInfo.environment["ONLY"] == "tvidle" {
             // TV en direct au lancement avec deux fournisseurs, 150 s sans aucune interaction, puis une capture
             relaunch(["-prisme.debug.demoServer2", "http://127.0.0.1:8098", "-prisme.debug.tab", "live"], wait: 150)
@@ -639,9 +640,13 @@ final class Visite: XCTestCase {
         press(.right); press(.down, 3); press(.select); Thread.sleep(forTimeInterval: 1); shot("R2-saut-change")
         relaunch(["-prisme.debug.tab", "settings", "-prisme.debug.settings", "play"], wait: 14)
         press(.right); shot("R2b-saut-relu")
-        // sauvegarde sur l'iPhone : code, téléchargement, renvoi, confirmation sur la TV
+        sauvegarde()
+    }
+
+    /// Sauvegarde sur l'iPhone : code, téléchargement, renvoi, confirmation sur la TV.
+    func sauvegarde() {
         relaunch(["-prisme.debug.tab", "settings", "-prisme.debug.settings", "data"], wait: 14)
-        press(.right); press(.up, 14); press(.select); Thread.sleep(forTimeInterval: 3); shot("R3-sauvegarde-code")
+        press(.right); press(.up, 14); press(.down); Thread.sleep(forTimeInterval: 1); shot("R3a-sauvegarde-ligne"); press(.select); Thread.sleep(forTimeInterval: 3); shot("R3-sauvegarde-code")
         let addr = app.staticTexts.allElementsBoundByIndex.map(\.label).first { $0.hasPrefix("http://") } ?? ""
         attach("adresse-sauvegarde", addr)
         guard !addr.isEmpty, let u = URL(string: addr + "/prisme-sauvegarde.json") else { return }
