@@ -416,10 +416,12 @@ struct FicheWorker {
         let castJ = String(data: (try? JSONEncoder().encode(cast)) ?? Data(), encoding: .utf8) ?? "[]"
         let wpJ = String(data: (try? JSONEncoder().encode(wp)) ?? Data(), encoding: .utf8) ?? "{}"
         // kind,ckey,pid,sid,tmdb,title,overview,poster,backdrop,genres,runtime,vote,year,coll,cast,wp,collname
-        return [m.kind.rawValue, c.key, m.pid, m.sid, id, title, (d["overview"] as? String) ?? "", (d["poster_path"] as? String) ?? "",
+        let row: [Any?] = [m.kind.rawValue, c.key, m.pid, m.sid, id, title, (d["overview"] as? String) ?? "", (d["poster_path"] as? String) ?? "",
                 (d["backdrop_path"] as? String) ?? "", genres, runtime, (d["vote_average"] as? Double) ?? 0, Int(date.prefix(4)) ?? c.year,
                 (coll?["id"] as? Int) ?? 0, castJ, wpJ, (coll?["name"] as? String) ?? "", countries, director, logo, compJ, FicheWorker.frCert(d, tv: tv),
-                FicheWorker.keywords(d, tv: tv)] + FicheWorker.dates(d, tv: tv)
+                FicheWorker.keywords(d, tv: tv)]
+        let extra: [Any?] = FicheWorker.dates(d, tv: tv)
+        return row + extra
     }
 
     /// relfr, relvod, lastair, nextep, seasons, pop — tirés de la même réponse TMDB (aucune requête en plus).

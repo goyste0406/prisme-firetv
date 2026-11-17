@@ -33,6 +33,11 @@ struct Provider: Codable, Identifiable, Equatable {
     var hidden: [String]?
     /// types non importés (« live », « vod », « series »), choisis à l'ajout
     var skip: [String]?
+    // --- 1.7.1 : langue du contenu (Gérer) — nil = « Tout garder »
+    var lang: String?
+    /// catégories gardées à la main malgré la règle de langue (« vod:12 »)
+    var langKeep: [String]?
+    var langMode: LangRules.Mode { LangRules.Mode(rawValue: lang ?? "") ?? .all }
 
     var account: XtreamAccount { XtreamAccount(server: server, username: username, password: password) }
 
@@ -60,7 +65,7 @@ final class ProviderStore: ObservableObject {
     static let shared = ProviderStore()
     private let key = "prisme.providers"
 
-    @Published var providers: [Provider] = [] { didSet { save() } }
+    @Published var providers: [Provider] = [] { didSet { save(); LangRules.preferPids = Set(providers.filter { $0.langMode == .prefer }.map(\.id)) } }
     @Published var importing: String?          // id du fournisseur en cours d'import (un à la fois)
     @Published var progress: Double = 0
     @Published var status: String = ""
@@ -116,6 +121,11 @@ final class ProviderStore: ObservableObject {
             }
             if let down = Debug.demoDown, provider("demo3") == nil {
                 providers.append(Provider(id: "demo3", name: "Étoile", server: down, username: "demo", password: "demo", color: 3))
+            }
+            // visite « langue » (tests seulement) : réglage « Langue du contenu » de Soleil (ou de Lune), puis réimport
+            if let m = Debug.arg("prisme.debug.lang"), let i = providers.firstIndex(where: { $0.id == "demo2" }) ?? providers.firstIndex(where: { $0.id == "demo" }) {
+                let v = m == "all" ? nil : m
+                if providers[i].lang != v { providers[i].lang = v; providers[i].lastImport = nil }
             }
         }
         save()

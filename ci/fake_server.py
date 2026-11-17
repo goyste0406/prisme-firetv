@@ -312,8 +312,12 @@ if PROFILE == "second":
     ]
     LIVE_CATS = [("1", "FRANCE ᴴᴰ"), ("2", "FRANCE INFOS"), ("3", "FRANCE SPORTS"), ("4", "FRANCE KIDS"), ("5", "FRANCE CINÉ / SÉRIES"),
                  ("6", "FRANCE SPORTS 4K ÉVÉNEMENTS"), ("7", "FRANCE DOCUMENTAIRES"), ("8", "FRANCE MUSIC"), ("9", "BELGIQUE")]
-    VOD_CATS = [("40", "VOD | FILMS FRANÇAIS"), ("41", "VOD | 4K")]
+    # 1.7.1 langue du contenu : une catégorie d'une autre langue, une sans langue dans le nom (titres anglais), et dans
+    # la catégorie française un titre marqué italien et un sans marque (ce dernier doit rester dans tous les modes)
+    VOD_CATS = [("40", "VOD | FILMS FRANÇAIS"), ("41", "VOD | 4K"), ("42", "EN| MOVIES"), ("43", "VOD | WORLD CINEMA")]
     SER_CATS = [("50", "SÉRIES | FR")]
+    _LANG_FILMS = [(5950, "42", "The Holdovers (2023)"), (5951, "42", "Past Lives (2023)"), (5952, "43", "The Zone of Interest (2023)"),
+                   (5953, "43", "Perfect Days (2023) JP"), (5954, "40", "Il Sorpasso (1962) ITA"), (5955, "40", "Mon Oncle (1958)")]
     # une partie des films de Lune (même TMDB, autre nom, autre qualité) + deux films à lui seul
     _SECOND_FILMS = [(0, "Dune Part Two (2024) MULTI 4K"), (6, "Inception (2010) VFF 1080p"), (7, "Intouchables (2011) HD"), (16, "Interstellar (2014) 4K HDR"),
                      (29, "Le Roi Lion (1994) VF"), (20, "Le Parrain (1972) VOSTFR")]
@@ -326,6 +330,9 @@ if PROFILE == "second":
         for k, (t, y) in enumerate([("Le Grand Bain", 2018), ("Les Petits Mouchoirs", 2010)]):
             out.append({"num": 50 + k, "name": f"{t} ({y})", "stream_id": 5900 + k, "stream_icon": img_url("p", f"x{k}", t), "rating": "6.8",
                         "added": str(NOW - 30 * DAY), "category_id": "40", "container_extension": "mkv", "tmdb": ""})
+        for sidv, cid, name in _LANG_FILMS:
+            out.append({"num": sidv - 5800, "name": name, "stream_id": sidv, "stream_icon": "", "rating": "7.0",
+                        "added": str(NOW - 12 * DAY), "category_id": cid, "container_extension": "mkv", "tmdb": ""})
         return out
     def series_list():
         return [{"num": 1, "name": "Lupin (2021) MULTI", "series_id": 6001, "cover": img_url("p", "s2001", "Lupin"), "plot": "Lupin : résumé.", "releaseDate": "2021-01-01",

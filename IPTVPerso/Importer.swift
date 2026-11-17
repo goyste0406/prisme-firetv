@@ -39,6 +39,12 @@ struct CatalogImporter {
         // ---- catégories
         var blocked = Set<String>()
         var liveCats: [String: String] = [:]
+        // 1.7.1 — langue du contenu : catégories d'une autre langue écartées (sauf gardées à la main) ;
+        // catégories sans langue dans le nom (« à vérifier ») : décidées après lecture, d'après leurs titres
+        let mode = provider.langMode
+        let keep = Set(provider.langKeep ?? [])
+        var toCheck: [String: String] = [:]          // « vod:12 » → type
+        var catNames: [String: String] = [:]
         for (i, (type, action)) in [("live", "get_live_categories"), ("vod", "get_vod_categories"), ("series", "get_series_categories")].enumerated() {
             progress(0.04 + Double(i) * 0.02, "Catégories…")
             let arr = (try? await json(action)) as? [[String: Any]] ?? []
@@ -50,6 +56,11 @@ struct CatalogImporter {
                 if (provider.hidden ?? []).contains(type + ":" + cid) { blocked.insert(type + ":" + cid) }
                 rows.append([pid, type, cid, name, pos])
                 if type == "live" { liveCats[cid] = name }
+                if mode != .all, !keep.contains(type + ":" + cid), !blocked.contains(type + ":" + cid) {
+                    let g = CatLang.of(name, samples: [], kind: type).g
+                    if g == .xx || g == .adult { blocked.insert(type + ":" + cid) }
+                    else if g == .chk { toCheck[type + ":" + cid] = type; catNames[type + ":" + cid] = name }
+                }
             }
             await db.read { db in
                 // liste vide (panne passagère du serveur) : les catégories déjà connues sont gardées
@@ -64,10 +75,26 @@ struct CatalogImporter {
         // ---- chaînes, films, séries : chaque liste est enregistrée dans un fichier, lue titre par titre et rangée par lots
         // (la mémoire reste stable, même avec des centaines de milliers de titres), puis remplace l'ancienne d'un coup
         var epgIDs = Set<String>()
+        var foreign = 0
+        var samples: [String: [String]] = [:]
+        func sample(_ k: String, _ name: String) {
+            guard toCheck[k] != nil, (samples[k]?.count ?? 0) < 60 else { return }
+            samples[k, default: []].append(name)
+        }
+        // catégories « à vérifier » : gardées si au moins la moitié des titres lus sont français (simulateur)
+        func rejected(_ type: String) -> [String] {
+            toCheck.filter { $0.value == type }.keys.filter { k in
+                let S = samples[k] ?? []
+                guard !S.isEmpty else { return false }        // rien d'écarté faute de données
+                return S.filter { CatLang.frTitle($0, kind: type) }.count * 100 / S.count < 50
+            }.map { String($0.dropFirst(type.count + 1)) }
+        }
         progress(0.12, "Chaînes de TV…")
-        res.counts["live"] = try await importList("live", action: "get_live_streams", what: "chaînes", p0: 0.12, p1: 0.30, progress: progress, &res) { s in
+        res.counts["live"] = try await importList("live", action: "get_live_streams", what: "chaînes", p0: 0.12, p1: 0.30, progress: progress, drop: { rejected("live") }, &res) { s in
             let cid = str(s["category_id"]), name = str(s["name"])
             if blocked.contains("live:" + cid) || str(s["is_adult"]) == "1" || Self.isAdult(name) { return nil }
+            if mode == .fr && LangRules.foreign(name) { foreign += 1; return nil }
+            sample("live:" + cid, name)
             let epg = str(s["epg_channel_id"])
             if !epg.isEmpty { epgIDs.insert(epg) }
             let arch = str(s["tv_archive"]) == "1" ? (Int(str(s["tv_archive_duration"])) ?? 1) : 0
@@ -82,9 +109,11 @@ struct CatalogImporter {
         }
 
         progress(0.30, "Films…")
-        res.counts["vod"] = try await importList("vod", action: "get_vod_streams", what: "films", p0: 0.30, p1: 0.50, progress: progress, &res) { s in
+        res.counts["vod"] = try await importList("vod", action: "get_vod_streams", what: "films", p0: 0.30, p1: 0.50, progress: progress, drop: { rejected("vod") }, &res) { s in
             let cid = str(s["category_id"]), name = str(s["name"])
             if blocked.contains("vod:" + cid) || str(s["is_adult"]) == "1" || Self.isAdult(name) { return nil }
+            if mode == .fr && LangRules.foreign(name) { foreign += 1; return nil }
+            sample("vod:" + cid, name)
             let tmdb = str(s["tmdb"]).isEmpty ? str(s["tmdb_id"]) : str(s["tmdb"])
             return [pid, str(s["stream_id"]), name, Int(str(s["year"])) ?? Self.year(in: name), str(s["stream_icon"]), cid,
                     str(s["container_extension"]).isEmpty ? "mp4" : str(s["container_extension"]),
@@ -92,13 +121,17 @@ struct CatalogImporter {
         }
 
         progress(0.50, "Séries…")
-        res.counts["series"] = try await importList("series", action: "get_series", what: "séries", p0: 0.50, p1: 0.62, progress: progress, &res) { s in
+        res.counts["series"] = try await importList("series", action: "get_series", what: "séries", p0: 0.50, p1: 0.62, progress: progress, drop: { rejected("series") }, &res) { s in
             let cid = str(s["category_id"]), name = str(s["name"])
             if blocked.contains("series:" + cid) || Self.isAdult(name) { return nil }
+            if mode == .fr && LangRules.foreign(name) { foreign += 1; return nil }
+            sample("series:" + cid, name)
             let rel = str(s["releaseDate"]).isEmpty ? str(s["release_date"]) : str(s["releaseDate"])
             return [pid, str(s["series_id"]), name, Int(rel.prefix(4)) ?? Self.year(in: name), str(s["cover"]), cid, str(s["plot"]),
                     Double(str(s["rating"])) ?? 0, Int(str(s["last_modified"])) ?? 0, str(s["tmdb"])]
         }
+
+        if mode != .all { PerfLog.ev("langue (\(mode.rawValue)) : \(foreign) titres étrangers écartés, \(blocked.count) catégories écartées") }
 
         // ---- guide des programmes (XMLTV), lu au fil de l'eau : jamais tout en mémoire
         progress(0.62, "Guide des programmes…")
@@ -129,7 +162,7 @@ struct CatalogImporter {
     /// de 2 000 → remplacement de l'ancienne liste en une seule transaction.
     /// Liste reçue vide, coupée ou illisible alors qu'il y avait du contenu : l'ancienne est gardée (panne passagère).
     private func importList(_ table: String, action: String, what: String, p0: Double, p1: Double,
-                            progress: @escaping (Double, String) -> Void, _ res: inout Result,
+                            progress: @escaping (Double, String) -> Void, drop: () -> [String] = { [] }, _ res: inout Result,
                             row: ([String: Any]) -> [Any?]?) async throws -> Int {
         let pid = provider.id
         // type non importé (choisi à l'ajout) : son contenu éventuel est retiré
@@ -173,6 +206,15 @@ struct CatalogImporter {
             }
         }
         flush()
+        // langue du contenu : catégories « à vérifier » où les titres français sont minoritaires
+        let dropped = drop()
+        if !dropped.isEmpty {
+            for chunk in stride(from: 0, to: dropped.count, by: 400) {
+                let part = Array(dropped[chunk..<min(dropped.count, chunk + 400)])
+                db.sync { db in db.run("DELETE FROM \(stage) WHERE pid=? AND cid IN (" + part.map { _ in "?" }.joined(separator: ",") + ")", [pid] + part) }
+            }
+            kept = db.sync { db in db.intValue("SELECT COUNT(*) FROM \(stage) WHERE pid=?", [pid]) ?? 0 }
+        }
         PerfLog.mem("import \(what) : lus et rangés (\(kept))")
 
         let received: Int

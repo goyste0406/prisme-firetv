@@ -67,6 +67,36 @@ struct LinkInfo: Equatable {
 // MARK: - Langue des catégories (simulateur : RL)
 
 /// Classement d'une catégorie du fournisseur : française, francophone, à vérifier, autre langue, adultes.
+/// Règles de langue des titres (simulateur : RI.foreign). Un titre marqué d'un code de langue étrangère
+/// (« KR| … », « … 2024 IT », « (US) »), sans aucune mention française, est étranger. Un titre sans marque ne l'est jamais.
+enum LangRules {
+    private static let codes = "KR|KOR|PL|POL|CN|CHN|JP|JAP|TR|TUR|RU|RUS|AR|ARA|IN|IND|ES|ESP|IT|ITA|DE|GER|PT|BR|NL|SE|NO|DK|FI|EN|ENG|US|USA|UK|LAT|LATINO|TH|THAI|VN|ID|PH|HI|HINDI"
+    // (sensible à la casse, comme le simulateur : « De » ou « it » dans un titre ne comptent pas)
+    private static let lead = try! NSRegularExpression(pattern: "^\\s*(?:" + codes + ")\\s*[|:\\-\u{2013}]")
+    private static let trail = try! NSRegularExpression(pattern: "[\\s_\\-|(\\[](?:" + codes + ")[\\])]?\\s*$")
+    private static let paren = try! NSRegularExpression(pattern: "[(\\[](?:" + codes + ")[\\])]")
+    static func foreign(_ name: String) -> Bool {
+        if CatLang.FR.firstMatch(in: CatLang.n(name), range: NSRange(CatLang.n(name).startIndex..., in: CatLang.n(name))) != nil { return false }
+        let r = NSRange(name.startIndex..., in: name)
+        return lead.firstMatch(in: name, range: r) != nil || trail.firstMatch(in: name, range: r) != nil || paren.firstMatch(in: name, range: r) != nil
+    }
+
+    /// Réglage « Langue du contenu » d'un fournisseur
+    enum Mode: String, CaseIterable { case all, prefer, fr
+        var label: String { switch self { case .all: return "Tout garder"; case .prefer: return "Privilégier le français"; case .fr: return "Français uniquement" } }
+        var sub: String {
+            switch self {
+            case .all: return "toutes les catégories et tous les titres"
+            case .prefer: return "catégories françaises ; titres étrangers gardés mais pas mis en avant"
+            case .fr: return "catégories françaises ; titres marqués d'une autre langue écartés"
+            }
+        }
+    }
+    /// fournisseurs en « Privilégier le français » (accueils : les titres étrangers n'y sont pas mis en avant)
+    nonisolated(unsafe) static var preferPids = Set<String>()
+    static func hideOnHome(_ it: MediaItem) -> Bool { preferPids.contains(it.pid) && foreign(it.name) }
+}
+
 struct CatLang: Equatable {
     enum Group: String { case fr, fo, chk, xx, adult }
     var g: Group

@@ -94,6 +94,7 @@ final class Visite: XCTestCase {
         if ProcessInfo.processInfo.environment["ONLY"] == "tvlecteur" { lecteurTV(); return }
         if ProcessInfo.processInfo.environment["ONLY"] == "tvcrash" { tvCrash(); return }
         if ProcessInfo.processInfo.environment["ONLY"] == "gouts" { gouts(); return }
+        if ProcessInfo.processInfo.environment["ONLY"] == "langue" { langue(); return }
         if ProcessInfo.processInfo.environment["ONLY"] == "tvidle" {
             // TV en direct au lancement avec deux fournisseurs, 150 s sans aucune interaction, puis une capture
             relaunch(["-prisme.debug.demoServer2", "http://127.0.0.1:8098", "-prisme.debug.tab", "live"], wait: 150)
@@ -595,6 +596,20 @@ final class Visite: XCTestCase {
         downUntil(["Généraliste"], max: 5, prefix: "T9-bas"); press(.select); Thread.sleep(forTimeInterval: 2); shot("T9-eventail")
         press(.select); Thread.sleep(forTimeInterval: 9); shot("T9b-direct-depuis-eventail", focus: false)
         back(); Thread.sleep(forTimeInterval: 2); shot("T9c-retour-eventail")
+    }
+
+    /// 1.7.1 — langue du contenu de Soleil : Français uniquement, Privilégier, puis retour à Tout garder.
+    /// À chaque fois : Gérer (nombres), l'écran « Catégories françaises », et les films de Soleil.
+    func langue() {
+        let two = ["-prisme.debug.demoServer2", "http://127.0.0.1:8098"]
+        for (n, m) in [("1", "fr"), ("2", "prefer"), ("3", "all")] {
+            relaunch(two + ["-prisme.debug.lang", m, "-prisme.debug.tab", "settings", "-prisme.debug.settings", "prov", "-prisme.debug.manage", "Soleil"], wait: 50)
+            shot("L\(n)a-gerer-\(m)")
+            press(.down, 4); shot("L\(n)b-gerer-langue-\(m)")
+            relaunch(two + ["-prisme.debug.tab", "settings", "-prisme.debug.settings", "prov", "-prisme.debug.manage", "Soleil", "-prisme.debug.frcats", "1"], wait: 25)
+            shot("L\(n)c-categories-francaises-\(m)")
+            for k in 1...6 { press(.down); shot("L\(n)d-categories-bas-\(m)-\(k)") }
+        }
     }
 
     /// Test des goûts (grands classiques), puis ses effets sur la fiche, l'accueil et les réglages.

@@ -270,6 +270,7 @@ struct ProviderManageView: View {
     @State private var changed = false
     @State private var confirmDelete = false
     @State private var editing = false
+    @State private var frCats = false
     @FocusState private var focus: String?
 
     var body: some View {
@@ -288,6 +289,15 @@ struct ProviderManageView: View {
                             line("all", SettingLine(title: "Afficher toutes les catégories", value: hidden.isEmpty ? "aucune masquée" : "\(hidden.count) masquée" + (hidden.count > 1 ? "s" : ""))) {
                                 if !hidden.isEmpty { hidden = []; changed = true; save() }
                             }
+                            // 1.7.1 : langue du contenu, propre à ce fournisseur (OK pour passer au choix suivant)
+                            line("lang", SettingLine(title: "Langue du contenu", value: p.langMode.label)) {
+                                let L = LangRules.Mode.allCases, i = L.firstIndex(of: p.langMode) ?? 0
+                                var q = p; q.lang = L[(i + 1) % L.count] == .all ? nil : L[(i + 1) % L.count].rawValue
+                                store.update(q); changed = true
+                            }
+                            Text(p.langMode.sub + " · appliqué à la prochaine actualisation").font(P.font(21)).opacity(0.5)
+                                .padding(.horizontal, 24).padding(.bottom, 14).frame(maxWidth: .infinity, alignment: .leading)
+                            line("frcats", SettingLine(title: "Catégories françaises", value: "voir et ajuster ›")) { frCats = true }
                             line("ref", SettingLine(title: "Actualiser le fournisseur", value: store.importing == pid ? "\(Int(store.progress * 100)) % · " + store.status : (p.lastImport.map { "à jour le " + Fmt.dateTime($0) } ?? "player_api.php"))) {
                                 store.refresh(pid)
                             }
@@ -304,7 +314,7 @@ struct ProviderManageView: View {
                                 Text(["live": "Catégories TV en direct", "vod": "Catégories films", "series": "Catégories séries"][t]! + " · \(shown) affichée" + (shown > 1 ? "s" : "") + " sur \(L.count)")
                                     .font(P.font(23, .bold)).tracking(2.5).textCase(.uppercase).foregroundStyle(.white.opacity(0.55))
                                     .padding(.leading, 34).padding(.top, 34).padding(.bottom, 10)
-                                group {
+                                lazyGroup {
                                     ForEach(L, id: \.id) { c in
                                         let hk = t + ":" + c.id, h = hidden.contains(hk)
                                         line("c-" + hk, CategoryLine(name: TitleTools.category(c.name), sub: h ? "masquée" : "\(Fmt.n(c.count)) " + (["live": "chaînes", "vod": "films", "series": "séries"][t] ?? ""), on: !h)) {
@@ -325,12 +335,23 @@ struct ProviderManageView: View {
         .onExitCommand { leave() }
         .onChange(of: focus) { _, f in if f != "del" { confirmDelete = false } }
         .task(id: store.catalogVersion) { await load() }
-        .onAppear { DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { focus = "on" } }
+        .onAppear {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { focus = "on" }
+            if Debug.arg("prisme.debug.frcats") == "1" { DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { frCats = true } }
+        }
         .fullScreenCover(isPresented: $editing) { ProviderEditView(pid: pid, close: { editing = false }) }
+        .fullScreenCover(isPresented: $frCats) { FrenchCatsView(pid: pid, close: { c in frCats = false; if c { changed = true; hidden = Set(store.provider(pid)?.hidden ?? []) } }) }
     }
 
     private func group<C: View>(@ViewBuilder _ c: () -> C) -> some View {
         VStack(spacing: 0) { c() }
+            .background(Color.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 26, style: .continuous))
+            .focusSection()
+    }
+
+    /// listes de catégories : chargées au fil du défilement (plus de 1 000 catégories chez certains fournisseurs)
+    private func lazyGroup<C: View>(@ViewBuilder _ c: () -> C) -> some View {
+        LazyVStack(spacing: 0) { c() }
             .background(Color.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 26, style: .continuous))
             .focusSection()
     }
@@ -365,6 +386,130 @@ struct ProviderManageView: View {
             }
             return out
         }.map { (type: $0.0, id: $0.1, name: $0.2, count: $0.3) }
+    }
+}
+
+// MARK: - Catégories françaises (simulateur : écran « Catégories » de l'ajout, quatre groupes)
+
+/// Les catégories d'un fournisseur rangées par langue : Françaises, Francophones, À vérifier, Autres langues.
+/// Un appui garde ou écarte une catégorie à la main ; « Revenir au choix de prisme » efface ces choix.
+struct FrenchCatsView: View {
+    @EnvironmentObject var store: ProviderStore
+    let pid: String
+    let close: (Bool) -> Void
+    struct Row: Identifiable { let key: String; let type: String; let name: String; let count: Int; let lang: CatLang; var id: String { key } }
+    @State private var rows: [Row] = []
+    @State private var type = "vod"
+    @State private var showX = false
+    @State private var changed = false
+    @State private var loaded = false
+    @FocusState private var focus: String?
+    private static let groups: [(CatLang.Group, String, String)] = [(.fr, "Françaises", "reconnues à leur nom"), (.fo, "Francophones", "Belgique, Québec, Suisse, Afrique : à ton choix"),
+                                                                    (.chk, "À vérifier", "pas de langue dans le nom : prisme a regardé les titres"), (.xx, "Autres langues", "ignorées, tu peux en ajouter une")]
+    private static let names: [String: (String, String)] = ["live": ("TV en direct", "chaînes"), "vod": ("Films", "films"), "series": ("Séries", "séries")]
+
+    private func isOn(_ r: Row, _ p: Provider) -> Bool {
+        if (p.langKeep ?? []).contains(r.key) { return true }
+        if (p.hidden ?? []).contains(r.key) { return false }
+        if p.langMode == .all { return r.lang.g != .adult }
+        switch r.lang.g { case .fr, .fo: return true; case .chk: return r.lang.pct >= 50 || r.count == 0; default: return false }
+    }
+
+    var body: some View {
+        ZStack {
+            PrismeBackground(tint: store.provider(pid)?.tint)
+            if let p = store.provider(pid) {
+                ScrollView {
+                    LazyVStack(alignment: .leading, spacing: 0) {
+                        Text("GÉRER LE FOURNISSEUR › CATÉGORIES FRANÇAISES").font(P.font(22, .bold)).tracking(3).foregroundStyle(.white.opacity(0.6)).padding(.leading, 34)
+                        Text(p.name).font(P.font(75, .bold)).padding(.leading, 34).padding(.top, 8).padding(.bottom, 10)
+                        Text("Langue du contenu : " + p.langMode.label + ". Comment prisme trie : un repère FR, VF, VFF, VFQ, VOSTFR ou TRUEFRENCH dans le nom, un nom écrit en français, sinon les titres de la catégorie.")
+                            .font(P.font(22)).opacity(0.6).padding(.horizontal, 34).padding(.bottom, 20)
+                        HStack(spacing: 12) {
+                            ForEach(["live", "vod", "series"], id: \.self) { t in
+                                let L = rows.filter { $0.type == t }
+                                Button { type = t; showX = false } label: { Text(FrenchCatsView.names[t]!.0 + " · \(L.filter { isOn($0, p) }.count)/\(L.count)") }
+                                    .buttonStyle(TabPillStyle(selected: type == t)).focused($focus, equals: "t-" + t)
+                            }
+                            Button { reset() } label: { Text("Revenir au choix de prisme") }.buttonStyle(TabPillStyle(selected: false)).focused($focus, equals: "reset")
+                        }
+                        .padding(.leading, 34).padding(.bottom, 20).focusSection()
+                        if !loaded { ProgressView().tint(.white).padding(40) }
+                        ForEach(FrenchCatsView.groups, id: \.0.rawValue) { g in
+                            let G = rows.filter { $0.type == type && $0.lang.g == g.0 }
+                            if !G.isEmpty {
+                                (Text(g.1).font(P.font(25, .bold)) + Text("  \(G.count)  ").font(P.font(21)) + Text(g.2).font(P.font(19)).foregroundColor(.white.opacity(0.5)))
+                                    .padding(.leading, 34).padding(.top, 26).padding(.bottom, 10)
+                                if g.0 == .xx && !showX {
+                                    Button { showX = true } label: {
+                                        SettingLine(title: "Afficher les \(G.count) catégories ignorées", value: "›")
+                                    }.buttonStyle(SettingRowStyle()).focused($focus, equals: "showx")
+                                } else {
+                                    ForEach(G) { r in
+                                        let on = isOn(r, p)
+                                        Button { toggle(r, on: on) } label: {
+                                            CategoryLine(name: TitleTools.category(r.name), sub: "\(Fmt.n(r.count)) " + FrenchCatsView.names[r.type]!.1 + " · " + r.lang.why, on: on)
+                                        }.buttonStyle(SettingRowStyle()).focused($focus, equals: "c-" + r.key)
+                                    }
+                                }
+                            }
+                        }
+                        let ad = rows.filter { $0.type == type && $0.lang.g == .adult }.count
+                        if ad > 0 {
+                            Text("Adultes · \(ad) · jamais chargées, même si tu changes les réglages ici").font(P.font(21)).opacity(0.5).padding(.leading, 34).padding(.top, 26)
+                        }
+                        Color.clear.frame(height: 60)
+                    }
+                    .padding(.horizontal, 300).padding(.top, 110)
+                }
+            }
+        }
+        .ignoresSafeArea()
+        .onExitCommand { close(changed) }
+        .task { await load() }
+        .onAppear { DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { focus = "t-vod" } }
+    }
+
+    private func toggle(_ r: Row, on: Bool) {
+        guard var p = store.provider(pid) else { return }
+        var keep = Set(p.langKeep ?? []), hid = Set(p.hidden ?? [])
+        keep.remove(r.key); hid.remove(r.key)
+        // choix par défaut de prisme pour cette catégorie, sans les choix faits à la main
+        var bare = p; bare.langKeep = nil; bare.hidden = nil
+        let def = isOn(r, bare)
+        if on && def { hid.insert(r.key) } else if !on && !def { keep.insert(r.key) }
+        p.langKeep = keep.isEmpty ? nil : keep.sorted(); p.hidden = hid.isEmpty ? nil : hid.sorted()
+        store.update(p); changed = true
+    }
+
+    private func reset() {
+        guard var p = store.provider(pid) else { return }
+        p.langKeep = nil; p.hidden = nil
+        store.update(p); changed = true
+    }
+
+    /// catégories et exemples de titres (60 par catégorie au plus) lus dans la base, classés hors de la file de la base
+    private func load() async {
+        let id = pid
+        let raw: [(String, String, String, Int, [String])] = await Database.shared.read { db in
+            var counts: [String: Int] = [:], samples: [String: [String]] = [:]
+            for t in ["live", "vod", "series"] {
+                db.query("SELECT cid, COUNT(*) FROM \(t) WHERE pid=? GROUP BY cid", [id]) { r in counts[t + ":" + r.str(0)] = r.int(1) }
+                db.query("SELECT cid, name FROM \(t) WHERE pid=?", [id]) { r in
+                    let k = t + ":" + r.str(0)
+                    if (samples[k]?.count ?? 0) < 60 { samples[k, default: []].append(r.str(1)) }
+                }
+            }
+            var out: [(String, String, String, Int, [String])] = []
+            db.query("SELECT type, cid, name FROM category WHERE pid=? ORDER BY type, pos", [id]) { r in
+                let k = r.str(0) + ":" + r.str(1)
+                out.append((k, r.str(0), r.str(2), counts[k] ?? 0, samples[k] ?? []))
+            }
+            return out
+        }
+        let L = await Task.detached { raw.map { Row(key: $0.0, type: $0.1, name: $0.2, count: $0.3, lang: CatLang.of($0.2, samples: $0.4, kind: $0.1)) } }.value
+        rows = L; loaded = true
+        if !L.contains(where: { $0.type == "vod" }), let f = L.first { type = f.type }
     }
 }
 
