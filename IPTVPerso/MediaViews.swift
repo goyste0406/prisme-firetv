@@ -769,6 +769,8 @@ struct PosterTile: View {
     var showNew = true
     /// rangée « Si tu hésites encore » : l'affiche seule (le pourcentage prend la place des bandeaux, comme le simulateur)
     var bare = false
+    /// place laissée au-dessus de l'heure de fin (Top 10 : l'évolution du classement occupe le coin)
+    var endBadgeTop: CGFloat = 0
     @ObservedObject var watch = WatchStore.shared
     var body: some View {
         ZStack(alignment: .top) {
@@ -787,7 +789,7 @@ struct PosterTile: View {
                 }
                 .font(P.font(15, .bold)).foregroundStyle(P.gold)
                 .padding(.horizontal, 8).padding(.vertical, 4).background(.black.opacity(0.65), in: RoundedRectangle(cornerRadius: 7))
-                .padding(10).padding(.top, newLabel == nil ? 0 : 30)
+                .padding(10).padding(.top, (newLabel == nil ? 0 : 30) + endBadgeTop)
                 .frame(maxWidth: .infinity, alignment: .trailing)
             }
             if let f = watch.fraction(item.id), f > 0.02, f < 0.92 {

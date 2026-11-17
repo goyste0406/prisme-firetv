@@ -70,7 +70,7 @@ struct CrossRow: View {
     private var chips: some View {
         HStack(spacing: 12) {
             ForEach(CrossMode.allCases) { m in
-                Button { mode = m } label: { Text(m == .film && kind == .series ? "Proche de cette série" : m.label) }.buttonStyle(XModeStyle(selected: mode == m))
+                Button { mode = m } label: { Text(m == .film && kind == .series ? "Proche de cette série" : m == .toi && ps.isDuo ? "Selon vos goûts" : m.label) }.buttonStyle(XModeStyle(selected: mode == m))
             }
             Button { info = true } label: { Text("ⓘ Comment on choisit") }.buttonStyle(XModeStyle(selected: false)).padding(.leading, 9)
         }
@@ -113,7 +113,7 @@ struct CrossRow: View {
 
     private func partsLine(_ r: CrossPickResult) -> String {
         mode.weights.filter { $0.1 > 0 }.map { k, w in
-            "\(CrossMode.partLabel[k] ?? k) \(Int(((r.parts[k] ?? 0) * 100).rounded())) % × \(Int((w * 100).rounded())) %"
+            "\(CrossMode.part(k, duo: ProfileStore.shared.isDuo)) \(Int(((r.parts[k] ?? 0) * 100).rounded())) % × \(Int((w * 100).rounded())) %"
         }.joined(separator: " · ")
     }
 
@@ -190,7 +190,7 @@ struct CrossInfo: View {
                     VStack(alignment: .leading, spacing: 12) {
                         Text("LE CALCUL").font(P.font(17, .bold)).tracking(2).foregroundStyle(.white.opacity(0.55))
                         ForEach(mode.weights.filter { $0.1 > 0 }, id: \.0) { k, w in
-                            bar(CrossMode.partLabel[k] ?? k, min(1, w * 2), CrossMode.partColor[k] ?? .white, value: "\(Int((w * 100).rounded())) %")
+                            bar(CrossMode.part(k, duo: ProfileStore.shared.isDuo), min(1, w * 2), CrossMode.partColor[k] ?? .white, value: "\(Int((w * 100).rounded())) %")
                         }
                         Text("Retirés : titres vus, « pas intéressé », absents de tes fournisseurs. La rangée est ensuite diversifiée.")
                             .font(P.font(19)).foregroundStyle(.white.opacity(0.65)).padding(.top, 6)

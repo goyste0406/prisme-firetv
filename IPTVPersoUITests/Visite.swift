@@ -537,6 +537,14 @@ final class Visite: XCTestCase {
         relaunch(["-prisme.debug.open", "series:demo:2001", "-prisme.debug.season", "2"])
         Thread.sleep(forTimeInterval: 3)
         press(.right, 2); press(.down, 6); Thread.sleep(forTimeInterval: 1); shot("16e-saison2-complete")
+        // 1.7.1 : après la fermeture d'une fiche, Retour sur l'accueil Séries remonte à la barre du haut
+        relaunch(["-prisme.debug.tab", "series"])
+        for (n, depth) in [("17", 2), ("18", 5)] {
+            press(.up, 8); press(.down, depth); shot(n + "a-series-tuile")
+            press(.select); Thread.sleep(forTimeInterval: 3); shot(n + "b-fiche-ouverte")
+            press(.down, 2); back(); Thread.sleep(forTimeInterval: 1); shot(n + "c-fiche-fermee")
+            back(); Thread.sleep(forTimeInterval: 2); shot(n + "d-retour-barre")
+        }
     }
 
     /// Observation : TV en direct ouverte au lancement avec deux fournisseurs, sans toucher à la télécommande,
@@ -560,12 +568,19 @@ final class Visite: XCTestCase {
         back(); Thread.sleep(forTimeInterval: 1)
         press(.down); Thread.sleep(forTimeInterval: 1.5); shot("T2-direct-chaines", focus: false)
         press(.down); Thread.sleep(forTimeInterval: 0.5); shot("T3-direct-chaine-suivante", focus: false)
-        Thread.sleep(forTimeInterval: 4); shot("T3b-direct-zappe", focus: false)
+        // 1.7.1 : passer sur une chaîne ne lance rien (seul OK change de chaîne)
+        Thread.sleep(forTimeInterval: 4); shot("T3b-direct-pas-de-zap", focus: false)
+        press(.up); Thread.sleep(forTimeInterval: 4); shot("T3c-direct-haut-pas-de-zap", focus: false)
         back(); Thread.sleep(forTimeInterval: 1); shot("T4-direct-retour-1-panneau-ferme", focus: false)
+        press(.down); Thread.sleep(forTimeInterval: 1.5); press(.down); Thread.sleep(forTimeInterval: 0.5)
+        press(.select); Thread.sleep(forTimeInterval: 6); shot("T4b-direct-ok-zappe", focus: false)
         // réglages du panneau (sous la liste des chaînes) : tout en bas (Son de nuit) puis remonter jusqu'à Source
         press(.down); Thread.sleep(forTimeInterval: 1); press(.down, 70); press(.up, 4); Thread.sleep(forTimeInterval: 1.5)
         shot("T5a-direct-panneau-reglages", focus: false)
         press(.select); Thread.sleep(forTimeInterval: 1.5); shot("T5-direct-sources", focus: false)
+        // autre qualité : la source change, la chaîne et le panneau restent
+        press(.down); press(.select); Thread.sleep(forTimeInterval: 6); shot("T5b-direct-autre-source-panneau-ouvert", focus: false)
+        press(.up); press(.select); Thread.sleep(forTimeInterval: 6); shot("T5c-direct-source-d-origine", focus: false)
         back(); Thread.sleep(forTimeInterval: 1); shot("T6-direct-sources-retour-liste", focus: false)
         back(); Thread.sleep(forTimeInterval: 1); shot("T7b-direct-retour-1-panneau-ferme", focus: false)
         back(); Thread.sleep(forTimeInterval: 2); shot("T8-direct-retour-2-quitte")

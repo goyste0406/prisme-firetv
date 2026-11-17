@@ -23,6 +23,8 @@ enum CrossMode: String, CaseIterable, Identifiable {
     /// libellés du simulateur (SL)
     static let partLabel: [String: String] = ["co": "Recommandé par TMDB", "kw": "Thèmes communs", "crew": "Équipe en commun",
                                               "prof": "Tes goûts", "qual": "Qualité", "fresh": "Récence"]
+    /// à deux : « Vos goûts »
+    static func part(_ k: String, duo: Bool) -> String { k == "prof" && duo ? "Vos goûts" : partLabel[k] ?? k }
     static let partColor: [String: Color] = ["co": Color(red: 0.38, green: 0.65, blue: 1), "kw": Color(red: 0.69, green: 0.55, blue: 1),
                                              "crew": Color(red: 0.2, green: 0.83, blue: 0.6), "prof": Color(red: 1, green: 0.8, blue: 0.3),
                                              "qual": Color(red: 1, green: 0.45, blue: 0.7), "fresh": Color(red: 0.6, green: 0.6, blue: 0.65)]

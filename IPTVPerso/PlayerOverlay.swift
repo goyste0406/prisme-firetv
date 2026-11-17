@@ -318,8 +318,7 @@ struct PlayerOverlay: View {
             }
             .buttonStyle(PlayerRowStyle(current: c.id == m.cur))
             .focused($focus, equals: "ch\(c.id)")
-            // simple passage dans la liste : la chaîne suit au bout d'une seconde (simulateur)
-            .onChange(of: focus) { _, f in if f == "ch\(c.id)", c.id != m.cur { m.zapTo(c.id, false) } }
+            // passer sur une chaîne ne lance rien : seul OK change de chaîne (simulateur « OK pour regarder »)
         }
         Divider().overlay(Color.white.opacity(0.15)).padding(.vertical, 10)
         ForEach(["version", "audio", "subs", "image", "night"], id: \.self) { k in row(k) }
@@ -371,7 +370,7 @@ struct PlayerOverlay: View {
             ForEach(m.subs.filter { $0.id >= 0 }) { o in choice(o.name, on: o.id == m.subCur, key: "s\(o.id)") { m.setSub(o.id); m.panel = .full } }
             if m.subs.filter({ $0.id >= 0 }).isEmpty { Text("Pas de sous-titres dans ce fichier.").font(P.font(24)).foregroundStyle(.white.opacity(0.7)).padding(.top, 8) }
         case "version":
-            ForEach(m.versions.indices, id: \.self) { i in choice(m.versions[i], on: i == m.versionCur, key: "v\(i)") { m.setVersion(i); m.panel = .full } }
+            ForEach(m.versions.indices, id: \.self) { i in choice(m.versions[i], on: i == m.versionCur, key: "v\(i)") { m.setVersion(i); if !m.live { m.panel = .full } } }
             Text("Changer de version reprend au même moment.").font(P.font(21)).foregroundStyle(.white.opacity(0.6)).padding(.top, 8)
         case "image":
             ForEach(PlayerUI.aspects, id: \.0) { a in choice(a.1, on: a.0 == m.aspect, key: "i" + a.0) { m.setAspect(a.0); m.panel = .full } }

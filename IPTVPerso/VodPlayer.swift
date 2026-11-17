@@ -97,7 +97,10 @@ final class VodPlayerController: UIViewController, VLCMediaPlayerDelegate {
     private var lastInputPos: Double = 0
     private var sleepTimer: Timer?
     // « Qu'a-t-il dit ? »
-    private var saidRestore: (until: Double, sub: Int32)?
+    /// « Qu'a-t-il dit ? » : sous-titres d'avant, à rétablir une fois le passage revu.
+    /// `armed` ne passe à vrai qu'une fois le recul réellement fait (le lecteur peut annoncer l'ancienne position un instant).
+    private var saidRestore: (until: Double, sub: Int32, armed: Bool)?
+    private var saidWant: Int32?
     // reprise après un changement (version, son de nuit)
     private var restartAt: Double?
     private var versionIndex = 0
@@ -191,7 +194,7 @@ final class VodPlayerController: UIViewController, VLCMediaPlayerDelegate {
         ui.touch = { [weak self] in self?.noteInput() }
         ui.togglePause = { [weak self] in self?.togglePause() }
         ui.setAudio = { [weak self] i in self?.player.currentAudioTrackIndex = i; self?.ui.audioCur = i; self?.toast("Audio : " + (self?.ui.audio.first { $0.id == i }?.name ?? "")) }
-        ui.setSub = { [weak self] i in self?.player.currentVideoSubTitleIndex = i; self?.ui.subCur = i; self?.saidRestore = nil }
+        ui.setSub = { [weak self] i in self?.player.currentVideoSubTitleIndex = i; self?.ui.subCur = i; self?.saidRestore = nil; self?.saidWant = nil }
         ui.setVersion = { [weak self] i in self?.switchVersion(i) }
         ui.setAspect = { [weak self] a in self?.applyAspect(a); UserDefaults.standard.set(a, forKey: ProfileStore.shared.key("prisme.player.aspect")) }
         ui.setNight = { [weak self] n in self?.changeNight(n) }
@@ -389,7 +392,8 @@ final class VodPlayerController: UIViewController, VLCMediaPlayerDelegate {
             }
             if !self.shownTracks, self.duration > 0 { self.shownTracks = true; self.readTracks() }
             if self.ui.osd || self.ui.interactive { self.refresh() } else { self.ui.pos = self.position }
-            if let r = self.saidRestore, self.position >= r.until {
+            if var r = self.saidRestore, !r.armed, self.position < r.until - min(3, r.until * 0.5) { r.armed = true; self.saidRestore = r }
+            if let r = self.saidRestore, r.armed, self.position >= r.until {
                 // « Qu'a-t-il dit ? » : le passage est revu, les sous-titres d'avant reviennent
                 self.player.currentVideoSubTitleIndex = r.sub; self.ui.subCur = r.sub; self.saidRestore = nil
             }
@@ -576,20 +580,48 @@ final class VodPlayerController: UIViewController, VLCMediaPlayerDelegate {
     private func whatSaid() {
         ui.options = false
         let here = position
+        // pistes relues maintenant : certaines n'apparaissent qu'après quelques secondes de lecture
+        readTracks()
         let names = ui.subs.filter { $0.id >= 0 }
         let fr = names.first { n in
             let x = n.name.lowercased()
-            return x.contains("fran") || x.contains("french") || x.range(of: #"\b(fr|fre|fra|vf|vff|vfq)\b"#, options: .regularExpression) != nil
-        }
+            return !x.contains("forc") && (x.contains("fran") || x.contains("french") || x.range(of: #"\b(fr|fre|fra|vf|vff|vfq)\b"#, options: .regularExpression) != nil)
+        } ?? names.first { n in let x = n.name.lowercased(); return x.contains("fran") || x.contains("french") }
+        // un nouvel appui pendant un passage déjà revu garde les sous-titres d'origine
+        let original = saidRestore?.sub ?? ui.subCur
         player.time = VLCTime(int: Int32(max(0, here - 10) * 1000))
-        if let f = fr {
-            if ui.subCur != f.id { saidRestore = (until: here + 1, sub: ui.subCur) }
-            player.currentVideoSubTitleIndex = f.id; ui.subCur = f.id
-            toast("10 s en arrière · sous-titres français pour ce passage")
-        } else {
+        guard let f = fr else {
+            saidRestore = nil; saidWant = nil
             toast("10 s en arrière · pas de sous-titres français dans ce fichier")
+            showOSD(); return
         }
+        saidRestore = original == f.id ? nil : (until: here + 1, sub: original, armed: false)
+        saidWant = f.id
+        // la piste est demandée après le recul, puis vérifiée : redemandée tant qu'elle n'est pas active (3 essais)
+        applySaid(f.id, attempt: 0)
+        toast("10 s en arrière · sous-titres français pour ce passage")
         showOSD()
+    }
+
+    private func applySaid(_ id: Int32, attempt: Int) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + (attempt == 0 ? 0.35 : 0.6)) { [weak self] in
+            guard let self, self.saidWant == id else { return }
+            if self.player.currentVideoSubTitleIndex != id { self.player.currentVideoSubTitleIndex = id }
+            self.ui.subCur = id
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
+                guard let self, self.saidWant == id else { return }
+                if self.player.currentVideoSubTitleIndex == id {
+                    PerfLog.ev("qu'a-t-il dit : piste \(id) active (essai \(attempt + 1))")
+                    self.saidWant = nil
+                } else if attempt < 2 {
+                    self.applySaid(id, attempt: attempt + 1)
+                } else {
+                    PerfLog.ev("qu'a-t-il dit : piste \(id) refusée par le lecteur")
+                    self.saidWant = nil
+                    self.toast("Sous-titres français indisponibles pour ce passage")
+                }
+            }
+        }
     }
 
     // MARK: marque-page du sommeil

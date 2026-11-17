@@ -198,9 +198,11 @@ struct VersionsModal: View {
                                 .buttonStyle(SourceRowStyle())
                                 .focused($focus, equals: v.id)
                         }
-                    }.padding(.vertical, 10).padding(.horizontal, 8)
+                    }.padding(.vertical, 12).padding(.horizontal, 22)
                 }
-                .frame(maxHeight: 640).scrollClipDisabled()
+                // liste coupée aux bords de la fenêtre (marge prévue pour l'agrandissement de la ligne sélectionnée) :
+                // au-delà, elle défile à l'intérieur
+                .frame(maxHeight: 600).padding(.horizontal, -22)
                 Text("OK pour lire cette source · Menu pour fermer").font(P.font(26)).foregroundStyle(.white.opacity(0.6)).padding(.top, 14)
             }
             .padding(.horizontal, 52).padding(.vertical, 56)
