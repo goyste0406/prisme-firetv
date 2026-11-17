@@ -529,8 +529,11 @@ struct FilmDetailView: View {
         if t.contains("MULTI") { lang.append("Plusieurs langues · MULTI") }
         if t.contains("VOSTFR") { lang.append("VO sous-titrée français") }
         if t.contains("VO") { lang.append("Version originale") }
-        let extra = t.filter { ["HDR", "HEVC", "DV", "ATMOS", "5.1"].contains($0) }
-        return .init(quality: q, provider: store.provider(v.pid)?.name ?? "Fournisseur", raw: v.name + (extra.isEmpty ? "" : ""),
+        // détails techniques présents dans le nom (HDR, Dolby Vision…) : affichés pour distinguer deux sources de même qualité
+        let names = ["HDR": "HDR", "DV": "Dolby Vision", "HEVC": "HEVC", "ATMOS": "Dolby Atmos", "5.1": "Son 5.1"]
+        let extra = t.compactMap { names[$0] }
+        if !extra.isEmpty { lang.append(extra.joined(separator: " · ")) }
+        return .init(quality: q, provider: store.provider(v.pid)?.name ?? "Fournisseur", raw: v.name,
                      audio: lang, isDefault: v.id == (versions.first?.id ?? ""))
     }
 }

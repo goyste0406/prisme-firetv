@@ -222,7 +222,7 @@ struct VersionsModal: View {
             QualityBadge(q: r.quality).frame(width: 172, alignment: .leading)
             VStack(alignment: .leading, spacing: 6) {
                 (Text(r.provider).font(P.font(36, .semibold)) + Text(r.isDefault ? " · par défaut" : "").font(P.font(26, .medium)).foregroundColor(.secondary))
-                Text(r.raw).font(P.font(26)).opacity(0.6).lineLimit(1)
+                Text(r.raw).font(P.font(26)).opacity(0.6).lineLimit(1).truncationMode(.middle)
             }
             Spacer(minLength: 10)
             VStack(alignment: .trailing, spacing: 4) {

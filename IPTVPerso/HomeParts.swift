@@ -119,7 +119,7 @@ struct Top10Row: View {
                             OutlineNumber(n: r.rank).offset(y: 40)
                             Button { open(r.item) } label: {
                                 ZStack(alignment: .topTrailing) {
-                                    PosterTile(item: r.item, showNew: false, endBadgeTop: r.move == nil ? 0 : 38).frame(width: 220, height: 330)
+                                    PosterTile(item: r.item, showNew: false, endBadgeTop: r.move == nil ? 0 : 38, caption: caption(r.item)).frame(width: 220, height: 330)
                                     if let m = r.move { MoveBadge(text: m).padding(10) }
                                 }
                             }
@@ -132,6 +132,22 @@ struct Top10Row: View {
             .scrollClipDisabled()
         }
         .focusSection()
+    }
+}
+
+extension Top10Row {
+    /// ligne d'information du simulateur : année (films) ; « S2 · É4 » si la série est commencée, sinon « 8 saisons »
+    func caption(_ it: MediaItem) -> String {
+        if it.kind == .series {
+            if let e = WatchStore.shared.inProgress.first(where: { $0.item == it.id }), let ep = e.ep,
+               let m = ep.range(of: #"Saison (\d+) · Épisode (\d+)"#, options: .regularExpression) {
+                let nums = ep[m].components(separatedBy: CharacterSet.decimalDigits.inverted).filter { !$0.isEmpty }
+                if nums.count == 2 { return "S\(nums[0]) · É\(nums[1])" }
+            }
+            if let n = it.fiche?.seasons, n > 0 { return "\(n) saison" + (n > 1 ? "s" : "") }
+        }
+        let y = (it.fiche?.year ?? 0) > 0 ? it.fiche!.year : it.clean.year
+        return y > 0 ? String(y) : ""
     }
 }
 

@@ -685,11 +685,17 @@ final class Visite: XCTestCase {
             for i in 1...12 { press(.down); shot(String(format: "A\(k)%02d-bas", i)) }
             // Parcourir : chaque onglet, puis ses tuiles vers la droite
             downUntil(["Catégories", "Licences et sagas", "Collections", "Chaînes"], max: 6, prefix: "A\(k)P-cherche")
+            // le focus peut être sur les tuiles : remonter jusqu'aux onglets
+            let tabs = ["Catégories", "Licences", "Collections", "Chaînes"]
+            for _ in 0..<3 where !tabs.contains(where: { focused().contains($0) }) { press(.up) }
+            press(.left, 4)
             for t in 0..<3 {
                 press(.select); Thread.sleep(forTimeInterval: 1.5); shot("A\(k)P\(t)-onglet")
-                press(.down); Thread.sleep(forTimeInterval: 1.5); shot("A\(k)P\(t)-tuiles")
+                press(.down); Thread.sleep(forTimeInterval: 2); shot("A\(k)P\(t)-tuiles")
                 press(.right, 3); Thread.sleep(forTimeInterval: 1.5); shot("A\(k)P\(t)-tuiles-droite")
-                press(.up); press(.left, 8); press(.right, t + 1)
+                press(.left, 3); press(.up)
+                for _ in 0..<2 where !tabs.contains(where: { focused().contains($0) }) { press(.up) }
+                press(.left, 4); press(.right, t + 1)
             }
         }
     }

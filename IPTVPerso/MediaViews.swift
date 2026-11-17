@@ -59,12 +59,15 @@ enum Tonight {
         }.sorted { $0.1 > $1.1 }
         var out: [MediaItem] = [], rest = scored
         var lastGenres: [String] = [], lastLangs: [String] = []
+        func unfamiliar(_ l: String) -> Bool { !l.isEmpty && !known.contains(l) }
         func ok(_ it: MediaItem) -> Bool {
             let g = it.fiche?.genres.components(separatedBy: ", ").first ?? ""
             let l = it.fiche?.olang ?? ""
             let gOK = g.isEmpty || lastGenres.suffix(2).filter { $0 == g }.count < 2
             let lOK = l.isEmpty || homeLangs.contains(l) || lastLangs.suffix(2).filter { $0 == l }.count < 2
-            return gOK && lOK
+            // une langue que le profil ne regarde pas : au plus un titre sur quatre
+            let uOK = !unfamiliar(l) || !lastLangs.suffix(3).contains(where: unfamiliar)
+            return gOK && lOK && uOK
         }
         while !rest.isEmpty {
             let i = rest.firstIndex { ok($0.0) } ?? 0
@@ -139,7 +142,7 @@ struct MediaHomeView: View {
                              items: forYou, open: { open = $0 })
                 }
                 if !snap.top.isEmpty {
-                    Top10Row(title: kind == .film ? "Top 10 du moment" : "Top 10 séries", sub: nil, items: snap.top, open: { open = $0 })
+                    Top10Row(title: kind == .film ? "Top 10 du moment" : "Top 10 séries", sub: kind == .film ? "les plus populaires en France cette semaine" : nil, items: snap.top, open: { open = $0 })
                 }
                 if !snap.newest.isEmpty { newSection }
                 if kind == .film, let b = because, !becauseList.isEmpty {
@@ -856,10 +859,23 @@ struct PosterTile: View {
     var bare = false
     /// place laissée au-dessus de l'heure de fin (Top 10 : l'évolution du classement occupe le coin)
     var endBadgeTop: CGFloat = 0
+    /// Top 10 (simulateur) : titre et une ligne d'information posés en bas de l'affiche (année, « S2 · É4 », « 8 saisons »)
+    var caption: String? = nil
     @ObservedObject var watch = WatchStore.shared
     var body: some View {
         ZStack(alignment: .top) {
-            Poster(url: item.posterURL, title: item.posterURL.isEmpty ? item.displayTitle : "")
+            Poster(url: item.posterURL, title: item.posterURL.isEmpty && caption == nil ? item.displayTitle : "")
+            if let caption {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(item.displayTitle).font(P.font(24, .heavy)).lineLimit(2).minimumScaleFactor(0.8)
+                    if !caption.isEmpty { Text(caption).font(P.font(16, .bold)).opacity(0.78).lineLimit(1) }
+                }
+                .foregroundStyle(.white).shadow(color: .black.opacity(0.6), radius: 5)
+                .padding(.horizontal, 14).padding(.bottom, 16).padding(.top, 60)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(LinearGradient(colors: [.clear, .black.opacity(0.82)], startPoint: .top, endPoint: .bottom))
+                .frame(maxHeight: .infinity, alignment: .bottom)
+            }
             if !bare, let n = newLabel {
                 Text(n).font(P.font(15, .heavy)).tracking(0.9).foregroundStyle(.white).lineLimit(1)
                     .padding(.vertical, 7).frame(maxWidth: .infinity)
