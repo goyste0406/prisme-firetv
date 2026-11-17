@@ -96,6 +96,7 @@ final class Visite: XCTestCase {
         if ProcessInfo.processInfo.environment["ONLY"] == "gouts" { gouts(); return }
         if ProcessInfo.processInfo.environment["ONLY"] == "langue" { langue(); return }
         if ProcessInfo.processInfo.environment["ONLY"] == "reglages" { reglages(); return }
+        if ProcessInfo.processInfo.environment["ONLY"] == "dit" { quATilDit(); return }
         if ProcessInfo.processInfo.environment["ONLY"] == "tvidle" {
             // TV en direct au lancement avec deux fournisseurs, 150 s sans aucune interaction, puis une capture
             relaunch(["-prisme.debug.demoServer2", "http://127.0.0.1:8098", "-prisme.debug.tab", "live"], wait: 150)
@@ -606,6 +607,23 @@ final class Visite: XCTestCase {
         downUntil(["Généraliste"], max: 5, prefix: "T9-bas"); press(.select); Thread.sleep(forTimeInterval: 2); shot("T9-eventail")
         press(.select); Thread.sleep(forTimeInterval: 9); shot("T9b-direct-depuis-eventail", focus: false)
         back(); Thread.sleep(forTimeInterval: 2); shot("T9c-retour-eventail")
+    }
+
+    /// 1.7.1 — « Qu'a-t-il dit ? » trois fois de suite sur un film sous-titré (sous-titres français pendant le passage revu,
+    /// puis retour aux sous-titres d'avant), puis sur un film sans sous-titres français (message clair).
+    func quATilDit() {
+        relaunch(["-prisme.debug.open", "film:demo:1000"])
+        press(.select); Thread.sleep(forTimeInterval: 25); shot("Q0-lecture", focus: false)
+        for k in 1...3 {
+            press(.down); Thread.sleep(forTimeInterval: 1); shot("Q\(k)a-options", focus: false)
+            press(.select)
+            for t in [1.0, 3.0, 5.0] { Thread.sleep(forTimeInterval: t == 1 ? 1 : 2); shot("Q\(k)b-apres-\(Int(t))s", focus: false) }
+            Thread.sleep(forTimeInterval: 9); shot("Q\(k)c-apres-14s-retour", focus: false)
+        }
+        back(); Thread.sleep(forTimeInterval: 1); back(); Thread.sleep(forTimeInterval: 2)
+        relaunch(["-prisme.debug.open", "film:demo:1011"])
+        press(.select); Thread.sleep(forTimeInterval: 20)
+        press(.down); Thread.sleep(forTimeInterval: 1); press(.select); Thread.sleep(forTimeInterval: 1.5); shot("Q9-sans-sous-titres-fr", focus: false)
     }
 
     /// 1.7.1 — les 9 rubriques des Réglages, puis la sauvegarde par l'iPhone (télécharger, renvoyer, confirmer sur la TV).
