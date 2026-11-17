@@ -26,9 +26,9 @@ struct PrefHelpFooter: View {
 struct PrefRow: View {
     let title: String
     var value: String = ""
+    var toggle: Bool? = nil
     var sub: String? = nil
     var icon: String = "chevron.right"
-    var toggle: Bool? = nil
     let action: () -> Void
     @FocusState private var f: Bool
     var body: some View {
