@@ -366,6 +366,11 @@ struct MediaHomeView: View {
             let week = Int(Date().timeIntervalSince1970) - 7 * 86400
             s.week = await MediaStore.list(.series, pids: p, where: "added > ?", args: [week], order: "added DESC", limit: 30)
         }
+        // « Privilégier le français » (fournisseur) : les titres marqués d'une autre langue ne sont pas mis en avant
+        if !LangRules.preferPids.isEmpty {
+            s.newest = s.newest.filter { !LangRules.hideOnHome($0) }
+            s.tonight = s.tonight.filter { !LangRules.hideOnHome($0) }
+        }
         s.top = await TrendStore.top(k, pids: p)
         if !s.top.isEmpty {
             s.topSub = k == .film ? "films populaires en France cette semaine · chez ton fournisseur" : "séries populaires cette semaine · chez ton fournisseur"
