@@ -61,56 +61,44 @@ struct CatalogImporter {
             }
         }
 
-        // ---- chaînes
-        progress(0.12, "Chaînes de TV…")
-        let live = skipped("live") ? [] : ((try await json("get_live_streams")) as? [[String: Any]] ?? [])
-        var lrows: [[Any?]] = []; lrows.reserveCapacity(live.count)
+        // ---- chaînes, films, séries : chaque liste est enregistrée dans un fichier, lue titre par titre et rangée par lots
+        // (la mémoire reste stable, même avec des centaines de milliers de titres), puis remplace l'ancienne d'un coup
         var epgIDs = Set<String>()
-        for s in live {
+        progress(0.12, "Chaînes de TV…")
+        res.counts["live"] = try await importList("live", action: "get_live_streams", what: "chaînes", p0: 0.12, p1: 0.30, progress: progress, &res) { s in
             let cid = str(s["category_id"]), name = str(s["name"])
-            if blocked.contains("live:" + cid) || str(s["is_adult"]) == "1" || Self.isAdult(name) { continue }
+            if blocked.contains("live:" + cid) || str(s["is_adult"]) == "1" || Self.isAdult(name) { return nil }
             let epg = str(s["epg_channel_id"])
             if !epg.isEmpty { epgIDs.insert(epg) }
             let arch = str(s["tv_archive"]) == "1" ? (Int(str(s["tv_archive_duration"])) ?? 1) : 0
             // identité de la chaîne calculée ici, une fois (lue telle quelle par l'index des chaînes)
             let id = LiveIndex.identity(name: name, category: liveCats[cid] ?? "")
-            lrows.append([pid, str(s["stream_id"]), name, Int(str(s["num"])) ?? 0, str(s["stream_icon"]), cid, epg, arch,
-                          id.name, id.key, id.q, id.u.rawValue, LiveIndex.rulesVersion])
+            return [pid, str(s["stream_id"]), name, Int(str(s["num"])) ?? 0, str(s["stream_icon"]), cid, epg, arch,
+                    id.name, id.key, id.q, id.u.rawValue, LiveIndex.rulesVersion]
         }
-        PerfLog.mem("import chaînes : reçues et préparées (\(live.count))")
-        res.counts["live"] = await keepOrReplace("live", lrows, received: live.count, &res)
-        PerfLog.mem("import chaînes : enregistrées")
+        // liste gardée à l'identique (reçue vide ou coupée) : le guide suit les chaînes déjà connues
+        if epgIDs.isEmpty {
+            await db.read { db in db.query("SELECT DISTINCT epg FROM live WHERE pid=? AND epg<>''", [pid]) { r in epgIDs.insert(r.str(0)) } }
+        }
 
-        // ---- films
         progress(0.30, "Films…")
-        let vod = skipped("vod") ? [] : ((try await json("get_vod_streams")) as? [[String: Any]] ?? [])
-        var vrows: [[Any?]] = []; vrows.reserveCapacity(vod.count)
-        for s in vod {
+        res.counts["vod"] = try await importList("vod", action: "get_vod_streams", what: "films", p0: 0.30, p1: 0.50, progress: progress, &res) { s in
             let cid = str(s["category_id"]), name = str(s["name"])
-            if blocked.contains("vod:" + cid) || str(s["is_adult"]) == "1" || Self.isAdult(name) { continue }
+            if blocked.contains("vod:" + cid) || str(s["is_adult"]) == "1" || Self.isAdult(name) { return nil }
             let tmdb = str(s["tmdb"]).isEmpty ? str(s["tmdb_id"]) : str(s["tmdb"])
-            vrows.append([pid, str(s["stream_id"]), name, Int(str(s["year"])) ?? Self.year(in: name), str(s["stream_icon"]), cid,
-                          str(s["container_extension"]).isEmpty ? "mp4" : str(s["container_extension"]),
-                          Double(str(s["rating"])) ?? 0, Int(str(s["added"])) ?? 0, tmdb])
+            return [pid, str(s["stream_id"]), name, Int(str(s["year"])) ?? Self.year(in: name), str(s["stream_icon"]), cid,
+                    str(s["container_extension"]).isEmpty ? "mp4" : str(s["container_extension"]),
+                    Double(str(s["rating"])) ?? 0, Int(str(s["added"])) ?? 0, tmdb]
         }
-        PerfLog.mem("import films : reçus et préparés (\(vod.count))")
-        res.counts["vod"] = await keepOrReplace("vod", vrows, received: vod.count, &res)
-        PerfLog.mem("import films : enregistrés")
 
-        // ---- séries
         progress(0.50, "Séries…")
-        let ser = skipped("series") ? [] : ((try await json("get_series")) as? [[String: Any]] ?? [])
-        var srows: [[Any?]] = []; srows.reserveCapacity(ser.count)
-        for s in ser {
+        res.counts["series"] = try await importList("series", action: "get_series", what: "séries", p0: 0.50, p1: 0.62, progress: progress, &res) { s in
             let cid = str(s["category_id"]), name = str(s["name"])
-            if blocked.contains("series:" + cid) || Self.isAdult(name) { continue }
+            if blocked.contains("series:" + cid) || Self.isAdult(name) { return nil }
             let rel = str(s["releaseDate"]).isEmpty ? str(s["release_date"]) : str(s["releaseDate"])
-            srows.append([pid, str(s["series_id"]), name, Int(rel.prefix(4)) ?? Self.year(in: name), str(s["cover"]), cid, str(s["plot"]),
-                          Double(str(s["rating"])) ?? 0, Int(str(s["last_modified"])) ?? 0, str(s["tmdb"])])
+            return [pid, str(s["series_id"]), name, Int(rel.prefix(4)) ?? Self.year(in: name), str(s["cover"]), cid, str(s["plot"]),
+                    Double(str(s["rating"])) ?? 0, Int(str(s["last_modified"])) ?? 0, str(s["tmdb"])]
         }
-        PerfLog.mem("import séries : reçues et préparées (\(ser.count))")
-        res.counts["series"] = await keepOrReplace("series", srows, received: ser.count, &res)
-        PerfLog.mem("import séries : enregistrées")
 
         // ---- guide des programmes (XMLTV), lu au fil de l'eau : jamais tout en mémoire
         progress(0.62, "Guide des programmes…")
@@ -137,26 +125,90 @@ struct CatalogImporter {
     /// Une liste reçue vide alors qu'il y avait du contenu n'efface rien : c'est presque toujours une panne passagère du serveur.
     private func skipped(_ type: String) -> Bool { (provider.skip ?? []).contains(type) }
 
-    private func keepOrReplace(_ table: String, _ rows: [[Any?]], received: Int, _ res: inout Result) async -> Int {
+    /// Une liste du fournisseur (chaînes, films ou séries) : fichier → lecture titre par titre → table d'attente par lots
+    /// de 2 000 → remplacement de l'ancienne liste en une seule transaction.
+    /// Liste reçue vide, coupée ou illisible alors qu'il y avait du contenu : l'ancienne est gardée (panne passagère).
+    private func importList(_ table: String, action: String, what: String, p0: Double, p1: Double,
+                            progress: @escaping (Double, String) -> Void, _ res: inout Result,
+                            row: ([String: Any]) -> [Any?]?) async throws -> Int {
         let pid = provider.id
         // type non importé (choisi à l'ajout) : son contenu éventuel est retiré
         if skipped(table) {
             await Database.shared.read { db in db.replaceProvider(table: table, pid: pid, sql: "", rows: []) }
             return 0
         }
-        let cols = rows.first?.count ?? 0
-        let kept = await Database.shared.read { db -> Int in
-            let before = db.intValue("SELECT COUNT(*) FROM \(table) WHERE pid=?", [pid]) ?? 0
-            if received == 0 && before > 0 { return before }
-            db.replaceProvider(table: table, pid: pid, sql: "INSERT OR REPLACE INTO \(table) VALUES(" + Array(repeating: "?", count: cols).joined(separator: ",") + ")", rows: rows)
-            return -1
+        // fichier laissé par la vérification (moins d'une heure) ou téléchargé maintenant
+        let acc = provider.account
+        let file: URL
+        if let f = ListFiles.fresh(account: acc, action: action) { file = f } else {
+            guard let u = apiURL(action) else { throw XtreamError.badURL }
+            file = ListFiles.file(account: acc, action: action)
+            try await ListFiles.download(u, to: file)
         }
-        if kept >= 0 {
-            let w = ["live": "chaînes", "vod": "films", "series": "séries"][table] ?? table
-            res.warning = "Liste des \(w) reçue vide : l'ancienne est gardée."
-            return kept
+        defer { try? FileManager.default.removeItem(at: file) }
+        let size = ((try? FileManager.default.attributesOfItem(atPath: file.path)[.size]) as? NSNumber)?.intValue ?? 0
+        PerfLog.mem("import \(what) : fichier reçu (\(size / 1_048_576) Mo)")
+
+        let db = Database.shared
+        let stage = table + "_stage"
+        db.sync { db in db.run("DELETE FROM \(stage) WHERE pid=?", [pid]) }
+        var batch: [[Any?]] = []; batch.reserveCapacity(2000)
+        var kept = 0, cols = 0, lastTick = Date()
+        func flush() {
+            guard !batch.isEmpty else { return }
+            let sql = "INSERT INTO \(stage) VALUES(" + Array(repeating: "?", count: cols).joined(separator: ",") + ")"
+            let b = batch
+            db.sync { db in db.insertMany(sql, b) }
+            batch.removeAll(keepingCapacity: true)
         }
-        return rows.count
+        let outcome = JSONStream.forEachObject(file: file) { o in
+            guard let r = row(o) else { return }
+            cols = r.count; batch.append(r); kept += 1
+            if batch.count >= 2000 {
+                flush()
+                if Date().timeIntervalSince(lastTick) > 0.5 {
+                    lastTick = Date()
+                    progress(p0 + (p1 - p0) * 0.8, "\(what.prefix(1).uppercased() + what.dropFirst()) : \(Fmt.n(kept)) lus…")
+                }
+            }
+        }
+        flush()
+        PerfLog.mem("import \(what) : lus et rangés (\(kept))")
+
+        let received: Int
+        switch outcome {
+        case .complete(let n): received = n
+        case .truncated, .notList: received = -1
+        }
+        let before = await db.read { db in db.intValue("SELECT COUNT(*) FROM \(table) WHERE pid=?", [pid]) ?? 0 }
+        if received <= 0 && before > 0 {
+            db.sync { db in db.run("DELETE FROM \(stage) WHERE pid=?", [pid]) }
+            res.warning = received < 0 ? "Liste des \(what) reçue incomplète : l'ancienne est gardée." : "Liste des \(what) reçue vide : l'ancienne est gardée."
+            return before
+        }
+        if received < 0 {
+            // premier import et liste coupée : on garde ce qui a pu être lu, et on le signale
+            res.warning = "Liste des \(what) reçue incomplète : \(Fmt.n(kept)) gardés."
+        }
+        progress(p1 - 0.01, "\(what.prefix(1).uppercased() + what.dropFirst()) : enregistrement…")
+        // remplacement d'un coup : l'ancienne liste et la nouvelle dans la même transaction
+        await db.read { db in
+            db.exec("BEGIN IMMEDIATE")
+            db.run("DELETE FROM \(table) WHERE pid=?", [pid])
+            db.run("INSERT OR REPLACE INTO \(table) SELECT * FROM \(stage) WHERE pid=?", [pid])
+            db.run("DELETE FROM \(stage) WHERE pid=?", [pid])
+            db.exec("COMMIT")
+        }
+        PerfLog.mem("import \(what) : enregistrés")
+        return kept
+    }
+
+    private func apiURL(_ action: String) -> URL? {
+        var c = URLComponents(string: provider.account.baseURL + "/player_api.php")
+        c?.queryItems = [URLQueryItem(name: "username", value: provider.username), URLQueryItem(name: "password", value: provider.password),
+                         URLQueryItem(name: "action", value: action)]
+        let q0 = c?.percentEncodedQuery; c?.percentEncodedQuery = q0?.replacingOccurrences(of: "+", with: "%2B")
+        return c?.url
     }
 
     private func xmltvURL() -> URL? {

@@ -96,6 +96,16 @@ final class Database: @unchecked Sendable {
             exec("ALTER TABLE live ADD COLUMN iv INTEGER")
             exec("PRAGMA user_version=7")
         }
+        if v < 8 {
+            // 1.7.1 : tables d'attente de l'import (mêmes colonnes que live, vod, series). Les listes d'un fournisseur y
+            // arrivent par lots pendant la lecture, puis remplacent l'ancien catalogue d'un coup à la fin : la mémoire
+            // reste stable avec un très gros fournisseur, et une coupure en route ne touche pas au catalogue en place.
+            // Ajouts seulement, rien n'est effacé. (Une colonne ajoutée plus tard à live, vod ou series doit l'être ici aussi.)
+            exec("CREATE TABLE IF NOT EXISTS live_stage AS SELECT * FROM live WHERE 0")
+            exec("CREATE TABLE IF NOT EXISTS vod_stage AS SELECT * FROM vod WHERE 0")
+            exec("CREATE TABLE IF NOT EXISTS series_stage AS SELECT * FROM series WHERE 0")
+            exec("PRAGMA user_version=8")
+        }
     }
 
     // MARK: Requêtes
@@ -192,6 +202,9 @@ final class Database: @unchecked Sendable {
     }
 
     /// Exécute un bloc sur la file de la base, sans bloquer l'écran.
+    /// Même chose sans attendre (lecture d'une liste au fil de l'eau, déjà hors de l'écran). Jamais depuis la file de la base.
+    func sync<T>(_ work: (Database) -> T) -> T { queue.sync { work(self) } }
+
     func read<T>(_ work: @escaping (Database) -> T) async -> T {
         await withCheckedContinuation { cont in
             queue.async { cont.resume(returning: work(self)) }

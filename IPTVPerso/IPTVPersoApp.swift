@@ -9,6 +9,7 @@ struct IPTVPersoApp: App {
         URLCache.shared = URLCache(memoryCapacity: 30 * 1024 * 1024, diskCapacity: 300 * 1024 * 1024)
         HomeCacheHook.install()
         PerfLog.startMemSampler()
+        ListFiles.purgeOld()
         Debug.legacySeedBeforeStores()
     }
 

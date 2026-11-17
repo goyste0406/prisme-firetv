@@ -223,24 +223,36 @@ struct ProviderAnalysis {
         for (type, catAction, listAction) in [("live", "get_live_categories", "get_live_streams"), ("vod", "get_vod_categories", "get_vod_streams"), ("series", "get_series_categories", "get_series")] {
             PerfLog.mem("vérification \(type) : avant")
             let cats = (try? await json(catAction, 60)) as? [[String: Any]] ?? []
-            let list = (try? await json(listAction, 120)) as? [[String: Any]] ?? []
-            PerfLog.mem("vérification \(type) : liste reçue (\(cats.count) catégories, \(list.count) lignes)")
-            var byCat: [String: [String]] = [:], dup: [String: Int] = [:]
-            for x in list {
-                let cid = str(x["category_id"]), name = str(x["name"])
-                byCat[cid, default: []].append(name)
-                if type == "live" && str(x["tv_archive"]) == "1" { a.replay += 1 }
-                let k = type == "live" ? ChannelTools.key(Channel(pid: "", sid: "", name: name, num: 0, icon: "", cid: "", epg: "", archive: 0)) : TitleTools.clean(name, year: CatalogImporter.year(in: name)).key
-                if otherKeys[type]?.contains(k) == true { dup[cid, default: 0] += 1 }
+            // la liste est enregistrée dans un fichier (l'import la réutilise ensuite) et lue titre par titre :
+            // seuls les comptes et quelques exemples par catégorie restent en mémoire
+            var count: [String: Int] = [:], samples: [String: [String]] = [:], dup: [String: Int] = [:], total = 0
+            if let u = url(listAction) {
+                let file = ListFiles.file(account: acc, action: listAction)
+                do { try await ListFiles.download(u, to: file) } catch { try? FileManager.default.removeItem(at: file) }
+                let others = otherKeys[type]
+                _ = JSONStream.forEachObject(file: file) { x in
+                    let cid = str(x["category_id"]), name = str(x["name"])
+                    total += 1
+                    count[cid, default: 0] += 1
+                    if (samples[cid]?.count ?? 0) < 60 { samples[cid, default: []].append(name) }
+                    if type == "live" && str(x["tv_archive"]) == "1" { a.replay += 1 }
+                    if let others, !others.isEmpty {
+                        let k = type == "live" ? ChannelTools.key(Channel(pid: "", sid: "", name: name, num: 0, icon: "", cid: "", epg: "", archive: 0)) : TitleTools.clean(name, year: CatalogImporter.year(in: name)).key
+                        if others.contains(k) { dup[cid, default: 0] += 1 }
+                    }
+                }
             }
+            PerfLog.mem("vérification \(type) : liste lue (\(cats.count) catégories, \(total) lignes)")
             var L: [(String, String)] = cats.map { (str($0["category_id"]), str($0["category_name"]).isEmpty ? "Sans nom" : str($0["category_name"])) }
-            if L.isEmpty && !list.isEmpty { L = [("*", "Toutes les " + (type == "live" ? "chaînes" : type == "vod" ? "films" : "séries"))]; byCat["*"] = list.map { str($0["name"]) } }
-            for (id, name) in L {
-                let items = byCat[id] ?? []
-                let lang = CatLang.of(name, samples: Array(items.prefix(60)), kind: type)
-                a.cats.append(Cat(id: id, type: type, name: name, count: items.count, lang: lang, dup: dup[id] ?? 0, on: lang.g != .adult && lang.proposed(name)))
+            if L.isEmpty && total > 0 {
+                L = [("*", "Toutes les " + (type == "live" ? "chaînes" : type == "vod" ? "films" : "séries"))]
+                count["*"] = total; samples["*"] = Array(samples.values.joined().prefix(60))
             }
-            a.totals[type] = list.count
+            for (id, name) in L {
+                let lang = CatLang.of(name, samples: samples[id] ?? [], kind: type)
+                a.cats.append(Cat(id: id, type: type, name: name, count: count[id] ?? 0, lang: lang, dup: dup[id] ?? 0, on: lang.g != .adult && lang.proposed(name)))
+            }
+            a.totals[type] = total
             PerfLog.mem("vérification \(type) : analysée")
             await step(a)
         }
@@ -251,15 +263,18 @@ struct ProviderAnalysis {
     static func existingKeys(_ pids: [String]) async -> [String: Set<String>] {
         guard !pids.isEmpty else { return [:] }
         let ph = pids.map { _ in "?" }.joined(separator: ",")
-        return await Database.shared.read { db in
-            var out: [String: Set<String>] = ["live": [], "vod": [], "series": []]
-            db.query("SELECT name FROM live WHERE pid IN (\(ph))", pids.map { $0 as Any? }) { r in
-                out["live"]!.insert(ChannelTools.key(Channel(pid: "", sid: "", name: r.str(0), num: 0, icon: "", cid: "", epg: "", archive: 0)))
+        // lecture brute dans la base (rapide), calcul des clés en dehors : la base reste libre pour le reste de l'appli
+        let raw: [String: [String]] = await Database.shared.read { db in
+            var out: [String: [String]] = ["live": [], "vod": [], "series": []]
+            for t in ["live", "vod", "series"] {
+                db.query("SELECT name FROM \(t) WHERE pid IN (\(ph))", pids.map { $0 as Any? }) { r in out[t]!.append(r.str(0)) }
             }
-            db.query("SELECT name, year FROM vod WHERE pid IN (\(ph))", pids.map { $0 as Any? }) { r in out["vod"]!.insert(TitleTools.clean(r.str(0), year: CatalogImporter.year(in: r.str(0))).key) }
-            db.query("SELECT name, year FROM series WHERE pid IN (\(ph))", pids.map { $0 as Any? }) { r in out["series"]!.insert(TitleTools.clean(r.str(0), year: CatalogImporter.year(in: r.str(0))).key) }
             return out
         }
+        var out: [String: Set<String>] = [:]
+        out["live"] = Set(raw["live", default: []].map { ChannelTools.key(Channel(pid: "", sid: "", name: $0, num: 0, icon: "", cid: "", epg: "", archive: 0)) })
+        for t in ["vod", "series"] { out[t] = Set(raw[t, default: []].map { TitleTools.clean($0, year: CatalogImporter.year(in: $0)).key }) }
+        return out
     }
 }
 
