@@ -450,10 +450,9 @@ final class Visite: XCTestCase {
 
     func attach(_ name: String, _ text: String) {
         let a = XCTAttachment(string: text); a.name = name; a.lifetime = .keepAlways; add(a)
-        do {
-            let f = URL(fileURLWithPath: dir).appendingPathComponent("focus.txt")
-            if let h = try? FileHandle(forWritingTo: f) { h.seekToEndOfFile(); h.write(Data("\(name) → \(text)\n".utf8)); try? h.closeFile() }
-        }
+        // dans le même journal que les captures (shot() réécrit focus.txt en entier à partir de « log »)
+        log += "\(name) → \(text)\n"
+        try? log.write(to: URL(fileURLWithPath: dir).appendingPathComponent("focus.txt"), atomically: true, encoding: .utf8)
     }
 
     /// Ajout d'un fournisseur géant (8096 : 1 500 catégories, 150 000 films, 40 000 séries, 30 000 chaînes)

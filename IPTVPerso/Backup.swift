@@ -16,12 +16,14 @@ import SwiftUI
 enum Backup {
     /// clés jamais copiées : propres à cet appareil ou recalculées
     private static let skip: Set<String> = ["prisme.tab", "prisme.xfr.last", "prisme.guide.last"]
+    /// réglages de test (arguments de lancement du simulateur) : jamais sauvegardés ni restaurés
+    private static func kept(_ k: String) -> Bool { k.hasPrefix("prisme.") && !k.hasPrefix("prisme.debug.") && !skip.contains(k) }
     private static var undoURL: URL { FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0].appendingPathComponent("prisme-avant-restauration.json") }
 
     /// Données de PRISME sous forme de fichier JSON (lisible, une sauvegarde par fichier).
     @MainActor static func export() -> Data {
         var keys: [String: Any] = [:]
-        for (k, v) in UserDefaults.standard.dictionaryRepresentation() where k.hasPrefix("prisme.") && !skip.contains(k) { keys[k] = v }
+        for (k, v) in UserDefaults.standard.dictionaryRepresentation() where kept(k) { keys[k] = v }
         let plist = (try? PropertyListSerialization.data(fromPropertyList: keys, format: .binary, options: 0)) ?? Data()
         // mots de passe des fournisseurs (gardés dans le trousseau, donc absents des réglages)
         var pw: [String: String] = [:]
@@ -46,8 +48,8 @@ enum Backup {
               let keys = try? PropertyListSerialization.propertyList(from: plist, format: nil) as? [String: Any] else { return false }
         try? export().write(to: undoURL, options: .atomic)
         let ud = UserDefaults.standard
-        for k in ud.dictionaryRepresentation().keys where k.hasPrefix("prisme.") && !skip.contains(k) { ud.removeObject(forKey: k) }
-        for (k, v) in keys { ud.set(v, forKey: k) }
+        for k in ud.dictionaryRepresentation().keys where kept(k) { ud.removeObject(forKey: k) }
+        for (k, v) in keys where kept(k) { ud.set(v, forKey: k) }
         for (id, p) in (o["pw"] as? [String: String]) ?? [:] where !p.isEmpty { _ = Keychain.set(p, for: id) }
         ud.synchronize()
         return true
