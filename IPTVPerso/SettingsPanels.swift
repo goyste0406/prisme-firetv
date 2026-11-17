@@ -3,27 +3,50 @@ import SwiftUI
 // MARK: - Réglages 1.7.1 : les rubriques du simulateur (Langues et sous-titres, Lecture et image, TV en direct, Guide TV,
 // Accueils et notes, Contrôle parental, Sauvegarde et mises à jour). Seules des options qui fonctionnent vraiment.
 
-/// Ligne de réglage (même apparence que les autres lignes des réglages) : titre, valeur, explication facultative dessous.
+/// Explication du réglage sélectionné, affichée en bas du panneau (simulateur : « Choisis un réglage pour voir à quoi il sert »)
+final class PrefHelp: ObservableObject {
+    static let shared = PrefHelp()
+    @Published var text: String?
+}
+
+struct PrefHelpFooter: View {
+    @ObservedObject var h = PrefHelp.shared
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Divider().overlay(Color.white.opacity(0.12))
+            Text(h.text ?? "Choisis un réglage pour voir à quoi il sert.").font(P.font(21)).foregroundStyle(P.dim).fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(.top, 10)
+        .onDisappear { h.text = nil }
+    }
+}
+
+/// Ligne de réglage (même apparence que les autres lignes des réglages) : titre, valeur ou interrupteur ;
+/// son explication s'affiche en bas du panneau quand la ligne est sélectionnée.
 struct PrefRow: View {
     let title: String
     var value: String = ""
     var sub: String? = nil
     var icon: String = "chevron.right"
+    var toggle: Bool? = nil
     let action: () -> Void
+    @FocusState private var f: Bool
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Button(action: action) {
-                HStack(spacing: 16) {
-                    Text(title).font(P.font(24, .semibold))
-                    Spacer()
+        Button(action: action) {
+            HStack(spacing: 16) {
+                Text(title).font(P.font(24, .semibold))
+                Spacer()
+                if let toggle { Switch(on: toggle).scaleEffect(0.8) }
+                else {
                     if !value.isEmpty { Text(value).font(P.font(21)).opacity(0.65).lineLimit(1) }
                     Image(systemName: icon).font(P.font(18, .bold)).opacity(0.5)
                 }
-                .padding(.horizontal, 22).frame(height: 72)
             }
-            .buttonStyle(RowStyle())
-            if let sub { Text(sub).font(P.font(19)).foregroundStyle(P.faint).padding(.horizontal, 22) }
+            .padding(.horizontal, 22).frame(height: 72)
         }
+        .buttonStyle(RowStyle())
+        .focused($f)
+        .onChange(of: f) { _, on in if on { PrefHelp.shared.text = sub } }
     }
 }
 
@@ -68,18 +91,19 @@ struct LangPanel: View {
     var body: some View {
         let _ = m.tick
         PrefHeader(title: "Langues et sous-titres")
+        SubPreview(size: AppPrefs.subSize, back: AppPrefs.subBack, color: AppPrefs.subColor)
         PrefRow(title: "Version préférée (\(ps.me.name))", value: Profile.langNames[ps.me.lang] ?? ps.me.lang,
                 sub: "La version (VFF, VF, VOSTFR…) se règle par profil : OK pour régler celle de \(ps.me.name).") {
             ProfileUI.shared.editProfile = ps.current
         }
-        PrefRow(title: "Sous-titres français par défaut", value: onOff(AppPrefs.subsFR),
+        PrefRow(title: "Sous-titres français par défaut", toggle: AppPrefs.subsFR,
                 sub: "Pour les profils réglés sur « Comme le réglage général ». Un profil peut aussi dire « Toujours » ou « Jamais ».") { m.toggle("subsFR", AppPrefs.subsFR) }
-        PrefRow(title: "Sous-titres français si seule la VO existe", value: onOff(AppPrefs.subsIfVO),
+        PrefRow(title: "Sous-titres français si seule la VO existe", toggle: AppPrefs.subsIfVO,
                 sub: "Plus besoin d'aller les chercher : ils s'activent tout seuls quand le film n'a pas de piste audio française.") { m.toggle("subsVO", AppPrefs.subsIfVO) }
-        SubPreview(size: AppPrefs.subSize, back: AppPrefs.subBack, color: AppPrefs.subColor).padding(.vertical, 6)
         PrefRow(title: "Taille des sous-titres", value: AppPrefs.subSizes[AppPrefs.subSize], sub: "L'aperçu au-dessus montre le résultat tout de suite.") { m.cycle("subSize", AppPrefs.subSize, 4) }
         PrefRow(title: "Fond des sous-titres", value: AppPrefs.subBacks[AppPrefs.subBack], sub: "Le bandeau reste lisible même sur les scènes claires.") { m.cycle("subBack", AppPrefs.subBack, 3) }
         PrefRow(title: "Couleur des sous-titres", value: AppPrefs.subColors[AppPrefs.subColor], sub: "Le jaune se lit mieux sur les vieux films.") { m.cycle("subColor", AppPrefs.subColor, 2) }
+        PrefHelpFooter()
     }
 }
 
@@ -113,10 +137,11 @@ struct PlayPanel: View {
         PrefRow(title: "Qualité préférée", value: AppPrefs.qualities[AppPrefs.maxQuality],
                 sub: "Utile si ta connexion sature le soir : prisme prend la meilleure version ou source sous cette limite (sauf si tu en choisis une).") { m.cycle("maxQ", AppPrefs.maxQuality, 3) }
         PrefInfo(title: "Moteur de lecture", value: "VLC · lit MKV, AVI, MP4 et les flux en direct")
-        PrefRow(title: "Décodage matériel", value: onOff(AppPrefs.hwDecode),
+        PrefRow(title: "Décodage matériel", toggle: AppPrefs.hwDecode,
                 sub: "Laisse-le activé : l'Apple TV décode l'image elle-même. À couper seulement si une vidéo saccade ou s'affiche mal.") { m.toggle("hw", AppPrefs.hwDecode) }
         PrefRow(title: "Saut avant / arrière", value: "\(AppPrefs.skip) s", sub: "Flèches gauche et droite pendant un film ou un épisode.") { m.cycle("skip", AppPrefs.skip, AppPrefs.skips) }
         PrefInfo(title: "Son de nuit, arrêt au coucher", value: "dans le lecteur (flèche bas) · retenus par profil")
+        PrefHelpFooter()
     }
 }
 
@@ -129,7 +154,7 @@ struct LivePanel: View {
     var body: some View {
         let _ = m.tick
         PrefHeader(title: "TV en direct")
-        PrefRow(title: "Ouvrir prisme sur la TV en direct", value: onOff(AppPrefs.openOnLive),
+        PrefRow(title: "Ouvrir prisme sur la TV en direct", toggle: AppPrefs.openOnLive,
                 sub: "Comme une box : à l'ouverture, la dernière chaîne regardée s'allume tout de suite.") { m.toggle("openLive", AppPrefs.openOnLive) }
         PrefRow(title: "Bascule automatique si la source ne démarre pas", value: AppPrefs.failover == 0 ? "désactivée" : "\(AppPrefs.failover) secondes",
                 sub: "Passe à la source suivante de la chaîne (autre qualité ou autre fournisseur). OK pour changer : désactivée, 5, 10, 20 ou 25 secondes.") {
@@ -138,6 +163,7 @@ struct LivePanel: View {
         PrefRow(title: "Chaînes et guide", value: store.importing != nil ? "mise à jour…" : "\(Fmt.n(store.active.reduce(0) { $0 + ($1.counts["live"] ?? 0) })) chaînes · \(Fmt.n(store.active.reduce(0) { $0 + ($1.counts["epg"] ?? 0) })) programmes",
                 sub: "OK pour recharger les chaînes et le guide de tes fournisseurs.") { for p in store.active { store.refresh(p.id) } }
         PrefInfo(title: "Chaînes récentes et favorites", value: "\(prefs.recent.count) récentes · \(prefs.favorites.count) favorites")
+        PrefHelpFooter()
     }
 }
 
@@ -149,7 +175,7 @@ struct EPGPanel: View {
     var body: some View {
         let _ = m.tick
         PrefHeader(title: "Guide TV")
-        PrefRow(title: "Téléchargement automatique au démarrage", value: onOff(AppPrefs.epgAuto),
+        PrefRow(title: "Téléchargement automatique au démarrage", toggle: AppPrefs.epgAuto,
                 sub: "Le guide est retéléchargé à l'ouverture de prisme s'il a plus de 12 heures.") { m.toggle("epgAuto", AppPrefs.epgAuto) }
         PrefRow(title: "Actualiser le guide maintenant", value: store.guideBusy ? "en cours…" : "dernière mise à jour : " + (store.guideLast == .distantPast ? "—" : Fmt.dateTime(store.guideLast))) {
             store.refreshGuide()
@@ -159,6 +185,7 @@ struct EPGPanel: View {
             m.cycle("epgShift", AppPrefs.epgShift, [0, 1, 2, 3, -3, -2, -1])
         }
         PrefInfo(title: "Sources", value: "\(store.active.count) × xmltv.php · \(Fmt.n(store.active.reduce(0) { $0 + ($1.counts["epg"] ?? 0) })) programmes\nimages des programmes : guide, xmltvfr.fr, TMDB")
+        PrefHelpFooter()
     }
 }
 
@@ -196,6 +223,7 @@ struct HomesPanel: View {
             if confirm { confirm = false; Task { await fiches.redownloadAll() } } else { confirm = true }
         }
         PrefInfo(title: "Notes affichées", value: "note TMDB · IMDb, Rotten Tomatoes, AlloCiné : non disponibles sans service payant ou clé")
+        PrefHelpFooter()
     }
 }
 
@@ -225,11 +253,12 @@ struct ParentalPanel: View {
             }
         }
         if AppPrefs.parentalCode != nil {
-            PrefRow(title: "Verrouiller les réglages", value: onOff(AppPrefs.lockSettings), sub: "Le code parental est demandé pour entrer dans les Réglages.") { m.toggle("lock", AppPrefs.lockSettings) }
+            PrefRow(title: "Verrouiller les réglages", toggle: AppPrefs.lockSettings, sub: "Le code parental est demandé pour entrer dans les Réglages.") { m.toggle("lock", AppPrefs.lockSettings) }
         }
         PrefRow(title: "Limites par profil", value: "\(ps.profiles.filter { $0.limit != nil }.count) profil(s) limité(s)", sub: "Profil enfant et limite d'âge se règlent dans chaque profil.") {
             ProfileUI.shared.editProfile = ps.current
         }
+        PrefHelpFooter()
     }
 }
 
@@ -315,6 +344,7 @@ struct DataPanel: View {
                       primaryButton: .destructive(Text("Restaurer")) { done = Backup.restore(p.s) ? Self.restartMsg : "Restauration impossible."; show = "" },
                       secondaryButton: .cancel(Text("Annuler")))
             }
+        PrefHelpFooter()
     }
     struct Pending: Identifiable { let s: Backup.Summary; var id: String { s.date + s.device } }
     static let restartMsg = "Fait ✓ · ferme prisme (deux appuis sur le bouton TV, puis fais glisser prisme vers le haut) et rouvre-la pour retrouver ces données."
