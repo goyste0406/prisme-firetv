@@ -5,7 +5,7 @@ import Foundation
 /// permettent de lancer la vraie app, de la piloter à la télécommande et d'en faire des captures d'écran.
 /// Installée avec Apparition, l'app n'a jamais ces arguments : rien ne change pour toi.
 enum Debug {
-    private static func arg(_ k: String) -> String? {
+    static func arg(_ k: String) -> String? {
         guard let v = UserDefaults.standard.volatileDomain(forName: UserDefaults.argumentDomain)[k] as? String, !v.isEmpty else { return nil }
         return v
     }

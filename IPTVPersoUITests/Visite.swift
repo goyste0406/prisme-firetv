@@ -19,7 +19,7 @@ final class Visite: XCTestCase {
                 "-prisme.debug.tmdbKey", "demo",
                 "-prisme.debug.tmdbBase", "http://127.0.0.1:8099/tmdb/3",
                 "-prisme.debug.imgBase", "http://127.0.0.1:8099/img",
-                "-prisme.debug.itunesBase", "http://127.0.0.1:8099/itunes",
+                "-prisme.debug.itunesBase", "http://127.0.0.1:8099/itunes", "-prisme.debug.xfrURL", "http://127.0.0.1:8099/xfr/xmltv_tnt.xml.gz",
                 "-prisme.debug.seed", "1", "-prisme.debug.bgTrailer", "off"]
 
     /// Relance l'app directement sur un écran (fiche, rubrique) : le catalogue est déjà dans la base.
@@ -537,6 +537,11 @@ final class Visite: XCTestCase {
         relaunch(["-prisme.debug.open", "series:demo:2001", "-prisme.debug.season", "2"])
         Thread.sleep(forTimeInterval: 3)
         press(.right, 2); press(.down, 6); Thread.sleep(forTimeInterval: 1); shot("16e-saison2-complete")
+        // 1.7.1 : rangée « selon les goûts » sous la fiche série (comme la fiche film)
+        relaunch(["-prisme.debug.open", "series:demo:2001"])
+        Thread.sleep(forTimeInterval: 3)
+        for i in 1...4 { press(.down, 3); shot(String(format: "16f-sous-la-fiche-%02d", i)) }
+        press(.right, 2); shot("16g-sous-la-fiche-droite")
         // 1.7.1 : après la fermeture d'une fiche, Retour sur l'accueil Séries remonte à la barre du haut
         relaunch(["-prisme.debug.tab", "series"])
         for (n, depth) in [("17", 2), ("18", 5)] {

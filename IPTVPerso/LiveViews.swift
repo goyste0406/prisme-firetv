@@ -523,6 +523,7 @@ struct FanCard: View {
             Button(action: action) {
                 ZStack(alignment: .topLeading) {
                     LinearGradient(colors: [Color(hue: hue, saturation: 0.55, brightness: 0.44), Color(hue: hue, saturation: 0.5, brightness: 0.15)], startPoint: .topLeading, endPoint: .bottomTrailing)
+                    ProgramImage(ch: ch, p: now)
                     Text((now?.title ?? name).uppercased()).font(P.font(34, .heavy)).foregroundStyle(.white.opacity(0.16))
                         .lineLimit(3).minimumScaleFactor(0.7)
                         .padding(.horizontal, 18).padding(.top, 72).frame(maxWidth: 300, alignment: .leading)
@@ -576,6 +577,7 @@ struct SoonCard: View {
             Button(action: action) {
                 ZStack(alignment: .topLeading) {
                     LinearGradient(colors: [Color(hue: hue, saturation: 0.45, brightness: 0.4), Color(hue: hue, saturation: 0.5, brightness: 0.14)], startPoint: .topLeading, endPoint: .bottomTrailing)
+                    ProgramImage(ch: a.ch, p: a.p)
                     Text(a.p.title.uppercased()).font(P.font(26, .heavy)).foregroundStyle(.white.opacity(0.22)).lineLimit(2)
                         .padding(.horizontal, 16).frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
                     HStack {
@@ -821,6 +823,8 @@ struct ChannelCard: View {
         Button(action: action) {
             ZStack(alignment: .topLeading) {
                 LinearGradient(colors: [Color(hue: hue, saturation: 0.55, brightness: 0.44), Color(hue: hue, saturation: 0.5, brightness: 0.15)], startPoint: .topLeading, endPoint: .bottomTrailing)
+                // 1.7.1 : l'image du programme en cours quand on en a une (guide, xmltvfr.fr ou TMDB)
+                ProgramImage(ch: ch, p: now)
                 Text((now?.title ?? name).uppercased()).font(P.font(26, .heavy)).foregroundStyle(.white.opacity(0.16))
                     // une seule ligne : sur deux lignes, le titre en filigrane passait sous « TF1 · reste … »
                     .lineLimit(1).minimumScaleFactor(0.7)

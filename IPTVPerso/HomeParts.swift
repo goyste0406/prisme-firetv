@@ -261,46 +261,82 @@ struct CollInfo: Identifiable {
     var trend = 0
 }
 
+/// Images des tuiles de « Parcourir » et « Explorer » (1.7.1) : une affiche en plein cadre par tuile,
+/// jamais la même image dans deux tuiles de la même rangée (meilleur effort : la première tuile servie la garde).
+@MainActor
+enum CoverPick {
+    private static var owner: [String: String] = [:]      // titre → tuile qui l'utilise
+    static func choose(_ tile: String, from list: [MediaItem]) -> MediaItem? {
+        let usable = list.filter { !$0.backdropURL.isEmpty || !$0.posterURL.isEmpty }
+        if let mine = usable.first(where: { owner[$0.id] == tile }) { return mine }
+        let pick = usable.first(where: { owner[$0.id] == nil }) ?? usable.first
+        if let pick { owner[pick.id] = tile }
+        return pick
+    }
+}
+
+/// Fond d'une tuile : image large (ou affiche recadrée) en plein cadre, dégradé sombre en bas pour le texte.
+struct CoverBackground: View {
+    let item: MediaItem?
+    let hue: Double
+    var body: some View {
+        ZStack {
+            LinearGradient(colors: [Color(hue: hue, saturation: 0.5, brightness: 0.38), Color(hue: hue, saturation: 0.55, brightness: 0.16)], startPoint: .topLeading, endPoint: .bottomTrailing)
+            if let it = item {
+                let wide = !it.backdropURL.isEmpty
+                SharpImage(url: wide ? it.backdropURL : it.posterURL, maxPixel: 520)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: wide ? .center : .top)
+                    .clipped()
+                    .transition(.opacity)
+            }
+            LinearGradient(stops: [.init(color: .clear, location: 0.25), .init(color: .black.opacity(0.55), location: 0.6), .init(color: .black.opacity(0.9), location: 1)],
+                           startPoint: .top, endPoint: .bottom)
+        }
+    }
+}
+
 struct CollTile: View {
     let c: CollInfo
     let unit: String
     let action: () -> Void
+    @State private var cover: MediaItem?
     var body: some View {
         Button(action: action) {
             ZStack(alignment: .bottomLeading) {
-                Color.white.opacity(0.06)
-                HStack(spacing: -70) {
-                    ForEach(Array(Array(c.preview.prefix(3).enumerated()).reversed()), id: \.element.id) { i, it in
-                        Poster(url: it.posterURL, maxPixel: 240).frame(width: 110, height: 165).clipShape(RoundedRectangle(cornerRadius: 10))
-                            .shadow(color: .black.opacity(0.5), radius: 8, x: -4).opacity(1 - Double(i) * 0.12)
-                    }
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .trailing).padding(.trailing, 26)
+                CoverBackground(item: cover, hue: P.hue(c.name))
                 VStack(alignment: .leading, spacing: 6) {
                     Image(systemName: c.icon).font(P.font(26, .semibold))
                     Text(c.name).font(P.font(25, .bold)).lineLimit(1)
-                    Text("\(c.count) \(unit)").font(P.font(18)).opacity(0.6)
+                    Text("\(c.count) \(unit)").font(P.font(18)).opacity(0.75)
                 }
-                .padding(24).frame(maxWidth: 300, alignment: .leading)
+                .shadow(color: .black.opacity(0.6), radius: 6)
+                .padding(24).frame(maxWidth: 430, alignment: .leading)
             }
             .frame(width: 480, height: 232)
+            .clipped()
             .foregroundStyle(.white)
         }
         .buttonStyle(TileStyle(radius: 22, zoom: 1.05))
+        .task(id: c.id) { cover = CoverPick.choose("c:" + c.id, from: c.preview) }
     }
 }
 
 /// Tuile de « Parcourir » : un mot (catégorie, genre) ou une licence (saga, plateforme).
+/// 1.7.1 : une affiche en plein cadre, tirée des titres de la catégorie (sorties récentes et bien notées d'abord).
 struct WordTile: View {
     let title: String
     let sub: String
     var rank: Int? = nil
+    /// titres candidats pour l'image (chargés à l'apparition de la tuile)
+    var candidates: (() async -> [MediaItem])? = nil
+    var key: String = ""
     let action: () -> Void
+    @State private var cover: MediaItem?
     var body: some View {
         let hue = P.hue(title)
         Button(action: action) {
             ZStack(alignment: .bottomLeading) {
-                LinearGradient(colors: [Color(hue: hue, saturation: 0.5, brightness: 0.38), Color(hue: hue, saturation: 0.55, brightness: 0.16)], startPoint: .topLeading, endPoint: .bottomTrailing)
+                CoverBackground(item: cover, hue: hue)
                 if let rank, rank <= 3 {
                     Text(rank == 1 ? "🔥 N° 1" : "🔥 Top \(rank)").font(P.font(15, .heavy)).padding(.horizontal, 9).padding(.vertical, 4)
                         .background(.black.opacity(0.55), in: RoundedRectangle(cornerRadius: 7)).padding(12)
@@ -308,13 +344,21 @@ struct WordTile: View {
                 }
                 VStack(alignment: .leading, spacing: 4) {
                     Text(title).font(P.font(28, .heavy)).lineLimit(2).minimumScaleFactor(0.7)
-                    Text(sub).font(P.font(17)).opacity(0.7).lineLimit(1)
-                }.padding(20)
+                    Text(sub).font(P.font(17)).opacity(0.8).lineLimit(1)
+                }
+                .shadow(color: .black.opacity(0.6), radius: 6)
+                .padding(20)
             }
             .frame(width: 320, height: 180)
+            .clipped()
             .foregroundStyle(.white)
         }
         .buttonStyle(TileStyle(radius: 20, zoom: 1.06))
+        .task(id: key + title) {
+            guard let candidates else { return }
+            let list = await candidates()
+            withAnimation(.easeOut(duration: 0.25)) { cover = CoverPick.choose("w:" + key + title, from: list) }
+        }
     }
 }
 
@@ -403,15 +447,17 @@ struct LicenceTile: View {
                             if c.logoIsIcon {
                                 Image(uiImage: img).resizable().scaledToFit().clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
                                     .frame(maxWidth: 76, maxHeight: 76)
-                            } else if f || !dark {
-                                // couleurs d'origine du logo (demande de Steven, 1.7) ; le simulateur les blanchissait hors sélection
-                                Image(uiImage: img).resizable().scaledToFit().frame(maxWidth: 244, maxHeight: 76)
+                            } else if !dark {
+                                // logo toujours dans ses couleurs d'origine (1.7.1), plus grand
+                                Image(uiImage: img).resizable().scaledToFit().frame(maxWidth: 300, maxHeight: 100)
                             } else {
-                                // logo presque noir : invisible sur le fond sombre, il reste en blanc tant qu'il n'est pas sélectionné
-                                Image(uiImage: img).renderingMode(.template).resizable().scaledToFit().foregroundStyle(.white.opacity(0.92)).frame(maxWidth: 244, maxHeight: 76)
+                                // logo très sombre : couleurs d'origine sur un fond clair léger, pour rester lisible sur le fond sombre
+                                Image(uiImage: img).resizable().scaledToFit().frame(maxWidth: 270, maxHeight: 82)
+                                    .padding(.horizontal, 14).padding(.vertical, 8)
+                                    .background(Color.white.opacity(0.78), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
                             }
                         }
-                        Text(c.name).font(P.font(24, .semibold)).lineLimit(1).minimumScaleFactor(0.7).padding(.horizontal, 16)
+                        Text(c.name).font(P.font(22, .semibold)).lineLimit(1).minimumScaleFactor(0.7).padding(.horizontal, 16)
                     } else {
                         Text(c.name).font(P.font(32, .semibold)).multilineTextAlignment(.center).lineLimit(2).minimumScaleFactor(0.6).padding(.horizontal, 18)
                     }

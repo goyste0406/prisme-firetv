@@ -55,11 +55,23 @@ struct SeriesDetailView: View {
     private var allSeen: Bool { !all.isEmpty && all.allSatisfy { watch.watched(key($0)) } }
 
     var body: some View {
-        HStack(alignment: .top, spacing: 56) {
-            left.frame(width: 700)
-            right
+        // 1.7.1 (demande de Steven) : sous la fiche, la même rangée « selon les goûts » que la fiche film ;
+        // la fiche garde exactement sa mise en page plein écran, la rangée arrive en descendant
+        ScrollView {
+            VStack(alignment: .leading, spacing: 0) {
+                HStack(alignment: .top, spacing: 56) {
+                    left.frame(width: 700)
+                    right
+                }
+                .padding(.leading, 90).padding(.trailing, 64).padding(.top, 70).padding(.bottom, 50)
+                .frame(height: 1080, alignment: .top)
+                if !similar.isEmpty {
+                    CrossRow(kind: .series, base: fiche, title: title, cands: similar.map(\.item), skip: [], open: { openOther = $0 })
+                        .padding(.horizontal, 120).padding(.top, 20).padding(.bottom, 100)
+                }
+            }
         }
-        .padding(.leading, 90).padding(.trailing, 64).padding(.top, 70).padding(.bottom, 50)
+        .scrollClipDisabled()
         .background {
             let hasBd = fiche?.backdrop.isEmpty == false
             ZStack {

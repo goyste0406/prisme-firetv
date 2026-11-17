@@ -213,11 +213,12 @@ enum MediaStore {
     }
 
     /// Titres choisis d'après leur fiche TMDB (collections « Moins de 2 h », « ★ 8 et plus », une saga…).
-    static func ficheList(_ k: MediaKind, pids: [String], cond: String, args: [Any?] = [], order: String, limit: Int) async -> [MediaItem] {
+    /// `extra` : valeurs des « ? » de `order`
+    static func ficheList(_ k: MediaKind, pids: [String], cond: String, args: [Any?] = [], order: String, limit: Int, extra: [Any?] = []) async -> [MediaItem] {
         guard !pids.isEmpty else { return [] }
         let t = table(k), c = cols(k).split(separator: ",").map { $0.hasPrefix("'") ? String($0) : "m." + $0 }.joined(separator: ",")
         let sql = "SELECT \(c) FROM fiche f JOIN \(t) m ON m.pid=f.pid AND m.sid=f.sid WHERE f.kind=? AND (\(cond)) AND m.pid IN \(inList(pids)) ORDER BY \(order) LIMIT \(limit * 3)"
-        let all: [Any?] = [k.rawValue] + args + pids.map { $0 as Any? }
+        let all: [Any?] = [k.rawValue] + args + pids.map { $0 as Any? } + extra
         return await Database.shared.read { db in
             var out: [MediaItem] = [], seen = Set<String>()
             db.query(sql, all) { r in let it = row(k, r); if seen.insert(it.clean.key).inserted { out.append(it) } }
@@ -497,6 +498,24 @@ enum MediaStore {
             db.query("SELECT \(cols(k)) FROM \(table(k)) WHERE pid=? AND cid=? ORDER BY added DESC LIMIT ? OFFSET ?", [cat.pid, cat.cid, limit, offset]) { r in out.append(row(k, r)) }
             return out.withFiches()
         }
+    }
+
+    /// Images possibles pour la tuile d'une catégorie : parmi ses derniers titres, ceux qui ont une fiche, les plus récents
+    /// et les mieux notés d'abord (une seule petite requête, faite quand la tuile apparaît).
+    static func covers(_ k: MediaKind, cat: Cat) async -> [MediaItem] {
+        let list = await page(k, cat: cat, offset: 0, limit: 24)
+        return coverCandidates(list)
+    }
+    static func genreCovers(_ k: MediaKind, pids: [String], genre: String) async -> [MediaItem] {
+        coverCandidates(await ficheList(k, pids: pids, cond: "f.genres LIKE ? AND f.backdrop<>''", args: ["%" + genre + "%"], order: "f.vote DESC", limit: 12))
+    }
+    static func coverCandidates(_ list: [MediaItem]) -> [MediaItem] {
+        func score(_ m: MediaItem) -> Double {
+            let y = (m.fiche?.year ?? 0) > 0 ? m.fiche!.year : m.clean.year
+            let vote = (m.fiche?.vote ?? 0) > 0 ? m.fiche!.vote : m.rating
+            return (m.backdropURL.isEmpty ? 0 : 4) + (m.fiche == nil ? 0 : 2) + vote / 2 + Double(max(0, min(10, y - 2014))) / 2.5
+        }
+        return list.sorted { score($0) > score($1) }
     }
 
     static func items(ids: [String]) async -> [MediaItem] {

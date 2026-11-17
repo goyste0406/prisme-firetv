@@ -106,6 +106,19 @@ final class Database: @unchecked Sendable {
             exec("CREATE TABLE IF NOT EXISTS series_stage AS SELECT * FROM series WHERE 0")
             exec("PRAGMA user_version=8")
         }
+        if v < 9 {
+            // 1.7.1 : vraies dates de sortie et popularité TMDB (« Ce soir ? »). Colonnes ajoutées, rien n'est effacé ;
+            // NULL = pas encore récupéré (complété en arrière-plan), '' = inconnu chez TMDB.
+            for c in ["relfr TEXT", "relvod TEXT", "lastair TEXT", "nextep TEXT", "seasons INTEGER", "pop REAL"] { exec("ALTER TABLE fiche ADD COLUMN " + c) }
+            exec("CREATE INDEX IF NOT EXISTS fiche_pop ON fiche(kind,pop)")
+            // images des programmes TV : celle du guide du fournisseur (<icon>), puis xmltvfr.fr, puis TMDB (mémorisée)
+            exec("ALTER TABLE epg ADD COLUMN img TEXT")
+            exec("CREATE TABLE IF NOT EXISTS progimg(k TEXT PRIMARY KEY, url TEXT, at INTEGER)")
+            exec("CREATE TABLE IF NOT EXISTS xfr(ch TEXT, start INTEGER, stop INTEGER, title TEXT, img TEXT)")
+            exec("CREATE INDEX IF NOT EXISTS xfr_ch ON xfr(ch,start)")
+            exec("CREATE TABLE IF NOT EXISTS xfrch(id TEXT PRIMARY KEY, n TEXT)")
+            exec("PRAGMA user_version=9")
+        }
     }
 
     // MARK: Requêtes

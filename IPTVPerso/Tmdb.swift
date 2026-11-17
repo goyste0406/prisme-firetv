@@ -55,6 +55,21 @@ struct Fiche: Hashable {
     var cert = ""
     /// mots-clés TMDB « id:nom|id:nom » ('' = aucun, inconnu tant que pas téléchargés)
     var keywords = ""
+    /// 1.7.1 — dates TMDB « AAAA-MM-JJ » ('' inconnue) : sortie cinéma en France, sortie en VOD/numérique (films) ;
+    /// dernière diffusion et prochain épisode (séries) ; nombre de saisons ; popularité TMDB (0 inconnue)
+    var relFR = ""
+    var relVOD = ""
+    var lastAir = ""
+    var nextEp = ""
+    var seasons = 0
+    var pop = 0.0
+    /// date de sortie la plus récente connue (cinéma, VOD, nouvelle saison) ; nil si aucune : jamais présenté comme récent
+    var latestRelease: Date? {
+        [relFR, relVOD, lastAir].compactMap { $0.isEmpty ? nil : Fiche.dayFormat.date(from: $0) }.filter { $0 <= Date() }.max()
+    }
+    nonisolated(unsafe) static let dayFormat: DateFormatter = {
+        let f = DateFormatter(); f.dateFormat = "yyyy-MM-dd"; f.locale = Locale(identifier: "en_US_POSIX"); f.timeZone = TimeZone(identifier: "UTC"); return f
+    }()
     var keywordIDs: Set<Int> { Set(keywords.split(separator: "|").compactMap { Int($0.split(separator: ":").first ?? "") }) }
     var keywordNames: [String] { keywords.split(separator: "|").compactMap { $0.split(separator: ":", maxSplits: 1).last.map(String.init) } }
     /// Pays en toutes lettres (« France »), le premier seulement.
@@ -71,11 +86,13 @@ enum FicheStore {
         let wp = (try? JSONDecoder().decode(WatchProviders.self, from: Data(r.str(11).utf8))) ?? WatchProviders()
         return Fiche(tmdb: r.int(0), title: r.str(1), overview: r.str(2), poster: r.str(3), backdrop: r.str(4), genres: r.str(5),
                      runtime: r.int(6), vote: r.double(7), year: r.int(8), coll: r.int(9), collName: r.str(12), cast: cast, wp: wp,
-                     pid: r.str(13), sid: r.str(14), country: r.str(15), director: r.str(16), logo: r.str(17), companies: r.str(18), cert: r.str(19), keywords: r.str(20))
+                     pid: r.str(13), sid: r.str(14), country: r.str(15), director: r.str(16), logo: r.str(17), companies: r.str(18), cert: r.str(19), keywords: r.str(20),
+                     relFR: r.str(21), relVOD: r.str(22), lastAir: r.str(23), nextEp: r.str(24), seasons: r.int(25), pop: r.double(26))
     }
     /// « cast » est un mot réservé de SQLite (CAST) : sans guillemets, la lecture des fiches échouait toujours
     /// (elles étaient bien téléchargées et enregistrées, mais jamais relues → fiches, saga, « Où le regarder » vides).
-    static let cols = "tmdb,title,overview,poster,backdrop,genres,runtime,vote,year,coll,\"cast\",wp,collname,pid,sid,country,director,logo,companies,cert,keywords"
+    static let cols = "tmdb,title,overview,poster,backdrop,genres,runtime,vote,year,coll,\"cast\",wp,collname,pid,sid,country,director,logo,companies,cert,keywords,relfr,relvod,lastair,nextep,seasons,pop"
+    static let ncols = 27
 
     /// Fiches de plusieurs titres d'un coup (clé = titre propre + année).
     static func byKeys(_ kind: MediaKind, _ keys: [String]) -> [String: Fiche] {
@@ -85,7 +102,7 @@ enum FicheStore {
         for chunk in stride(from: 0, to: keys.count, by: 400) {
             let part = Array(keys[chunk..<min(keys.count, chunk + 400)])
             db.query("SELECT \(cols),ckey FROM fiche WHERE kind=? AND ckey IN (" + part.map { _ in "?" }.joined(separator: ",") + ")",
-                     [kind.rawValue] + part) { r in out[r.str(21)] = row(r) }
+                     [kind.rawValue] + part) { r in out[r.str(Int32(ncols))] = row(r) }
         }
         return out
     }
@@ -150,6 +167,7 @@ struct FicheWorker {
         }
         await fillCerts(api)
         await fillKeywords(api)
+        await fillDates(api)
         await MainActor.run { FicheService.shared.version += 1 }
     }
 
@@ -220,6 +238,45 @@ struct FicheWorker {
         }
     }
 
+    /// 1.7.1 : dates de sortie et popularité des fiches téléchargées avant (un appel TMDB par titre, en arrière-plan,
+    /// les mieux notés d'abord : ce sont les candidats de « Ce soir ? »).
+    func fillDates(_ api: TmdbAPI) async {
+        for kind in [MediaKind.film, .series] {
+            let todo: [(String, Int)] = await Database.shared.read { db in
+                var out: [(String, Int)] = []
+                db.query("SELECT ckey, tmdb FROM fiche WHERE kind=? AND pop IS NULL AND tmdb>0 ORDER BY vote DESC", [kind.rawValue]) { r in out.append((r.str(0), r.int(1))) }
+                return out
+            }
+            var i = 0
+            while i < todo.count {
+                if Task.isCancelled { return }
+                let batch = Array(todo[i..<min(todo.count, i + 24)]); i += batch.count
+                var rows: [[Any?]] = []
+                await withTaskGroup(of: (String, [Any?]?).self) { g in
+                    var it = batch.makeIterator()
+                    func add(_ x: (String, Int)) {
+                        g.addTask {
+                            let tv = kind == .series
+                            guard let d = await api.get((tv ? "/tv/" : "/movie/") + String(x.1), tv ? [] : [("append_to_response", "release_dates")]) else { return (x.0, nil) }
+                            return (x.0, FicheWorker.dates(d, tv: tv))
+                        }
+                    }
+                    for _ in 0..<4 { if let x = it.next() { add(x) } }
+                    while let r = await g.next() {
+                        if let v = r.1 { rows.append(v + [kind.rawValue, r.0]) }
+                        if let x = it.next() { add(x) }
+                    }
+                }
+                await Database.shared.read { db in
+                    db.exec("BEGIN")
+                    for r in rows { db.run("UPDATE fiche SET relfr=?, relvod=?, lastair=?, nextep=?, seasons=?, pop=? WHERE kind=? AND ckey=?", r) }
+                    db.exec("COMMIT")
+                }
+                if !rows.isEmpty { await MainActor.run { FicheService.shared.version += 1 } }
+            }
+        }
+    }
+
     /// Classifications manquantes des fiches téléchargées avant la 1.6 (un petit appel TMDB par titre, en arrière-plan).
     func fillCerts(_ api: TmdbAPI) async {
         for kind in [MediaKind.film, .series] {
@@ -253,7 +310,7 @@ struct FicheWorker {
         }
     }
 
-    static let insertSQL = "INSERT OR REPLACE INTO fiche(kind,ckey,pid,sid,\(FicheStore.cols.replacingOccurrences(of: ",pid,sid", with: ""))) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)"
+    static let insertSQL = "INSERT OR REPLACE INTO fiche(kind,ckey,pid,sid,\(FicheStore.cols.replacingOccurrences(of: ",pid,sid", with: ""))) VALUES(" + Array(repeating: "?", count: FicheStore.ncols + 2).joined(separator: ",") + ")"
 
     /// Fiche d'un seul titre, tout de suite : quand on ouvre sa page et qu'elle n'a pas encore été téléchargée en arrière-plan.
     /// `tmdbHint` : identifiant TMDB donné par le fournisseur (get_vod_info), plus sûr que la recherche par titre.
@@ -288,7 +345,7 @@ struct FicheWorker {
             db.query("SELECT ckey, country IS NULL FROM fiche WHERE kind=?", [kind.rawValue]) { r in have.insert(r.str(0)); if r.int(1) == 1 { old.insert(r.str(0)) } }
             let weekAgo = Int(Date().timeIntervalSince1970) - 7 * 86400
             db.query("SELECT ckey FROM fmiss WHERE kind=? AND at>?", [kind.rawValue, weekAgo]) { r in have.insert(r.str(0)) }
-            db.query("SELECT \(cols) FROM \(table) WHERE pid IN (" + pids.map { _ in "?" }.joined(separator: ",") + ") ORDER BY added DESC", pids) { r in
+            db.query("SELECT \(cols) FROM \(table) WHERE pid IN (" + pids.map { _ in "?" }.joined(separator: ",") + ") ORDER BY (year>=?) DESC, rating DESC, added DESC", pids.map { $0 as Any? } + [Calendar.current.component(.year, from: Date()) - 2]) { r in
                 all.append(MediaItem(kind: kind, pid: r.str(0), sid: r.str(1), name: r.str(2), year: r.int(3), icon: r.str(4), cid: r.str(5),
                                      ext: r.str(6), rating: r.double(7), added: r.int(8), tmdb: r.str(9), plot: r.str(10)))
             }
@@ -362,7 +419,32 @@ struct FicheWorker {
         return [m.kind.rawValue, c.key, m.pid, m.sid, id, title, (d["overview"] as? String) ?? "", (d["poster_path"] as? String) ?? "",
                 (d["backdrop_path"] as? String) ?? "", genres, runtime, (d["vote_average"] as? Double) ?? 0, Int(date.prefix(4)) ?? c.year,
                 (coll?["id"] as? Int) ?? 0, castJ, wpJ, (coll?["name"] as? String) ?? "", countries, director, logo, compJ, FicheWorker.frCert(d, tv: tv),
-                FicheWorker.keywords(d, tv: tv)]
+                FicheWorker.keywords(d, tv: tv)] + FicheWorker.dates(d, tv: tv)
+    }
+
+    /// relfr, relvod, lastair, nextep, seasons, pop — tirés de la même réponse TMDB (aucune requête en plus).
+    /// Rien d'inventé : une date absente reste ''.
+    static func dates(_ d: [String: Any], tv: Bool) -> [Any?] {
+        let pop = (d["popularity"] as? Double) ?? 0
+        if tv {
+            let next = ((d["next_episode_to_air"] as? [String: Any])?["air_date"] as? String) ?? ""
+            let last = ((d["last_episode_to_air"] as? [String: Any])?["air_date"] as? String) ?? ((d["last_air_date"] as? String) ?? "")
+            return ["", "", last, next, (d["number_of_seasons"] as? Int) ?? 0, pop]
+        }
+        var theatre: [String] = [], digital: [String] = []
+        for r in ((d["release_dates"] as? [String: Any])?["results"] as? [[String: Any]]) ?? [] where (r["iso_3166_1"] as? String) == "FR" {
+            for x in (r["release_dates"] as? [[String: Any]]) ?? [] {
+                guard let day = (x["release_date"] as? String)?.prefix(10), day.count == 10 else { continue }
+                switch (x["type"] as? Int) ?? 0 {
+                case 2, 3: theatre.append(String(day))       // sortie limitée ou en salles
+                case 4, 5, 6: digital.append(String(day))    // numérique, physique, télévision
+                default: break
+                }
+            }
+        }
+        // sans date française : la sortie mondiale de TMDB (champ release_date) tient lieu de sortie cinéma
+        let world = (d["release_date"] as? String) ?? ""
+        return [theatre.min() ?? (world.count == 10 ? world : ""), digital.min() ?? "", "", "", 0, pop]
     }
 }
 

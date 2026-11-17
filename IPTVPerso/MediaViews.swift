@@ -22,6 +22,45 @@ enum HomeCacheHook { static func install() { HomeCacheReset.run = { HomeCache.ma
 
 /// Envies et durées de « Ce soir ? » (simulateur).
 enum Tonight {
+    /// « récent » : sortie cinéma, en VOD ou nouvelle saison depuis moins de 8 mois
+    static let recentDays = 240.0
+    static func day(_ d: Date) -> String {
+        Fiche.dayFormat.string(from: d)
+    }
+    /// part sans les goûts : récence de la vraie sortie, popularité TMDB, note
+    static func baseScore(_ it: MediaItem) -> Double {
+        guard let f = it.fiche else { return 0 }
+        var rec = 0.0
+        if let d = f.latestRelease {
+            let days = Date().timeIntervalSince(d) / 86400
+            rec = days < recentDays ? 1 - days / recentDays * 0.6 : max(0, 0.4 - (days - recentDays) / 1500)
+        }
+        let pop = min(1, log10(max(1, f.pop)) / 2.3)
+        let vote = max(0, min(1, (f.vote - 6) / 2.8))
+        return 0.4 * rec + 0.3 * pop + 0.3 * vote
+    }
+    static func base(_ L: [MediaItem]) -> [MediaItem] { L.map { ($0, baseScore($0)) }.sorted { $0.1 > $1.1 }.map(\.0) }
+    /// classement final : 70 % récence/popularité/note, 30 % goûts du profil (s'ils sont connus), puis des genres variés
+    static func rank(_ L: [MediaItem], fit: [String: Int]) -> [MediaItem] {
+        let scored = L.map { it -> (MediaItem, Double) in
+            let b = baseScore(it)
+            guard let t = fit[it.id] else { return (it, b) }
+            return (it, 0.7 * b + 0.3 * Double(t) / 100 + (t < 40 ? -0.2 : 0))
+        }.sorted { $0.1 > $1.1 }
+        var out: [MediaItem] = [], rest = scored
+        var lastGenres: [String] = []
+        while !rest.isEmpty {
+            // pas plus de deux titres de suite du même genre principal
+            let i = rest.firstIndex { x in
+                let g = x.0.fiche?.genres.components(separatedBy: ", ").first ?? ""
+                return g.isEmpty || lastGenres.suffix(2).filter { $0 == g }.count < 2
+            } ?? 0
+            let x = rest.remove(at: i)
+            out.append(x.0); lastGenres.append(x.0.fiche?.genres.components(separatedBy: ", ").first ?? "")
+        }
+        return out
+    }
+
     static let durations: [(String, String, Int)] = [("all", "Peu importe", 0), ("105", "Moins de 1 h 45", 105), ("150", "Moins de 2 h 30", 150)]
     static let moods: [(String, String, String)] = [
         ("rire", "Rire", "comed|anim|famil"), ("frisson", "Frisson", "thriller|horreur|horror|crime|polic|myst"),
@@ -53,6 +92,8 @@ struct MediaHomeView: View {
     @State private var browseTab = ""
     @State private var showAllNew = false
     @State private var forYou: [MediaItem] = []
+    /// goût du profil (0-100, le moins favorable des deux à deux) pour les titres de « Ce soir ? »
+    @State private var tonightFit: [String: Int] = [:]
     @ObservedObject var ps = ProfileStore.shared
     @ObservedObject var tasteStore = TasteStore.shared
     @FocusState private var heroFocus: Bool
@@ -149,7 +190,8 @@ struct MediaHomeView: View {
     private var tonightList: [MediaItem] {
         let maxD = Tonight.durations.first { $0.0 == dur }?.2 ?? 0
         let rx = Tonight.moods.first { $0.0 == mood }?.2
-        return snap.tonight.filter { it in
+        let ranked = Tonight.rank(snap.tonight, fit: tonightFit)
+        return ranked.filter { it in
             let rt = it.fiche?.runtime ?? 0
             if maxD > 0 && (rt == 0 || rt > maxD) { return false }
             if let rx, (it.fiche?.genres ?? "").lowercased().folding(options: .diacriticInsensitive, locale: nil).range(of: rx, options: .regularExpression) == nil { return false }
@@ -288,9 +330,12 @@ struct MediaHomeView: View {
         case "col":
             ForEach(snap.colls) { c in CollTile(c: c, unit: unit) { openColl = c } }
         default:
-            ForEach(snap.genres) { g in WordTile(title: g.name, sub: "\(g.count) \(unit)") { openColl = g } }
+            ForEach(snap.genres) { g in
+                WordTile(title: g.name, sub: "\(g.count) \(unit)", candidates: { await MediaStore.genreCovers(kind, pids: store.active.map(\.id), genre: g.name) }, key: g.id) { openColl = g }
+            }
             ForEach(snap.cats) { c in
-                WordTile(title: c.name, sub: "catégorie · \(c.count) \(unit)" + (store.active.count > 1 ? " · " + (store.provider(c.pid)?.name ?? "") : "")) { openCat = c }
+                WordTile(title: c.name, sub: "catégorie · \(c.count) \(unit)" + (store.active.count > 1 ? " · " + (store.provider(c.pid)?.name ?? "") : ""),
+                         candidates: { await MediaStore.covers(kind, cat: c) }, key: c.id) { openCat = c }
             }
         }
     }
@@ -309,10 +354,15 @@ struct MediaHomeView: View {
         var n = await MediaStore.list(k, pids: p, where: "added > ?", args: [twoWeeks], order: "added DESC", limit: 40)
         if n.isEmpty { n = await MediaStore.list(k, pids: p, order: "added DESC", limit: 20) }
         s.newest = n
+        // « Ce soir ? » (1.7.1) : candidats bien notés, les sorties récentes (vraie date TMDB, pas la date d'ajout chez le
+        // fournisseur) et les plus populaires d'abord ; le classement final ajoute les goûts du profil (Tonight.rank)
+        let since = Tonight.day(Date().addingTimeInterval(-Tonight.recentDays * 86400))
         if k == .film {
-            s.tonight = await MediaStore.ficheList(.film, pids: p, cond: "f.vote>=6.5", order: "f.vote DESC", limit: 160)
+            s.tonight = Tonight.base(await MediaStore.ficheList(.film, pids: p, cond: "f.vote>=6.3",
+                order: "(MAX(COALESCE(f.relfr,''),COALESCE(f.relvod,''))>=?) DESC, COALESCE(f.pop,0) DESC, f.vote DESC", limit: 200, extra: [since]))
         } else {
-            s.tonight = await MediaStore.ficheList(.series, pids: p, cond: "f.vote>=7.5", order: "f.vote DESC", limit: 40)
+            s.tonight = Tonight.base(await MediaStore.ficheList(.series, pids: p, cond: "f.vote>=7",
+                order: "(COALESCE(f.lastair,'')>=?) DESC, COALESCE(f.pop,0) DESC, f.vote DESC", limit: 80, extra: [since]))
             let week = Int(Date().timeIntervalSince1970) - 7 * 86400
             s.week = await MediaStore.list(.series, pids: p, where: "added > ?", args: [week], order: "added DESC", limit: 30)
         }
@@ -470,17 +520,21 @@ struct MediaHomeView: View {
     /// (à deux : le goût le moins favorable des deux doit rester bon).
     private func loadForYou() async {
         let watchers = ps.watchers.filter { $0.id != ProfileStore.guestID }
-        guard !watchers.isEmpty else { forYou = []; return }
+        guard !watchers.isEmpty else { forYou = []; tonightFit = [:]; return }
         var models: [TasteModel] = []
         for w in watchers { models.append(await TasteStore.shared.model(w.id)) }
-        guard models.allSatisfy({ !$0.isEmpty }) else { forYou = []; return }
+        guard models.allSatisfy({ !$0.isEmpty }) else { forYou = []; tonightFit = [:]; return }
         let seen = Set(watch.entries.values.filter { $0.dur > 0 && $0.pos / $0.dur >= 0.85 }.map(\.item))
+        var fits: [String: Int] = [:]
         let scored: [(MediaItem, Int)] = snap.tonight.compactMap { it in
-            guard !seen.contains(it.id), let f = it.fiche else { return nil }
+            guard let f = it.fiche else { return nil }
             let v = models.compactMap { $0.fit(f, kind: kind) }
-            guard v.count == models.count, let m = v.min(), m >= 60 else { return nil }
+            guard v.count == models.count, let m = v.min() else { return nil }
+            fits[it.id] = m
+            guard !seen.contains(it.id), m >= 60 else { return nil }
             return (it, m)
         }
+        tonightFit = fits
         forYou = Array(scored.sorted { $0.1 > $1.1 }.prefix(16).map(\.0))
     }
 

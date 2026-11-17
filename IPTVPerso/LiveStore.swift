@@ -26,6 +26,9 @@ struct Program: Identifiable, Hashable {
     let stop: Int
     let title: String
     let descr: String
+    /// image du programme donnée par le guide (<icon>), et son genre (« Film », « Série »…) — 1.7.1
+    var img = ""
+    var cat = ""
     var id: String { "\(start)-\(title)" }
     var startDate: Date { Date(timeIntervalSince1970: TimeInterval(start)) }
     var stopDate: Date { Date(timeIntervalSince1970: TimeInterval(stop)) }
@@ -92,8 +95,8 @@ enum LiveStore {
         let a = Int(from.timeIntervalSince1970), z = a + Int(hours * 3600)
         let list = await Database.shared.read { db -> [Program] in
             var out: [Program] = []
-            db.query("SELECT start,stop,title,descr FROM epg WHERE ch=? AND stop>? AND start<? ORDER BY start", [ch.epg, a, z]) { r in
-                out.append(Program(start: r.int(0), stop: r.int(1), title: r.str(2), descr: r.str(3)))
+            db.query("SELECT start,stop,title,descr,COALESCE(img,''),COALESCE(cat,'') FROM epg WHERE ch=? AND stop>? AND start<? ORDER BY start", [ch.epg, a, z]) { r in
+                out.append(Program(start: r.int(0), stop: r.int(1), title: r.str(2), descr: r.str(3), img: r.str(4), cat: r.str(5)))
             }
             return out
         }
@@ -116,10 +119,10 @@ enum LiveStore {
         return await Database.shared.read { db in
             var out: [Airing] = [], seen = Set<String>()
             db.query("""
-                SELECT l.pid,l.sid,l.name,l.num,l.icon,l.cid,l.epg,l.archive,e.start,e.stop,e.title,e.descr FROM epg e JOIN live l ON l.epg=e.ch
+                SELECT l.pid,l.sid,l.name,l.num,l.icon,l.cid,l.epg,l.archive,e.start,e.stop,e.title,e.descr,COALESCE(e.img,''),COALESCE(e.cat,'') FROM epg e JOIN live l ON l.epg=e.ch
                 WHERE e.title=? COLLATE NOCASE AND e.stop>? AND l.pid IN (\(ph)) ORDER BY e.start LIMIT 12
                 """, ([t, now] as [Any?]) + providers.map { $0 as Any? }) { r in
-                let a = Airing(ch: row(r), p: Program(start: r.int(8), stop: r.int(9), title: r.str(10), descr: r.str(11)))
+                let a = Airing(ch: row(r), p: Program(start: r.int(8), stop: r.int(9), title: r.str(10), descr: r.str(11), img: r.str(12), cat: r.str(13)))
                 if seen.insert(a.ch.name + "|\(a.p.start)").inserted { out.append(a) }
             }
             return Array(out.prefix(6))
@@ -184,10 +187,10 @@ enum LiveStore {
         let list = await Database.shared.read { db -> [Airing] in
             var out: [Airing] = [], seen = Set<String>()
             db.query("""
-                SELECT l.pid,l.sid,l.name,l.num,l.icon,l.cid,l.epg,l.archive,e.start,e.stop,e.title,e.descr FROM epg e JOIN live l ON l.epg=e.ch
+                SELECT l.pid,l.sid,l.name,l.num,l.icon,l.cid,l.epg,l.archive,e.start,e.stop,e.title,e.descr,COALESCE(e.img,''),COALESCE(e.cat,'') FROM epg e JOIN live l ON l.epg=e.ch
                 WHERE e.start>? AND e.start<=? AND l.pid IN (\(ph)) ORDER BY e.start, l.num LIMIT 80
                 """, ([now, now + 3600] as [Any?]) + providers.map { $0 as Any? }) { r in
-                let a = Airing(ch: row(r), p: Program(start: r.int(8), stop: r.int(9), title: r.str(10), descr: r.str(11)))
+                let a = Airing(ch: row(r), p: Program(start: r.int(8), stop: r.int(9), title: r.str(10), descr: r.str(11), img: r.str(12), cat: r.str(13)))
                 if seen.insert(a.ch.epg + "|\(a.p.start)").inserted { out.append(a) }
             }
             return Array(out.prefix(20))

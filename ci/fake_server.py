@@ -265,11 +265,18 @@ def series_info(sidv, idx=None):
                      "releaseDate": f"{y}-01-01", "episode_run_time": str(rt), "youtube_trailer": "dQw4w9WgXcQ", "tmdb": str(sidv)},
             "episodes": eps}
 
-def xmltv():
+# 1.7.1 : guide public façon xmltvfr.fr (chaînes « TF1.fr »…) avec des images pour des programmes que le guide
+# du fournisseur donne sans image (« Le 20h », « Capital », « Quotidien ») : teste la 2e source d'images.
+XFR_CH = ("tf1.fr", "france2.fr", "m6.fr")
+XFR_ICON = {"Le 20h", "Capital", "Quotidien"}
+
+def xmltv(only=None, icons=None):
+    icons = PROG_ICON if icons is None else icons
     lines = ['<?xml version="1.0" encoding="UTF-8"?>', "<tv>"]
     seen = set()
     for n, c, e in CHANNELS:
         if not e or e in seen: continue
+        if only is not None and e not in only: continue
         seen.add(e)
         lines.append(f'<channel id="{e}"><display-name>{e}</display-name></channel>')
         r = random.Random(e)
@@ -280,7 +287,7 @@ def xmltv():
             title = r.choice(PROGS)
             cat = PROG_CAT.get(title, "")
             ct = f'<category lang="fr">{cat}</category>' if cat else ""
-            ic = f'<icon src="{BASE}/gen/b/prog_{urllib.parse.quote(title)}.png?l={urllib.parse.quote(title)}" />' if title in PROG_ICON else ""
+            ic = f'<icon src="{BASE}/gen/b/prog_{urllib.parse.quote(title)}.png?l={urllib.parse.quote(title)}" />' if title in icons else ""
             dt = f"<date>{PROG_YEAR[title]}</date>" if title in PROG_YEAR else ""
             lines.append(f'<programme start="{a}" stop="{b}" channel="{e}"><title>{title}</title><desc>{title} : description.</desc>{ct}{dt}{ic}</programme>')
             t += d * 60
@@ -411,6 +418,20 @@ def studios_for(i):
 # classifications françaises (format TMDB « release_dates ») : Léa (12 ans max) ne doit pas voir les « 16 »
 CERTS = {"Joker": "16", "Drive": "16", "Parasite": "12", "Le Parrain": "12", "La Haine": "12", "Barbie": "TP", "Vice-Versa": "TP", "Vice-Versa 2": "U"}
 
+# 1.7.1 « Ce soir ? » : vraies dates de sortie en France (cinéma = type 3, numérique = type 4) et popularité TMDB.
+# « Projet dernière chance » sort en salles il y a 2 mois et en VOD il y a 3 semaines (récent) ; « Un p'tit truc en plus »
+# est ajouté hier chez le fournisseur mais sorti en 2024 (ne doit pas passer pour récent).
+RECENT = {"Projet dernière chance": (-60, -20), "Gladiator II": (-150, -90)}
+POP = {"Projet dernière chance": 310.0, "Gladiator II": 180.0, "Un p'tit truc en plus": 12.0}
+def movie_dates(t, y):
+    L = []
+    if t in RECENT:
+        a, b = RECENT[t]
+        L = [{"certification": CERTS.get(t, ""), "type": 3, "release_date": day(a) + "T00:00:00.000Z"}, {"certification": "", "type": 4, "release_date": day(b) + "T00:00:00.000Z"}]
+    else:
+        L = [{"certification": CERTS.get(t, ""), "type": 3, "release_date": f"{y}-03-01T00:00:00.000Z"}]
+    return L
+
 def movie(i):
     t, y, rt, v, g, col, ago = FILMS[i]
     m = fid(i)
@@ -423,7 +444,8 @@ def movie(i):
             "production_companies": [{"id": sid_, "name": n, "logo_path": tmdb_path("g", f"co{sid_}")} for sid_, n in studios_for(i)],
             "images": {"logos": [{"iso_639_1": "fr", "file_path": tmdb_path("g", f"m{m}")}] if i % 3 != 2 else []},
             "watch/providers": providers_for(t),
-            "release_dates": {"results": ([{"iso_3166_1": "FR", "release_dates": [{"certification": CERTS[t], "type": 3}]}] if t in CERTS else [])},
+            "release_dates": {"results": [{"iso_3166_1": "FR", "release_dates": movie_dates(t, y)}]},
+            "popularity": POP.get(t, round(v * 6, 1)),
             "keywords": {"keywords": [{"id": a, "name": b} for a, b in KW.get(t, [])]}}
 
 def tv(i):
@@ -436,7 +458,9 @@ def tv(i):
             "aggregate_credits": {"cast": [{"name": a, "roles": [{"character": c}], "profile_path": tmdb_path("r", a.replace(" ", "_"))} for a, c in CAST[2:8]]},
             "watch/providers": providers_for(t),
             # Lupin : un 6e épisode de la saison 3 annoncé dans 3 jours (« à venir »)
-            "next_episode_to_air": ({"season_number": ns, "episode_number": ne + 1, "name": "Le dernier coup", "air_date": day(3)} if i == 1 else None)}
+            "next_episode_to_air": ({"season_number": ns, "episode_number": ne + 1, "name": "Le dernier coup", "air_date": day(3)} if i == 1 else None),
+            "last_episode_to_air": {"air_date": day(-10) if i in (1, 11) else f"{y + ns - 1}-05-01"}, "number_of_seasons": ns,
+            "popularity": 150.0 if i in (1, 11) else round(v * 5, 1)}
 
 def day(n):
     return time.strftime("%Y-%m-%d", time.localtime(NOW + n * DAY))
@@ -459,8 +483,10 @@ def tmdb(path, q):
             return {"results": [{"id": c[0], k: c[1], d: f"{c[2]}-06-01", "poster_path": tmdb_path("p", f"c{c[0]}"), "vote_average": 7.5, "popularity": 80}]}
         if m.group(1) == "movie":
             hit = [i for i, f in enumerate(FILMS) if f[0].lower() == qq] or ([ALIASES[qq]] if qq in ALIASES else [])
-            return {"results": [{"id": fid(i), "title": FILMS[i][0], "original_title": FILMS[i][0], "release_date": f"{FILMS[i][1]}-03-01", "popularity": 50} for i in hit]}
-        return {"results": [{"id": sid(i), "name": f[0], "original_name": f[0], "first_air_date": f"{f[1]}-01-01", "popularity": 50} for i, f in enumerate(SERIES) if f[0].lower() == qq]}
+            return {"results": [{"id": fid(i), "title": FILMS[i][0], "original_title": FILMS[i][0], "release_date": f"{FILMS[i][1]}-03-01", "popularity": 50,
+                                 "poster_path": tmdb_path("p", f"m{fid(i)}"), "backdrop_path": tmdb_path("b", f"m{fid(i)}")} for i in hit]}
+        return {"results": [{"id": sid(i), "name": f[0], "original_name": f[0], "first_air_date": f"{f[1]}-01-01", "popularity": 50,
+                             "poster_path": tmdb_path("p", f"s{sid(i)}"), "backdrop_path": tmdb_path("b", f"s{sid(i)}")} for i, f in enumerate(SERIES) if f[0].lower() == qq]}
     # recommandations TMDB (« Les fans de … l'adorent ») : titres qui partagent le premier genre, les mieux notés d'abord
     m = re.match(r"^/(movie|tv)/(\d+)/recommendations$", path)
     if m:
@@ -585,6 +611,9 @@ class H(http.server.BaseHTTPRequestHandler):
             if a == "get_series_info": return self.send(200, series_info(int((q.get("series_id") or ["2000"])[0])))
             return self.send(200, [])
         if p.endswith("/xmltv.php"): return self.send(200, xmltv(), "application/xml")
+        if p == "/xfr/xmltv_tnt.xml.gz":
+            import gzip
+            return self.send(200, gzip.compress(xmltv(only=XFR_CH, icons=XFR_ICON).encode()), "application/gzip")
         if p == "/itunes/search":
             term = (q.get("term") or [""])[0].lower(); country = (q.get("country") or [""])[0]
             res = [{"kind": "feature-movie", "trackName": f[0], "releaseDate": f"{f[1]}-03-01T08:00:00Z", "trackTimeMillis": f[2] * 60000,

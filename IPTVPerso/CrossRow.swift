@@ -69,8 +69,13 @@ struct CrossRow: View {
 
     private var chips: some View {
         HStack(spacing: 12) {
-            ForEach(CrossMode.allCases) { m in
+            // séries (1.7.1) : la pastille des goûts n'apparaît que si le profil a des goûts connus ; sinon, le test des goûts
+            let noTaste = kind == .series && !models.isEmpty && models.allSatisfy(\.isEmpty)
+            ForEach(CrossMode.allCases.filter { !(noTaste && $0 == .toi) }) { m in
                 Button { mode = m } label: { Text(m == .film && kind == .series ? "Proche de cette série" : m == .toi && ps.isDuo ? "Selon vos goûts" : m.label) }.buttonStyle(XModeStyle(selected: mode == m))
+            }
+            if noTaste, ps.current != ProfileStore.guestID {
+                Button { ProfileUI.shared.taste = ps.current } label: { Text("Faire le test des goûts") }.buttonStyle(XModeStyle(selected: false))
             }
             Button { info = true } label: { Text("ⓘ Comment on choisit") }.buttonStyle(XModeStyle(selected: false)).padding(.leading, 9)
         }
