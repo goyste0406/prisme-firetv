@@ -448,7 +448,7 @@ struct FrenchCatsView: View {
                                     ForEach(G) { r in
                                         let on = isOn(r, p)
                                         Button { toggle(r, on: on) } label: {
-                                            CategoryLine(name: TitleTools.category(r.name), sub: "\(Fmt.n(r.count)) " + FrenchCatsView.names[r.type]!.1 + " · " + r.lang.why, on: on)
+                                            CategoryLine(name: TitleTools.category(r.name), sub: "\(Fmt.n(r.count)) " + (r.count > 1 ? FrenchCatsView.names[r.type]!.1 : String(FrenchCatsView.names[r.type]!.1.dropLast())) + " · " + r.lang.why, on: on)
                                         }.buttonStyle(SettingRowStyle()).focused($focus, equals: "c-" + r.key)
                                     }
                                 }
