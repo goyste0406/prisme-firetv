@@ -60,7 +60,12 @@ struct LiveHomeView: View {
         .fullScreenCover(item: $playing) { r in LivePlayerView(channels: r.list, start: r.index) }
         .fullScreenCover(item: $guide) { g in GuideView(channels: g.list, title: g.title) }
         .fullScreenCover(item: $replay) { r in VodPlayerView(request: r) }
-        .task(id: store.catalogVersion) { PerfLog.ev("TV index début v\(store.catalogVersion)"); index = await LiveIndex.all(pids: store.active.map(\.id), version: store.catalogVersion); sourceCounts = Dictionary(index.map { ($0.key, $0.sources) }, uniquingKeysWith: max); PerfLog.ev("TV index fin \(index.count)") }
+        .task(id: store.catalogVersion) { PerfLog.ev("TV index début v\(store.catalogVersion)"); index = await LiveIndex.all(pids: store.active.map(\.id), version: store.catalogVersion); sourceCounts = Dictionary(index.map { ($0.key, $0.sources) }, uniquingKeysWith: max); PerfLog.ev("TV index fin \(index.count)")
+            // visite de test seulement : ouvrir directement une chaîne (« TF1 », 3 sources en 720p, 1080p et 4K)
+            if playing == nil, let n = Debug.arg("prisme.debug.playLive"), let e = index.first(where: { $0.name == n && $0.copies.count > 1 }) ?? index.first(where: { $0.name == n }) {
+                let (l, i) = LiveIndex.withNeighbors(e.ch); play(l, i)
+            }
+        }
     }
 
     @ViewBuilder private var content: some View {

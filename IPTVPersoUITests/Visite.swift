@@ -591,6 +591,15 @@ final class Visite: XCTestCase {
         back(); Thread.sleep(forTimeInterval: 1); shot("T6-direct-sources-retour-liste", focus: false)
         back(); Thread.sleep(forTimeInterval: 1); shot("T7b-direct-retour-1-panneau-ferme", focus: false)
         back(); Thread.sleep(forTimeInterval: 2); shot("T8-direct-retour-2-quitte")
+        // TF1 : trois sources (720p, 1080p, 4K, deux fournisseurs) — changer de qualité sans changer de chaîne ni fermer le panneau
+        relaunch(["-prisme.debug.demoServer2", "http://127.0.0.1:8098", "-prisme.debug.tab", "live", "-prisme.debug.playLive", "TF1"], wait: 90)
+        Thread.sleep(forTimeInterval: 8); shot("TQ0-tf1", focus: false)
+        press(.down); Thread.sleep(forTimeInterval: 1.5); press(.down, 70); press(.up, 4); Thread.sleep(forTimeInterval: 1.5)
+        press(.select); Thread.sleep(forTimeInterval: 1.5); shot("TQ1-tf1-sources", focus: false)
+        for k in 1...2 { press(.down); press(.select); Thread.sleep(forTimeInterval: 8); shot("TQ2-tf1-qualite-\(k)", focus: false) }
+        press(.up, 2); press(.up); Thread.sleep(forTimeInterval: 1); shot("TQ3-tf1-haut", focus: false)
+        back(); Thread.sleep(forTimeInterval: 1); shot("TQ4-retour-liste", focus: false)
+        back(); Thread.sleep(forTimeInterval: 1); back(); Thread.sleep(forTimeInterval: 2); shot("TQ5-quitte")
         // depuis l'éventail d'un paquet « univers »
         relaunch(["-prisme.debug.demoServer2", "http://127.0.0.1:8098", "-prisme.debug.tab", "live"], wait: 60)
         // (la rangée « Pour toi, maintenant » existe maintenant : l'univers est une rangée plus bas)
