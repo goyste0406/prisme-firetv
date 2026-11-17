@@ -122,7 +122,7 @@ struct SubPreview: View {
                 .background(back == 1 ? Color.black.opacity(0.66) : .clear, in: RoundedRectangle(cornerRadius: 6))
                 .padding(.bottom, 22)
         }
-        .frame(maxWidth: 900).frame(height: 190)
+        .frame(maxWidth: .infinity).frame(height: 190)
         .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
     }
 }
@@ -293,19 +293,19 @@ struct DataPanel: View {
     var body: some View {
         PrefHeader(title: "Sauvegarde et mises à jour")
         Text("iCloud demande un compte Apple développeur payant : avec ton installation par Apparition, prisme passe par ton Wi-Fi.").font(P.font(20)).foregroundStyle(P.faint)
-        PrefRow(title: "Sauvegarde sur l'iPhone", value: show == "phone" ? "code affiché" : "›",
+        PrefRow(title: "Sauvegarde sur l'iPhone", value: show == "phone" ? "code affiché" : "",
                 sub: "Scanne le code avec l'iPhone : télécharge la sauvegarde (profils, Ma liste, reprises, goûts, réglages, fournisseurs) ou renvoie-en une à restaurer.") {
             show = show == "phone" ? "" : "phone"
         }
         if show == "phone" { qrBlock(phone) }
-        PrefRow(title: "Recevoir d'une autre Apple TV", value: show == "receive" ? "en attente…" : "›",
+        PrefRow(title: "Recevoir d'une autre Apple TV", value: show == "receive" ? "en attente…" : "",
                 sub: "Rend cette Apple TV visible sur le Wi-Fi. Sur l'autre Apple TV : Réglages › Sauvegarde › Envoyer vers une autre Apple TV.") {
             show = show == "receive" ? "" : "receive"
         }
         if show == "receive" {
             Text(inbox.failed ?? (inbox.address == nil ? "Préparation…" : "Visible sur le Wi-Fi sous le nom « prisme · \(UIDevice.current.name) ». Reste sur cet écran.")).font(P.font(21)).foregroundStyle(P.dim).padding(.horizontal, 22)
         }
-        PrefRow(title: "Envoyer vers une autre Apple TV", value: show == "send" ? "\(sender.peers.count) trouvée(s)" : "›",
+        PrefRow(title: "Envoyer vers une autre Apple TV", value: show == "send" ? "\(sender.peers.count) trouvée(s)" : "",
                 sub: "Les données de cette Apple TV remplacent celles de l'autre, après confirmation sur l'autre.") {
             show = show == "send" ? "" : "send"
         }
