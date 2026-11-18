@@ -291,6 +291,9 @@ struct DataPanel: View {
     @State private var done: String?
     @State private var undoConfirm = false
     var body: some View {
+        // les lignes sont regroupées : la fenêtre « Restaurer cette sauvegarde ? » et le suivi des codes s'appliquent
+        // au panneau entier (posés sur la dernière ligne seule, la fenêtre ne s'ouvrait pas sur la TV)
+        VStack(alignment: .leading, spacing: 26) {
         PrefHeader(title: "Sauvegarde et mises à jour")
         Text("iCloud demande un compte Apple développeur payant : avec ton installation par Apparition, prisme passe par ton Wi-Fi.").font(P.font(20)).foregroundStyle(P.faint)
         PrefRow(title: "Sauvegarde sur l'iPhone", value: show == "phone" ? "code affiché" : "",
@@ -331,6 +334,7 @@ struct DataPanel: View {
         PrefInfo(title: "Appareil", value: UIDevice.current.name + " · tvOS " + UIDevice.current.systemVersion)
         PrefInfo(title: "Code source", value: "github.com/goyste0406/prisme-firetv (branche appletv)")
         PrefInfo(title: "Fournisseurs · profils", value: "\(store.providers.count) · \(ProfileStore.shared.profiles.count)")
+        }
             .task(id: store.catalogVersion) { dbSize = await Database.shared.read { $0.fileSize } }
             .onChange(of: show) { _, s in
                 if s == "phone" { phone.start() } else { phone.stop() }
