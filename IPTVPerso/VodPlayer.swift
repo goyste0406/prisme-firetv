@@ -476,7 +476,7 @@ final class VodPlayerController: UIViewController, VLCMediaPlayerDelegate {
             if !self.seeked, self.duration > 0 {
                 self.seeked = true
                 var to = self.restartAt ?? (self.req.startAt > 0 ? self.req.startAt : nil)
-                if !self.debugFromUsed { self.debugFromUsed = true; if let d = Debug.playFrom { to = d } }
+                if !self.debugFromUsed || Debug.playFromEach { self.debugFromUsed = true; if let d = Debug.playFrom { to = d } }
                 if let to { self.player.time = VLCTime(int: Int32(to * 1000)) }
                 self.restartAt = nil
                 self.lastInputPos = to ?? 0
@@ -1033,7 +1033,7 @@ extension VodPlayerController {
         } else if let f = req.film {
             guard !endShown else { return }
             let lead = max(d - 420, creditsChapter ?? 0)
-            guard p >= max(d * 0.5, lead) else { return }
+            guard p >= max(d * 0.2, lead) else { return }
             endShown = true
             if f.post { postPending = true; showPostCard() }
             else if pick != nil { showFilmCard(countdown: true) }
@@ -1112,7 +1112,8 @@ extension VodPlayerController {
         } else {
             c.kicker = "FIN DE L'ÉPISODE"
             c.title = endTitle(e)
-            if let d = announced(e) { c.lines = [d] }
+            // date annoncée par TMDB : seulement pour la suite de la série, pas pour un épisode qui manque au milieu
+            if e.missingNext == nil, let d = announced(e) { c.lines = [d] }
             c.image = ""
             c.buttons = ["Fermer"]
             showCard(.episode, c, actions: [{ [weak self] in self?.quit() }], back: { [weak self] in self?.watchCredits() })
@@ -1156,7 +1157,7 @@ extension VodPlayerController {
                 showCard(.episode, c, actions: [{ [weak self] in self?.goNextEpisode(manual: true) }, { [weak self] in self?.quit() }], back: { [weak self] in self?.quit() })
             } else {
                 c.title = endTitle(e)
-                if let d = announced(e) { c.lines = [d] }
+                if e.missingNext == nil, let d = announced(e) { c.lines = [d] }
                 c.buttons = ["Fermer"]
                 showCard(.episode, c, actions: [{ [weak self] in self?.quit() }], back: { [weak self] in self?.quit() })
             }

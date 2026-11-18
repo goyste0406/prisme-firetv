@@ -822,71 +822,76 @@ final class Visite: XCTestCase {
     /// français + anglais ; saison 2 sans chapitres, français seul. Captures sans lecture du focus (vidéo en cours).
     func finSerie() {
         let w = { (t: Double) in Thread.sleep(forTimeInterval: t) }
-        relaunch(["-prisme.debug.open", "series:demo:2002", "-prisme.debug.playEp", "1-1", "-prisme.debug.playFrom", "27"], wait: 22)
-        w(8); shot("S01-intro-bouton", focus: false)
-        press(.select); w(3); shot("S02-intro-passee", focus: false)
-        press(.right, 18); w(10); shot("S03-carte-episode-suivant", focus: false)
-        w(3); shot("S03b-carte-prete", focus: false)
-        w(9); shot("S04-enchaine-e2", focus: false)
-        // É2 : intro décalée de 8 s → bouton ; OK la confirme (2e épisode : passage automatique ensuite)
-        w(37); shot("S05-intro-e2", focus: false)
-        press(.select); w(2)
-        press(.right, 21); w(10); shot("S06-carte-e2", focus: false)
-        press(.right); w(1); shot("S06b-voir-generique-choisi", focus: false)
-        press(.select); w(2); shot("S07-generique", focus: false)
-        w(36); shot("S08-fin-episode", focus: false)
-        press(.select); w(33); shot("S09-intro-auto-e3", focus: false)
-        press(.left, 3); w(3); shot("S10-retour-annule", focus: false)
-        press(.right, 20); w(12); shot("S11-carte-e3", focus: false)
-        press(.select); w(2); shot("S12-encore-un", focus: false)
+        let hpi = ["-prisme.debug.open", "series:demo:2002"]
+        func play(_ ep: String, from: Int, _ extra: [String] = []) { relaunch(hpi + ["-prisme.debug.playEp", ep, "-prisme.debug.playFrom", String(from)] + extra, wait: 18) }
+        // intro : bouton (É1), confirmé par OK ; É2 (intro décalée de 8 s) confirmé aussi ; É3 : passage automatique, puis annulé
+        play("1-1", from: 26); w(2); shot("S01-intro-bouton", focus: false)
+        press(.select); w(2); shot("S02-intro-passee", focus: false)
+        play("1-2", from: 34); w(2); shot("S05-intro-e2", focus: false)
+        press(.select); w(1)
+        play("1-3", from: 25); w(3); shot("S09-intro-auto-e3", focus: false)
+        press(.left, 3); w(2); shot("S10-retour-annule", focus: false)
+        // générique (chapitre à 260 s) : carte, « prêt », enchaînement automatique
+        play("1-1", from: 254, ["-prisme.debug.playFromEach", "1"]); w(3); shot("S03-carte-episode-suivant", focus: false)
+        w(4); shot("S03b-carte-prete", focus: false)
+        w(6); shot("S04-enchaine-e2", focus: false)
+        // « Voir le générique » puis « Fin de l'épisode »
+        play("1-2", from: 254); w(7); press(.right); w(1); shot("S06b-voir-generique-choisi", focus: false)
+        press(.select); w(1); shot("S07-generique", focus: false)
+        w(42); shot("S08-fin-episode", focus: false)
+        // « Encore un ? » (réglé sur 1 épisode pour le test), « Un dernier », puis « Dernier épisode de la soirée »
+        play("1-3", from: 254, ["-prisme.debug.playFromEach", "1", "-prisme.play.binge", "1"]); w(7); press(.select); w(2); shot("S12-encore-un", focus: false)
         press(.down); w(1); shot("S12b-un-dernier-choisi", focus: false)
-        press(.select); w(8); shot("S13-un-dernier", focus: false)
-        press(.right, 24); w(16); shot("S14-dernier-de-la-soiree", focus: false)
-        press(.select); w(1.5); shot("S15-bonne-nuit", focus: false)
-        w(6); shot("S16-fiche-zero-spoiler", focus: false)
-        press(.down, 2); w(1); shot("S16b-fiche-episodes", focus: false)
-        // panneau du lecteur : Épisodes et réglages de cette série ; audio anglais retenu pour la série
-        relaunch(["-prisme.debug.open", "series:demo:2002", "-prisme.debug.playEp", "1-6", "-prisme.debug.playFrom", "100"], wait: 22)
-        press(.up); w(1); shot("S20-raccourcis", focus: false)
+        press(.select); w(5); shot("S13-un-dernier", focus: false)
+        w(4); shot("S14-dernier-de-la-soiree", focus: false)
+        press(.select); w(1); shot("S15-bonne-nuit", focus: false)
+        w(5); shot("S16-fiche-zero-spoiler", focus: false)
+        // panneau : Épisodes et réglages de cette série ; audio anglais retenu
+        play("1-6", from: 100); press(.up); w(1); shot("S20-raccourcis", focus: false)
         press(.up); w(2); shot("S21-panneau-episodes", focus: false)
         press(.down, 3); w(1); shot("S22-reglages-serie")
+        if focused().contains("Sous-titres") { press(.left) }
         press(.select); w(1); shot("S23-audio")
         press(.down); press(.select); w(2); shot("S24-audio-anglais")
         back(); w(1)
-        press(.right, 16); w(10); press(.select); w(10); shot("S25-e7-langue-retenue", focus: false)
+        press(.down); press(.right); press(.select); w(8); shot("S25-e7-langue-retenue", focus: false)
         press(.up); press(.up); w(2); press(.down, 3); w(1); shot("S26-e7-panneau")
         back(); w(1)
-        // saison 2 sans piste anglaise : la langue n'est pas imposée, message
-        relaunch(["-prisme.debug.open", "series:demo:2002", "-prisme.debug.playEp", "2-1"], wait: 20)
-        shot("S27-pas-de-piste-anglaise", focus: false); w(3); shot("S27b-pas-de-piste-anglaise", focus: false)
-        // épisode manquant chez le fournisseur (Lupin S2·É4) : carte « Fin de l'épisode »
-        relaunch(["-prisme.debug.open", "series:demo:2001", "-prisme.debug.playEp", "2-3", "-prisme.debug.playFrom", "70"], wait: 22)
-        w(10); shot("S28-episode-absent", focus: false)
+        // saison 2 sans piste anglaise : message, la langue n'est pas imposée
+        relaunch(hpi + ["-prisme.debug.playEp", "2-1"], wait: 12)
+        for i in 1...5 { w(1.5); shot("S27-\(i)-pas-de-piste-anglaise", focus: false) }
+        // épisode manquant chez le fournisseur (Lupin S2·É4)
+        relaunch(["-prisme.debug.open", "series:demo:2001", "-prisme.debug.playEp", "2-3", "-prisme.debug.playFrom", "73"], wait: 18)
+        w(3); shot("S28-episode-absent", focus: false)
     }
 
     /// Films de 9 min : Spider-Man Homecoming (suite de la saga), No Way Home (scène après le générique), Le Parrain (recommandation).
     func finFilm() {
         let w = { (t: Double) in Thread.sleep(forTimeInterval: t) }
-        relaunch(["-prisme.debug.open", "film:demo:1014", "-prisme.debug.playFrom", "112"], wait: 16)
-        press(.select); w(14); shot("F01-a-suivre-saga", focus: false)
+        func film(_ id: String, from: Int, _ extra: [String] = []) {
+            relaunch(["-prisme.debug.open", "film:demo:" + id, "-prisme.debug.playFrom", String(from)] + extra, wait: 16)
+            press(.select)
+        }
+        // À suivre : suite de la saga (Spider-Man Homecoming → Far From Home), pause pendant le compte à rebours
+        film("1014", from: 116); w(9); shot("F01-a-suivre-saga", focus: false)
         press(.playPause); w(1); shot("F02-pause-compte-arrete", focus: false)
         w(4); shot("F02b-pause-toujours", focus: false)
         press(.playPause); w(17); shot("F03-film-suivant-lance", focus: false)
-        relaunch(["-prisme.debug.open", "film:demo:1012", "-prisme.debug.playFrom", "112"], wait: 16)
-        press(.select); w(14); shot("F04-scene-apres-generique", focus: false)
+        // scène après le générique (No Way Home) : carte, 👍 depuis la carte
+        film("1012", from: 116); w(9); shot("F04-scene-apres-generique", focus: false)
         press(.right, 2); press(.select); w(2); shot("F05-note-pouce", focus: false)
         press(.left, 2); press(.select); w(1); shot("F06-carte-fermee", focus: false)
-        press(.right, 40); w(16); shot("F07-fin-a-suivre", focus: false)
+        // fin réelle du film : À suivre revient ; Rester ferme (déjà noté : pas de question)
+        film("1012", from: 533); w(14); shot("F07-fin-a-suivre", focus: false)
         press(.right); press(.select); w(3); shot("F08-rester-quitte", focus: false)
-        relaunch(["-prisme.debug.open", "film:demo:1020", "-prisme.debug.playFrom", "112"], wait: 16)
-        press(.select); w(14); shot("F09-a-suivre-reco", focus: false)
+        // recommandation (Le Parrain), Rester, puis fin : « Tu as aimé … ? »
+        film("1020", from: 116); w(9); shot("F09-a-suivre-reco", focus: false)
         back(); w(1); shot("F10-rester", focus: false)
-        press(.right, 40); w(16); shot("F10b-fin-du-film", focus: false)
+        film("1020", from: 533); w(14); shot("F10b-fin-du-film", focus: false)
         back(); w(2); shot("F11-tu-as-aime", focus: false)
         press(.select); w(3); shot("F12-note-fermee", focus: false)
-        relaunch(["-prisme.debug.open", "film:demo:1020", "-prisme.debug.playFrom", "500"], wait: 16)
-        press(.select); w(8); back(); w(1); back(); w(3); shot("F13-pas-de-seconde-demande", focus: false)
-        relaunch(["-prisme.debug.open", "film:demo:1014", "-prisme.debug.playFrom", "112", "-prisme.debug.bedIn", "1"], wait: 16)
-        press(.select); w(14); shot("F14-apres-coucher-sans-compte", focus: false)
+        film("1020", from: 500); w(6); back(); w(1); back(); w(3); shot("F13-pas-de-seconde-demande", focus: false)
+        // fin après l'heure du coucher : pas de lancement automatique
+        film("1014", from: 116, ["-prisme.debug.bedIn", "1"]); w(9); shot("F14-apres-coucher-sans-compte", focus: false)
     }
 }

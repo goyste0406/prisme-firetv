@@ -73,6 +73,8 @@ extension Debug {
     static var bedInMinutes: Int? { arg("prisme.debug.bedIn").flatMap { Int($0) } }
     /// 1.8 : première lecture démarrée à N secondes (tests de fin d'épisode et de fin de film sans attendre)
     static var playFrom: Double? { arg("prisme.debug.playFrom").flatMap { Double($0) } }
+    /// … et chaque épisode ou film suivant aussi (enchaînements de fin)
+    static var playFromEach: Bool { arg("prisme.debug.playFromEach") == "1" }
     /// 1.8 : la fiche série lance directement l'épisode « S-É » (« 2-3 »)
     static var playEp: (Int, Int)? {
         guard let a = arg("prisme.debug.playEp")?.split(separator: "-").compactMap({ Int($0) }), a.count == 2 else { return nil }
