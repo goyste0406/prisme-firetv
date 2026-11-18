@@ -35,6 +35,9 @@ struct PlayerCardsLayer: View {
             }
         }
         .animation(.easeOut(duration: 0.25), value: m.card)
+        // repère pour la visite automatique (attendre la carte au lieu d'un délai fixe)
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("carte-" + String(describing: m.card))
     }
 
     // MARK: Passer l'intro (simulateur .spskip : à droite, au-dessus de la barre)

@@ -195,7 +195,7 @@ struct PlayerOverlay: View {
             if m.card != .none && !(m.card == .intro && m.panel != .none) && m.sleepLeft == nil { PlayerCardsLayer(m: m) }
             if m.panel != .none { panel.transition(.move(edge: .trailing).combined(with: .opacity)) }
             if let t = m.toast {
-                Text(t).font(P.font(26, .semibold)).padding(.horizontal, 30).frame(height: 66)
+                Text(t).font(P.font(26, .semibold)).padding(.horizontal, 30).frame(height: 66).accessibilityIdentifier("toast")
                     .background(.ultraThinMaterial, in: Capsule()).environment(\.colorScheme, .dark)
                     .frame(maxHeight: .infinity, alignment: .top).padding(.top, 70)
             }
@@ -336,6 +336,8 @@ struct PlayerOverlay: View {
                     }
                     .padding(.horizontal, 6).padding(.vertical, 6)
                 }
+                // une sous-liste repart du haut (sinon elle gardait le défilement de la liste précédente : vide en haut)
+                .id(m.panel.isSub ? "sub" : "full")
                 .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
             }
             .padding(.horizontal, 30).padding(.top, 34).padding(.bottom, 24)

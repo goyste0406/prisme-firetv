@@ -950,8 +950,18 @@ extension VodPlayerController {
     }
 
     private func applyLangMemory() {
-        defer { langApplied = true }
-        guard req.episode != nil else { return }
+        guard req.episode != nil, !langApplied else { return }
+        // pistes pas encore annoncées par VLC : nouvel essai 3 s plus tard
+        if ui.audio.isEmpty {
+            let k = req.key
+            DispatchQueue.main.asyncAfter(deadline: .now() + 3) { [weak self] in
+                guard let self, self.req.key == k, !self.langApplied else { return }
+                self.readTracks()
+                if self.ui.audio.isEmpty { self.langApplied = true } else { self.applyLangMemory() }
+            }
+            return
+        }
+        langApplied = true
         var notes: [String] = []
         if let a = mem.audio {
             let cur = ui.audio.first { $0.id == ui.audioCur }.flatMap { TrackLang.code($0.name) }
