@@ -292,7 +292,9 @@ struct LiveFrontView: View {
         var out: [(Channel, String)] = [], used = Set<String>()
         if let r = recent.first { out.append((r, "Tu l'as regardée récemment")); used.insert(ChannelTools.key(r)) }
         for (u, _) in weight.sorted(by: { $0.value > $1.value }) where u != .autres && out.count < 3 {
-            if let c = nowGenres.first(where: { $0.0 == u })?.1.first(where: { !used.contains(ChannelTools.key($0)) }) {
+            // d'abord une chaîne qui diffuse un programme de cet univers, sinon une chaîne de cet univers
+            let pool = nowGenres.first(where: { $0.0 == u })?.1 ?? index.filter { $0.univers == u }.prefix(30).map(\.ch)
+            if let c = pool.first(where: { !used.contains(ChannelTools.key($0)) }) {
                 out.append((c, "Parce que tu regardes " + Self.phrase(u))); used.insert(ChannelTools.key(c))
             }
         }
