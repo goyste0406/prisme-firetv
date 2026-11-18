@@ -860,6 +860,7 @@ final class Visite: XCTestCase {
         waitFor("carte-episode", 60); w(1); shot("S14-dernier-de-la-soiree", focus: false)
         press(.select); w(1); shot("S15-bonne-nuit", focus: false)
         w(5); shot("S16-fiche-zero-spoiler", focus: false)
+        press(.right, 2); press(.down, 6); w(1); shot("S16b-fiche-episodes-floutes")
         // panneau : Épisodes et réglages de cette série ; audio anglais retenu pour la série
         play("1-6", from: 100); w(12); press(.up); w(1); shot("S20-raccourcis", focus: false)
         press(.up); w(2); shot("S21-panneau-episodes", focus: false)

@@ -193,6 +193,8 @@ final class VodPlayerController: UIViewController, VLCMediaPlayerDelegate {
     private var debugFromUsed = false
     /// « Rester » choisi sur « À suivre » : à la fin, pas de lancement automatique (avis puis fermeture)
     private var stayed = false
+    /// épisode ou film marqué « vu » (fin, épisode suivant) : les sauvegardes régulières ne le ramènent plus en arrière
+    private var finished = false
 
     private var sleepAfter: TimeInterval { Double(Debug.sleepAfterSeconds ?? 90 * 60) }
 
@@ -269,8 +271,8 @@ final class VodPlayerController: UIViewController, VLCMediaPlayerDelegate {
         ui.nightActive = nightWanted
         ui.touch = { [weak self] in self?.noteInput() }
         ui.togglePause = { [weak self] in self?.togglePause() }
-        ui.setAudio = { [weak self] i in self?.player.currentAudioTrackIndex = i; self?.ui.audioCur = i; self?.toast("Audio : " + (self?.ui.audio.first { $0.id == i }?.name ?? "")); self?.rememberLang() }
-        ui.setSub = { [weak self] i in self?.player.currentVideoSubTitleIndex = i; self?.ui.subCur = i; self?.saidRestore = nil; self?.saidWant = nil; self?.rememberLang() }
+        ui.setAudio = { [weak self] i in self?.player.currentAudioTrackIndex = i; self?.ui.audioCur = i; self?.toast("Audio : " + (self?.ui.audio.first { $0.id == i }?.name ?? "")); self?.rememberLang(audio: true) }
+        ui.setSub = { [weak self] i in self?.player.currentVideoSubTitleIndex = i; self?.ui.subCur = i; self?.saidRestore = nil; self?.saidWant = nil; self?.rememberLang(audio: false) }
         ui.setVersion = { [weak self] i in self?.switchVersion(i) }
         ui.setAspect = { [weak self] a in self?.applyAspect(a); UserDefaults.standard.set(a, forKey: ProfileStore.shared.key("prisme.player.aspect")) }
         ui.setNight = { [weak self] n in self?.changeNight(n) }
@@ -348,6 +350,8 @@ final class VodPlayerController: UIViewController, VLCMediaPlayerDelegate {
 
     private func savePosition(at p0: Double? = nil) {
         guard !isLive else { return }
+        if p0 == nil, finished { return }
+        if let p = p0, duration > 0, p >= duration - 1 { finished = true }
         let d = duration, p = p0 ?? position
         guard d > 60, p > 0 else { return }
         let r = req
@@ -852,7 +856,7 @@ extension VodPlayerController {
         ui.card = .none; ui.countdown = nil; ui.prepared = false
         intro = nil; introDone = false; introAutoAt = nil; introNoAuto = false
         creditsChapter = nil; endShown = false; creditsWatch = false
-        pick = nil; postPending = false; rated = false; langApplied = false; stayed = false
+        pick = nil; postPending = false; rated = false; langApplied = false; stayed = false; finished = false
         if let e = req.episode {
             mem = SeriesMemory.load(e.series)
             ui.series = true
@@ -944,10 +948,12 @@ extension VodPlayerController {
     }
 
     /// Langue choisie par toi pendant un épisode : retenue pour la série (la langue, pas le numéro de piste).
-    fileprivate func rememberLang() {
+    fileprivate func rememberLang(audio: Bool) {
         guard let e = req.episode else { return }
-        mem.audio = ui.audio.first { $0.id == ui.audioCur }.flatMap { TrackLang.code($0.name) } ?? mem.audio
-        if ui.subCur < 0 { mem.subs = "off" } else if let n = ui.subs.first(where: { $0.id == ui.subCur })?.name, !TrackLang.isForced(n) { mem.subs = TrackLang.code(n) ?? mem.subs }
+        // seulement ce que tu viens de changer (l'audio, ou les sous-titres)
+        if audio { mem.audio = ui.audio.first { $0.id == ui.audioCur }.flatMap { TrackLang.code($0.name) } ?? mem.audio }
+        else if ui.subCur < 0 { mem.subs = "off" }
+        else if let n = ui.subs.first(where: { $0.id == ui.subCur })?.name, !TrackLang.isForced(n) { mem.subs = TrackLang.code(n) ?? mem.subs }
         mem.save(e.series)
     }
 

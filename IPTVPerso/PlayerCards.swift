@@ -162,7 +162,7 @@ struct PlayerCardsLayer: View {
         ZStack {
             Rectangle().fill(.ultraThinMaterial).environment(\.colorScheme, .dark).overlay(Color.black.opacity(0.45)).ignoresSafeArea()
             VStack(alignment: .leading, spacing: 0) {
-                Text("🍿 \(m.bingeCount) ÉPISODES D'AFFILÉE").font(P.font(17, .heavy)).tracking(2).foregroundStyle(.white.opacity(0.7))
+                Text("🍿 \(m.bingeCount) ÉPISODE\(m.bingeCount > 1 ? "S" : "") D'AFFILÉE").font(P.font(17, .heavy)).tracking(2).foregroundStyle(.white.opacity(0.7))
                 Text("Encore un ?").font(P.font(38, .bold)).padding(.top, 14)
                 (Text(m.encoreEp + " finirait à ") + Text(m.encoreEnd).bold().foregroundColor(m.encoreLate ? Color(red: 1, green: 0.42, blue: 0.42) : .white)
                  + Text(" · ton coucher est à " + m.encoreBed))
