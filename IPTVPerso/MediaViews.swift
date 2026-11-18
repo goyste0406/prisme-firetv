@@ -105,6 +105,7 @@ struct MediaHomeView: View {
     @State private var mood = ""
     @State private var askDur = false
     @State private var askMood = false
+    @State private var askWho = false
     @State private var because: MediaItem?
     @State private var becauseList: [MediaItem] = []
     @State private var browseTab = ""
@@ -112,6 +113,8 @@ struct MediaHomeView: View {
     @State private var forYou: [MediaItem] = []
     /// goût du profil (0-100, le moins favorable des deux à deux) pour les titres de « Ce soir ? »
     @State private var tonightFit: [String: Int] = [:]
+    /// goût de chacun (à deux : « 81 · 64 » sur l'affiche, comme le simulateur)
+    @State private var tonightFits: [String: [Int]] = [:]
     /// langues d'origine des titres que le profil a regardés (au moins la moitié)
     @State private var tonightLangs: Set<String> = []
     @ObservedObject var ps = ProfileStore.shared
@@ -175,6 +178,13 @@ struct MediaHomeView: View {
         .confirmationDialog("Durée", isPresented: $askDur) {
             ForEach(0..<Tonight.durations.count, id: \.self) { i in Button(Tonight.durations[i].1) { dur = Tonight.durations[i].0 } }
         }
+        .confirmationDialog("Avec", isPresented: $askWho) {
+            // simulateur « 👤 Seul ▾ » : seul, ou à deux avec un autre profil
+            Button("Seul") { ps.endDuo() }
+            ForEach(ps.profiles.filter { $0.id != ps.me.id && $0.id != ProfileStore.guestID }) { p in
+                Button("À deux avec " + p.name) { ps.useDuo(ps.me.id, p.id) }
+            }
+        }
         .confirmationDialog("Envie", isPresented: $askMood) {
             Button("Toutes les envies") { mood = "" }
             ForEach(0..<Tonight.moods.count, id: \.self) { i in Button(Tonight.moods[i].1) { mood = Tonight.moods[i].0 } }
@@ -228,20 +238,48 @@ struct MediaHomeView: View {
                     Image(systemName: "moon").font(P.font(28, .semibold))
                     Text("Ce soir ?").font(P.font(33, .bold))
                     Text("\(L.count) \(unit) · il est " + Fmt.hm(Date())).font(P.font(19)).foregroundStyle(P.faint)
-                    Spacer(minLength: 20)
-                    if kind == .film {
-                        BandChip(icon: "timer", text: Tonight.durations.first { $0.0 == dur }?.1 ?? "Peu importe", menu: true) { askDur = true }
+                    // simulateur : les choix suivent le titre (durée, envie, avec qui, surprends-moi)
+                    HStack(spacing: 14) {
+                        if kind == .film {
+                            BandChip(icon: "timer", text: Tonight.durations.first { $0.0 == dur }?.1 ?? "Peu importe", menu: true) { askDur = true }
+                        }
+                        BandChip(icon: "sparkles", text: Tonight.moods.first { $0.0 == mood }?.1 ?? "Toutes les envies", menu: true) { askMood = true }
+                        BandChip(icon: ps.isDuo ? "person.2" : "person", text: ps.isDuo ? "À deux" : "Seul", menu: true) { askWho = true }
+                        BandChip(icon: "dice", text: "Surprends-moi") { if let pick = L.prefix(6).randomElement() { open = pick } }
                     }
-                    BandChip(icon: "sparkles", text: Tonight.moods.first { $0.0 == mood }?.1 ?? "Toutes les envies", menu: true) { askMood = true }
-                    BandChip(icon: "dice", text: "Surprends-moi") { if let pick = L.prefix(6).randomElement() { open = pick } }
+                    .padding(.leading, 18)
+                    Spacer(minLength: 0)
                 }
             }, row: {
                 LazyHStack(spacing: 30) {
                     if L.isEmpty { Text("Aucun titre avec ces choix · change la durée ou l'envie").font(P.font(22)).foregroundStyle(P.dim).frame(height: 300) }
-                    ForEach(L.prefix(24)) { it in PosterButton(item: it) { open = it } }
+                    ForEach(L.prefix(24)) { it in
+                        // simulateur : % de correspondance en haut à gauche, heure de fin en haut à droite, année en bas,
+                        // point bleu pour un titre arrivé récemment (pas de bandeau « NOUVEAU » dans « Ce soir ? »)
+                        Button { open = it } label: {
+                            PosterTile(item: it, showNew: false, caption: tonightYear(it), pct: tonightPct(it), newDot: isRecent(it))
+                                .frame(width: 220, height: 330)
+                        }
+                        .buttonStyle(TileStyle()).accessibilityLabel(it.displayTitle)
+                    }
                 }
             })
         }
+    }
+
+    private func tonightPct(_ it: MediaItem) -> String? {
+        guard let v = tonightFits[it.id], !v.isEmpty else { return nil }
+        return v.count == 2 ? "\(v[0]) · \(v[1])" : "\(v[0]) %"
+    }
+    private func tonightYear(_ it: MediaItem) -> String {
+        let y = (it.fiche?.year ?? 0) > 0 ? it.fiche!.year : it.clean.year
+        if it.kind == .series, let n = it.fiche?.seasons, n > 0 { return (y > 0 ? "\(y) · " : "") + "\(n) saison" + (n > 1 ? "s" : "") }
+        return y > 0 ? String(y) : ""
+    }
+    private func isRecent(_ it: MediaItem) -> Bool {
+        guard it.added > 0 else { return false }
+        let d = (Int(Date().timeIntervalSince1970) - it.added) / 86400
+        return d >= 0 && d <= 7
     }
 
     private func tonightSub(_ it: MediaItem) -> String {
@@ -554,21 +592,21 @@ struct MediaHomeView: View {
         let seenItems = await MediaStore.items(ids: Array(Set(seenIDs.map { $0.components(separatedBy: ":e").first ?? $0 })))
         tonightLangs = Set(seenItems.compactMap { $0.fiche?.olang }.filter { !$0.isEmpty })
         let watchers = ps.watchers.filter { $0.id != ProfileStore.guestID }
-        guard !watchers.isEmpty else { forYou = []; tonightFit = [:]; return }
+        guard !watchers.isEmpty else { forYou = []; tonightFit = [:]; tonightFits = [:]; return }
         var models: [TasteModel] = []
         for w in watchers { models.append(await TasteStore.shared.model(w.id)) }
-        guard models.allSatisfy({ !$0.isEmpty }) else { forYou = []; tonightFit = [:]; return }
+        guard models.allSatisfy({ !$0.isEmpty }) else { forYou = []; tonightFit = [:]; tonightFits = [:]; return }
         let seen = Set(watch.entries.values.filter { $0.dur > 0 && $0.pos / $0.dur >= 0.85 }.map(\.item))
-        var fits: [String: Int] = [:]
+        var fits: [String: Int] = [:], all: [String: [Int]] = [:]
         let scored: [(MediaItem, Int)] = snap.tonight.compactMap { it in
             guard let f = it.fiche else { return nil }
             let v = models.compactMap { $0.fit(f, kind: kind) }
             guard v.count == models.count, let m = v.min() else { return nil }
-            fits[it.id] = m
+            fits[it.id] = m; all[it.id] = v
             guard !seen.contains(it.id), m >= 60 else { return nil }
             return (it, m)
         }
-        tonightFit = fits
+        tonightFit = fits; tonightFits = all
         forYou = Array(scored.sorted { $0.1 > $1.1 }.prefix(16).map(\.0))
     }
 
@@ -862,6 +900,11 @@ struct PosterTile: View {
     var endBadgeTop: CGFloat = 0
     /// Top 10 (simulateur) : une ligne d'information posée en bas de l'affiche (titre ajouté seulement sans affiche) (année, « S2 · É4 », « 8 saisons »)
     var caption: String? = nil
+    /// « Ce soir ? » (simulateur) : % de correspondance en haut à gauche, point bleu « nouveau »
+    var pct: String? = nil
+    var newDot = false
+    /// heure de fin en haut à droite (le Top 10 du simulateur n'en a pas : le coin est pour l'évolution du classement)
+    var showEnd = true
     @ObservedObject var watch = WatchStore.shared
     var body: some View {
         ZStack(alignment: .top) {
@@ -878,13 +921,24 @@ struct PosterTile: View {
                 .background(LinearGradient(colors: [.clear, .black.opacity(0.82)], startPoint: .top, endPoint: .bottom))
                 .frame(maxHeight: .infinity, alignment: .bottom)
             }
+            if let pct {
+                Text(pct).font(P.font(18, .heavy)).foregroundStyle(Color(red: 0.62, green: 0.94, blue: 0.69))
+                    .padding(.horizontal, 12).padding(.vertical, 5)
+                    .background(Color.black.opacity(0.6), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    .padding(12).frame(maxWidth: .infinity, alignment: .leading)
+            }
+            if newDot {
+                Circle().fill(Color(red: 0.31, green: 0.63, blue: 1)).frame(width: 16, height: 16)
+                    .overlay(Circle().stroke(Color(red: 0.31, green: 0.63, blue: 1).opacity(0.3), lineWidth: 5))
+                    .padding(14).frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
+            }
             if !bare, let n = newLabel {
                 Text(n).font(P.font(15, .heavy)).tracking(0.9).foregroundStyle(.white).lineLimit(1)
                     .padding(.vertical, 7).frame(maxWidth: .infinity)
                     .background(Color(red: 0.04, green: 0.52, blue: 1))
                     .shadow(color: .black.opacity(0.35), radius: 5, y: 2)
             }
-            if !bare, item.kind == .film, let rt = item.fiche?.runtime, rt > 0 {
+            if !bare, showEnd, item.kind == .film, let rt = item.fiche?.runtime, rt > 0 {
                 let left = max(60, Double(rt * 60) - (watch.resume(item.id) ?? 0))
                 HStack(spacing: 5) {
                     Text("fin " + Fmt.hm(Date().addingTimeInterval(left)))

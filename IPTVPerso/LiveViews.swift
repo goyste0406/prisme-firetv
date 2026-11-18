@@ -158,6 +158,9 @@ struct LiveFrontView: View {
     @State private var nowGenres: [(Univers, [Channel])] = []
     @State private var nowOpen: Univers?
     @State private var nowShown = false
+    /// « Pour toi, maintenant » (simulateur) : 3 chaînes en direct et leur raison
+    @State private var forNow: [(Channel, String)] = []
+    @State private var forNowSub = ""
 
     private var head: Channel? { recent.first ?? favs.first }
     private func entry(_ c: Channel) -> LiveIndex.Entry? { LiveIndex.byKey[ChannelTools.key(c)] }
@@ -166,14 +169,16 @@ struct LiveFrontView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 34) {
                 headBlock
-                if !recent.isEmpty {
-                    rowTitle("Pour toi, maintenant", "tes chaînes récentes, en ce moment")
+                if !forNow.isEmpty {
+                    // simulateur : trois chaînes en direct choisies d'après ce que tu regardes (à cette heure-ci quand
+                    // le journal de visionnage le permet), chacune avec sa raison
+                    rowTitle("Pour toi, maintenant", forNowSub)
                     row {
-                        ForEach(Array(recent.prefix(10).enumerated()), id: \.element.id) { i, ch in
+                        ForEach(Array(forNow.enumerated()), id: \.element.0.id) { i, x in
                             VStack(alignment: .leading, spacing: 10) {
-                                ChannelCard(ch: ch, fav: prefs.isFavorite(ch)) { play(recent, i) }
-                                    .contextMenu { favButton(ch); SourceButtons(ch: ch) { c in play([c], 0) } }
-                                Text("Tu l'as regardée récemment").font(P.font(17)).foregroundStyle(P.faint)
+                                ChannelCard(ch: x.0, fav: prefs.isFavorite(x.0)) { play(forNow.map(\.0), i) }
+                                    .contextMenu { favButton(x.0); SourceButtons(ch: x.0) { c in play([c], 0) } }
+                                Text(x.1).font(P.font(17)).foregroundStyle(P.faint)
                             }
                         }
                     }
@@ -256,12 +261,62 @@ struct LiveFrontView: View {
         var seen = Set<String>()
         soon = s1.filter { seen.insert(ChannelTools.key($0.ch) + "|\($0.p.start)").inserted }
         if let h = head { let nn = await LiveStore.nowNext(h); headNow = nn.0; headNext = nn.1 }
+        await loadForNow()
         loaded = true
         // Réglages › TV en direct : à l'ouverture de prisme, la dernière chaîne regardée s'allume tout de suite (une fois)
         if AppPrefs.openOnLive, !LiveAutoStart.done, let h = recent.first { LiveAutoStart.done = true; playHead(h) }
     }
 
     private func playOne(_ ch: Channel) { let (l, i) = LiveIndex.withNeighbors(ch); play(l, i) }
+
+    /// « Pour toi, maintenant » : la dernière chaîne regardée, puis une chaîne qui diffuse en ce moment un programme
+    /// de tes univers préférés (d'après le journal de visionnage aux mêmes heures, sinon tes chaînes récentes).
+    /// Sans historique, la rangée n'apparaît pas : aucune raison inventée.
+    private func loadForNow() async {
+        guard !recent.isEmpty else { forNow = []; return }
+        let hour = Calendar.current.component(.hour, from: Date())
+        let sess = await WatchJournal.sessions(profile: ProfileStore.shared.me.id, since: Date().addingTimeInterval(-30 * 86400)).filter { s in
+            guard s.kind == "tv" else { return false }
+            let h = Calendar.current.component(.hour, from: s.start), d = abs(h - hour)
+            return min(d, 24 - d) <= 2
+        }
+        var weight: [Univers: Int] = [:]
+        if !sess.isEmpty {
+            let chans = await LiveIndex.resolve(ids: Array(Set(sess.map { String($0.item.dropFirst(5)) })))
+            var uOf: [String: Univers] = [:]
+            for c in chans { if let u = entry(c)?.univers { uOf[c.id] = u } }
+            for x in sess { if let u = uOf[String(x.item.dropFirst(5))] { weight[u, default: 0] += x.seconds } }
+        }
+        let byHour = !weight.isEmpty
+        if !byHour { for (i, c) in recent.prefix(10).enumerated() { if let u = entry(c)?.univers { weight[u, default: 0] += 10 - i } } }
+        var out: [(Channel, String)] = [], used = Set<String>()
+        if let r = recent.first { out.append((r, "Tu l'as regardée récemment")); used.insert(ChannelTools.key(r)) }
+        for (u, _) in weight.sorted(by: { $0.value > $1.value }) where u != .autres && out.count < 3 {
+            if let c = nowGenres.first(where: { $0.0 == u })?.1.first(where: { !used.contains(ChannelTools.key($0)) }) {
+                out.append((c, "Parce que tu regardes " + Self.phrase(u))); used.insert(ChannelTools.key(c))
+            }
+        }
+        for r in recent.dropFirst() where out.count < 3 && !used.contains(ChannelTools.key(r)) {
+            out.append((r, "Tu l'as regardée récemment")); used.insert(ChannelTools.key(r))
+        }
+        forNow = out
+        forNowSub = byHour ? "selon ce que tu regardes vers \(hour) h" : "selon tes chaînes récentes"
+    }
+
+    private static func phrase(_ u: Univers) -> String {
+        switch u {
+        case .sport: return "du sport"
+        case .cinema: return "du cinéma"
+        case .info: return "l'info"
+        case .series: return "des séries"
+        case .divert: return "du divertissement"
+        case .jeunesse: return "des programmes jeunesse"
+        case .decouverte: return "des documentaires"
+        case .musique: return "de la musique"
+        case .generaliste: return "les grandes chaînes"
+        case .autres: return "ces chaînes"
+        }
+    }
 
     private func rowTitle(_ t: String, _ sub: String) -> some View { SectionTitle(title: t, sub: sub).padding(.leading, 18) }
 

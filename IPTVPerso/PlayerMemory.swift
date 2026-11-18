@@ -117,7 +117,8 @@ enum FilmRatings {
     }
     static func value(_ work: String, pid: String) -> Int? { all(pid)[work]?.v }
 
-    @MainActor static func rate(_ it: MediaItem, _ v: Int, pid: String = ProfileStore.shared.me.id) {
+    @MainActor static func rate(_ it: MediaItem, _ v: Int, pid p0: String? = nil) {
+        let pid = p0 ?? ProfileStore.shared.me.id
         var m = all(pid)
         let f = it.fiche
         m[it.workKey] = Rated(v: v, genres: Genres.canon(f?.genres ?? ""), kw: Array(f?.keywordIDs ?? []), dir: f?.director ?? "",
