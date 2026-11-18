@@ -29,6 +29,8 @@ struct PrefRow: View {
     var toggle: Bool? = nil
     var sub: String? = nil
     var icon: String = "chevron.right"
+    /// la ligne prend la sélection dès qu'elle apparaît (confirmation qui vient de s'afficher)
+    var grab = false
     let action: () -> Void
     @FocusState private var f: Bool
     var body: some View {
@@ -47,6 +49,7 @@ struct PrefRow: View {
         .buttonStyle(RowStyle())
         .focused($f)
         .onChange(of: f) { _, on in if on { PrefHelp.shared.text = sub } }
+        .onAppear { if grab { DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { f = true } } }
     }
 }
 
@@ -296,6 +299,21 @@ struct DataPanel: View {
         VStack(alignment: .leading, spacing: 26) {
         PrefHeader(title: "Sauvegarde et mises à jour")
         Text("iCloud demande un compte Apple développeur payant : avec ton installation par Apparition, prisme passe par ton Wi-Fi.").font(P.font(20)).foregroundStyle(P.faint)
+        // sauvegarde arrivée (iPhone ou autre Apple TV) : confirmation dans le panneau, sélection posée sur « Restaurer »
+        // (la fenêtre d'alerte système ne s'ouvrait pas depuis ce panneau sur tvOS)
+        if let r = phone.received ?? inbox.received {
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Restaurer cette sauvegarde ?").font(P.font(28, .bold))
+                Text("Sauvegarde du \(r.date) (\(r.device)) · profils : \(r.profiles.joined(separator: ", ")).").font(P.font(21)).foregroundStyle(P.dim)
+                Text("Les profils, Ma liste, les reprises, les goûts, les réglages et les fournisseurs de cette Apple TV seront remplacés. Une copie de ceux d'aujourd'hui est gardée pour annuler.").font(P.font(20)).foregroundStyle(P.faint)
+            }.padding(.horizontal, 22)
+            PrefRow(title: "Restaurer", icon: "arrow.counterclockwise", grab: true) {
+                done = Backup.restore(r) ? Self.restartMsg : "Restauration impossible."
+                phone.received = nil; inbox.received = nil; show = ""
+                DataCount.write("restauration confirmée sur la TV")
+            }
+            PrefRow(title: "Ne pas restaurer", icon: "xmark") { phone.received = nil; inbox.received = nil }
+        }
         PrefRow(title: "Sauvegarde sur l'iPhone", value: show == "phone" ? "code affiché" : "",
                 sub: "Scanne le code avec l'iPhone : télécharge la sauvegarde (profils, Ma liste, reprises, goûts, réglages, fournisseurs) ou renvoie-en une à restaurer.") {
             show = show == "phone" ? "" : "phone"
@@ -356,15 +374,8 @@ struct DataPanel: View {
                     DataCount.write("restauration acceptée")
                 }
             }
-            .alert(item: Binding(get: { (phone.received ?? inbox.received).map { Pending(s: $0) } }, set: { if $0 == nil { phone.received = nil; inbox.received = nil } })) { p in
-                Alert(title: Text("Restaurer cette sauvegarde ?"),
-                      message: Text("Sauvegarde du \(p.s.date) (\(p.s.device)) · profils : \(p.s.profiles.joined(separator: ", ")).\n\nLes profils, Ma liste, les reprises, les goûts, les réglages et les fournisseurs de cette Apple TV seront remplacés. Une copie de ceux d'aujourd'hui est gardée pour annuler."),
-                      primaryButton: .destructive(Text("Restaurer")) { done = Backup.restore(p.s) ? Self.restartMsg : "Restauration impossible."; show = "" },
-                      secondaryButton: .cancel(Text("Annuler")))
-            }
         PrefHelpFooter()
     }
-    struct Pending: Identifiable { let s: Backup.Summary; var id: String { s.date + s.device } }
     static let restartMsg = "Fait ✓ · ferme prisme (deux appuis sur le bouton TV, puis fais glisser prisme vers le haut) et rouvre-la pour retrouver ces données."
 
     private func qrBlock(_ l: BackupLink) -> some View {
