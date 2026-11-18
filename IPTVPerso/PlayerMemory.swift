@@ -37,6 +37,8 @@ struct SeriesMemory: Codable {
     /// langue retenue : audio (« fr », « en »…), sous-titres (« fr », « en », « off » ; nil = choix par défaut)
     var audio: String?
     var subs: String?
+    /// version choisie sur la fiche (« fournisseur|VF 4K »)
+    var version: String?
 
     @MainActor static func key(_ series: String) -> String { ProfileStore.shared.key("prisme.series.mem." + series) }
     @MainActor static func load(_ series: String) -> SeriesMemory {

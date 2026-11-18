@@ -93,7 +93,11 @@ struct SeriesDetailView: View {
         .sheet(isPresented: $showSyn) { SynopsisSheet(kicker: "SÉRIE", title: title, text: plot.isEmpty ? "Pas de résumé chez le fournisseur." : plot) }
         .sheet(item: $actor) { a in ActorSheet(actor: a, kind: .series, excluding: item.clean.key) }
         .confirmationDialog("Choisir la version", isPresented: $pickVersion) {
-            ForEach(versions) { v in Button(versionLabel(v)) { chosen = v; Task { info = await InfoLoader.load(v) } } }
+            ForEach(versions) { v in Button(versionLabel(v)) {
+                chosen = v; Task { info = await InfoLoader.load(v) }
+                // 1.8 : la version choisie est retenue pour cette série (elle passe avant la préférence générale du profil)
+                var m = SeriesMemory.load(item.id); m.version = v.pid + "|" + v.clean.tags.joined(separator: " "); m.save(item.id)
+            } }
         }
         .alert(launchMsg ?? "", isPresented: Binding(get: { launchMsg != nil }, set: { if !$0 { launchMsg = nil } })) { Button("OK") {} }
     }
@@ -617,7 +621,11 @@ struct SeriesDetailView: View {
         async let i = InfoLoader.load(item)
         async let v = MediaStore.versions(of: item, pids: pids)
         let (i1, v1) = await (i, v)
-        if chosen == nil { chosen = v1.first }
+        if chosen == nil {
+            // version retenue pour cette série (même fournisseur et mêmes repères VF / VOSTFR / 4K), sinon la première
+            let want = SeriesMemory.load(item.id).version
+            chosen = v1.first { want != nil && $0.pid + "|" + $0.clean.tags.joined(separator: " ") == want } ?? v1.first
+        }
         if let c = chosen, c.id != item.id { info = await InfoLoader.load(c) } else { info = i1 }
         versions = v1
         if season == 0 { season = Debug.season ?? nextEp?.season ?? info.seasons.first?.number ?? 1 }
