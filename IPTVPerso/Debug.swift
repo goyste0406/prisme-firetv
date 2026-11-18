@@ -71,6 +71,13 @@ extension Debug {
     static var whoHold: Bool { arg("prisme.debug.whoHold") == "1" }
     /// heure du coucher simulée « dans N minutes » (pour voir « Fin à … · après ton coucher » à toute heure)
     static var bedInMinutes: Int? { arg("prisme.debug.bedIn").flatMap { Int($0) } }
+    /// 1.8 : première lecture démarrée à N secondes (tests de fin d'épisode et de fin de film sans attendre)
+    static var playFrom: Double? { arg("prisme.debug.playFrom").flatMap { Double($0) } }
+    /// 1.8 : la fiche série lance directement l'épisode « S-É » (« 2-3 »)
+    static var playEp: (Int, Int)? {
+        guard let a = arg("prisme.debug.playEp")?.split(separator: "-").compactMap({ Int($0) }), a.count == 2 else { return nil }
+        return (a[0], a[1])
+    }
 
     /// Simule une installation 1.5.3 (avant les profils) : historique et Ma liste écrits dans les clés d'origine,
     /// AVANT le chargement des profils. Sert à vérifier que la migration les rattache bien au profil de Steven.

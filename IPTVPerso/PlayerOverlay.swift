@@ -51,6 +51,43 @@ final class PlayerUI: ObservableObject {
     @Published var liveStart: Date?
     @Published var liveStop: Date?
     var zapTo: (Int, Bool) -> Void = { _, _ in }
+    // 1.8 phase 1 : cartes de fin de lecture (PlayerCards.swift)
+    enum Card: Equatable { case none, intro, episode, film, post, encore, rate }
+    @Published var card: Card = .none
+    @Published var cardSel = 0
+    @Published var countdown: Int?
+    @Published var prepared = false
+    @Published var introSub = ""
+    @Published var endInfo = EndCardInfo()
+    @Published var bingeCount = 0
+    @Published var encoreEp = ""
+    @Published var encoreEnd = ""
+    @Published var encoreBed = ""
+    @Published var encoreLate = false
+    @Published var rateTitle = ""
+    // séries : panneau « Épisodes » et « Réglages de cette série »
+    @Published var series = false
+    @Published var episodes: [PanelEpisode] = []
+    @Published var epCur = ""
+    @Published var epSeason = 1
+    /// épisodes vus en entier, épisode à suivre (zéro spoiler : les suivants sont floutés)
+    @Published var epSeen: Set<String> = []
+    @Published var epProgress: [String: Double] = [:]
+    @Published var stopAfter = false
+    @Published var seriesAutoSkip = true
+    @Published var introLearned = ""
+    var playEpisode: (Int, Int) -> Void = { _, _ in }
+    var nextEpisode: () -> Void = {}
+    var setStopAfter: (Bool) -> Void = { _ in }
+    var setSeriesAutoSkip: (Bool) -> Void = { _ in }
+    var forgetIntro: () -> Void = {}
+    /// zéro spoiler : épisode plus loin que celui en cours (et pas déjà vu)
+    func spoiler(_ e: PanelEpisode) -> Bool {
+        guard PlaybackPrefs.zeroSpoiler, !epSeen.contains(e.id), let c = episodes.firstIndex(where: { $0.id == epCur }),
+              let i = episodes.firstIndex(of: e) else { return false }
+        return i > c
+    }
+
     /// dernière option utilisée (le panneau s'ouvre dessus)
     @Published var lastKey = "audio"
     var bedMinutes = 1380
@@ -72,14 +109,16 @@ final class PlayerUI: ObservableObject {
     static let nights: [(String, String)] = [("auto", "Auto après ton coucher"), ("on", "Toujours"), ("off", "Jamais")]
 
     var interactive: Bool { panel != .none || options || sleepLeft != nil }
+    /// une carte qui attend un choix (la télécommande la pilote ; « Passer l'intro » laisse avancer/reculer)
+    var cardActive: Bool { card != .none && card != .intro }
 
     // MARK: habitudes (par profil) : les 3 raccourcis = les 3 réglages les plus utilisés
 
-    private static let order = ["audio", "subs", "version", "image", "night", "bedstop", "info"]
+    private static let order = ["audio", "subs", "version", "image", "night", "bedstop", "info", "stopafter"]
     private var usageKey: String { ProfileStore.shared.key("prisme.player.usage") }
     var shortcuts: [String] {
         let u = (UserDefaults.standard.dictionary(forKey: usageKey) as? [String: Int]) ?? [:]
-        let L = PlayerUI.order.filter { $0 != "version" || versions.count > 1 }
+        let L = PlayerUI.order.filter { ($0 != "version" || versions.count > 1) && ($0 != "stopafter" || series) && ($0 != "bedstop" || !series) }
         return Array(L.sorted { (u[$0] ?? 0, -(PlayerUI.order.firstIndex(of: $0) ?? 0)) > (u[$1] ?? 0, -(PlayerUI.order.firstIndex(of: $1) ?? 0)) }.prefix(3))
     }
     func used(_ k: String) {
@@ -104,6 +143,7 @@ final class PlayerUI: ObservableObject {
         case "image": return ("viewfinder", "Image", PlayerUI.aspects.first { $0.0 == aspect }?.1 ?? "Auto")
         case "night": return ("moon", "Son de nuit", (night == "auto" ? "Auto après " + Self.hm(bedMinutes) : night == "on" ? "Toujours" : "Jamais") + (nightActive ? " · actif" : ""))
         case "bedstop": return ("bed.double", "Arrêt à " + Self.hm(bedMinutes), bedStop ? "Activé" : "Désactivé")
+        case "stopafter": return ("moon.zzz", "Arrêt après cet épisode", stopAfter ? "Activé" : "Désactivé")
         default: return ("info.circle", "Infos du flux", info.first?.1 ?? "")
         }
     }
@@ -151,6 +191,8 @@ struct PlayerOverlay: View {
                 bottomBar
             }
             if m.loading && m.message == nil { ProgressView().scaleEffect(2).tint(.white) }
+            // cartes de fin (simulateur) : sous le panneau ; « Passer l'intro » se cache quand un panneau est ouvert
+            if m.card != .none && !(m.card == .intro && m.panel != .none) && m.sleepLeft == nil { PlayerCardsLayer(m: m) }
             if m.panel != .none { panel.transition(.move(edge: .trailing).combined(with: .opacity)) }
             if let t = m.toast {
                 Text(t).font(P.font(26, .semibold)).padding(.horizontal, 30).frame(height: 66)
@@ -165,7 +207,7 @@ struct PlayerOverlay: View {
         .animation(.easeOut(duration: 0.25), value: m.panel)
         .animation(.easeOut(duration: 0.25), value: m.osd)
         .onReceive(clock) { now = $0 }
-        .onChange(of: m.panel) { _, p in placeFocus(p) }
+        .onChange(of: m.panel) { old, p in placeFocus(p, from: old) }
         .onChange(of: m.options) { _, o in if o { focus = "said" } }
         .task { try? await Task.sleep(nanoseconds: 6_000_000_000); withAnimation(.easeOut(duration: 0.6)) { m.hintVisible = false } }
         .onChange(of: m.sleepLeft == nil) { _, none in if !none { focus = "sleep-yes" } }
@@ -207,10 +249,29 @@ struct PlayerOverlay: View {
             }
             .padding(.top, 22)
             if m.hintVisible {
-                Text(m.live ? "↑ raccourcis puis chaînes · ↓ chaînes · ⏯ pause · Retour ×2 : quitter" : m.hint)
+                Text(m.live ? "↑ raccourcis puis chaînes · ↓ chaînes · ⏯ pause · Retour ×2 : quitter"
+                     : m.series ? "↑ raccourcis puis épisodes · ↓ options · ⏯ pause · Retour ×2 : quitter" : m.hint)
                     .font(P.font(21)).foregroundStyle(.white.opacity(0.6)).padding(.top, 10).transition(.opacity)
             }
-            if !m.live { saidButton }
+            if !m.live {
+                HStack(spacing: 14) {
+                    saidButton
+                    if m.series {
+                        // simulateur : « ⏩ Épisode suivant » à côté de « Qu'a-t-il dit ? »
+                        Button { m.options = false; m.nextEpisode() } label: {
+                            HStack(spacing: 12) {
+                                Image(systemName: "forward.end.fill").font(.system(size: 22, weight: .semibold))
+                                Text("Épisode suivant").font(P.font(25, .bold))
+                            }
+                            .padding(.horizontal, 28).frame(height: 62)
+                        }
+                        .buttonStyle(PlayerChipStyle())
+                        .focused($focus, equals: "nextep")
+                        .disabled(!m.options)
+                        .padding(.top, 22)
+                    }
+                }
+            }
         }
         .padding(.leading, 86).padding(.trailing, 86 + right).padding(.bottom, 58)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
@@ -249,7 +310,8 @@ struct PlayerOverlay: View {
                 .padding(.bottom, 4)
                 ForEach(m.shortcuts, id: \.self) { k in row(k) }
                 Divider().overlay(Color.white.opacity(0.15))
-                rowButton(icon: m.live ? "list.bullet.rectangle" : "rectangle.grid.1x2", title: m.live ? "Chaînes et tout le reste" : "Tous les réglages", value: "↑ ou OK", key: "all") { m.panel = .full }
+                rowButton(icon: m.live || m.series ? "list.bullet.rectangle" : "rectangle.grid.1x2",
+                          title: m.live ? "Chaînes et tout le reste" : m.series ? "Épisodes et tout le reste" : "Tous les réglages", value: "↑ ou OK", key: "all") { m.panel = .full }
             }
             .padding(28).frame(width: 565)
             .background(panelBG(36))
@@ -262,7 +324,7 @@ struct PlayerOverlay: View {
                     if case let .sub(k) = m.panel {
                         Label(m.label(k).title, systemImage: "chevron.left").font(P.font(34, .bold))
                     } else {
-                        Text(m.live ? "Chaînes" : "Lecture").font(P.font(36, .bold))
+                        Text(m.live ? "Chaînes" : m.series ? "Épisodes" : "Lecture").font(P.font(36, .bold))
                     }
                     Spacer()
                     Text(Fmt.hm(now)).font(P.font(34, .semibold)).monospacedDigit()
@@ -286,7 +348,81 @@ struct PlayerOverlay: View {
     }
 
     @ViewBuilder private var fullList: some View {
-        if m.live { liveList } else { vodList }
+        if m.live { liveList } else if m.series { seriesList } else { vodList }
+    }
+
+    /// Série (simulateur) : saisons, épisodes, puis « RÉGLAGES DE CETTE SÉRIE » en pastilles
+    @ViewBuilder private var seriesList: some View {
+        let seasons = Array(Set(m.episodes.map(\.season))).sorted()
+        if seasons.count > 1 {
+            HStack(spacing: 12) {
+                ForEach(seasons, id: \.self) { n in
+                    Button { m.epSeason = n } label: { Text("Saison \(n)").font(P.font(21, .bold)).padding(.horizontal, 20).frame(height: 50) }
+                        .buttonStyle(PlayerChipStyle(on: m.epSeason == n)).focused($focus, equals: "sea\(n)")
+                }
+            }
+            .padding(.bottom, 10)
+        }
+        ForEach(m.episodes.filter { $0.season == m.epSeason }) { e in
+            let hide = m.spoiler(e), cur = e.id == m.epCur
+            Button { m.panel = .none; if !cur { m.playEpisode(e.season, e.number) } } label: {
+                HStack(spacing: 18) {
+                    ArtView(backdrop: e.image, poster: "", maxPixel: 300, posterWidthRatio: 0.3)
+                        .frame(width: 150, height: 84).clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                        .blur(radius: hide ? 8 : 0).clipped()
+                    VStack(alignment: .leading, spacing: 5) {
+                        Text("\(e.number). " + (e.title.isEmpty ? "Épisode \(e.number)" : e.title)).font(P.font(24, .bold)).lineLimit(1)
+                            .blur(radius: hide ? 6 : 0)
+                        Text(epLine(e, cur: cur)).font(P.font(19)).opacity(0.7).lineLimit(1)
+                    }
+                    Spacer(minLength: 0)
+                }
+                .padding(.horizontal, 14).padding(.vertical, 10).frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .buttonStyle(PlayerRowStyle(current: cur))
+            .focused($focus, equals: "ep" + e.id)
+        }
+        Divider().overlay(Color.white.opacity(0.15)).padding(.vertical, 12)
+        Text("RÉGLAGES DE CETTE SÉRIE").font(P.font(20, .bold)).tracking(3).foregroundStyle(.white.opacity(0.65)).padding(.bottom, 6)
+        HStack(spacing: 12) {
+            chip("Audio : " + m.label("audio").value, key: "c-audio") { m.used("audio"); m.panel = .sub("audio") }
+            chip("Sous-titres : " + (m.subCur < 0 ? "non" : m.label("subs").value), key: "c-subs") { m.used("subs"); m.panel = .sub("subs") }
+        }
+        HStack(spacing: 12) {
+            chip(m.versions.indices.contains(m.versionCur) ? m.versions[m.versionCur] : "Version unique", key: "c-version") { m.used("version"); m.panel = .sub("version") }
+            chip("Intro passée auto", key: "c-auto", on: m.seriesAutoSkip) { m.setSeriesAutoSkip(!m.seriesAutoSkip) }
+        }
+        HStack(spacing: 12) {
+            chip("Arrêt après cet épisode", key: "c-stop", on: m.stopAfter) { m.used("stopafter"); m.setStopAfter(!m.stopAfter) }
+            chip("Image : " + m.label("image").value, key: "c-image") { m.used("image"); m.panel = .sub("image") }
+        }
+        HStack(spacing: 12) {
+            chip("Son de nuit : " + (m.night == "auto" ? "auto" : m.night == "on" ? "toujours" : "jamais"), key: "c-night") { m.used("night"); m.panel = .sub("night") }
+            chip("Infos du flux", key: "c-info") { m.used("info"); m.panel = .sub("info") }
+        }
+        if !m.introLearned.isEmpty {
+            Text("Intro apprise : " + m.introLearned).font(P.font(20)).foregroundStyle(.white.opacity(0.6)).padding(.top, 8)
+            chip("Oublier le moment de l'intro", key: "c-forget") { m.forgetIntro() }
+        }
+    }
+
+    private func epLine(_ e: PanelEpisode, cur: Bool) -> String {
+        let d = e.minutes > 0 ? "\(e.minutes) min" : ""
+        if cur { return "en cours" + (m.dur > 0 ? " · reste " + "\(max(1, Int((m.dur - m.pos) / 60))) min" : "") }
+        if m.epSeen.contains(e.id) { return "✓ vu" + (d.isEmpty ? "" : " · " + d) }
+        if let f = m.epProgress[e.id] { return "commencé · \(Int(f * 100)) %" }
+        return d
+    }
+
+    private func chip(_ t: String, key: String, on: Bool = false, action: @escaping () -> Void) -> some View {
+        Button { m.touch(); action() } label: {
+            HStack(spacing: 8) {
+                if on { Image(systemName: "checkmark").font(.system(size: 17, weight: .bold)) }
+                Text(t).font(P.font(21, .bold)).lineLimit(1)
+            }
+            .padding(.horizontal, 20).frame(height: 52)
+        }
+        .buttonStyle(PlayerChipStyle(on: on)).focused($focus, equals: key)
     }
 
     /// TV en direct (simulateur, variante « tv ») : récentes, liste des chaînes avec leur programme, puis les réglages
@@ -391,7 +527,7 @@ struct PlayerOverlay: View {
         let l = m.label(k)
         return rowButton(icon: l.icon, title: l.title, value: l.value, key: k) {
             m.used(k)
-            if k == "bedstop" { m.setBedStop(!m.bedStop) } else { m.panel = .sub(k) }
+            if k == "bedstop" { m.setBedStop(!m.bedStop) } else if k == "stopafter" { m.setStopAfter(!m.stopAfter) } else { m.panel = .sub(k) }
         }
     }
 
@@ -432,11 +568,16 @@ struct PlayerOverlay: View {
     }
 
     /// La sélection arrive sur la dernière option utilisée (« le panneau se souvient »), ou sur l'option choisie dans une sous-liste.
-    private func placeFocus(_ p: PlayerUI.Panel) {
+    private func placeFocus(_ p: PlayerUI.Panel, from old: PlayerUI.Panel = .none) {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) {
             switch p {
             case .shortcuts: focus = m.shortcuts.contains(m.lastKey) ? m.lastKey : m.shortcuts.first
             case .full where m.live: focus = "ch\(m.cur)"
+            case .full where m.series:
+                // retour d'une sous-liste : sur sa pastille ; sinon sur l'épisode en cours
+                if case let .sub(k) = old { focus = "c-" + k; return }
+                m.epSeason = m.episodes.first { $0.id == m.epCur }?.season ?? m.epSeason
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { focus = "ep" + m.epCur }
             case .full: focus = ["audio", "subs", "version", "image", "night", "bedstop", "info"].contains(m.lastKey) ? m.lastKey : "audio"
             case let .sub(k):
                 switch k {

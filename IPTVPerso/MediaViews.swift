@@ -605,8 +605,9 @@ struct MediaHomeView: View {
     private func play(_ it: MediaItem, _ info: MediaInfo) {
         guard let p = store.provider(it.pid) else { open = it; return }
         if it.kind == .film {
-            guard let url = p.movieURL(it) else { open = it; return }
-            playing = VodRequest(url: url, key: it.id, item: it.id, title: it.displayTitle, subtitle: "", icon: it.posterURL, startAt: watch.resume(it.id) ?? 0)
+            // même lecture que depuis la fiche (bandeau, fin du film : À suivre, avis)
+            guard let r = FilmNext.request(it, from: watch.resume(it.id) ?? 0) else { open = it; return }
+            playing = r
         } else {
             guard let e = EpisodeLogic.next(it, info, watch),
                   let r = EpisodeLogic.request(it, title: it.displayTitle, info: info, provider: p, episode: e, from: watch.resume(EpisodeLogic.key(it, e)) ?? 0) else { open = it; return }

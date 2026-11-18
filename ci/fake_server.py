@@ -74,7 +74,7 @@ FILMS = [
     ("Concrete Utopia", 2023, 130, 7.1, ["Drame", "Thriller"], None, 9),
 ]
 KW = {"Wonder Woman": [(229266, "dc extended universe (dceu)"), (9715, "superhero")], "Aquaman": [(229266, "dc extended universe (dceu)"), (9715, "superhero")],
-      "Spider-Man : No Way Home": [(180547, "marvel cinematic universe (mcu)"), (9715, "superhero")], "Spider-Man : Far From Home": [(180547, "marvel cinematic universe (mcu)"), (9715, "superhero")],
+      "Spider-Man : No Way Home": [(180547, "marvel cinematic universe (mcu)"), (9715, "superhero"), (179430, "aftercreditsstinger")], "Spider-Man : Far From Home": [(180547, "marvel cinematic universe (mcu)"), (9715, "superhero")],
       "Spider-Man : Homecoming": [(180547, "marvel cinematic universe (mcu)"), (9715, "superhero")], "Wonder": [(818, "based on novel or book")],
       "Dune": [(3386, "space opera"), (818, "based on novel or book")], "Dune : Deuxième partie": [(3386, "space opera")]}
 # mêmes films sous d'autres noms chez le fournisseur (test du dédoublonnage par identifiant TMDB)
@@ -679,6 +679,15 @@ class H(http.server.BaseHTTPRequestHandler):
         if m and int(m.group(1)) == fid(11): return self.send_file(MEDIA + "/film-sans-fr.mkv")
         m = re.match(r"^/series/[^/]+/[^/]+/(\d+)\.\w+$", p)
         if m and (m.group(1).startswith(str(sid(1))) or m.group(1).startswith(str(LUPIN_ALT))): return self.send_file(MEDIA + "/film-sous-titres.mkv")
+        # 1.8 phase 1 : HPI — saison 1 avec chapitres « Intro » et « Générique » (intro décalée de 8 s sur l'épisode 2),
+        # deux pistes audio (français, anglais) et deux sous-titres ; saison 2 sans chapitres, audio français seul
+        if m and m.group(1).startswith(str(sid(2))):
+            ep = m.group(1)[len(str(sid(2))):]
+            if ep.startswith("01"): return self.send_file(MEDIA + ("/ep-b.mkv" if ep == "0102" else "/ep-a.mkv"))
+            return self.send_file(MEDIA + "/ep-sans.mkv")
+        # 1.8 phase 1 : films de 9 min pour la fin de film (saga, scène après le générique, recommandation)
+        m2 = re.match(r"^/movie/[^/]+/[^/]+/(\d+)\.\w+$", p)
+        if m2 and int(m2.group(1)) in (fid(12), fid(13), fid(14), fid(20)): return self.send_file(MEDIA + "/film-fin.mkv")
         m = re.match(r"^/live/[^/]+/[^/]+/(\d+)\.\w+$", p)
         if m and PROFILE in ("main", "second"):
             i = int(m.group(1)) - 300

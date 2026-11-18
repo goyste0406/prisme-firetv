@@ -26,12 +26,61 @@ struct VodRequest: Identifiable {
     var live: [Channel] = []
     var liveIndex = 0
 
+    /// 1.8 phase 1 : épisode (carte « Épisode suivant », intro, langue retenue, panneau Épisodes) ou film (À suivre, avis)
+    var episode: EpisodeCtx? = nil
+    var film: FilmCtx? = nil
+
     /// Lecture d'une chaîne (zapping dans `channels`) avec le lecteur commun aux films et séries
     static func live(_ channels: [Channel], start: Int) -> VodRequest {
         var r = VodRequest(url: URL(string: "about:blank")!, key: "", item: "", title: "", subtitle: "", icon: "", startAt: 0)
         r.live = channels; r.liveIndex = max(0, min(start, channels.count - 1))
         return r
     }
+}
+
+/// Un épisode dans le panneau « Épisodes » du lecteur.
+struct PanelEpisode: Identifiable, Equatable {
+    let season: Int, number: Int, title: String, minutes: Int, image: String
+    var id: String { "\(season)-\(number)" }
+}
+
+/// Ce que le lecteur sait de l'épisode lu (série, suivant, liste du panneau).
+struct EpisodeCtx {
+    let series: String           // id de la série
+    let seriesTitle: String
+    let season: Int, number: Int
+    let epTitle: String
+    let provider: String
+    let version: String          // « VF · 4K »
+    var image = ""               // image large de la série (carte « Épisode suivant »)
+    var episodes: [PanelEpisode] = []
+    /// épisode suivant chez le fournisseur (nil : aucun)
+    var next: PanelEpisode?
+    var nextPlot = ""
+    /// l'épisode qui suit dans l'ordre (S·É+1) manque chez le fournisseur (« É4 pas encore chez ton fournisseur »)
+    var missingNext: Int?
+    /// date annoncée par TMDB pour le prochain épisode (« AAAA-MM-JJ »), saisons annoncées par TMDB
+    var tmdbNext = ""
+    var tmdbSeasons = 0
+    /// lance un autre épisode (S, É) de la même série chez le même fournisseur
+    var jump: ((Int, Int) -> VodRequest?)? = nil
+    var epKey: String { SeriesMemory.epKey(season, number) }
+}
+
+/// Ce que le lecteur sait du film lu (scène après le générique, film suivant).
+struct FilmCtx {
+    let item: MediaItem
+    /// TMDB : « scène pendant / après le générique »
+    var post: Bool { let k = item.fiche?.keywordNames ?? []; return k.contains("aftercreditsstinger") || k.contains("duringcreditsstinger") }
+    /// film proposé à la fin (calculé pendant la lecture)
+    var pick: (() async -> FilmPick?)? = nil
+}
+
+struct FilmPick {
+    let item: MediaItem
+    let reason: String
+    let minutes: Int
+    let request: () -> VodRequest?
 }
 
 struct VodPlayerView: View {
@@ -119,6 +168,29 @@ final class VodPlayerController: UIViewController, VLCMediaPlayerDelegate {
     private var sourceIndex = 0
     private var zapWork: DispatchWorkItem?
     private var recent: [Int] = []
+    // 1.8 phase 1 : fin de lecture, intro, langue, journal
+    private var mem = SeriesMemory()
+    private var intro: (s: Double, e: Double, chap: Bool)?
+    private var introDone = false
+    private var introAutoAt: (date: Date, end: Double)?
+    private var introNoAuto = false
+    private var creditsChapter: Double?
+    private var endShown = false
+    private var creditsWatch = false
+    private var cdTimer: Timer?
+    private var cardActions: [() -> Void] = []
+    private var cardBackAction: () -> Void = {}
+    private var played: Double = 0
+    private var playedLast: Double = -1
+    private var sessionStart = Date()
+    private var binge = 0
+    private var bingeAsked = false
+    private var lastEpisodeEnd: Date?
+    private var pick: FilmPick?
+    private var postPending = false
+    private var rated = false
+    private var langApplied = false
+    private var debugFromUsed = false
 
     private var sleepAfter: TimeInterval { Double(Debug.sleepAfterSeconds ?? 90 * 60) }
 
@@ -169,6 +241,8 @@ final class VodPlayerController: UIViewController, VLCMediaPlayerDelegate {
 
     func stop() {
         stallWork?.cancel(); zapWork?.cancel()
+        cdTimer?.invalidate(); cdTimer = nil
+        flushJournal()
         savePosition()
         saveTimer?.invalidate(); saveTimer = nil
         minuteTimer?.invalidate(); minuteTimer = nil
@@ -193,8 +267,8 @@ final class VodPlayerController: UIViewController, VLCMediaPlayerDelegate {
         ui.nightActive = nightWanted
         ui.touch = { [weak self] in self?.noteInput() }
         ui.togglePause = { [weak self] in self?.togglePause() }
-        ui.setAudio = { [weak self] i in self?.player.currentAudioTrackIndex = i; self?.ui.audioCur = i; self?.toast("Audio : " + (self?.ui.audio.first { $0.id == i }?.name ?? "")) }
-        ui.setSub = { [weak self] i in self?.player.currentVideoSubTitleIndex = i; self?.ui.subCur = i; self?.saidRestore = nil; self?.saidWant = nil }
+        ui.setAudio = { [weak self] i in self?.player.currentAudioTrackIndex = i; self?.ui.audioCur = i; self?.toast("Audio : " + (self?.ui.audio.first { $0.id == i }?.name ?? "")); self?.rememberLang() }
+        ui.setSub = { [weak self] i in self?.player.currentVideoSubTitleIndex = i; self?.ui.subCur = i; self?.saidRestore = nil; self?.saidWant = nil; self?.rememberLang() }
         ui.setVersion = { [weak self] i in self?.switchVersion(i) }
         ui.setAspect = { [weak self] a in self?.applyAspect(a); UserDefaults.standard.set(a, forKey: ProfileStore.shared.key("prisme.player.aspect")) }
         ui.setNight = { [weak self] n in self?.changeNight(n) }
@@ -213,6 +287,7 @@ final class VodPlayerController: UIViewController, VLCMediaPlayerDelegate {
         }
         ui.stillWatching = { [weak self] in self?.endSleepAsk(pause: false) }
         ui.pauseForLater = { [weak self] in self?.endSleepAsk(pause: true) }
+        setupEnd()
     }
 
     private func start(at: Double? = nil) {
@@ -295,9 +370,9 @@ final class VodPlayerController: UIViewController, VLCMediaPlayerDelegate {
         DispatchQueue.main.asyncAfter(deadline: .now() + 5, execute: w)
     }
 
-    private func toast(_ t: String) {
+    private func toast(_ t: String, seconds: Double = 3.5) {
         ui.toast = t
-        DispatchQueue.main.asyncAfter(deadline: .now() + 3.5) { [weak self] in if self?.ui.toast == t { self?.ui.toast = nil } }
+        DispatchQueue.main.asyncAfter(deadline: .now() + seconds) { [weak self] in if self?.ui.toast == t { self?.ui.toast = nil } }
     }
 
     private func noteInput() { lastInput = Date(); lastInputPos = position }
@@ -314,8 +389,10 @@ final class VodPlayerController: UIViewController, VLCMediaPlayerDelegate {
         seekWork?.cancel()
         let w = DispatchWorkItem { [weak self] in
             guard let self else { return }
-            let target = max(0, min(self.duration - 2, self.position + self.ui.pending))
+            let from = self.position
+            let target = max(0, min(self.duration - 2, from + self.ui.pending))
             self.ui.pending = 0
+            self.noteJump(from: from, to: target)
             self.player.time = VLCTime(int: Int32(target * 1000))
             self.refresh()
         }
@@ -334,6 +411,8 @@ final class VodPlayerController: UIViewController, VLCMediaPlayerDelegate {
             if press.type == .menu { ui.log("VC began menu (panneau)"); return }
             return super.pressesBegan(presses, with: event)
         }
+        if ui.cardActive, press.type != .menu { cardPress(press.type); return }
+        if ui.card == .intro, press.type == .select { skipIntro(); return }
         switch press.type {
         case .menu: return   // Retour : traité par shortBack() (via SwiftUI)
         case .leftArrow where isLive, .rightArrow where isLive: showOSD()
@@ -364,9 +443,12 @@ final class VodPlayerController: UIViewController, VLCMediaPlayerDelegate {
         noteInput()
         if ui.sleepLeft != nil { ui.stillWatching(); return }
         if ui.interactive { ui.back("lecteur"); return }
+        if ui.cardActive { cardBackAction(); return }
         if ui.message != nil && (cutDone || bedDone) { quit(); return }
         // comportement validé (1.7) : 1re pression = fermer le panneau ouvert (ci-dessus), 2e pression = quitter la vidéo,
         // bandeau affiché ou non (tvOS réserve « Retour maintenu » à l'écran d'accueil de l'Apple TV)
+        // 1.8 : un film vu à 85 % ou plus demande d'abord « Tu as aimé … ? » (une seule fois par film)
+        if askRateBeforeQuit() { return }
         quit()
     }
 
@@ -382,6 +464,9 @@ final class VodPlayerController: UIViewController, VLCMediaPlayerDelegate {
             let p = self.position
             if self.ui.loading, self.lastTick >= 0, p != self.lastTick { self.ui.loading = false; self.stallWork?.cancel() }
             self.lastTick = p
+            // journal : seulement le temps réellement joué (ni les pauses ni les sauts)
+            if self.player.isPlaying, self.playedLast >= 0, p - self.playedLast > 0, p - self.playedLast < 3 { self.played += p - self.playedLast }
+            self.playedLast = p
             if self.isLive {
                 if !self.shownTracks, p > 0 { self.shownTracks = true; self.readTracks() }
                 self.checkSleep()
@@ -390,12 +475,13 @@ final class VodPlayerController: UIViewController, VLCMediaPlayerDelegate {
             // reprise : on saute à la position enregistrée (ou à celle d'avant un changement) dès que la durée est connue
             if !self.seeked, self.duration > 0 {
                 self.seeked = true
-                let to = self.restartAt ?? (self.req.startAt > 0 ? self.req.startAt : nil)
+                var to = self.restartAt ?? (self.req.startAt > 0 ? self.req.startAt : nil)
+                if !self.debugFromUsed { self.debugFromUsed = true; if let d = Debug.playFrom { to = d } }
                 if let to { self.player.time = VLCTime(int: Int32(to * 1000)) }
                 self.restartAt = nil
                 self.lastInputPos = to ?? 0
             }
-            if !self.shownTracks, self.duration > 0 { self.shownTracks = true; self.readTracks(); self.defaultSubs() }
+            if !self.shownTracks, self.duration > 0 { self.shownTracks = true; self.readTracks(); self.defaultSubs(); self.afterTracks() }
             if self.ui.osd || self.ui.interactive { self.refresh() } else { self.ui.pos = self.position }
             if var r = self.saidRestore, !r.armed, self.position < r.until - min(3, r.until * 0.5) { r.armed = true; self.saidRestore = r }
             if let r = self.saidRestore, r.armed, self.position >= r.until {
@@ -404,6 +490,7 @@ final class VodPlayerController: UIViewController, VLCMediaPlayerDelegate {
             }
             self.checkCut()
             self.checkSleep()
+            self.checkEnd()
         }
     }
 
@@ -576,6 +663,7 @@ final class VodPlayerController: UIViewController, VLCMediaPlayerDelegate {
         let w = DispatchWorkItem { [weak self] in
             guard let self else { return }
             self.recent.removeAll { $0 == self.liveIndex }; self.recent.insert(self.liveIndex, at: 0)
+            self.flushJournal()
             self.liveIndex = i; self.sources = []
             self.loadLive(); self.start()
         }
@@ -741,11 +829,507 @@ final class VodPlayerController: UIViewController, VLCMediaPlayerDelegate {
                 self.ui.loading = false; self.ui.message = "La diffusion s'est arrêtée."
             case .ended:
                 self.ui.loading = false
-                self.savePosition()
-                if let n = self.req.next?() { self.req = n; self.versionIndex = 0; self.setupUI(); self.start() }   // épisode suivant
-                else { self.quit() }
+                self.savePosition(at: self.duration)
+                self.endedFlow()
             default: break
             }
+        }
+    }
+}
+
+// MARK: - 1.8 phase 1 : fin de lecture (épisode et film), intro, langue retenue, journal
+// Un seul moteur pour les deux lecteurs : mêmes cartes, même compte à rebours (arrêté pendant la pause), même règle
+// pour Retour, même journal. Priorités : arrêt au coucher, « Tu regardes toujours ? », « Encore un ? »,
+// scène après le générique, épisode suivant / À suivre, « Tu as aimé ? » — jamais deux fenêtres à la fois.
+
+extension VodPlayerController {
+
+    /// À chaque nouvelle lecture (épisode suivant, autre épisode, film suivant) : état de fin remis à zéro.
+    fileprivate func setupEnd() {
+        cdTimer?.invalidate(); cdTimer = nil
+        ui.card = .none; ui.countdown = nil; ui.prepared = false
+        intro = nil; introDone = false; introAutoAt = nil; introNoAuto = false
+        creditsChapter = nil; endShown = false; creditsWatch = false
+        pick = nil; postPending = false; rated = false; langApplied = false
+        if let e = req.episode {
+            mem = SeriesMemory.load(e.series)
+            ui.series = true
+            ui.episodes = e.episodes
+            ui.epCur = "\(e.season)-\(e.number)"
+            ui.epSeason = e.season
+            ui.seriesAutoSkip = mem.autoSkip
+            // pastille « version » des réglages de la série (simulateur « Lune · 1080p »)
+            if req.versions.isEmpty { ui.versions = [e.provider + (e.version.isEmpty ? "" : " · " + e.version)]; ui.versionCur = 0 }
+            refreshEpisodeState()
+            ui.playEpisode = { [weak self] s, n in self?.jumpTo(s, n) }
+            ui.nextEpisode = { [weak self] in self?.goNextEpisode(manual: true) }
+            ui.setStopAfter = { [weak self] on in
+                guard let self else { return }
+                self.ui.stopAfter = on
+                self.toast(on ? "☾ prisme s'arrêtera après cet épisode" : "Arrêt après cet épisode désactivé")
+                if self.ui.card == .episode { self.endShown = false; self.showEpisodeCard() }
+            }
+            ui.setSeriesAutoSkip = { [weak self] on in
+                guard let self, let e = self.req.episode else { return }
+                self.mem.autoSkip = on; self.mem.save(e.series); self.ui.seriesAutoSkip = on
+                self.toast(on ? "Intro passée automatiquement pour " + e.seriesTitle : "Intro : bouton seulement pour " + e.seriesTitle)
+            }
+            ui.forgetIntro = { [weak self] in
+                guard let self, let e = self.req.episode else { return }
+                self.mem.intros = [:]; self.mem.save(e.series)
+                self.ui.introLearned = ""
+                if self.intro?.chap == false { self.intro = nil; if self.ui.card == .intro { self.ui.card = .none } }
+                self.toast("Moment de l'intro oublié pour " + e.seriesTitle)
+            }
+            updateLearnedText()
+        } else {
+            ui.series = false
+            ui.episodes = []
+        }
+        if let f = req.film, let p = f.pick {
+            let key = req.key
+            Task { @MainActor [weak self] in
+                let x = await p()
+                guard let self, self.req.key == key else { return }
+                self.pick = x
+            }
+        }
+    }
+
+    private func refreshEpisodeState() {
+        guard let e = req.episode else { return }
+        let w = WatchStore.shared
+        var seen = Set<String>(), prog: [String: Double] = [:]
+        // historique de la série : l'épisode est reconnu à « Saison S · Épisode N » (début du sous-titre enregistré)
+        let mine = w.entries.values.filter { $0.item == e.series }
+        for x in e.episodes {
+            let tag = "Saison \(x.season) · Épisode \(x.number)"
+            if let f = mine.first(where: { ($0.ep ?? "") == tag || ($0.ep ?? "").hasPrefix(tag + " · ") }) {
+                let fr = f.dur > 0 ? f.pos / f.dur : 0
+                if fr >= 0.92 { seen.insert(x.id) } else if fr > 0.02 { prog[x.id] = fr }
+            }
+        }
+        ui.epSeen = seen; ui.epProgress = prog
+    }
+
+    private func updateLearnedText() {
+        if let l = mem.learned() {
+            ui.introLearned = PlayerUI.hms(l.start) + " → " + PlayerUI.hms(l.end) + " · appris sur " + l.from + (l.count >= 2 ? " (confirmé \(l.count) fois)" : "")
+        } else { ui.introLearned = "" }
+    }
+
+    // MARK: pistes : chapitres (intro, générique) et langue retenue pour la série
+
+    fileprivate func afterTracks() {
+        let d = duration
+        guard d > 0 else { return }
+        let ti = player.currentTitleIndex
+        let ch = ti >= 0 ? (player.chapterDescriptions(ofTitle: ti) as? [[String: Any]] ?? []) : []
+        let list: [(name: String, s: Double, e: Double)] = ch.compactMap { c in
+            guard let o = (c[VLCChapterDescriptionTimeOffset] as? NSNumber)?.doubleValue else { return nil }
+            let du = (c[VLCChapterDescriptionDuration] as? NSNumber)?.doubleValue ?? 0
+            return ((c[VLCChapterDescriptionName] as? String) ?? "", o / 1000, (o + du) / 1000)
+        }
+        func match(_ n: String, _ re: String) -> Bool { n.range(of: re, options: [.regularExpression, .caseInsensitive, .diacriticInsensitive]) != nil }
+        if let c = list.first(where: { match($0.name, #"intro|opening|ouverture|g[eé]n[eé]rique de d[eé]but"#) }), c.e > c.s, c.s < d * 0.5 {
+            intro = (c.s, c.e, true)
+        }
+        if let c = list.last(where: { match($0.name, #"credits|cr[eé]dits|g[eé]n[eé]rique|ending|end titles"#) && !match($0.name, #"d[eé]but|opening"#) }), c.s > d * 0.5 {
+            creditsChapter = c.s
+        }
+        if req.episode != nil, intro == nil, let l = mem.learned(), l.end < d * 0.5 { intro = (l.start, l.end, false) }
+        applyLangMemory()
+    }
+
+    /// Langue choisie par toi pendant un épisode : retenue pour la série (la langue, pas le numéro de piste).
+    fileprivate func rememberLang() {
+        guard let e = req.episode else { return }
+        mem.audio = ui.audio.first { $0.id == ui.audioCur }.flatMap { TrackLang.code($0.name) } ?? mem.audio
+        if ui.subCur < 0 { mem.subs = "off" } else if let n = ui.subs.first(where: { $0.id == ui.subCur })?.name, !TrackLang.isForced(n) { mem.subs = TrackLang.code(n) ?? mem.subs }
+        mem.save(e.series)
+    }
+
+    private func applyLangMemory() {
+        defer { langApplied = true }
+        guard req.episode != nil else { return }
+        var notes: [String] = []
+        if let a = mem.audio {
+            let cur = ui.audio.first { $0.id == ui.audioCur }.flatMap { TrackLang.code($0.name) }
+            if cur != a {
+                if let t = ui.audio.first(where: { TrackLang.code($0.name) == a }) { player.currentAudioTrackIndex = t.id; ui.audioCur = t.id }
+                else if ui.audio.count > 0 { notes.append("Pas de piste \(TrackLang.adjF(a)) dans cet épisode · audio " + (cur.map(TrackLang.name) ?? ui.audio.first { $0.id == ui.audioCur }?.name ?? "par défaut")) }
+            }
+        }
+        if let sb = mem.subs {
+            if sb == "off" { if ui.subCur >= 0 { player.currentVideoSubTitleIndex = -1; ui.subCur = -1 } }
+            else if let t = ui.subs.first(where: { $0.id >= 0 && !TrackLang.isForced($0.name) && TrackLang.code($0.name) == sb }) {
+                if t.id != ui.subCur { player.currentVideoSubTitleIndex = t.id; ui.subCur = t.id }
+            } else { notes.append("Pas de sous-titres en \(TrackLang.name(sb)) dans cet épisode") }
+        }
+        if let n = notes.first { toast(n, seconds: 6) }
+    }
+
+    // MARK: intro
+
+    /// Saut vers l'avant de plus de 20 s dans les 8 premières minutes : « l'intro va d'ici à là » pour cet épisode.
+    fileprivate func noteJump(from: Double, to: Double) {
+        guard let e = req.episode else { return }
+        // retour en arrière juste après un passage automatique : ce n'était pas la bonne intro
+        if let a = introAutoAt, Date().timeIntervalSince(a.date) < 20, to < a.end - 5 {
+            introAutoAt = nil; introNoAuto = true
+            if let k = mem.intros.keys.filter({ $0 != e.epKey }).sorted(by: SeriesMemory.epOrder).last { mem.intros[k] = nil; mem.save(e.series) }
+            updateLearnedText()
+            toast("Compris : intro pas passée automatiquement pour cet épisode")
+            return
+        }
+        guard to - from > 20, from < 480, intro?.chap != true, mem.intros[e.epKey] == nil else { return }
+        mem.intros[e.epKey] = [from, to]
+        mem.save(e.series)
+        updateLearnedText()
+    }
+
+    fileprivate func skipIntro() {
+        guard let i = intro, let e = req.episode else { return }
+        ui.card = .none; introDone = true
+        player.time = VLCTime(int: Int32(i.e * 1000))
+        // confirmation : ce moment est bien l'intro de cet épisode
+        mem.intros[e.epKey] = [i.s, i.e]
+        mem.save(e.series)
+        updateLearnedText()
+        showOSD()
+    }
+
+    private func checkIntro(_ p: Double) {
+        guard let i = intro, !introDone, ui.card == .none || ui.card == .intro else { return }
+        if p >= i.s, p < i.e - 1 {
+            let l = mem.learned()
+            let auto = PlaybackPrefs.autoSkip && mem.autoSkip && !introNoAuto && (l?.count ?? 0) >= 2
+            if auto, player.isPlaying {
+                introDone = true; ui.card = .none
+                player.time = VLCTime(int: Int32(i.e * 1000))
+                introAutoAt = (Date(), i.e)
+                toast("⏭ Intro passée automatiquement · appris sur " + (l?.from ?? ""), seconds: 5)
+            } else if ui.card != .intro {
+                ui.introSub = (l?.count ?? 0) == 1 && !i.chap ? "appris sur " + (l?.from ?? "")
+                    : (PlaybackPrefs.autoSkip && mem.autoSkip ? "prisme retiendra le moment pour les prochains épisodes" : "")
+                ui.card = .intro
+            }
+        } else if ui.card == .intro {
+            ui.card = .none
+            if p >= i.e - 1 { introDone = true }
+        }
+    }
+
+    // MARK: moment de la carte de fin
+
+    fileprivate func checkEnd() {
+        let p = position, d = duration
+        guard d > 60, !isLive, !cutDone, !bedDone, ui.sleepLeft == nil else { return }
+        if req.episode != nil {
+            checkIntro(p)
+            guard !endShown, !creditsWatch else { return }
+            let lead = creditsChapter ?? mem.creditsAverage.map { d - $0 } ?? (d - PlaybackPrefs.cardLead)
+            if p >= max(d * 0.5, lead) { endShown = true; showEpisodeCard() }
+        } else if let f = req.film {
+            guard !endShown else { return }
+            let lead = max(d - 420, creditsChapter ?? 0)
+            guard p >= max(d * 0.5, lead) else { return }
+            endShown = true
+            if f.post { postPending = true; showPostCard() }
+            else if pick != nil { showFilmCard(countdown: true) }
+        }
+    }
+
+    // MARK: cartes
+
+    private func showCard(_ c: PlayerUI.Card, _ info: EndCardInfo, actions: [() -> Void], back: @escaping () -> Void, sel: Int = 0, countdown: Int? = nil, onZero: (() -> Void)? = nil) {
+        cdTimer?.invalidate(); cdTimer = nil
+        ui.endInfo = info
+        cardActions = actions
+        cardBackAction = back
+        ui.cardSel = sel
+        ui.countdown = countdown
+        ui.prepared = false
+        ui.card = c
+        guard countdown != nil else { return }
+        cdTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] t in
+            guard let self, let n = self.ui.countdown else { t.invalidate(); return }
+            // compte à rebours arrêté pendant la pause et pendant « Tu regardes toujours ? »
+            guard self.player.isPlaying, self.ui.sleepLeft == nil else { return }
+            if n <= 1 { t.invalidate(); self.ui.countdown = 0; onZero?() }
+            else {
+                self.ui.countdown = n - 1
+                if n - 1 <= 6, !self.ui.prepared { self.ui.prepared = true }
+            }
+        }
+    }
+
+    private func closeCard() {
+        cdTimer?.invalidate(); cdTimer = nil
+        ui.card = .none; ui.countdown = nil
+    }
+
+    fileprivate func cardPress(_ t: UIPress.PressType) {
+        let n = cardActions.count + (ui.endInfo.rateButtons && (ui.card == .film || ui.card == .post) ? 2 : 0)
+        switch t {
+        case .leftArrow where ui.card != .encore: ui.cardSel = max(0, ui.cardSel - 1)
+        case .rightArrow where ui.card != .encore: ui.cardSel = min(max(0, n - 1), ui.cardSel + 1)
+        case .upArrow where ui.card == .encore: ui.cardSel = max(0, ui.cardSel - 1)
+        case .downArrow where ui.card == .encore: ui.cardSel = min(max(0, n - 1), ui.cardSel + 1)
+        case .select:
+            if cardActions.indices.contains(ui.cardSel) { cardActions[ui.cardSel]() }
+            else if ui.endInfo.rateButtons { rateFromCard(ui.cardSel == cardActions.count ? 1 : -1) }
+        case .playPause: togglePause()
+        default: break
+        }
+    }
+
+    // MARK: épisode
+
+    private func episodeLabel(_ s: Int, _ n: Int) -> String { "S\(s) · É\(n)" }
+
+    fileprivate func showEpisodeCard() {
+        guard let e = req.episode else { return }
+        var c = EndCardInfo()
+        c.image = e.image
+        if let n = e.next, e.missingNext == nil {
+            let last = ui.stopAfter
+            c.kicker = last ? "DERNIER ÉPISODE DE LA SOIRÉE" : "ÉPISODE SUIVANT DANS"
+            c.title = episodeLabel(n.season, n.number) + (n.title.isEmpty ? "" : " · « " + n.title + " »")
+            c.plot = e.nextPlot
+            c.plotHidden = PlaybackPrefs.zeroSpoiler && !ui.epSeen.contains(n.id)
+            c.lines = [e.version.isEmpty ? "chez " + e.provider + " · préparé pendant le générique, 1 seule connexion"
+                                         : e.version + " · " + e.provider + " · préparé pendant le générique, 1 seule connexion"]
+            if last {
+                c.buttons = ["Terminer la soirée"]
+                showCard(.episode, c, actions: [{ [weak self] in self?.endNight() }], back: { [weak self] in self?.watchCredits() })
+            } else {
+                c.buttons = ["▶ Épisode suivant", "Voir le générique"]
+                showCard(.episode, c, actions: [{ [weak self] in self?.goNextEpisode(manual: true) }, { [weak self] in self?.watchCredits() }],
+                         back: { [weak self] in self?.watchCredits() }, countdown: PlaybackPrefs.episodeCountdown,
+                         onZero: { [weak self] in self?.goNextEpisode(manual: false) })
+            }
+        } else {
+            c.kicker = "FIN DE L'ÉPISODE"
+            c.title = endTitle(e)
+            if let d = announced(e) { c.lines = [d] }
+            c.image = ""
+            c.buttons = ["Fermer"]
+            showCard(.episode, c, actions: [{ [weak self] in self?.quit() }], back: { [weak self] in self?.watchCredits() })
+        }
+    }
+
+    /// Fin sans épisode suivant : manquant, saison finie ou tout vu (simulateur).
+    private func endTitle(_ e: EpisodeCtx) -> String {
+        if let m = e.missingNext { return "É\(m) pas encore chez ton fournisseur" }
+        let lastSeason = e.episodes.map(\.season).max() ?? e.season
+        if e.tmdbSeasons > lastSeason || !e.tmdbNext.isEmpty {
+            return e.season == lastSeason && !e.tmdbNext.isEmpty && e.tmdbSeasons <= lastSeason
+                ? "É\(e.number + 1) pas encore chez ton fournisseur" : "Saison \(e.season) finie !"
+        }
+        return "Tu as tout vu !"
+    }
+
+    private func announced(_ e: EpisodeCtx) -> String? {
+        guard !e.tmdbNext.isEmpty, let d = Fiche.dayFormat.date(from: e.tmdbNext), d > Date().addingTimeInterval(-86400) else { return nil }
+        let f = DateFormatter(); f.locale = Locale(identifier: "fr_FR"); f.dateFormat = "EEEE d MMMM"
+        return "Prochain épisode annoncé le " + f.string(from: d)
+    }
+
+    /// « Voir le générique » (ou Retour) : la carte disparaît, l'épisode va jusqu'au bout, pas d'enchaînement.
+    private func watchCredits() {
+        closeCard(); creditsWatch = true
+        showOSD()
+    }
+
+    fileprivate func endedFlow() {
+        cdTimer?.invalidate(); cdTimer = nil
+        if let e = req.episode {
+            if ui.stopAfter, e.next != nil { endNight(); return }
+            if ui.card == .episode, ui.countdown != nil { goNextEpisode(manual: false); return }
+            // fin réelle de l'épisode : carte « Fin de l'épisode », sans compte à rebours
+            var c = EndCardInfo()
+            c.kicker = "FIN DE L'ÉPISODE"
+            if let n = e.next, e.missingNext == nil {
+                c.title = "Ensuite : " + episodeLabel(n.season, n.number) + (n.title.isEmpty || (PlaybackPrefs.zeroSpoiler && !ui.epSeen.contains(n.id)) ? "" : " · « " + n.title + " »")
+                c.buttons = ["▶ Épisode suivant", "Fermer"]
+                showCard(.episode, c, actions: [{ [weak self] in self?.goNextEpisode(manual: true) }, { [weak self] in self?.quit() }], back: { [weak self] in self?.quit() })
+            } else {
+                c.title = endTitle(e)
+                if let d = announced(e) { c.lines = [d] }
+                c.buttons = ["Fermer"]
+                showCard(.episode, c, actions: [{ [weak self] in self?.quit() }], back: { [weak self] in self?.quit() })
+            }
+            return
+        }
+        if req.film != nil {
+            if ui.card == .film, let p = pick, ui.countdown != nil { playFilm(p); return }
+            if let p = pick, !lateFor(p.minutes) { showFilmCard(countdown: true); return }
+            if pick != nil { showFilmCard(countdown: false); return }
+            if askRateBeforeQuit() { return }
+        }
+        quit()
+    }
+
+    /// Épisode suivant : le compteur « d'affilée » avance ; « Encore un ? » après N épisodes ; arrêt prévu après celui-ci.
+    fileprivate func goNextEpisode(manual: Bool) {
+        guard let e = req.episode else { return }
+        if manual, duration > 0, position > duration * 0.8 {
+            // moment où tu passes à la suite : retenu comme début du générique pour cette série
+            mem.creditsLead.append(duration - position); mem.creditsLead = Array(mem.creditsLead.suffix(5)); mem.save(e.series)
+        }
+        closeCard()
+        if ui.stopAfter { endNight(); return }
+        guard e.next != nil, e.missingNext == nil, let n = req.next?() else { showEpisodeCard(); return }
+        // « d'affilée » : sans quitter le lecteur ni faire une pause de plus de 15 minutes
+        if let l = lastEpisodeEnd, Date().timeIntervalSince(l) > 15 * 60 { binge = 0 }
+        binge += 1; lastEpisodeEnd = Date()
+        savePosition(at: duration)
+        if PlaybackPrefs.binge > 0, binge >= PlaybackPrefs.binge, !bingeAsked {
+            bingeAsked = true
+            askEncore(next: n)
+            return
+        }
+        switchTo(n, toast: true)
+    }
+
+    private func switchTo(_ n: VodRequest, toast t: Bool) {
+        flushJournal()
+        req = n; versionIndex = 0
+        setupUI(); start()
+        if t, let e = n.episode { toast("⚡ " + episodeLabel(e.season, e.number) + " enchaîne sans attente · " + (e.version.isEmpty ? "" : e.version + " · ") + e.provider) }
+    }
+
+    private func jumpTo(_ s: Int, _ n: Int) {
+        guard let e = req.episode, let r = e.jump?(s, n) else { return }
+        savePosition()
+        closeCard()
+        switchTo(r, toast: false)
+    }
+
+    private func askEncore(next n: VodRequest) {
+        player.pause()
+        guard let e = n.episode else { switchTo(n, toast: true); return }
+        let mins = e.episodes.first { $0.season == e.season && $0.number == e.number }?.minutes ?? 0
+        let endMin = Self.eveningNow() + max(1, mins)
+        ui.bingeCount = binge
+        ui.encoreEp = episodeLabel(e.season, e.number)
+        ui.encoreEnd = PlayerUI.hm(endMin)
+        ui.encoreBed = PlayerUI.hm(ui.bedMinutes)
+        ui.encoreLate = endMin > ui.bedMinutes
+        showCard(.encore, EndCardInfo(), actions: [
+            { [weak self] in self?.binge = 0; self?.bingeAsked = false; self?.closeCard(); self?.switchTo(n, toast: true) },
+            { [weak self] in self?.closeCard(); self?.switchTo(n, toast: false); self?.ui.stopAfter = true; self?.toast("☾ Un dernier : prisme s'arrêtera après " + "S\(e.season) · É\(e.number)") },
+            { [weak self] in self?.closeCard(); self?.quit() },
+        ], back: { [weak self] in self?.closeCard(); self?.quit() }, sel: ui.encoreLate ? 1 : 0)
+    }
+
+    /// « Arrêt après cet épisode » / « Terminer la soirée » : le lecteur se ferme avec « 🌙 Bonne nuit ».
+    private func endNight() {
+        closeCard()
+        player.pause()
+        savePosition(at: duration)
+        ui.message = "🌙 Bonne nuit\nprisme a arrêté après cet épisode."
+        let w = DispatchWorkItem { [weak self] in self?.quit() }
+        closeWork = w
+        DispatchQueue.main.asyncAfter(deadline: .now() + 3, execute: w)
+    }
+
+    // MARK: film
+
+    private func lateFor(_ minutes: Int) -> Bool {
+        guard minutes > 0 else { return false }
+        return Self.eveningNow() + minutes > ui.bedMinutes
+    }
+
+    private func showPostCard() {
+        var c = EndCardInfo()
+        c.kicker = "🎬 SCÈNE APRÈS LE GÉNÉRIQUE"
+        c.title = "Reste jusqu'au bout"
+        c.buttons = ["D'accord", "Ignorer"]
+        c.rateButtons = true
+        c.rated = req.film.flatMap { FilmRatings.value($0.item.workKey, pid: ProfileStore.shared.me.id) }
+        c.lines = ["Une scène t'attend à la toute fin."]
+        showCard(.post, c, actions: [{ [weak self] in self?.closeCard() }, { [weak self] in self?.postPending = false; self?.closeCard() }],
+                 back: { [weak self] in self?.closeCard() })
+    }
+
+    private func showFilmCard(countdown: Bool) {
+        guard let p = pick else { return }
+        let late = lateFor(p.minutes)
+        var c = EndCardInfo()
+        c.kicker = countdown && !late ? "À SUIVRE · LECTURE DANS" : "À SUIVRE"
+        c.title = p.item.fiche?.title.isEmpty == false ? p.item.fiche!.title : p.item.clean.title
+        c.image = p.item.posterURL
+        c.poster = true
+        let y = (p.item.fiche?.year ?? 0) > 0 ? p.item.fiche!.year : p.item.clean.year
+        var meta: [String] = []
+        if y > 0 { meta.append(String(y)) }
+        if p.minutes > 0 { meta.append(runtimeText(p.minutes)); meta.append("fin à " + Fmt.hm(Date().addingTimeInterval(Double(p.minutes) * 60))) }
+        c.lines = [p.reason] + (meta.isEmpty ? [] : [meta.joined(separator: " · ")]) + (late ? ["finirait après ton coucher : lancement à ta demande"] : [])
+        c.buttons = ["▶ Regarder maintenant", "Rester"]
+        c.rateButtons = true
+        c.rated = req.film.flatMap { FilmRatings.value($0.item.workKey, pid: ProfileStore.shared.me.id) }
+        showCard(.film, c, actions: [{ [weak self] in self?.playFilm(p) }, { [weak self] in self?.stayAfterCard() }],
+                 back: { [weak self] in self?.stayAfterCard() }, countdown: countdown && !late ? PlaybackPrefs.filmCountdown : nil,
+                 onZero: { [weak self] in self?.playFilm(p) })
+    }
+
+    private func stayAfterCard() {
+        closeCard()
+        // à la toute fin du film, « Rester » ferme le lecteur (en demandant ton avis si besoin)
+        if player.state == .ended || (duration > 0 && position >= duration - 2) { if !askRateBeforeQuit() { quit() } }
+        else { showOSD() }
+    }
+
+    private func playFilm(_ p: FilmPick) {
+        closeCard()
+        guard let r = p.request() else { toast("Ce film n'est plus disponible chez ton fournisseur"); return }
+        savePosition(at: duration)
+        switchTo(r, toast: false)
+        toast("▶ " + r.title)
+    }
+
+    private func rateFromCard(_ v: Int) {
+        guard let f = req.film else { return }
+        FilmRatings.rate(f.item, v)
+        rated = true
+        var c = ui.endInfo; c.rated = v; ui.endInfo = c
+        toast(v > 0 ? "👍 Noté : tes recommandations en tiennent compte" : "👎 Noté : moins de films comme celui-ci")
+    }
+
+    /// « Tu as aimé … ? » : fin du film ou départ après 85 % ; jamais deux fois pour le même film.
+    fileprivate func askRateBeforeQuit() -> Bool {
+        guard let f = req.film, !rated, ui.card != .rate, duration > 0, position / duration >= 0.85,
+              FilmRatings.shouldAsk(f.item.workKey, pid: ProfileStore.shared.me.id) else { return false }
+        rated = true
+        player.pause()
+        ui.rateTitle = f.item.fiche?.title.isEmpty == false ? f.item.fiche!.title : f.item.clean.title
+        let w = f.item.workKey, pid = ProfileStore.shared.me.id
+        showCard(.rate, EndCardInfo(), actions: [
+            { [weak self] in FilmRatings.rate(f.item, 1); self?.closeCard(); self?.quit() },
+            { [weak self] in FilmRatings.rate(f.item, -1); self?.closeCard(); self?.quit() },
+            { [weak self] in FilmRatings.skip(w, pid: pid); self?.closeCard(); self?.quit() },
+        ], back: { [weak self] in FilmRatings.skip(w, pid: pid); self?.closeCard(); self?.quit() })
+        return true
+    }
+
+    // MARK: journal
+
+    fileprivate func flushJournal() {
+        let sec = Int(played)
+        played = 0; playedLast = -1
+        let start = sessionStart
+        sessionStart = Date()
+        let pid = ProfileStore.shared.me.id
+        if isLive {
+            guard req.live.indices.contains(liveIndex) else { return }
+            let ch = req.live[liveIndex]
+            WatchJournal.add(.init(profile: pid, start: start, item: "live:" + ch.id, key: "", title: ChannelTools.clean(ch.name), ep: "", kind: "tv", seconds: sec))
+        } else if let e = req.episode {
+            WatchJournal.add(.init(profile: pid, start: start, item: req.item, key: req.key, title: e.seriesTitle, ep: episodeLabel(e.season, e.number), kind: "episode", seconds: sec))
+        } else {
+            WatchJournal.add(.init(profile: pid, start: start, item: req.item, key: req.key, title: req.title, ep: "", kind: req.item.hasPrefix("replay:") ? "replay" : "film", seconds: sec))
         }
     }
 }

@@ -514,6 +514,9 @@ struct FilmDetailView: View {
         r.versions = ([src] + others).compactMap { v in store.provider(v.pid)?.movieURL(v).map { (label: versionLabel(v), url: $0) } }
         // partie 1 d'un film coupé en deux soirées : arrêt prévu (encore à venir)
         if let s = stopAt ?? SplitStore.get(item.id), from < s - 60 { r.stopAt = s }
+        // 1.8 : fin du film (scène après le générique, « À suivre », « Tu as aimé ? »)
+        var it = item; it.fiche = fiche
+        r.film = FilmCtx(item: it, pick: { await FilmNext.pick(for: it) })
         playing = r
     }
 

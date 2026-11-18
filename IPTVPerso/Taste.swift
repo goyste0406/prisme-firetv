@@ -178,7 +178,7 @@ final class TasteStore: ObservableObject {
     /// Le modèle d'un profil (calculé une fois, recalculé quand ses réponses ou son historique changent).
     func model(_ pid: String) async -> TasteModel {
         let hist = WatchStore.entries(for: pid)
-        let sig = "\(hist.count)|\(hist.values.map(\.at).max()?.timeIntervalSince1970 ?? 0)"
+        let sig = "\(hist.count)|\(hist.values.map(\.at).max()?.timeIntervalSince1970 ?? 0)|\(FilmRatings.all(pid).count)"
         if let m = models[pid], cachedSig[pid] == sig { return m }
         let m = await build(pid, hist: hist)
         models[pid] = m; cachedSig[pid] = sig
@@ -214,6 +214,11 @@ final class TasteStore: ObservableObject {
             if Date().timeIntervalSince(e.at) < 14 * 86400 { w *= 1.2 }
             add(Genres.canon(f.genres), Array(f.keywordIDs), f.director, f.cast.map(\.n), w)
             if w >= 1 { m.liked.append((it.workKey, it.displayTitle, Genres.canon(f.genres))) }
+        }
+        // 1.8 : « Tu as aimé … ? » en fin de film — un avis donné après avoir vu le film, il compte pleinement
+        for (k, r) in FilmRatings.all(pid) {
+            add(r.genres, r.kw, r.dir, r.cast, r.v > 0 ? 1.6 : -1.2)
+            if r.v > 0 { m.liked.append((k, r.title, r.genres)) }
         }
         if let a {
             m.hasTest = true

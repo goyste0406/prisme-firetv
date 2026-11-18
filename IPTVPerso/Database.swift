@@ -124,6 +124,12 @@ final class Database: @unchecked Sendable {
             exec("ALTER TABLE fiche ADD COLUMN olang TEXT")
             exec("PRAGMA user_version=10")
         }
+        if v < 11 {
+            // 1.8 (phase 1) : journal de visionnage (une ligne par séance réellement regardée, par profil). Table ajoutée, rien d'autre ne change.
+            exec("CREATE TABLE IF NOT EXISTS journal(profile TEXT, at INTEGER, item TEXT, key TEXT, title TEXT, ep TEXT, kind TEXT, seconds INTEGER)")
+            exec("CREATE INDEX IF NOT EXISTS journal_p ON journal(profile,at)")
+            exec("PRAGMA user_version=11")
+        }
     }
 
     // MARK: Requêtes

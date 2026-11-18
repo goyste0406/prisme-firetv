@@ -450,6 +450,7 @@ struct SeriesDetailView: View {
 
     private func episodeRow(_ e: EpisodeInfo, fill: EpisodeFill? = nil) -> some View {
         let st = state(e)
+        let hide = EpisodeLogic.isSpoiler(item, info, e, watch: watch)
         let f = watch.fraction(key(e))
         let m = mins(e)
         return Button {
@@ -457,7 +458,8 @@ struct SeriesDetailView: View {
         } label: {
             HStack(alignment: .top, spacing: 24) {
                 ZStack(alignment: .bottom) {
-                    Poster(url: e.image.isEmpty ? (info.backdrop.isEmpty ? item.posterURL : info.backdrop) : e.image).frame(width: 288, height: 162).clipped()
+                    Poster(url: e.image.isEmpty ? (info.backdrop.isEmpty ? item.posterURL : info.backdrop) : e.image).frame(width: 288, height: 162)
+                        .blur(radius: hide ? 14 : 0).clipped()
                     if let f, f > 0.02, f < 0.92 {
                         GeometryReader { g in
                             ZStack(alignment: .leading) {
@@ -468,7 +470,11 @@ struct SeriesDetailView: View {
                     }
                 }.frame(width: 288, height: 162).clipShape(RoundedRectangle(cornerRadius: 14))
                 VStack(alignment: .leading, spacing: 7) {
-                    Text("\(e.number). " + (e.title.isEmpty ? "Épisode \(e.number)" : cleanEpTitle(e.title))).font(P.font(25, .bold)).lineLimit(1)
+                    // zéro spoiler : titre, image et résumé floutés ; numéro, durée et note restent lisibles
+                    HStack(spacing: 0) {
+                        Text("\(e.number). ")
+                        Text(e.title.isEmpty ? "Épisode \(e.number)" : cleanEpTitle(e.title)).blur(radius: hide ? 7 : 0)
+                    }.font(P.font(25, .bold)).lineLimit(1)
                     HStack(spacing: 8) {
                         if e.rating > 0 {
                             let top = info.seasons.first { $0.number == e.season }.map { topEpisodes($0).contains(e.number) } ?? false
@@ -482,7 +488,10 @@ struct SeriesDetailView: View {
                         else if isNew(e) { Pill(text: "NOUVEAU", bg: Self.newBlue.opacity(0.25), fg: Self.newBlue, stroke: nil) }
                         if let fill { Text("◆ complété depuis " + fill.from).foregroundStyle(Self.fillPurple).lineLimit(1) }
                     }.font(P.font(18, .medium)).opacity(0.75)
-                    if !e.plot.isEmpty { Text(e.plot).font(P.font(19)).opacity(0.7).lineLimit(2) }
+                    if !e.plot.isEmpty {
+                        Text(e.plot).font(P.font(19)).opacity(0.7).lineLimit(2).blur(radius: hide ? 6 : 0)
+                        if hide { Text("🙈 résumé masqué").font(P.font(17, .semibold)).foregroundStyle(Color(red: 0.5, green: 0.7, blue: 1)) }
+                    }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
@@ -511,7 +520,11 @@ struct SeriesDetailView: View {
                     .overlay(Color.black.opacity(0.45))
                     .clipShape(RoundedRectangle(cornerRadius: 14))
                 VStack(alignment: .leading, spacing: 7) {
-                    Text("\(x.number). " + name).font(P.font(25, .bold)).lineLimit(1)
+                    // zéro spoiler : le titre d'un épisode annoncé est flouté (la date reste lisible)
+                    HStack(spacing: 0) {
+                        Text("\(x.number). ")
+                        Text(name).blur(radius: PlaybackPrefs.zeroSpoiler && name != "Épisode \(x.number)" ? 7 : 0)
+                    }.font(P.font(25, .bold)).lineLimit(1)
                     HStack(spacing: 8) {
                         if m > 0 { Text(runtimeText(m)) }
                         Pill(text: pill.0, bg: pill.1, fg: pill.2, stroke: nil)
@@ -614,6 +627,8 @@ struct SeriesDetailView: View {
         if fiche == nil, TmdbKey.value != nil { fiche = await FicheWorker.fetchNow(item, tmdbHint: info.tmdb) }
         fills = await EpisodeFill.find(main: chosen ?? item, info: info, versions: v1, providerName: { store.provider($0)?.name ?? "" })
         if let id = fiche?.tmdb ?? (info.tmdb > 0 ? info.tmdb : nil) { upcoming = await UpcomingEpisode.load(tmdb: id, have: Set(all.map { "\($0.season)-\($0.number)" })) }
+        // visite de test : lecture directe d'un épisode
+        if let (sn, en) = Debug.playEp, playing == nil, let e = all.first(where: { $0.season == sn && $0.number == en }) { playEpisode(e, from: 0) }
         airings = await LiveStore.airings(title: title, providers: pids)
         let y = (fiche?.year ?? 0) > 0 ? fiche!.year : (item.clean.year > 0 ? item.clean.year : info.year)
         trailer = await TrailerStore.find(title: title, year: y, minutes: 0, tmdb: fiche?.tmdb ?? info.tmdb, tv: true)
@@ -628,12 +643,12 @@ struct SeriesDetailView: View {
 
     private func playFill(_ f: EpisodeFill, from: Double) {
         guard let p = store.provider(f.version.pid) else { return }
-        playing = EpisodeLogic.request(item, title: title, info: f.info, provider: p, episode: f.episode, from: from)
+        playing = EpisodeLogic.request(item, title: title, info: f.info, provider: p, episode: f.episode, from: from, fiche: fiche, version: versionShort(f.version))
     }
 
     private func playEpisode(_ e: EpisodeInfo, from: Double) {
         guard let p = store.provider(cur.pid) else { return }
-        playing = EpisodeLogic.request(item, title: title, info: info, provider: p, episode: e, from: from)
+        playing = EpisodeLogic.request(item, title: title, info: info, provider: p, episode: e, from: from, fiche: fiche, version: versionShort(cur))
     }
 
     private func versionShort(_ v: MediaItem) -> String {

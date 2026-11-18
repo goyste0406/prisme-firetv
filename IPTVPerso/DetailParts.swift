@@ -56,18 +56,69 @@ enum EpisodeLogic {
         return all.first
     }
 
-    static func request(_ item: MediaItem, title: String, info: MediaInfo, provider: Provider, episode e: EpisodeInfo, from: Double) -> VodRequest? {
+    /// Zéro spoiler : rang de l'épisode « à toi » d'un profil (en cours, ou le suivant du dernier vu) ; nil s'il n'a rien vu.
+    static func markIndex(_ item: MediaItem, _ info: MediaInfo, entries: [String: WatchStore.Entry]) -> Int? {
+        let all = info.seasons.flatMap(\.episodes)
+        guard let li = all.indices.filter({ entries[key(item, all[$0])] != nil })
+            .max(by: { (entries[key(item, all[$0])]?.at ?? .distantPast) < (entries[key(item, all[$1])]?.at ?? .distantPast) }),
+              let en = entries[key(item, all[li])] else { return nil }
+        let done = en.dur > 0 && en.pos / en.dur >= 0.92
+        return done ? li + 1 : li
+    }
+
+    /// Épisode plus loin que celui de chaque profil qui regarde (mode à deux : la progression de chacun compte).
+    /// Historique incomplet (commencé en S3) : seuls les épisodes après celui en cours sont floutés.
+    @MainActor
+    static func isSpoiler(_ item: MediaItem, _ info: MediaInfo, _ e: EpisodeInfo, watch: WatchStore) -> Bool {
+        guard PlaybackPrefs.zeroSpoiler, !watch.watched(key(item, e)) else { return false }
+        let all = info.seasons.flatMap(\.episodes)
+        guard let i = all.firstIndex(of: e) else { return false }
+        let ps = ProfileStore.shared
+        var marks: [Int] = []
+        for w in ps.watchers {
+            let ent = w.id == ps.me.id ? watch.entries : WatchStore.entries(for: w.id)
+            marks.append(markIndex(item, info, entries: ent) ?? 0)
+        }
+        return i > (marks.min() ?? 0)
+    }
+
+    static func request(_ item: MediaItem, title: String, info: MediaInfo, provider: Provider, episode e: EpisodeInfo, from: Double,
+                        fiche: Fiche? = nil, version: String = "") -> VodRequest? {
         guard let url = provider.episodeURL(e) else { return nil }
         let all = info.seasons.flatMap(\.episodes)
-        var r = VodRequest(url: url, key: key(item, e), item: item.id, title: title,
+        let et = cleanTitle(e.title)
+        // bandeau du lecteur (simulateur) : « LUPIN · SAISON 1 · ÉPISODE 2 », le titre de l'épisode, « VF · 4K · chez Atlas »
+        var r = VodRequest(url: url, key: key(item, e), item: item.id, title: et.isEmpty ? title : et,
                            subtitle: "Saison \(e.season) · Épisode \(e.number)" + (e.title.isEmpty ? "" : " · " + e.title), icon: item.posterURL, startAt: from)
-        r.kicker = "SÉRIE · SAISON \(e.season) · ÉPISODE \(e.number)"
-        r.meta = (e.title.isEmpty ? "" : e.title + " · ") + "chez " + provider.name
+        r.kicker = title.uppercased() + " · SAISON \(e.season) · ÉPISODE \(e.number)"
+        r.meta = (version.isEmpty ? "" : version + " · ") + "chez " + provider.name
+        let f = fiche ?? item.fiche
+        var ctx = EpisodeCtx(series: item.id, seriesTitle: title, season: e.season, number: e.number, epTitle: et, provider: provider.name, version: version)
+        ctx.image = info.backdrop.isEmpty ? (f.map { Fiche.img($0.backdrop, "w1280") } ?? "") : info.backdrop
+        ctx.episodes = all.map { PanelEpisode(season: $0.season, number: $0.number, title: cleanTitle($0.title), minutes: minutes($0, info: info, fiche: f), image: $0.image) }
+        ctx.tmdbNext = f?.nextEp ?? ""
+        ctx.tmdbSeasons = f?.seasons ?? 0
         if let i = all.firstIndex(of: e), i + 1 < all.count {
             let n = all[i + 1]
-            r.next = { request(item, title: title, info: info, provider: provider, episode: n, from: 0) }
+            // un trou dans la numérotation (É4 absent alors que É5 est là) : l'épisode qui suit manque chez le fournisseur
+            if n.season == e.season, n.number > e.number + 1 { ctx.missingNext = e.number + 1 }
+            ctx.next = PanelEpisode(season: n.season, number: n.number, title: cleanTitle(n.title), minutes: minutes(n, info: info, fiche: f), image: n.image)
+            ctx.nextPlot = n.plot
+            r.next = { request(item, title: title, info: info, provider: provider, episode: n, from: 0, fiche: f, version: version) }
         }
+        ctx.jump = { s, n in
+            guard let x = all.first(where: { $0.season == s && $0.number == n }) else { return nil }
+            return request(item, title: title, info: info, provider: provider, episode: x, from: 0, fiche: f, version: version)
+        }
+        r.episode = ctx
         return r
+    }
+
+    /// « Lupin - S01E02 - La relève » → « La relève » (titre d'épisode du fournisseur)
+    static func cleanTitle(_ t: String) -> String {
+        let parts = t.components(separatedBy: " - ")
+        if parts.count >= 3, parts[1].range(of: #"^S\d+E\d+$"#, options: [.regularExpression, .caseInsensitive]) != nil { return parts[2...].joined(separator: " - ") }
+        return t
     }
 
     /// Durée d'un épisode en minutes : celle du fournisseur, sinon la durée type de la série (TMDB ou fournisseur).
