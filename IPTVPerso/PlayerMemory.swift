@@ -13,14 +13,21 @@ import Foundation
 enum PlaybackPrefs {
     private static var ud: UserDefaults { .standard }
     private static func k(_ s: String) -> String { ProfileStore.shared.key("prisme.play." + s) }
+    // valeurs lues aussi sous forme de texte (« 1 », « true ») : c'est ainsi qu'arrivent les réglages de la visite de test
+    private static func num(_ s: String) -> Double? {
+        let o = ud.object(forKey: k(s))
+        if let n = o as? NSNumber { return n.doubleValue }
+        if let t = o as? String { return Double(t) ?? (t == "true" ? 1 : t == "false" ? 0 : nil) }
+        return nil
+    }
     /// « Passer l'intro » automatique quand le moment est confirmé (simulateur : activé)
-    static var autoSkip: Bool { ud.object(forKey: k("autoskip")) as? Bool ?? true }
+    static var autoSkip: Bool { num("autoskip").map { $0 != 0 } ?? true }
     /// zéro spoiler : titres, images et résumés des épisodes à venir floutés (simulateur : activé)
-    static var zeroSpoiler: Bool { ud.object(forKey: k("spoiler")) as? Bool ?? true }
+    static var zeroSpoiler: Bool { num("spoiler").map { $0 != 0 } ?? true }
     /// « Encore un ? » après N épisodes d'affilée (simulateur : 3 ; 0 = jamais)
-    static var binge: Int { ud.object(forKey: k("binge")) as? Int ?? 3 }
+    static var binge: Int { num("binge").map { Int($0) } ?? 3 }
     /// carte « Épisode suivant » : secondes avant la fin quand ni chapitre ni moment appris (45 s, voir le plan)
-    static var cardLead: Double { ud.object(forKey: k("cardlead")) as? Double ?? 45 }
+    static var cardLead: Double { num("cardlead") ?? 45 }
     /// compte à rebours de la carte épisode (simulateur : 10 s) et de « À suivre » (simulateur : 15 s)
     static let episodeCountdown = 10
     static let filmCountdown = 15

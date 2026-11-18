@@ -191,6 +191,8 @@ final class VodPlayerController: UIViewController, VLCMediaPlayerDelegate {
     private var rated = false
     private var langApplied = false
     private var debugFromUsed = false
+    /// « Rester » choisi sur « À suivre » : à la fin, pas de lancement automatique (avis puis fermeture)
+    private var stayed = false
 
     private var sleepAfter: TimeInterval { Double(Debug.sleepAfterSeconds ?? 90 * 60) }
 
@@ -850,7 +852,7 @@ extension VodPlayerController {
         ui.card = .none; ui.countdown = nil; ui.prepared = false
         intro = nil; introDone = false; introAutoAt = nil; introNoAuto = false
         creditsChapter = nil; endShown = false; creditsWatch = false
-        pick = nil; postPending = false; rated = false; langApplied = false
+        pick = nil; postPending = false; rated = false; langApplied = false; stayed = false
         if let e = req.episode {
             mem = SeriesMemory.load(e.series)
             ui.series = true
@@ -976,7 +978,7 @@ extension VodPlayerController {
                 if t.id != ui.subCur { player.currentVideoSubTitleIndex = t.id; ui.subCur = t.id }
             } else { notes.append("Pas de sous-titres en \(TrackLang.name(sb)) dans cet épisode") }
         }
-        if let n = notes.first { toast(n, seconds: 6) }
+        if let n = notes.first { toast(n, seconds: 6); DataCount.write("langue : " + notes.joined(separator: " / ")) }
     }
 
     // MARK: intro
@@ -989,7 +991,8 @@ extension VodPlayerController {
             introAutoAt = nil; introNoAuto = true
             if let k = mem.intros.keys.filter({ $0 != e.epKey }).sorted(by: SeriesMemory.epOrder).last { mem.intros[k] = nil; mem.save(e.series) }
             updateLearnedText()
-            toast("Compris : intro pas passée automatiquement pour cet épisode")
+            toast("Compris : intro pas passée automatiquement pour cet épisode", seconds: 5)
+            DataCount.write("intro : passage automatique annulé (\(e.epKey))")
             return
         }
         guard to - from > 20, from < 480, intro?.chap != true, mem.intros[e.epKey] == nil else { return }
@@ -1019,6 +1022,7 @@ extension VodPlayerController {
                 player.time = VLCTime(int: Int32(i.e * 1000))
                 introAutoAt = (Date(), i.e)
                 toast("⏭ Intro passée automatiquement · appris sur " + (l?.from ?? ""), seconds: 5)
+                DataCount.write("intro : passée automatiquement (\(req.episode?.epKey ?? ""))")
             } else if ui.card != .intro {
                 ui.introSub = (l?.count ?? 0) == 1 && !i.chap ? "appris sur " + (l?.from ?? "")
                     : (PlaybackPrefs.autoSkip && mem.autoSkip ? "prisme retiendra le moment pour les prochains épisodes" : "")
@@ -1174,6 +1178,7 @@ extension VodPlayerController {
             return
         }
         if req.film != nil {
+            if stayed { if askRateBeforeQuit() { return }; quit(); return }
             if ui.card == .film, let p = pick, ui.countdown != nil { playFilm(p); return }
             if let p = pick, !lateFor(p.minutes) { showFilmCard(countdown: true); return }
             if pick != nil { showFilmCard(countdown: false); return }
@@ -1288,6 +1293,7 @@ extension VodPlayerController {
 
     private func stayAfterCard() {
         closeCard()
+        stayed = true
         // à la toute fin du film, « Rester » ferme le lecteur (en demandant ton avis si besoin)
         if player.state == .ended || (duration > 0 && position >= duration - 2) { if !askRateBeforeQuit() { quit() } }
         else { showOSD() }

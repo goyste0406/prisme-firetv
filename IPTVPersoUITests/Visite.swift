@@ -534,6 +534,12 @@ final class Visite: XCTestCase {
         press(.select); Thread.sleep(forTimeInterval: 2); shot("27c-en-ce-moment-chaines")
         press(.down); press(.select); Thread.sleep(forTimeInterval: 1.5); shot("27d-retour")
         press(.down, 3); shot("27e-tv-bas")
+        // 1.8 : « Pour toi, maintenant » après avoir regardé une chaîne (raisons tirées de l'historique)
+        relaunch(["-prisme.debug.tab", "live", "-prisme.debug.playLive", "TF1"], wait: 20)
+        Thread.sleep(forTimeInterval: 40); back(); Thread.sleep(forTimeInterval: 1); back(); Thread.sleep(forTimeInterval: 3)
+        shot("28-pour-toi-maintenant")
+        relaunch(["-prisme.debug.tab", "live"]); shot("28b-pour-toi-maintenant-relance")
+        press(.down); shot("28c-pour-toi-maintenant-rangee")
     }
 
     func ficheSerie() {
@@ -838,14 +844,13 @@ final class Visite: XCTestCase {
         play("1-2", from: 34); waitFor("carte-intro", 60); w(1); shot("S05-intro-e2", focus: false)
         press(.select); w(2)
         play("1-3", from: 26); waitFor("toast", 60); w(0.5); shot("S09-intro-auto-e3", focus: false)
-        press(.left, 3); w(2); shot("S10-retour-annule", focus: false)
+        press(.left, 3); w(1); shot("S10-retour-annule", focus: false)
         // générique (chapitre à 260 s) : carte, « prêt », enchaînement automatique
         play("1-1", from: 254, ["-prisme.debug.playFromEach", "1"]); waitFor("carte-episode", 60); w(1); shot("S03-carte-episode-suivant", focus: false)
         w(4); shot("S03b-carte-prete", focus: false)
         waitFor("toast", 20); shot("S04-enchaine-e2", focus: false)
         // « Voir le générique » puis « Fin de l'épisode »
-        play("1-2", from: 254); waitFor("carte-episode", 60); w(1); press(.right); w(1); shot("S06b-voir-generique-choisi", focus: false)
-        press(.select); w(1); shot("S07-generique", focus: false)
+        play("1-2", from: 254); waitFor("carte-episode", 60); press(.right); press(.select); w(1); shot("S07-generique", focus: false)
         waitFor("carte-episode", 70); w(1); shot("S08-fin-episode", focus: false)
         // « Encore un ? » (réglé sur 1 épisode pour le test), « Un dernier », puis « Dernier épisode de la soirée »
         play("1-3", from: 254, ["-prisme.debug.playFromEach", "1", "-prisme.play.binge", "1"]); waitFor("carte-episode", 60); w(1)
@@ -868,7 +873,7 @@ final class Visite: XCTestCase {
         back(); w(1)
         // saison 2 sans piste anglaise : message, la langue n'est pas imposée
         relaunch(hpi + ["-prisme.debug.playEp", "2-1"], wait: 8)
-        waitFor("toast", 60); w(0.5); shot("S27-pas-de-piste-anglaise", focus: false)
+        waitFor("toast", 60); for i in 1...3 { shot("S27-\(i)-pas-de-piste-anglaise", focus: false); w(1) }
         // épisode manquant chez le fournisseur (Lupin S2·É4)
         relaunch(["-prisme.debug.open", "series:demo:2001", "-prisme.debug.playEp", "2-3", "-prisme.debug.playFrom", "73"], wait: 8)
         waitFor("carte-episode", 60); w(1); shot("S28-episode-absent", focus: false)
