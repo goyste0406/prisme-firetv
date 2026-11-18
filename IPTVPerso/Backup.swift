@@ -146,8 +146,10 @@ final class BackupLink: ObservableObject {
         } else if method == "POST" {
             if let s = Backup.read(body) {
                 received = s
+                DataCount.write("sauvegarde reçue par le Wi-Fi (\(body.count) octets)")
                 data = Data(BackupLink.page("Envoyé à la TV ✓", "Regarde ta TV : confirme la restauration avec la télécommande.", form: false).utf8)
             } else {
+                DataCount.write("fichier refusé (\(body.count) octets)")
                 data = Data(BackupLink.page("Fichier refusé", "Ce fichier n'est pas une sauvegarde de prisme.", form: false).utf8)
             }
         } else if path.hasSuffix("/prisme-sauvegarde.json") {

@@ -833,11 +833,15 @@ struct ChannelCard: View {
             ZStack(alignment: .topLeading) {
                 LinearGradient(colors: [Color(hue: hue, saturation: 0.55, brightness: 0.44), Color(hue: hue, saturation: 0.5, brightness: 0.15)], startPoint: .topLeading, endPoint: .bottomTrailing)
                 // 1.7.1 : l'image du programme en cours quand on en a une (guide, xmltvfr.fr ou TMDB)
+                // chaque couche a la taille exacte de la carte : une image ou un titre plus large décalait tout le contenu
+                // vers la gauche (texte coupé au bord : « nterstellar », « rance 3 »)
                 ProgramImage(ch: ch, p: now)
+                    .frame(width: ChannelCard.size.width, height: ChannelCard.size.height).clipped()
                 Text((now?.title ?? name).uppercased()).font(P.font(26, .heavy)).foregroundStyle(.white.opacity(0.16))
                     // une seule ligne : sur deux lignes, le titre en filigrane passait sous « TF1 · reste … »
-                    .lineLimit(1).minimumScaleFactor(0.7)
-                    .padding(.horizontal, 16).padding(.top, 54).frame(maxWidth: .infinity, alignment: .leading)
+                    .lineLimit(1).minimumScaleFactor(0.5)
+                    .padding(.horizontal, 16).padding(.top, 54)
+                    .frame(width: ChannelCard.size.width, alignment: .leading).clipped()
                 LinearGradient(colors: [.clear, .black.opacity(0.78)], startPoint: .center, endPoint: .bottom)
                 VStack(alignment: .leading, spacing: 4) {
                     HStack(spacing: 8) {
@@ -852,6 +856,7 @@ struct ChannelCard: View {
                     if let now { ProgressLine(value: now.progress()).frame(height: 5).padding(.top, 4) }
                 }
                 .foregroundStyle(.white).padding(14)
+                .frame(width: ChannelCard.size.width, height: ChannelCard.size.height, alignment: .topLeading)
             }
             .frame(width: ChannelCard.size.width, height: ChannelCard.size.height)
         }
