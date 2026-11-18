@@ -674,7 +674,8 @@ final class Visite: XCTestCase {
         var r = URLRequest(url: URL(string: addr2)!); r.httpMethod = "POST"; r.httpBody = backup
         let sem2 = DispatchSemaphore(value: 0)
         URLSession.shared.dataTask(with: r) { d, resp, err in
-            let page = String(data: d ?? Data(), encoding: .utf8).flatMap { $0.range(of: "<h3>").map { r in String($0[r.upperBound...].prefix(40)) } } ?? ""
+            var page = ""
+            if let html = String(data: d ?? Data(), encoding: .utf8), let h = html.range(of: "<h3>") { page = String(html[h.upperBound...].prefix(40)) }
             self.attach("renvoi-sauvegarde", "\((resp as? HTTPURLResponse)?.statusCode ?? 0) · \(backup.count) octets envoyés · réponse « \(page) » \(err?.localizedDescription ?? "")"); sem2.signal() }.resume()
         _ = sem2.wait(timeout: .now() + 15)
         Thread.sleep(forTimeInterval: 3); shot("R4-restaurer-confirmation")
