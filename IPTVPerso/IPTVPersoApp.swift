@@ -115,7 +115,7 @@ struct MainTabView: View {
         }
         .task {
             // test du simulateur uniquement : onglet ou fiche demandés en argument de lancement
-            if let t = Debug.tab { nav.tab = ["films": .films, "series": .series, "live": .live, "mine": .mine, "settings": .settings][t] ?? nav.tab }
+            if let t = Debug.tab { nav.tab = ["films": .films, "series": .series, "live": .live, "mine": .mine, "search": .search, "settings": .settings][t] ?? nav.tab }
             guard let o = Debug.open else { return }
             for _ in 0..<120 {
                 if let it = await MediaStore.items(ids: [o]).first {
