@@ -735,7 +735,7 @@ struct HeroView: View {
                 .focused(focus)
                 .contextMenu {
                     Button { info() } label: { Label("Voir la fiche", systemImage: "info.circle") }
-                    Button { watch.toggleFavorite(item.id) } label: {
+                    Button { watch.toggleFavorite(item.id, item: item, from: "depuis l'accueil") } label: {
                         Label(watch.favorites.contains(item.id) ? "Retirer de ma liste" : "Ajouter à ma liste", systemImage: watch.favorites.contains(item.id) ? "checkmark" : "plus")
                     }
                 }
@@ -1020,52 +1020,6 @@ struct CategoryGridView: View {
         let page = await MediaStore.page(kind, cat: cat, offset: items.count, limit: 60)
         if page.count < 60 { done = true }
         items += page
-    }
-}
-
-// MARK: - Ma liste (films et séries ajoutés avec +, et ceux commencés)
-
-struct MineView: View {
-    @EnvironmentObject var store: ProviderStore
-    @ObservedObject var watch = WatchStore.shared
-    @State private var resume: [ResumeEntry] = []
-    @State private var films: [MediaItem] = []
-    @State private var series: [MediaItem] = []
-    @State private var open: MediaItem?
-    @State private var loaded = false
-
-    var body: some View {
-        BarScrollView {
-            LazyVStack(alignment: .leading, spacing: 30) {
-                TopBar(claimFocus: true).id(BarScrollView<EmptyView>.top)
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Ma liste").font(P.font(64, .bold))
-                    Text("Ce que tu as ajouté avec +, et ce que tu as commencé.").font(P.font(25)).foregroundStyle(P.dim)
-                }.padding(.horizontal, 120)
-                if loaded && resume.isEmpty && films.isEmpty && series.isEmpty {
-                    VStack(spacing: 14) {
-                        Image(systemName: "plus.circle").font(P.font(70)).foregroundStyle(P.faint)
-                        Text("Ta liste est vide").font(P.font(34, .bold))
-                        Text("Sur la fiche d'un film ou d'une série, choisis + pour l'ajouter ici.").font(P.font(24)).foregroundStyle(P.dim)
-                    }.frame(maxWidth: .infinity).padding(.top, 100)
-                }
-                if !resume.isEmpty { ResumeRow(entries: resume, open: { open = $0 }) }
-                if !films.isEmpty { MediaRow(title: "Films", sub: "\(films.count)", items: films, open: { open = $0 }) }
-                if !series.isEmpty { MediaRow(title: "Séries", sub: "\(series.count)", items: series, open: { open = $0 }) }
-            }.padding(.bottom, 100)
-        }
-        .scrollClipDisabled()
-        .ignoresSafeArea()
-        .navigationDestination(item: $open) { it in DetailView(item: it) }
-        .task(id: "\(watch.favorites.count)|\(watch.entries.count)|\(store.catalogVersion)") {
-            let list = Array(watch.inProgress.prefix(20))
-            let items = await MediaStore.items(ids: list.map(\.item))
-            let byID = Dictionary(items.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
-            resume = list.compactMap { e in byID[e.item].map { ResumeEntry(item: $0, entry: e) } }
-            films = await MediaStore.items(ids: watch.favorites.filter { $0.hasPrefix("film:") })
-            series = await MediaStore.items(ids: watch.favorites.filter { $0.hasPrefix("series:") })
-            loaded = true
-        }
     }
 }
 

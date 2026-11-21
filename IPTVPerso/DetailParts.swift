@@ -7,8 +7,10 @@ import UIKit
 /// Entrée des fiches : un film ou une série.
 struct DetailView: View {
     let item: MediaItem
+    /// Ma liste (simulateur « mn:play ») : la fiche s'ouvre et lance tout de suite la lecture (reprise ou épisode suivant)
+    var autoPlay = false
     var body: some View {
-        if item.kind == .film { FilmDetailView(item: item) } else { SeriesDetailView(item: item) }
+        if item.kind == .film { FilmDetailView(item: item, autoPlay: autoPlay) } else { SeriesDetailView(item: item, autoPlay: autoPlay) }
     }
 }
 

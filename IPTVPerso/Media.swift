@@ -665,8 +665,10 @@ final class WatchStore: ObservableObject {
             .filter { seen.insert($0.item).inserted }
     }
 
-    func toggleFavorite(_ id: String) {
-        if let i = favorites.firstIndex(of: id) { favorites.remove(at: i) } else { favorites.insert(id, at: 0) }
+    /// `item` et `from` (« depuis sa fiche »…) : Ma liste garde la date et l'origine de l'ajout (simulateur)
+    func toggleFavorite(_ id: String, item: MediaItem? = nil, from: String = "") {
+        if let i = favorites.firstIndex(of: id) { favorites.remove(at: i); MyListMeta.removed(id) }
+        else { favorites.insert(id, at: 0); if let item { MyListMeta.added(item, from: from) } }
     }
 
     /// « Saison vue » / « Saison non vue » sur la fiche d'une série.

@@ -5,6 +5,8 @@ import SwiftUI
 
 struct FilmDetailView: View {
     let item: MediaItem
+    var autoPlay = false
+    @State private var autoDone = false
     @EnvironmentObject var store: ProviderStore
     @ObservedObject var watch = WatchStore.shared
     @State private var fiche: Fiche?
@@ -231,7 +233,7 @@ struct FilmDetailView: View {
                 Button { splitOpen = true } label: { Label("En 2 soirées", systemImage: "moon").font(P.font(30, .semibold)) }
                     .buttonStyle(FicheButtonStyle()).opacity(peek ? 0.22 : 1).focused($splitFocused)
             }
-            Button { watch.toggleFavorite(item.id) } label: {
+            Button { watch.toggleFavorite(item.id, item: item, from: "depuis sa fiche") } label: {
                 Image(systemName: watch.favorites.contains(item.id) ? "checkmark" : "plus").font(P.font(32, .bold))
             }.buttonStyle(FicheButtonStyle(square: true)).opacity(peek ? 0.22 : 1)
             Button { if versions.count > 1 { pickVersion = true } else { launchMsg = "Une seule version chez ton fournisseur" } } label: {
@@ -450,6 +452,7 @@ struct FilmDetailView: View {
         let (i1, v1) = await (i, v)
         info = i1; versions = v1
         if chosen == nil { chosen = v1.first }
+        if autoPlay, !autoDone { autoDone = true; play(from: resumeAt ?? 0) }
         // fiche TMDB pas encore téléchargée en arrière-plan : on la cherche tout de suite pour ce film
         if fiche == nil, TmdbKey.value != nil { fiche = await FicheWorker.fetchNow(item, tmdbHint: i1.tmdb) }
         var titles = [title]

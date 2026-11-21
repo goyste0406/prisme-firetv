@@ -105,6 +105,7 @@ final class Visite: XCTestCase {
         if ProcessInfo.processInfo.environment["ONLY"] == "finserie" { finSerie(); return }
         if ProcessInfo.processInfo.environment["ONLY"] == "finfilm" { finFilm(); return }
         if ProcessInfo.processInfo.environment["ONLY"] == "lot1" { lot1(); return }
+        if ProcessInfo.processInfo.environment["ONLY"] == "lot2" { lot2(); return }
         if ProcessInfo.processInfo.environment["ONLY"] == "tvidle" {
             // TV en direct au lancement avec deux fournisseurs, 150 s sans aucune interaction, puis une capture
             relaunch(["-prisme.debug.demoServer2", "http://127.0.0.1:8098", "-prisme.debug.tab", "live"], wait: 150)
@@ -930,6 +931,48 @@ final class Visite: XCTestCase {
         // 7. profil de Léa seule : son propre journal
         relaunch(["-prisme.debug.profiles", "2", "-prisme.debug.second", "1", "-prisme.debug.open", "series:demo:2002", "-prisme.debug.playEp", "1-6", "-prisme.debug.playFrom", "100"], wait: 10)
         w(35); back(); w(2); back(); w(3); shot("L60-journal-lea", focus: false)
+    }
+
+    /// Lot 2 : Ma liste (envies, propositions, « Tu l'avais oublié ? », Duel, options, rangées) et Ma semaine.
+    func lot2() {
+        let w = { (t: Double) in Thread.sleep(forTimeInterval: t) }
+        func until(_ s: String, _ b: XCUIRemote.Button, _ n: Int = 10) { for _ in 0..<n where !focused().contains(s) { press(b) } }
+        func hold() { remote.press(.select, forDuration: 1.2); Thread.sleep(forTimeInterval: 0.8) }
+        let base2 = ["-prisme.debug.mylist", "1", "-prisme.debug.profiles", "2", "-prisme.debug.tab", "mine"]
+        relaunch(base2, wait: 16)
+        shot("M01-ma-liste-haut")
+        until("Sous-onglet Ma liste", .down, 3); shot("M02-sous-onglet")
+        press(.down); w(1); shot("M03-envie-rire")
+        press(.right, 2); w(1); shot("M04-envie-emotion")
+        press(.left, 2); press(.down); w(1); shot("M05-oublie")
+        press(.down); w(1); shot("M06-proposition")
+        hold(); shot("M07-options-proposition")
+        press(.down); w(0.5); shot("M07b-options-bas")
+        back(); w(1); shot("M08-options-fermees")
+        until("Duel", .down, 4); shot("M09-bouton-duel")
+        press(.select); w(1.5); shot("M10-duel-1")
+        press(.right); w(0.5); shot("M11-duel-droite")
+        press(.select); w(1.5); shot("M12-duel-2")
+        for _ in 0..<4 where focused().contains("Duel") == false && app.descendants(matching: .any)["mnd-0"].exists { press(.select); w(1.5) }
+        w(8); shot("M13-gagnant-lance", focus: false)
+        back(); w(2); back(); w(3); shot("M14-retour-ma-liste")
+        for _ in 0..<6 { press(.down) }
+        w(1); shot("M15-rangees")
+        for _ in 0..<4 { press(.down) }
+        w(1); shot("M16-plus-disponible")
+        // « Le garder » puis « Tu l'avais oublié ? » disparaît
+        for _ in 0..<14 where !focused().contains("Le garder") { press(.up) }
+        press(.select); w(2); shot("M17-garde")
+        // Ma semaine : chiffres, colonnes, options, retirer de l'historique
+        for _ in 0..<12 where !focused().contains("Sous-onglet") { press(.up) }
+        until("Sous-onglet Ma semaine", .right, 3); w(1.5); shot("M20-ma-semaine")
+        press(.down); w(1); shot("M21-semaine-titre")
+        hold(); shot("M22-options-historique")
+        press(.down, 2); press(.select); w(2); shot("M23-retire-historique")
+        // profil de Léa : sa liste et sa semaine (vide)
+        relaunch(base2 + ["-prisme.debug.second", "1"], wait: 16)
+        shot("M30-ma-liste-lea")
+        until("Sous-onglet Ma liste", .down, 3); until("Sous-onglet Ma semaine", .right, 3); w(1.5); shot("M31-semaine-lea-vide")
     }
 
     func finFilm() {

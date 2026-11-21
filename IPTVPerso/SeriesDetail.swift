@@ -6,6 +6,8 @@ import SwiftUI
 
 struct SeriesDetailView: View {
     let item: MediaItem
+    var autoPlay = false
+    @State private var autoDone = false
     @EnvironmentObject var store: ProviderStore
     @ObservedObject var watch = WatchStore.shared
     @State private var fiche: Fiche?
@@ -176,7 +178,7 @@ struct SeriesDetailView: View {
                 }
             }.focusSection()
             HStack(spacing: 12) {
-                Button { watch.toggleFavorite(item.id) } label: {
+                Button { watch.toggleFavorite(item.id, item: item, from: "depuis sa fiche") } label: {
                     Image(systemName: watch.favorites.contains(item.id) ? "checkmark" : "plus").font(P.font(32, .bold))
                 }.buttonStyle(FicheButtonStyle(square: true))
                 Button { if versions.count > 1 { pickVersion = true } else { launchMsg = "Une seule version chez ton fournisseur" } } label: {
@@ -640,6 +642,7 @@ struct SeriesDetailView: View {
         if fiche == nil, TmdbKey.value != nil { fiche = await FicheWorker.fetchNow(item, tmdbHint: info.tmdb) }
         fills = await EpisodeFill.find(main: chosen ?? item, info: info, versions: v1, providerName: { store.provider($0)?.name ?? "" })
         if let id = fiche?.tmdb ?? (info.tmdb > 0 ? info.tmdb : nil) { upcoming = await UpcomingEpisode.load(tmdb: id, have: Set(all.map { "\($0.season)-\($0.number)" })) }
+        if autoPlay, !autoDone, playing == nil, !all.isEmpty { autoDone = true; mainAction() }
         // visite de test : lecture directe d'un épisode
         if let (sn, en) = Debug.playEp, playing == nil, let e = all.first(where: { $0.season == sn && $0.number == en }) { playEpisode(e, from: 0) }
         airings = await LiveStore.airings(title: title, providers: pids)

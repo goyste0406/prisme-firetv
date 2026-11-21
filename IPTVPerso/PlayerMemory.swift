@@ -166,6 +166,12 @@ enum WatchJournal {
     }
 
     /// Séances d'un profil depuis une date (Ma semaine, phase 2 ; bandeau du dimanche, phase 5)
+    /// Ma semaine › « Retirer de l'historique » : les séances de ce titre, pour ce profil seulement (choix de l'utilisateur)
+    static func remove(profile: String, item: String) async {
+        await Database.shared.read { db in db.run("DELETE FROM journal WHERE profile=? AND item=?", [profile, item]) }
+        if Debug.demoServer != nil { await MainActor.run { DataCount.write("journal [\(profile)] : séances de \(item) retirées") } }
+    }
+
     static func sessions(profile: String, since: Date) async -> [Session] {
         await Database.shared.read { db in
             var out: [Session] = []
@@ -192,5 +198,67 @@ enum SeriesAlerts {
         guard !all.contains(k) else { return }
         UserDefaults.standard.set(all + [k], forKey: storeKey)
         DataCount.write("alerte : " + k)
+    }
+}
+
+
+// MARK: - Lot 2 : Ma liste (simulateur favAt, remind)
+// Par profil, uniquement des ajouts : la date et l'origine de chaque ajout (« depuis sa fiche »…), avec le titre et
+// l'affiche (pour « Plus disponible » quand le fournisseur retire le titre), et les titres « gardés » (« Tu l'avais
+// oublié ? » ne les rappelle plus). Un titre déjà dans la liste avant cette version n'a pas de date : elle n'est pas
+// connue, on n'en invente pas.
+@MainActor
+enum MyListMeta {
+    struct Info: Codable, Equatable { var at: Date?; var from: String; var title: String; var poster: String }
+    private static func k(_ pid: String) -> String { ProfileStore.storageKey("prisme.mylist.meta", for: pid) }
+    private static func kk(_ pid: String) -> String { ProfileStore.storageKey("prisme.mylist.keep", for: pid) }
+    static func all(_ pid: String = ProfileStore.shared.me.id) -> [String: Info] {
+        guard let d = UserDefaults.standard.data(forKey: k(pid)), let m = try? JSONDecoder().decode([String: Info].self, from: d) else { return [:] }
+        return m
+    }
+    private static func save(_ m: [String: Info], _ pid: String) {
+        if let d = try? JSONEncoder().encode(m) { UserDefaults.standard.set(d, forKey: k(pid)) }
+    }
+    /// ajout à Ma liste : date, origine, titre, affiche
+    static func added(_ it: MediaItem, from: String) {
+        let pid = ProfileStore.shared.me.id
+        var m = all(pid)
+        m[it.id] = Info(at: Date(), from: from, title: it.displayTitle, poster: it.posterURL)
+        save(m, pid)
+        DataCount.write("ma liste [\(pid)] : + \(it.displayTitle) \(from)")
+    }
+    static func removed(_ id: String) {
+        let pid = ProfileStore.shared.me.id
+        var m = all(pid); m.removeValue(forKey: id); save(m, pid)
+    }
+    /// titres déjà dans la liste : on garde leur nom et leur affiche (sans date)
+    static func remember(_ items: [MediaItem]) {
+        let pid = ProfileStore.shared.me.id
+        var m = all(pid), changed = false
+        for it in items {
+            if var x = m[it.id] {
+                if x.title.isEmpty || x.poster.isEmpty { x.title = it.displayTitle; x.poster = it.posterURL; m[it.id] = x; changed = true }
+            } else { m[it.id] = Info(at: nil, from: "", title: it.displayTitle, poster: it.posterURL); changed = true }
+        }
+        if changed { save(m, pid) }
+    }
+    static var kept: Set<String> { Set(UserDefaults.standard.stringArray(forKey: kk(ProfileStore.shared.me.id)) ?? []) }
+    static func keep(_ id: String) {
+        let pid = ProfileStore.shared.me.id
+        UserDefaults.standard.set(Array(kept.union([id])), forKey: kk(pid))
+        DataCount.write("ma liste [\(pid)] : gardé \(id)")
+    }
+    /// test seulement : un titre de la liste que le fournisseur n'a plus
+    static func debugGone(_ id: String, title: String) {
+        let pid = ProfileStore.shared.me.id
+        var m = all(pid); m[id] = Info(at: Date().addingTimeInterval(-20 * 86400), from: "depuis sa fiche", title: title, poster: ""); save(m, pid)
+    }
+    /// test seulement : date d'ajout ancienne (vérifier « Tu l'avais oublié ? »)
+    static func debugAge(_ id: String, days: Int) {
+        let pid = ProfileStore.shared.me.id
+        var m = all(pid)
+        var x = m[id] ?? Info(at: nil, from: "depuis sa fiche", title: "", poster: "")
+        x.at = Date().addingTimeInterval(-Double(days) * 86400); x.from = "depuis sa fiche"
+        m[id] = x; save(m, pid)
     }
 }

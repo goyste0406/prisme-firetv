@@ -132,6 +132,29 @@ extension Debug {
                 TasteStore.shared.save(c, for: b.id)
             }
         }
+        // lot 2 : Ma liste variée (un titre ajouté il y a 4 mois, un titre retiré par le fournisseur) et une semaine
+        // de séances dans le journal (test seulement : jamais dans l'appli installée)
+        if arg("prisme.debug.mylist") == "1", !UserDefaults.standard.bool(forKey: "prisme.debug.mylist.done") {
+            UserDefaults.standard.set(true, forKey: "prisme.debug.mylist.done")
+            let ids = ["film:demo:1006", "film:demo:1001", "film:demo:1012", "film:demo:1014", "film:demo:1016", "film:demo:1020",
+                       "film:demo:1030", "series:demo:2001", "series:demo:2002", "series:demo:2004", "film:demo:9999"]
+            WatchStore.shared.favorites = ids
+            MyListMeta.debugAge("film:demo:1016", days: 120)
+            MyListMeta.debugGone("film:demo:9999", title: "Le Grand Bleu")
+            if let b = ProfileStore.shared.profiles.first(where: { $0.id != "p1" }) {
+                UserDefaults.standard.set(["film:demo:1020", "series:demo:2002"], forKey: ProfileStore.storageKey("prisme.media.favs", for: b.id))
+            }
+            let cal = Calendar.current, d0 = cal.startOfDay(for: Date())
+            let plan: [(Int, Double, String, String, String, String, Int)] = [
+                (6, 21, "series:demo:2001", "Lupin", "S1 · É1", "episode", 2400), (6, 18, "film:demo:1001", "Dune", "", "film", 4100),
+                (5, 20.9, "film:demo:1006", "Inception", "", "film", 6400), (4, 21.2, "series:demo:2002", "HPI", "S1 · É2", "episode", 3000),
+                (2, 21, "film:demo:1020", "Le Parrain", "", "film", 5100), (2, 20, "live:demo-1", "TF1", "", "tv", 1800),
+                (1, 21.5, "series:demo:2001", "Lupin", "S1 · É2", "episode", 2700), (0, 21, "series:demo:2001", "Lupin", "S1 · É3", "episode", 2600)]
+            for (ago, h, item, title, ep, kind, sec) in plan {
+                let t = (cal.date(byAdding: .day, value: -ago, to: d0) ?? d0).addingTimeInterval(h * 3600)
+                WatchJournal.add(.init(profile: "p1", start: t, item: item, key: item, title: title, ep: ep, kind: kind, seconds: sec))
+            }
+        }
         // profil actif = le deuxième profil (Léa) dès l'ouverture
         if arg("prisme.debug.second") == "1", let b = ProfileStore.shared.profiles.first(where: { $0.id != "p1" }) { ProfileStore.shared.use(b.id) }
         // « 6 » : le maximum de profils, pour vérifier les listes et le défilement
