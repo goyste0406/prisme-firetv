@@ -945,7 +945,7 @@ final class Visite: XCTestCase {
         until("Sous-onglet Ma liste", .down, 3); shot("M02-sous-onglet")
         press(.down); w(1); shot("M03-envie-rire")
         press(.right, 2); w(1); shot("M04-envie-emotion")
-        press(.left, 2); press(.down); w(1); shot("M05-oublie")
+        press(.down); w(1); shot("M05-oublie")
         press(.down); w(1); shot("M06-proposition")
         hold(); shot("M07-options-proposition")
         press(.down); w(0.5); shot("M07b-options-bas")

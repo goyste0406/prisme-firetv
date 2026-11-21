@@ -260,8 +260,8 @@ struct MineView: View {
     private func oldBanner(_ e: MineEntry) -> some View {
         HStack(spacing: 15) {
             Text("🕰 Tu l'avais oublié ? « \(e.title) » est dans ta liste depuis plus de 3 mois.").font(P.font(21)).lineLimit(1)
-            smallButton("mno-keep", "Le garder") { MyListMeta.keep(e.id); say("Gardé dans ta liste"); refresh += 1 }
-            smallButton("mno-del", "Le retirer") { remove(e.id) }
+            smallButton("mnk-keep", "Le garder") { MyListMeta.keep(e.id); say("Gardé dans ta liste"); refresh += 1; focus = "mnm-\(mood)" }
+            smallButton("mnk-del", "Le retirer") { remove(e.id); focus = "mnm-\(mood)" }
         }
         .padding(.vertical, 15).padding(.horizontal, 21)
         .background(RoundedRectangle(cornerRadius: 24, style: .continuous).fill(Color(red: 245 / 255, green: 158 / 255, blue: 11 / 255).opacity(0.12)))
