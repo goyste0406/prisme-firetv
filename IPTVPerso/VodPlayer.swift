@@ -1094,10 +1094,18 @@ extension VodPlayerController {
     fileprivate func cardPress(_ t: UIPress.PressType) {
         let n = cardActions.count + (ui.endInfo.rateButtons && (ui.card == .film || ui.card == .post) ? 2 : 0)
         switch t {
+        // « Saison terminée » : gauche / droite seulement entre les deux boutons du bas
+        case .leftArrow where ui.card == .season: if ui.cardSel > ui.seasonEnd.rows.count { ui.cardSel -= 1 }
+        case .rightArrow where ui.card == .season: if ui.cardSel >= ui.seasonEnd.rows.count { ui.cardSel = min(n - 1, ui.cardSel + 1) }
         case .leftArrow where ui.card != .encore: ui.cardSel = max(0, ui.cardSel - 1)
         case .rightArrow where ui.card != .encore: ui.cardSel = min(max(0, n - 1), ui.cardSel + 1)
         case .upArrow where ui.card == .encore: ui.cardSel = max(0, ui.cardSel - 1)
         case .downArrow where ui.card == .encore: ui.cardSel = min(max(0, n - 1), ui.cardSel + 1)
+        case .upArrow where ui.card == .season:
+            let r = ui.seasonEnd.rows.count
+            ui.cardSel = ui.cardSel < r ? max(0, ui.cardSel - 1) : max(0, r - 1)
+        case .downArrow where ui.card == .season:
+            if ui.cardSel < ui.seasonEnd.rows.count { ui.cardSel += 1 }
         case .select:
             if cardActions.indices.contains(ui.cardSel) { cardActions[ui.cardSel]() }
             else if ui.endInfo.rateButtons { rateFromCard(ui.cardSel == cardActions.count ? 1 : -1) }
@@ -1132,25 +1140,70 @@ extension VodPlayerController {
                          onZero: { [weak self] in self?.goNextEpisode(manual: false) })
             }
         } else {
+            // simulateur : « FIN DE L'ÉPISODE » puis « É4 pas encore chez ton fournisseur » / « Tu as tout vu ! » ;
+            // le bouton mène à la fenêtre « Saison terminée » (avec l'alerte d'abord si un épisode manque)
             c.kicker = "FIN DE L'ÉPISODE"
-            c.title = endTitle(e)
-            // date annoncée par TMDB : seulement pour la suite de la série, pas pour un épisode qui manque au milieu
-            if e.missingNext == nil, let d = announced(e) { c.lines = [d] }
+            c.title = e.missingNext.map { "É\($0) pas encore chez ton fournisseur" } ?? "Tu as tout vu !"
             c.image = ""
-            c.buttons = ["Fermer"]
-            showCard(.episode, c, actions: [{ [weak self] in self?.quit() }], back: { [weak self] in self?.watchCredits() })
+            if let m = e.missingNext {
+                c.buttons = ["🔔 M'avertir et fermer"]
+                showCard(.episode, c, actions: [{ [weak self] in
+                    SeriesAlerts.add(e.series, e.season, m); self?.showSeasonEnd() }], back: { [weak self] in self?.watchCredits() })
+            } else {
+                c.buttons = ["Fermer"]
+                showCard(.episode, c, actions: [{ [weak self] in self?.showSeasonEnd() }], back: { [weak self] in self?.watchCredits() })
+            }
         }
     }
 
-    /// Fin sans épisode suivant : manquant, saison finie ou tout vu (simulateur).
-    private func endTitle(_ e: EpisodeCtx) -> String {
-        if let m = e.missingNext { return "É\(m) pas encore chez ton fournisseur" }
-        let lastSeason = e.episodes.map(\.season).max() ?? e.season
-        if e.tmdbSeasons > lastSeason || !e.tmdbNext.isEmpty {
-            return e.season == lastSeason && !e.tmdbNext.isEmpty && e.tmdbSeasons <= lastSeason
-                ? "É\(e.number + 1) pas encore chez ton fournisseur" : "Saison \(e.season) finie !"
+    /// « Saison terminée » (simulateur pbseason) : fin réelle sans épisode suivant, ou épisode suivant absent.
+    fileprivate func showSeasonEnd() {
+        guard let e = req.episode else { quit(); return }
+        player.pause()
+        savePosition(at: duration)
+        let s = e.season
+        let eps = e.episodes.filter { $0.season == s }
+        let seen = eps.filter { ui.epSeen.contains($0.id) || $0.number <= e.number }.count
+        let total = max(eps.map(\.number).max() ?? 0, e.missingNext ?? 0)
+        let mins = eps.reduce(0) { $0 + $1.minutes }
+        let tonight = binge + 1
+        let more = e.episodes.contains { $0.season > s }
+        let nextSeason = e.episodes.filter { $0.season > s }.map(\.season).min() ?? s + 1
+        var x = SeasonEndInfo()
+        x.kicker = e.seriesTitle + " · saison \(s)"
+        x.title = "Saison terminée" + (e.missingNext != nil || !more ? ", pour l'instant" : "")
+        x.stats = [("\(seen) / \(total)", "épisodes vus"),
+                   (mins > 0 ? runtimeText(mins) : "—", "pour toute la saison"),
+                   ("\(tonight)", "épisode" + (tonight > 1 ? "s" : "") + " ce soir")]
+        var acts: [() -> Void] = []
+        var sel = 0
+        if let m = e.missingNext {
+            let on = SeriesAlerts.has(e.series, s, m)
+            x.rows.append(.init(title: episodeLabel(s, m), sub: "pas encore chez ton fournisseur", button: on ? "✓ Je te préviens" : "Préviens-moi quand il arrive"))
+            acts.append { [weak self] in SeriesAlerts.add(e.series, s, m); self?.showSeasonEnd() }
         }
-        return "Tu as tout vu !"
+        if more {
+            x.rows.append(.init(title: "Saison \(nextSeason)", sub: "disponible chez ton fournisseur", button: "Commencer la saison \(nextSeason)"))
+            let first = e.episodes.filter { $0.season == nextSeason }.map(\.number).min() ?? 1
+            acts.append { [weak self] in self?.binge = 0; self?.jumpTo(nextSeason, first) }
+            if e.missingNext == nil { sel = acts.count - 1 }
+        } else {
+            let on = SeriesAlerts.has(e.series, s + 1, 0)
+            let sub = announced(e).map { $0.replacingOccurrences(of: "Prochain épisode annoncé le", with: "annoncée pour le") }
+                ?? (e.tmdbSeasons > s ? "existe, pas encore chez ton fournisseur" : "pas encore annoncée")
+            x.rows.append(.init(title: "Saison \(s + 1)", sub: sub, button: on ? "✓ Je te préviens" : "Préviens-moi"))
+            acts.append { [weak self] in SeriesAlerts.add(e.series, s + 1, 0); self?.showSeasonEnd() }
+            if e.missingNext == nil { sel = acts.count - 1 }
+        }
+        x.bottom = ["Revoir depuis l'épisode 1", "Fermer"]
+        let firstOfSeason = eps.map(\.number).min() ?? 1
+        acts.append { [weak self] in self?.binge = 0; self?.jumpTo(s, firstOfSeason) }
+        acts.append { [weak self] in self?.closeCard(); self?.quit() }
+        // la sélection reste sur le bouton choisi quand la fenêtre se redessine (alerte activée)
+        let keep = ui.card == .season ? ui.cardSel : sel
+        ui.seasonEnd = x
+        showCard(.season, EndCardInfo(), actions: acts, back: { [weak self] in self?.closeCard(); self?.quit() }, sel: keep)
+        DataCount.write("saison terminée : " + x.title + " · " + x.stats.map { $0.0 + " " + $0.1 }.joined(separator: " · ") + " · " + x.rows.map { $0.title + " (" + $0.sub + ") [" + $0.button + "]" }.joined(separator: " · "))
     }
 
     private func announced(_ e: EpisodeCtx) -> String? {
@@ -1178,10 +1231,7 @@ extension VodPlayerController {
                 c.buttons = ["▶ Épisode suivant", "Fermer"]
                 showCard(.episode, c, actions: [{ [weak self] in self?.goNextEpisode(manual: true) }, { [weak self] in self?.quit() }], back: { [weak self] in self?.quit() })
             } else {
-                c.title = endTitle(e)
-                if e.missingNext == nil, let d = announced(e) { c.lines = [d] }
-                c.buttons = ["Fermer"]
-                showCard(.episode, c, actions: [{ [weak self] in self?.quit() }], back: { [weak self] in self?.quit() })
+                showSeasonEnd()
             }
             return
         }
@@ -1346,15 +1396,17 @@ extension VodPlayerController {
         played = 0; playedLast = -1
         let start = sessionStart
         sessionStart = Date()
-        let pid = ProfileStore.shared.me.id
-        if isLive {
-            guard req.live.indices.contains(liveIndex) else { return }
-            let ch = req.live[liveIndex]
-            WatchJournal.add(.init(profile: pid, start: start, item: "live:" + ch.id, key: "", title: ChannelTools.clean(ch.name), ep: "", kind: "tv", seconds: sec))
-        } else if let e = req.episode {
-            WatchJournal.add(.init(profile: pid, start: start, item: req.item, key: req.key, title: e.seriesTitle, ep: episodeLabel(e.season, e.number), kind: "episode", seconds: sec))
-        } else {
-            WatchJournal.add(.init(profile: pid, start: start, item: req.item, key: req.key, title: req.title, ep: "", kind: req.item.hasPrefix("replay:") ? "replay" : "film", seconds: sec))
+        // mode à deux : la séance compte pour chacun des deux profils, chacun dans son propre historique
+        for pid in ProfileStore.shared.watchers.map(\.id) {
+            if isLive {
+                guard req.live.indices.contains(liveIndex) else { return }
+                let ch = req.live[liveIndex]
+                WatchJournal.add(.init(profile: pid, start: start, item: "live:" + ch.id, key: "", title: ChannelTools.clean(ch.name), ep: "", kind: "tv", seconds: sec))
+            } else if let e = req.episode {
+                WatchJournal.add(.init(profile: pid, start: start, item: req.item, key: req.key, title: e.seriesTitle, ep: episodeLabel(e.season, e.number), kind: "episode", seconds: sec))
+            } else {
+                WatchJournal.add(.init(profile: pid, start: start, item: req.item, key: req.key, title: req.title, ep: "", kind: req.item.hasPrefix("replay:") ? "replay" : "film", seconds: sec))
+            }
         }
     }
 }

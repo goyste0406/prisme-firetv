@@ -21,6 +21,22 @@ struct EndCardInfo: Equatable {
     var rated: Int? = nil
 }
 
+/// « Saison terminée » (simulateur pbseason) : chiffres de la saison, puis des lignes avec un bouton chacune
+/// (épisode absent, saison suivante), puis « Revoir depuis l'épisode 1 » et « Fermer ».
+/// La sélection suit l'ordre des boutons : d'abord ceux des lignes, puis ceux du bas.
+struct SeasonEndInfo: Equatable {
+    struct Row: Equatable { var title: String; var sub: String; var button: String }
+    var kicker = ""
+    var title = ""
+    var stats: [(String, String)] = []
+    var rows: [Row] = []
+    var bottom: [String] = []
+    static func == (a: SeasonEndInfo, b: SeasonEndInfo) -> Bool {
+        a.kicker == b.kicker && a.title == b.title && a.rows == b.rows && a.bottom == b.bottom
+            && a.stats.map { $0.0 + "|" + $0.1 } == b.stats.map { $0.0 + "|" + $0.1 }
+    }
+}
+
 struct PlayerCardsLayer: View {
     @ObservedObject var m: PlayerUI
 
@@ -31,6 +47,7 @@ struct PlayerCardsLayer: View {
             case .episode, .film, .post: endCard
             case .encore: encoreModal
             case .rate: rateModal
+            case .season: seasonModal
             case .none: EmptyView()
             }
         }
@@ -164,7 +181,7 @@ struct PlayerCardsLayer: View {
             VStack(alignment: .leading, spacing: 0) {
                 Text("🍿 \(m.bingeCount) ÉPISODE\(m.bingeCount > 1 ? "S" : "") D'AFFILÉE").font(P.font(17, .heavy)).tracking(2).foregroundStyle(.white.opacity(0.7))
                 Text("Encore un ?").font(P.font(38, .bold)).padding(.top, 14)
-                (Text(m.encoreEp + " finirait à ") + Text(m.encoreEnd).bold().foregroundColor(m.encoreLate ? Color(red: 1, green: 0.42, blue: 0.42) : .white)
+                (Text(m.encoreEp + " finirait à ") + Text(m.encoreEnd).bold().foregroundColor(m.encoreLate ? Color(red: 1, green: 180 / 255, blue: 168 / 255) : .white)
                  + Text(" · ton coucher est à " + m.encoreBed))
                     .font(P.font(24)).foregroundStyle(.white.opacity(0.7)).padding(.top, 12).padding(.bottom, 24)
                 ForEach(Array(["▶ Oui, encore un", "☾ Un dernier, puis on arrête", "Arrêter maintenant"].enumerated()), id: \.offset) { i, t in
@@ -179,6 +196,57 @@ struct PlayerCardsLayer: View {
             .animation(.easeOut(duration: 0.15), value: m.cardSel)
         }
         .transition(.opacity)
+    }
+
+    // simulateur .pb-mdl (largeur 780 → 1170) : .pb-k, h2 32 → 48, .pb-stats, .pb-lr, .pb-mb ; boutons .pb-btn
+    private var seasonModal: some View {
+        let x = m.seasonEnd
+        return ZStack {
+            Rectangle().fill(.ultraThinMaterial).environment(\.colorScheme, .dark).overlay(Color.black.opacity(0.45)).ignoresSafeArea()
+            VStack(alignment: .leading, spacing: 24) {
+                Text(x.kicker.uppercased()).font(P.font(18, .bold)).tracking(2.5).foregroundStyle(.white.opacity(0.72))
+                Text(x.title).font(P.font(48, .bold))
+                HStack(spacing: 15) {
+                    ForEach(Array(x.stats.enumerated()), id: \.offset) { _, st in
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text(st.0).font(P.font(33, .bold))
+                            Text(st.1).font(P.font(19.5)).foregroundStyle(.white.opacity(0.8))
+                        }
+                        .padding(.vertical, 18).padding(.horizontal, 21).frame(maxWidth: .infinity, alignment: .leading)
+                        .background(Color.white.opacity(0.1), in: RoundedRectangle(cornerRadius: 21, style: .continuous))
+                    }
+                }
+                ForEach(Array(x.rows.enumerated()), id: \.offset) { i, r in
+                    HStack(spacing: 21) {
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text(r.title).font(P.font(22.5, .bold)).lineLimit(1)
+                            Text(r.sub).font(P.font(19.5)).foregroundStyle(.white.opacity(0.78)).lineLimit(1)
+                        }
+                        Spacer(minLength: 0)
+                        pbButton(r.button, on: m.cardSel == i)
+                    }
+                    .padding(.vertical, 18).padding(.horizontal, 21)
+                    .background(Color.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 21, style: .continuous))
+                }
+                HStack(spacing: 15) {
+                    ForEach(Array(x.bottom.enumerated()), id: \.offset) { i, t in pbButton(t, on: m.cardSel == x.rows.count + i) }
+                }
+                .frame(maxWidth: .infinity)
+            }
+            .padding(.vertical, 45).padding(.horizontal, 51).frame(width: 1170)
+            .background(modalBG)
+            .animation(.easeOut(duration: 0.15), value: m.cardSel)
+        }
+        .transition(.opacity)
+    }
+
+    private func pbButton(_ t: String, on: Bool) -> some View {
+        Text(t).font(P.font(22.5, .semibold)).lineLimit(1)
+            .foregroundStyle(on ? Color(red: 17 / 255, green: 19 / 255, blue: 24 / 255) : .white)
+            .padding(.vertical, 15).padding(.horizontal, 27)
+            .background(RoundedRectangle(cornerRadius: 21, style: .continuous).fill(on ? Color.white : Color(red: 28 / 255, green: 30 / 255, blue: 38 / 255).opacity(0.6)))
+            .overlay(RoundedRectangle(cornerRadius: 21, style: .continuous).stroke(on ? Color.white : Color.white.opacity(0.3), lineWidth: 1.5))
+            .scaleEffect(on ? 1.06 : 1).shadow(color: .black.opacity(on ? 0.45 : 0), radius: 20, y: 10)
     }
 
     private var rateModal: some View {

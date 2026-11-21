@@ -104,6 +104,7 @@ final class Visite: XCTestCase {
         if ProcessInfo.processInfo.environment["ONLY"] == "envoi" { envoi(); return }
         if ProcessInfo.processInfo.environment["ONLY"] == "finserie" { finSerie(); return }
         if ProcessInfo.processInfo.environment["ONLY"] == "finfilm" { finFilm(); return }
+        if ProcessInfo.processInfo.environment["ONLY"] == "lot1" { lot1(); return }
         if ProcessInfo.processInfo.environment["ONLY"] == "tvidle" {
             // TV en direct au lancement avec deux fournisseurs, 150 s sans aucune interaction, puis une capture
             relaunch(["-prisme.debug.demoServer2", "http://127.0.0.1:8098", "-prisme.debug.tab", "live"], wait: 150)
@@ -878,6 +879,57 @@ final class Visite: XCTestCase {
         // épisode manquant chez le fournisseur (Lupin S2·É4)
         relaunch(["-prisme.debug.open", "series:demo:2001", "-prisme.debug.playEp", "2-3", "-prisme.debug.playFrom", "73"], wait: 8)
         waitFor("carte-episode", 60); w(1); shot("S28-episode-absent", focus: false)
+    }
+
+    /// Lot 1 : cas restants des lecteurs (fin de saison, épisode absent, « Encore un ? » après le coucher, oublier l'intro,
+    /// film sans proposition, mode à deux, journal par profil).
+    func lot1() {
+        let w = { (t: Double) in Thread.sleep(forTimeInterval: t) }
+        let hpi = ["-prisme.debug.open", "series:demo:2002"]
+        func play(_ ep: String, from: Int, _ extra: [String] = []) { relaunch(hpi + ["-prisme.debug.playEp", ep, "-prisme.debug.playFrom", String(from)] + extra, wait: 8) }
+        // 1. épisode absent (Lupin S2·É4) : carte, « M'avertir et fermer », fenêtre « Saison terminée », navigation, saison 3
+        relaunch(["-prisme.debug.open", "series:demo:2001", "-prisme.debug.playEp", "2-3", "-prisme.debug.playFrom", "73"], wait: 8)
+        waitFor("carte-episode", 60); w(1); shot("L01-fin-episode-absent", focus: false)
+        press(.select); waitFor("carte-season", 10); w(1); shot("L02-saison-terminee-absent", focus: false)
+        press(.select); w(1); shot("L03-alerte-activee", focus: false)
+        press(.down); w(0.5); shot("L04-saison-suivante", focus: false)
+        press(.down); w(0.5); shot("L05-revoir", focus: false)
+        press(.right); w(0.5); shot("L06-fermer", focus: false)
+        press(.up); w(0.5); shot("L07-retour-ligne", focus: false)
+        press(.select); w(10); shot("L08-saison-3-lancee", focus: false)
+        // 2. dernier épisode de la série (HPI S4·É8) : « Tu as tout vu ! », puis la fenêtre, puis Fermer
+        play("4-8", from: 250); waitFor("carte-episode", 60); w(1); shot("L10-tu-as-tout-vu", focus: false)
+        press(.select); waitFor("carte-season", 10); w(1); shot("L11-saison-terminee-fin", focus: false)
+        press(.down); press(.right); press(.select); w(3); shot("L12-ferme-fiche", focus: false)
+        // 3. intro apprise (É1 puis É2), passée seule sur É3, puis « Oublier le moment de l'intro » : É4 revient au bouton
+        play("1-1", from: 26); waitFor("carte-intro", 60); press(.select); w(2)
+        play("1-2", from: 34); waitFor("carte-intro", 60); press(.select); w(2)
+        play("1-3", from: 26); waitFor("toast", 60); w(0.5); shot("L20-intro-auto", focus: false)
+        press(.up); w(1); press(.up); w(2)
+        for _ in 0..<16 where !focused().contains("Oublier") { press(.down) }
+        shot("L21-oublier-intro")
+        press(.select); w(2); shot("L22-intro-oubliee", focus: false)
+        play("1-4", from: 26); waitFor("carte-intro", 60); w(1); shot("L23-e4-bouton-sans-auto", focus: false)
+        // 4. « Encore un ? » quand l'épisode suivant finirait après le coucher : « Un dernier » choisi d'office
+        play("1-3", from: 254, ["-prisme.debug.playFromEach", "1", "-prisme.play.binge", "1", "-prisme.debug.bedIn", "5"])
+        waitFor("carte-episode", 60); w(1); press(.select); waitFor("carte-encore", 10); w(1); shot("L30-encore-un-apres-coucher", focus: false)
+        back(); w(3)
+        // 5. journal : 40 s de lecture, 15 s de pause, 10 s, retour de 10 s, 10 s → environ 60 s comptées
+        play("1-5", from: 80); w(40); press(.playPause); w(15); press(.playPause); w(10); press(.left); w(10)
+        back(); w(2); back(); w(3); shot("L40-journal-steven", focus: false)
+        // 6. mode à deux (Steven + Léa) : zéro spoiler selon la progression de chacun, note pour le profil actif seulement,
+        //    film sans proposition (aucune carte « À suivre » vide), journal pour les deux profils
+        relaunch(["-prisme.debug.profiles", "2", "-prisme.debug.open", "series:demo:2001", "-prisme.debug.season", "2"], wait: 14)
+        press(.down, 3); w(1); shot("L50-lupin-s2-steven")
+        relaunch(["-prisme.debug.profiles", "2", "-prisme.debug.duo", "1", "-prisme.debug.open", "series:demo:2001", "-prisme.debug.season", "2"], wait: 14)
+        press(.down, 3); w(1); shot("L51-lupin-s2-a-deux")
+        relaunch(["-prisme.debug.profiles", "2", "-prisme.debug.duo", "1", "-prisme.debug.noPick", "1", "-prisme.debug.open", "film:demo:1020", "-prisme.debug.playFrom", "500"], wait: 16)
+        press(.select); w(30); shot("L52-film-sans-proposition", focus: false)
+        waitFor("carte-rate", 60); w(1); shot("L53-tu-as-aime-a-deux", focus: false)
+        press(.select); w(3); shot("L54-note-profil-actif", focus: false)
+        // 7. profil de Léa seule : son propre journal
+        relaunch(["-prisme.debug.profiles", "2", "-prisme.debug.second", "1", "-prisme.debug.open", "series:demo:2002", "-prisme.debug.playEp", "1-6", "-prisme.debug.playFrom", "100"], wait: 10)
+        w(35); back(); w(2); back(); w(3); shot("L60-journal-lea", focus: false)
     }
 
     func finFilm() {

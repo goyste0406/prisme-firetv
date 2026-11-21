@@ -134,6 +134,7 @@ enum FilmRatings {
                               cast: (f?.cast ?? []).prefix(4).map(\.n), title: it.displayTitle)
         if let d = try? JSONEncoder().encode(m) { UserDefaults.standard.set(d, forKey: key(pid)) }
         HomeCacheReset.run(); TasteStore.shared.invalidate(pid)
+        DataCount.write("note [\(pid)] : \(it.displayTitle) \(v > 0 ? "👍" : "👎")")
     }
     static func skip(_ work: String, pid: String) {
         var s = Set(UserDefaults.standard.stringArray(forKey: skipKey(pid)) ?? [])
@@ -160,7 +161,7 @@ enum WatchJournal {
                 db.run("INSERT INTO journal(profile,at,item,key,title,ep,kind,seconds) VALUES(?,?,?,?,?,?,?,?)",
                        [s.profile, Int(s.start.timeIntervalSince1970), s.item, s.key, s.title, s.ep, s.kind, s.seconds])
             }
-            if Debug.demoServer != nil { await MainActor.run { DataCount.write("journal : \(s.kind) « \(s.title)\(s.ep.isEmpty ? "" : " · " + s.ep) » \(s.seconds) s") } }
+            if Debug.demoServer != nil { await MainActor.run { DataCount.write("journal [\(s.profile)] : \(s.kind) « \(s.title)\(s.ep.isEmpty ? "" : " · " + s.ep) » \(s.seconds) s") } }
         }
     }
 
@@ -174,5 +175,22 @@ enum WatchJournal {
             }
             return out
         }
+    }
+}
+
+// MARK: - « Préviens-moi » (simulateur : fin de saison, épisode absent chez le fournisseur)
+// Une alerte par profil : « série|saison|épisode » (épisode 0 : toute la saison). Ajout seulement, aucune donnée existante
+// n'est touchée. L'annonce de l'arrivée se fera dans le bandeau « Cette nuit » (lot 4), à partir des imports réels.
+@MainActor
+enum SeriesAlerts {
+    private static var storeKey: String { ProfileStore.shared.key("prisme.series.alerts") }
+    static var all: [String] { UserDefaults.standard.stringArray(forKey: storeKey) ?? [] }
+    static func key(_ series: String, _ s: Int, _ e: Int) -> String { "\(series)|\(s)|\(e)" }
+    static func has(_ series: String, _ s: Int, _ e: Int) -> Bool { all.contains(key(series, s, e)) }
+    static func add(_ series: String, _ s: Int, _ e: Int) {
+        let k = key(series, s, e)
+        guard !all.contains(k) else { return }
+        UserDefaults.standard.set(all + [k], forKey: storeKey)
+        DataCount.write("alerte : " + k)
     }
 }

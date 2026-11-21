@@ -8,6 +8,7 @@ import Foundation
 enum FilmNext {
     @MainActor
     static func pick(for it: MediaItem) async -> FilmPick? {
+        if Debug.noPick { return nil }
         let store = ProviderStore.shared
         let pids = store.active.map(\.id)
         guard let f = it.fiche, !pids.isEmpty else { return nil }

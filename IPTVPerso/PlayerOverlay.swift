@@ -52,7 +52,7 @@ final class PlayerUI: ObservableObject {
     @Published var liveStop: Date?
     var zapTo: (Int, Bool) -> Void = { _, _ in }
     // 1.8 phase 1 : cartes de fin de lecture (PlayerCards.swift)
-    enum Card: Equatable { case none, intro, episode, film, post, encore, rate }
+    enum Card: Equatable { case none, intro, episode, film, post, encore, rate, season }
     @Published var card: Card = .none
     @Published var cardSel = 0
     @Published var countdown: Int?
@@ -64,6 +64,8 @@ final class PlayerUI: ObservableObject {
     @Published var encoreEnd = ""
     @Published var encoreBed = ""
     @Published var encoreLate = false
+    /// « Saison terminée » (simulateur pbseason)
+    @Published var seasonEnd = SeasonEndInfo()
     @Published var rateTitle = ""
     // séries : panneau « Épisodes » et « Réglages de cette série »
     @Published var series = false

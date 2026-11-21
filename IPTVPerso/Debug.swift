@@ -75,6 +75,8 @@ extension Debug {
     static var playFrom: Double? { arg("prisme.debug.playFrom").flatMap { Double($0) } }
     /// … et chaque épisode ou film suivant aussi (enchaînements de fin)
     static var playFromEach: Bool { arg("prisme.debug.playFromEach") == "1" }
+    /// lot 1 : aucun film à proposer en fin de film (vérifie qu'aucune carte « À suivre » vide n'apparaît)
+    static var noPick: Bool { arg("prisme.debug.noPick") == "1" }
     /// 1.8 : la fiche série lance directement l'épisode « S-É » (« 2-3 »)
     static var playEp: (Int, Int)? {
         guard let a = arg("prisme.debug.playEp")?.split(separator: "-").compactMap({ Int($0) }), a.count == 2 else { return nil }
