@@ -951,11 +951,15 @@ final class Visite: XCTestCase {
         back(); w(1); shot("M08-options-fermees")
         until("Duel", .down, 4); shot("M09-bouton-duel")
         press(.select); w(1.5); shot("M10-duel-1")
+        let duel = app.descendants(matching: .any)["mnd-0"].exists
         press(.right); w(0.5); shot("M11-duel-droite")
         press(.select); w(1.5); shot("M12-duel-2")
-        for _ in 0..<4 where focused().contains("Duel") == false && app.descendants(matching: .any)["mnd-0"].exists { press(.select); w(1.5) }
-        w(8); shot("M13-gagnant-lance", focus: false)
-        back(); w(2); back(); w(3); shot("M14-retour-ma-liste")
+        for _ in 0..<4 where app.descendants(matching: .any)["mnd-0"].exists { press(.select); w(1.5) }
+        if duel {
+            w(8); shot("M13-gagnant-lance", focus: false)
+            back(); w(3); back(); w(3)
+        }
+        shot("M14-retour-ma-liste")
         for _ in 0..<6 { press(.down) }
         w(1); shot("M15-rangees")
         for _ in 0..<4 { press(.down) }

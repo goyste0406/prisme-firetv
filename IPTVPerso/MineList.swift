@@ -114,7 +114,8 @@ struct MineView: View {
                         tabChip("list", "Ma liste")
                         tabChip("week", "Ma semaine")
                     }
-                    .padding(.top, 6).padding(.bottom, 18).focusSection()
+                    .padding(.top, 6).padding(.bottom, 18)
+                    .frame(maxWidth: .infinity, alignment: .leading).focusSection()
                     if sub == "list" { listPage } else { weekPage }
                     Color.clear.frame(height: 90)
                 }
@@ -174,9 +175,10 @@ struct MineView: View {
             HStack(spacing: 12) {
                 ForEach(Array(MineMood.all.enumerated()), id: \.offset) { j, m in moodChip(j, m) }
             }
-            .padding(.top, 9).padding(.bottom, 21).focusSection()
+            .padding(.top, 9).padding(.bottom, 21)
+            .frame(maxWidth: .infinity, alignment: .leading).focusSection()
             if let old = forgotten {
-                oldBanner(old).padding(.bottom, 18).focusSection()
+                oldBanner(old).padding(.bottom, 18).frame(maxWidth: .infinity, alignment: .leading).focusSection()
             }
             if picks.isEmpty {
                 Text("Rien dans ta liste pour cette envie : essaie une autre.").font(P.font(24)).foregroundStyle(.white.opacity(0.65)).padding(.vertical, 45)
@@ -196,7 +198,7 @@ struct MineView: View {
                         .overlay(RoundedRectangle(cornerRadius: 21, style: .continuous).stroke(Color.white.opacity(f ? 0 : 0.14), lineWidth: 1.5))
                         .scaleEffect(f ? 1.05 : 1)
                 }
-                .padding(.bottom, 9).focusSection()
+                .padding(.bottom, 9).frame(maxWidth: .infinity, alignment: .leading).focusSection()
             }
             if !rest.isEmpty { posterRow("Aussi pour cette envie", "\(rest.count)", rest, "mnr") }
             if !others.isEmpty { posterRow("Le reste de ta liste", "\(others.count)", others, "mnx") }
@@ -260,7 +262,8 @@ struct MineView: View {
     // simulateur .mn-pk : hauteur 220 → 330, rayon 20 → 30, pastille en haut à gauche, texte en bas
     private func pickCard(_ e: MineEntry, _ i: Int) -> some View {
         let late = MineLogic.late(e)
-        let badge = i == 0 && !late ? "⭐ le plus adapté" : late ? "finit après ton coucher" : MineLogic.endOf(e).map { "finit à " + MineLogic.hm($0) } ?? "durée inconnue"
+        // durée inconnue : pas d'heure de fin (jamais inventée)
+        let badge = i == 0 && !late ? "⭐ le plus adapté" : late ? "finit après ton coucher" : MineLogic.endOf(e).map { "finit à " + MineLogic.hm($0) } ?? ""
         return FocusTile(id: "mnp-\(i)", focus: $focus, label: e.title, tap: { play(e.item) }, long: { options(e) }) { f in
             ZStack(alignment: .bottomLeading) {
                 ArtView(backdrop: e.item.backdropURL, poster: e.item.posterURL, maxPixel: 900, fill: true)
@@ -272,9 +275,9 @@ struct MineView: View {
                     Text(MineLogic.why(e)).font(P.font(18.75)).opacity(0.85).lineLimit(1)
                 }
                 .padding(.horizontal, 24).padding(.bottom, 21)
-                Text(badge).font(P.font(18, .heavy)).padding(.vertical, 6).padding(.horizontal, 13.5)
+                if !badge.isEmpty { Text(badge).font(P.font(18, .heavy)).padding(.vertical, 6).padding(.horizontal, 13.5)
                     .background(Capsule().fill(Color.black.opacity(0.6)))
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading).padding(18)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading).padding(18) }
             }
             .frame(maxWidth: .infinity).frame(height: 330)
             .background(Color(red: 0x1b / 255, green: 0x1e / 255, blue: 0x27 / 255))
