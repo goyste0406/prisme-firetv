@@ -212,7 +212,8 @@ enum MyListMeta {
     struct Info: Codable, Equatable { var at: Date?; var from: String; var title: String; var poster: String }
     private static func k(_ pid: String) -> String { ProfileStore.storageKey("prisme.mylist.meta", for: pid) }
     private static func kk(_ pid: String) -> String { ProfileStore.storageKey("prisme.mylist.keep", for: pid) }
-    static func all(_ pid: String = ProfileStore.shared.me.id) -> [String: Info] {
+    static func all(_ p0: String? = nil) -> [String: Info] {
+        let pid = p0 ?? ProfileStore.shared.me.id
         guard let d = UserDefaults.standard.data(forKey: k(pid)), let m = try? JSONDecoder().decode([String: Info].self, from: d) else { return [:] }
         return m
     }
