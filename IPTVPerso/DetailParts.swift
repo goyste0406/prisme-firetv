@@ -70,10 +70,16 @@ enum EpisodeLogic {
     /// Historique incomplet (commencé en S3) : seuls les épisodes après celui en cours sont floutés.
     @MainActor
     static func isSpoiler(_ item: MediaItem, _ info: MediaInfo, _ e: EpisodeInfo, watch: WatchStore) -> Bool {
-        guard PlaybackPrefs.zeroSpoiler, !watch.watched(key(item, e)) else { return false }
+        guard PlaybackPrefs.zeroSpoiler else { return false }
+        let ps = ProfileStore.shared
+        // vu par tous ceux qui regardent : rien à cacher (à deux, ce que l'un a vu peut gâcher la surprise de l'autre)
+        let k = key(item, e)
+        let seenByAll = ps.watchers.allSatisfy { w in
+            w.id == ps.me.id ? watch.watched(k) : (WatchStore.entries(for: w.id)[k].map { $0.dur > 0 && $0.pos / $0.dur >= 0.92 } ?? false)
+        }
+        guard !seenByAll else { return false }
         let all = info.seasons.flatMap(\.episodes)
         guard let i = all.firstIndex(of: e) else { return false }
-        let ps = ProfileStore.shared
         var marks: [Int] = []
         for w in ps.watchers {
             let ent = w.id == ps.me.id ? watch.entries : WatchStore.entries(for: w.id)

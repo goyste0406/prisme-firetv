@@ -34,6 +34,8 @@ struct SeriesDetailView: View {
     @State private var upcoming: [UpcomingEpisode] = []
     @FocusState private var tabFocus: String?
     @FocusState private var playFocused: Bool
+    /// zéro spoiler à deux : la fiche se redessine si on passe à deux ou seul
+    @ObservedObject private var profiles = ProfileStore.shared
 
     /// 1920 − marges (90 + 64) − colonne de gauche (700) − espace (56)
     static let panelW: CGFloat = 1010
@@ -89,7 +91,10 @@ struct SeriesDetailView: View {
         .fullScreenCover(item: $showRecap) { plan in
             RecapScreen(plan: plan, backdrop: (fiche?.backdrop.isEmpty == false) ? Fiche.img(fiche!.backdrop, "original") : info.backdrop, poster: item.posterURL) { mainAction() }
         }
-        .onAppear { DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { playFocused = true } }
+        .onAppear {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { playFocused = true }
+            DataCount.write("fiche série « \(title) » : " + profiles.watchersName)
+        }
         .sheet(isPresented: $showSyn) { SynopsisSheet(kicker: "SÉRIE", title: title, text: plot.isEmpty ? "Pas de résumé chez le fournisseur." : plot) }
         .sheet(item: $actor) { a in ActorSheet(actor: a, kind: .series, excluding: item.clean.key) }
         .confirmationDialog("Choisir la version", isPresented: $pickVersion) {
