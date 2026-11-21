@@ -417,8 +417,9 @@ final class VodPlayerController: UIViewController, VLCMediaPlayerDelegate {
             if press.type == .menu { ui.log("VC began menu (panneau)"); return }
             return super.pressesBegan(presses, with: event)
         }
-        if ui.cardActive, press.type != .menu { cardPress(press.type); return }
-        if ui.card == .intro, press.type == .select { skipIntro(); return }
+        // un message du lecteur (pause, source en panne) passe avant la carte, qui est alors cachée
+        if ui.cardActive, ui.message == nil, press.type != .menu { cardPress(press.type); return }
+        if ui.card == .intro, ui.message == nil, press.type == .select { skipIntro(); return }
         switch press.type {
         case .menu: return   // Retour : traité par shortBack() (via SwiftUI)
         case .leftArrow where isLive, .rightArrow where isLive: showOSD()
@@ -449,7 +450,7 @@ final class VodPlayerController: UIViewController, VLCMediaPlayerDelegate {
         noteInput()
         if ui.sleepLeft != nil { ui.stillWatching(); return }
         if ui.interactive { ui.back("lecteur"); return }
-        if ui.cardActive { cardBackAction(); return }
+        if ui.cardActive && ui.message == nil { cardBackAction(); return }
         if ui.message != nil && (cutDone || bedDone) { quit(); return }
         // comportement validé (1.7) : 1re pression = fermer le panneau ouvert (ci-dessus), 2e pression = quitter la vidéo,
         // bandeau affiché ou non (tvOS réserve « Retour maintenu » à l'écran d'accueil de l'Apple TV)
@@ -1051,7 +1052,8 @@ extension VodPlayerController {
             let lead = creditsChapter ?? mem.creditsAverage.map { d - $0 } ?? (d - PlaybackPrefs.cardLead)
             if p >= max(d * 0.5, lead) { endShown = true; showEpisodeCard() }
         } else if let f = req.film {
-            guard !endShown else { return }
+            // pas de carte « À suivre » pour un extrait ou une vidéo de moins de 5 min (vrai film : toujours plus long)
+            guard !endShown, d >= 300 else { return }
             let lead = max(d - 420, creditsChapter ?? 0)
             guard p >= max(d * 0.2, lead) else { return }
             endShown = true

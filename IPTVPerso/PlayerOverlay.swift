@@ -191,8 +191,9 @@ struct PlayerOverlay: View {
                 bottomBar
             }
             if m.loading && m.message == nil { ProgressView().scaleEffect(2).tint(.white) }
-            // cartes de fin (simulateur) : sous le panneau ; « Passer l'intro » se cache quand un panneau est ouvert
-            if m.card != .none && !(m.card == .intro && m.panel != .none) && m.sleepLeft == nil { PlayerCardsLayer(m: m).ignoresSafeArea() }  // positions du simulateur mesurées depuis le bord de l'écran
+            // cartes de fin (simulateur) : sous le panneau ; « Passer l'intro » se cache quand un panneau est ouvert ;
+            // un message du lecteur (pause « ta place est gardée », source en panne) passe avant la carte
+            if m.card != .none && !(m.card == .intro && m.panel != .none) && m.sleepLeft == nil && m.message == nil { PlayerCardsLayer(m: m).ignoresSafeArea() }  // positions du simulateur mesurées depuis le bord de l'écran
             if m.panel != .none { panel.transition(.move(edge: .trailing).combined(with: .opacity)) }
             if let t = m.toast {
                 // simulateur #toast : centré en bas (bottom 40 → 60), rayon 16 → 24, verre sombre + liseré

@@ -33,7 +33,7 @@ enum FilmNext {
         var models: [TasteModel] = []
         for w in ProfileStore.shared.watchers { models.append(await TasteStore.shared.model(w.id)) }
         let no = NotInterested.list(ProfileStore.shared.me.id)
-        let pool = sim.filter { $0.fiche?.tmdb != f.tmdb && $0.allowedForProfile && !no.contains($0.workKey) && !seen($0) }
+        let pool = sim.filter { $0.id != it.id && $0.workKey != it.workKey && $0.fiche?.tmdb != f.tmdb && $0.allowedForProfile && !no.contains($0.workKey) && !seen($0) }
         let title = f.title.isEmpty ? it.clean.title : f.title
         let res = await Task.detached(priority: .utility) { CrossPick.pick(base: f, title: title, cands: pool, recs: [], models: models, mode: .mix) }.value
         guard let r = res.first(where: { !started($0.item) }) else { return nil }
