@@ -301,6 +301,19 @@ struct LiveFrontView: View {
         for r in recent.dropFirst() where out.count < 3 && !used.contains(ChannelTools.key(r)) {
             out.append((r, "Tu l'as regardée récemment")); used.insert(ChannelTools.key(r))
         }
+        // simulateur : toujours 3 cartes. Peu d'historique : une autre chaîne des mêmes univers,
+        // puis un programme en direct maintenant (raison vraie, jamais inventée)
+        for (u, _) in weight.sorted(by: { $0.value > $1.value }) where u != .autres && out.count < 3 {
+            let pool = nowGenres.first(where: { $0.0 == u })?.1 ?? index.filter { $0.univers == u }.prefix(30).map(\.ch)
+            for c in pool where out.count < 3 && !used.contains(ChannelTools.key(c)) {
+                out.append((c, "Parce que tu regardes " + Self.phrase(u))); used.insert(ChannelTools.key(c))
+            }
+        }
+        for (_, pool) in nowGenres where out.count < 3 {
+            if let c = pool.first(where: { !used.contains(ChannelTools.key($0)) }) {
+                out.append((c, "En direct en ce moment")); used.insert(ChannelTools.key(c))
+            }
+        }
         forNow = out
         forNowSub = byHour ? "selon ce que tu regardes vers \(hour) h" : "selon tes chaînes récentes"
     }

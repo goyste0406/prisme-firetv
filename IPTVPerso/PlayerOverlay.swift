@@ -192,12 +192,17 @@ struct PlayerOverlay: View {
             }
             if m.loading && m.message == nil { ProgressView().scaleEffect(2).tint(.white) }
             // cartes de fin (simulateur) : sous le panneau ; « Passer l'intro » se cache quand un panneau est ouvert
-            if m.card != .none && !(m.card == .intro && m.panel != .none) && m.sleepLeft == nil { PlayerCardsLayer(m: m) }
+            if m.card != .none && !(m.card == .intro && m.panel != .none) && m.sleepLeft == nil { PlayerCardsLayer(m: m).ignoresSafeArea() }  // positions du simulateur mesurées depuis le bord de l'écran
             if m.panel != .none { panel.transition(.move(edge: .trailing).combined(with: .opacity)) }
             if let t = m.toast {
-                Text(t).font(P.font(26, .semibold)).padding(.horizontal, 30).frame(height: 66).accessibilityIdentifier("toast")
-                    .background(.ultraThinMaterial, in: Capsule()).environment(\.colorScheme, .dark)
-                    .frame(maxHeight: .infinity, alignment: .top).padding(.top, 70)
+                // simulateur #toast : centré en bas (bottom 40 → 60), rayon 16 → 24, verre sombre + liseré
+                Text(t).font(P.font(27, .medium)).lineLimit(1).padding(.horizontal, 36).padding(.vertical, 21).accessibilityIdentifier("toast")
+                    .background(RoundedRectangle(cornerRadius: 24, style: .continuous).fill(.ultraThinMaterial)
+                        .overlay(RoundedRectangle(cornerRadius: 24, style: .continuous).fill(Color(red: 40/255, green: 40/255, blue: 48/255).opacity(0.75)))
+                        .overlay(RoundedRectangle(cornerRadius: 24, style: .continuous).stroke(Color.white.opacity(0.12), lineWidth: 1.5)))
+                    .environment(\.colorScheme, .dark)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom).padding(.bottom, 60).ignoresSafeArea()
+                    .transition(.opacity.combined(with: .offset(y: 30)))
             }
             if let s = m.sleepLeft { sleepModal(s) }
             // message masqué tant qu'un panneau est ouvert (il le recouvrait) ; il revient à la fermeture
@@ -206,6 +211,7 @@ struct PlayerOverlay: View {
         .foregroundStyle(.white)
         .animation(.easeOut(duration: 0.25), value: m.panel)
         .animation(.easeOut(duration: 0.25), value: m.osd)
+        .animation(.easeOut(duration: 0.3), value: m.toast)
         .onReceive(clock) { now = $0 }
         .onChange(of: m.panel) { old, p in placeFocus(p, from: old) }
         .onChange(of: m.options) { _, o in if o { focus = "said" } }
@@ -330,15 +336,19 @@ struct PlayerOverlay: View {
                     Text(Fmt.hm(now)).font(P.font(34, .semibold)).monospacedDigit()
                 }
                 .padding(.bottom, 18)
+                // série (simulateur) : les saisons restent en haut et les réglages en bas ; seuls les épisodes défilent
+                let seriesFull = m.series && !m.live && !m.panel.isSub
+                if seriesFull { seriesSeasons }
                 ScrollView {
                     VStack(alignment: .leading, spacing: 8) {
-                        if case let .sub(k) = m.panel { subList(k) } else { fullList }
+                        if case let .sub(k) = m.panel { subList(k) } else if seriesFull { seriesEpisodes } else { fullList }
                     }
                     .padding(.horizontal, 6).padding(.vertical, 6)
                 }
                 // une sous-liste repart du haut (sinon elle gardait le défilement de la liste précédente : vide en haut)
                 .id(m.panel.isSub ? "sub" : "full")
                 .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+                if seriesFull { seriesSettings.padding(.horizontal, 6) }
             }
             .padding(.horizontal, 30).padding(.top, 34).padding(.bottom, 24)
             .frame(width: 720).frame(maxHeight: .infinity)
@@ -355,6 +365,12 @@ struct PlayerOverlay: View {
 
     /// Série (simulateur) : saisons, épisodes, puis « RÉGLAGES DE CETTE SÉRIE » en pastilles
     @ViewBuilder private var seriesList: some View {
+        seriesSeasons
+        seriesEpisodes
+        seriesSettings
+    }
+
+    @ViewBuilder private var seriesSeasons: some View {
         let seasons = Array(Set(m.episodes.map(\.season))).sorted()
         if seasons.count > 1 {
             HStack(spacing: 12) {
@@ -363,8 +379,11 @@ struct PlayerOverlay: View {
                         .buttonStyle(PlayerChipStyle(on: m.epSeason == n)).focused($focus, equals: "sea\(n)")
                 }
             }
-            .padding(.bottom, 10)
+            .padding(.horizontal, 6).padding(.bottom, 10)
         }
+    }
+
+    @ViewBuilder private var seriesEpisodes: some View {
         ForEach(m.episodes.filter { $0.season == m.epSeason }) { e in
             let hide = m.spoiler(e), cur = e.id == m.epCur
             Button { m.panel = .none; if !cur { m.playEpisode(e.season, e.number) } } label: {
@@ -384,6 +403,9 @@ struct PlayerOverlay: View {
             .buttonStyle(PlayerRowStyle(current: cur))
             .focused($focus, equals: "ep" + e.id)
         }
+    }
+
+    @ViewBuilder private var seriesSettings: some View {
         Divider().overlay(Color.white.opacity(0.15)).padding(.vertical, 12)
         Text("RÉGLAGES DE CETTE SÉRIE").font(P.font(20, .bold)).tracking(3).foregroundStyle(.white.opacity(0.65)).padding(.bottom, 6)
         HStack(spacing: 12) {

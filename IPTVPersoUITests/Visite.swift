@@ -874,7 +874,7 @@ final class Visite: XCTestCase {
         back(); w(1)
         // saison 2 sans piste anglaise : message, la langue n'est pas imposée
         relaunch(hpi + ["-prisme.debug.playEp", "2-1"], wait: 8)
-        waitFor("toast", 60); for i in 1...3 { shot("S27-\(i)-pas-de-piste-anglaise", focus: false); w(1) }
+        waitFor("toast", 60); w(0.5); for i in 1...3 { shot("S27-\(i)-pas-de-piste-anglaise", focus: false); w(1) }
         // épisode manquant chez le fournisseur (Lupin S2·É4)
         relaunch(["-prisme.debug.open", "series:demo:2001", "-prisme.debug.playEp", "2-3", "-prisme.debug.playFrom", "73"], wait: 8)
         waitFor("carte-episode", 60); w(1); shot("S28-episode-absent", focus: false)
