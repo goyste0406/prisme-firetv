@@ -198,7 +198,7 @@ struct PlayerCardsLayer: View {
         .transition(.opacity)
     }
 
-    // simulateur .pb-mdl (largeur 780 → 1170) : .pb-k, h2 32 → 48, .pb-stats, .pb-lr, .pb-mb ; boutons .pb-btn
+    // simulateur .pb-mdl (largeur mesurée 848 → 1272) : .pb-k, h2 32 → 48, .pb-stats, .pb-lr, .pb-mb ; boutons .pb-btn
     private var seasonModal: some View {
         let x = m.seasonEnd
         return ZStack {
@@ -233,7 +233,7 @@ struct PlayerCardsLayer: View {
                 }
                 .frame(maxWidth: .infinity)
             }
-            .padding(.vertical, 45).padding(.horizontal, 51).frame(width: 1170)
+            .padding(.vertical, 45).padding(.horizontal, 51).frame(width: 1272)
             .background(modalBG)
             .animation(.easeOut(duration: 0.15), value: m.cardSel)
         }
