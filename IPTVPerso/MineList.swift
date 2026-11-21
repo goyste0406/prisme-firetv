@@ -153,6 +153,10 @@ struct MineView: View {
         // fiches TMDB arrivées en arrière-plan : genres et durées (envies, heures de fin) mis à jour
         .onReceive(FicheService.shared.$version.throttle(for: .seconds(4), scheduler: RunLoop.main, latest: true).dropFirst()) { _ in refresh += 1 }
         .focusScope(mineNS)
+        // retour d'une fiche ou du lecteur : la sélection revient sur le titre lancé (simulateur « ret »)
+        .onChange(of: open == nil) { _, closed in
+            if closed, let b = back { DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { focus = b } }
+        }
         .onChange(of: modal == nil) { _, closed in
             if closed, let b = back { DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { focus = b } }
         }
