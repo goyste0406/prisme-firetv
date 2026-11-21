@@ -940,6 +940,7 @@ final class Visite: XCTestCase {
         func hold() { remote.press(.select, forDuration: 1.2); Thread.sleep(forTimeInterval: 0.8) }
         let base2 = ["-prisme.debug.mylist", "1", "-prisme.debug.profiles", "2", "-prisme.debug.tab", "mine"]
         relaunch(base2, wait: 16)
+        w(20)   // fiches TMDB du faux serveur : genres et durées (envies, heures de fin)
         shot("M01-ma-liste-haut")
         until("Sous-onglet Ma liste", .down, 3); shot("M02-sous-onglet")
         press(.down); w(1); shot("M03-envie-rire")

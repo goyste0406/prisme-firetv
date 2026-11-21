@@ -1,4 +1,5 @@
 import SwiftUI
+import Combine
 
 // MARK: - Lot 2 : Ma liste et Ma semaine (simulateur « mine » : listHtml, weekHtml, mnduel, mnopt)
 // Dimensions : celles du simulateur (écran logique 1280 × 720) × 1,5. Marge de la page : 56 → 84.
@@ -102,6 +103,8 @@ struct MineView: View {
     @FocusState private var focus: String?
     /// sélection à rendre à la page quand une fenêtre se ferme (simulateur « ret »)
     @State private var back: String?
+    /// en descendant de la barre : la sélection arrive sur le sous-onglet ouvert, et sur l'envie choisie (simulateur)
+    @Namespace private var mineNS
 
     struct MineOpen: Identifiable, Hashable { let item: MediaItem; let play: Bool; var id: String { item.id + (play ? ":p" : "") } }
 
@@ -136,7 +139,20 @@ struct MineView: View {
         }
         .ignoresSafeArea()
         .animation(.easeOut(duration: 0.25), value: toast)
-        .onChange(of: focus) { _, f in if let f, !f.hasPrefix("mno-"), !f.hasPrefix("mnd-") { back = f } }
+        .onChange(of: focus) { old, f in
+            if let f, !f.hasPrefix("mno-"), !f.hasPrefix("mnd-") { back = f }
+            // simulateur : le survol d'un sous-onglet ou d'une envie la choisit ; en arrivant d'ailleurs dans la rangée,
+            // la sélection va sur celle qui est ouverte (jamais un changement de page par simple passage)
+            guard let f else { return }
+            if f.hasPrefix("mns-") {
+                if old?.hasPrefix("mns-") == true { sub = String(f.dropFirst(4)) } else if f != "mns-" + sub { focus = "mns-" + sub }
+            } else if f.hasPrefix("mnm-"), let j = Int(f.dropFirst(4)) {
+                if old?.hasPrefix("mnm-") == true { mood = j } else if j != mood { focus = "mnm-\(mood)" }
+            }
+        }
+        // fiches TMDB arrivées en arrière-plan : genres et durées (envies, heures de fin) mis à jour
+        .onReceive(FicheService.shared.$version.throttle(for: .seconds(4), scheduler: RunLoop.main, latest: true).dropFirst()) { _ in refresh += 1 }
+        .focusScope(mineNS)
         .onChange(of: modal == nil) { _, closed in
             if closed, let b = back { DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { focus = b } }
         }
@@ -155,7 +171,7 @@ struct MineView: View {
                 .background(Capsule().fill(f ? Color.white : sub == k ? Color.white.opacity(0.14) : .clear))
                 .scaleEffect(f ? 1.06 : 1)
         }
-        .onChange(of: focus) { _, n in if n == "mns-" + k, sub != k { sub = k } }
+        .prefersDefaultFocus(sub == k, in: mineNS)
     }
 
     // MARK: Ma liste
@@ -228,7 +244,7 @@ struct MineView: View {
             .overlay(RoundedRectangle(cornerRadius: 21, style: .continuous).stroke(Color.white.opacity(f ? 0 : 0.14), lineWidth: 1.5))
             .scaleEffect(f ? 1.06 : 1)
         }
-        .onChange(of: focus) { _, nf in if nf == "mnm-\(j)", mood != j { mood = j } }
+        .prefersDefaultFocus(j == mood, in: mineNS)
     }
 
     /// simulateur : ajouté il y a plus de 3 mois, jamais lancé, pas « gardé »
