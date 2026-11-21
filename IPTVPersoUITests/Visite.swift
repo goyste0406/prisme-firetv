@@ -106,6 +106,7 @@ final class Visite: XCTestCase {
         if ProcessInfo.processInfo.environment["ONLY"] == "finfilm" { finFilm(); return }
         if ProcessInfo.processInfo.environment["ONLY"] == "lot1" { lot1(); return }
         if ProcessInfo.processInfo.environment["ONLY"] == "lot2" { lot2(); return }
+        if ProcessInfo.processInfo.environment["ONLY"] == "lot3" { lot3(); return }
         if ProcessInfo.processInfo.environment["ONLY"] == "tvidle" {
             // TV en direct au lancement avec deux fournisseurs, 150 s sans aucune interaction, puis une capture
             relaunch(["-prisme.debug.demoServer2", "http://127.0.0.1:8098", "-prisme.debug.tab", "live"], wait: 150)
@@ -978,6 +979,63 @@ final class Visite: XCTestCase {
         relaunch(base2 + ["-prisme.debug.second", "1"], wait: 16)
         shot("M30-ma-liste-lea")
         until("Sous-onglet Ma liste", .down, 3); until("Sous-onglet Ma semaine", .right, 3); w(1.5); shot("M31-semaine-lea-vide")
+    }
+
+    /// Lot 3 : recherche (clavier PRISME, fautes, phrases, filtres, aperçu, récentes, Siri / clavier d'Apple, gros catalogue)
+    func lot3() {
+        let w = { (t: Double) in Thread.sleep(forTimeInterval: t) }
+        let grid = ["abcdef", "ghijkl", "mnopqr", "stuvwx", "yz1234", "567890"].map { Array($0) }
+        var at = (0, 0)
+        func pos(_ c: Character) -> (Int, Int) { for (r, row) in grid.enumerated() { if let i = row.firstIndex(of: c) { return (r, i) } }; return (0, 0) }
+        func typeWord(_ s: String) {
+            for c in s {
+                let t = pos(c)
+                if t.0 > at.0 { press(.down, t.0 - at.0) } else if t.0 < at.0 { press(.up, at.0 - t.0) }
+                if t.1 > at.1 { press(.right, t.1 - at.1) } else if t.1 < at.1 { press(.left, at.1 - t.1) }
+                at = t; press(.select); w(0.3)
+            }
+        }
+        let q = { (s: String) -> [String] in ["-prisme.debug.tab", "search", "-prisme.debug.q", s] }
+        relaunch(["-prisme.debug.tab", "search"], wait: 16)
+        w(15)
+        shot("R01-vide")
+        press(.down); for _ in 0..<6 { press(.left) }; at = (0, 0); w(0.5); shot("R02-clavier")
+        typeWord("nolan"); w(2); shot("R03-nolan-tape")
+        press(.right, 6); w(1.5); shot("R04-nolan-apercu")
+        press(.down); w(1); shot("R05-nolan-2e")
+        press(.playPause); w(10); shot("R06-lecture-directe", focus: false)
+        back(); w(3); back(); w(3); shot("R07-retour-recherche")
+        relaunch(q("inceptoin"), wait: 16); w(10); press(.down); press(.right, 7); w(1.5); shot("R10-faute")
+        relaunch(q("comedie annees 90"), wait: 16); w(8); press(.down); press(.right, 7); w(1.5); shot("R11-phrase")
+        relaunch(q("films avec omar sy"), wait: 16); w(8); press(.down); press(.right, 7); w(1.5); shot("R12-phrase-acteur")
+        relaunch(q("le match en ce moment"), wait: 16); w(8); press(.down); press(.right, 7); w(1.5); shot("R13-match")
+        relaunch(q("omar"), wait: 16); w(8); press(.down); press(.right, 7); w(1)
+        for _ in 0..<6 where !focused().contains("srf-") && !focused().contains("Tout") && !focused().contains("Acteurs") { press(.up) }
+        for _ in 0..<6 where !focused().contains("Acteurs") { press(.right) }
+        press(.select); w(1.5); shot("R14-filtre-acteurs")
+        press(.down); w(1.5); shot("R15-acteur-apercu")
+        press(.select); w(4); shot("R16-acteur-fiche")
+        back(); w(2)
+        relaunch(q("tf1"), wait: 16); w(8); press(.down); press(.right, 7); w(1.5); shot("R17-chaine-apercu")
+        // récentes : les recherches ouvertes plus haut (nolan, omar)
+        relaunch(["-prisme.debug.tab", "search"], wait: 16); w(4); press(.down); press(.right, 7); w(1); shot("R18-recentes")
+        // Siri / clavier d'Apple : la touche ouvre le clavier du système, le texte revient dans la recherche
+        press(.left, 8); for _ in 0..<8 { press(.down) }
+        for _ in 0..<4 where !focused().contains("k-siri") && !focused().contains("Siri") { press(.right) }
+        shot("R19-touche-siri")
+        press(.select); w(2.5); shot("R20-clavier-apple", focus: false)
+        app.typeText("lupin"); w(2); shot("R21-texte-tape", focus: false)
+        back(); w(3); shot("R22-texte-revenu")
+        // gros catalogue (40 000 films, 20 000 séries, 20 000 chaînes) : temps de réponse écrit dans donnees.txt
+        app.terminate()
+        app.launchArguments = ["-prisme.debug.demoServer", "http://127.0.0.1:8097", "-prisme.debug.tmdbKey", "demo",
+                               "-prisme.debug.tmdbBase", "http://127.0.0.1:8099/tmdb/3", "-prisme.debug.imgBase", "http://127.0.0.1:8099/img",
+                               "-prisme.debug.itunesBase", "http://127.0.0.1:8099/itunes", "-prisme.debug.bgTrailer", "off",
+                               "-prisme.debug.tab", "search", "-prisme.debug.q", "film 12"]
+        app.launch(); w(150)
+        shot("R30-gros-catalogue")
+        press(.down); press(.left, 6); at = (0, 0)
+        typeWord("a"); w(3); typeWord("b"); w(3); shot("R31-gros-catalogue-frappe")
     }
 
     func finFilm() {

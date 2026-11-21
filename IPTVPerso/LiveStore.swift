@@ -177,6 +177,28 @@ enum LiveStore {
         return Univers.allCases.compactMap { u in by[u].map { (u, ChannelTools.dedupe($0)) } }.filter { !$0.1.isEmpty }
     }
 
+    /// Recherche (lot 3) : tous les programmes en cours, une chaîne une fois (gardé 2 minutes en mémoire).
+    static func airingNow(providers: [String]) async -> [Airing] {
+        guard !providers.isEmpty else { return [] }
+        let key = ("now|" + providers.joined(separator: ",")) as NSString
+        if let b = soonCache.object(forKey: key), Date().timeIntervalSince(b.at) < 120 { return b.list }
+        let now = Int(Date().timeIntervalSince1970)
+        let ph = providers.map { _ in "?" }.joined(separator: ",")
+        let list = await Database.shared.read { db -> [Airing] in
+            var out: [Airing] = [], seen = Set<String>()
+            db.query("""
+                SELECT l.pid,l.sid,l.name,l.num,l.icon,l.cid,l.epg,l.archive,e.start,e.stop,e.title,e.descr,COALESCE(e.img,''),COALESCE(e.cat,'') FROM epg e JOIN live l ON l.epg=e.ch
+                WHERE e.start<=? AND e.stop>? AND l.pid IN (\(ph)) ORDER BY l.num LIMIT 3000
+                """, ([now, now] as [Any?]) + providers.map { $0 as Any? }) { r in
+                let a = Airing(ch: row(r), p: Program(start: r.int(8), stop: r.int(9), title: r.str(10), descr: r.str(11), img: r.str(12), cat: r.str(13)))
+                if seen.insert(ChannelTools.key(a.ch)).inserted { out.append(a) }
+            }
+            return out
+        }
+        soonCache.setObject(AiringBox(list), forKey: key)
+        return list
+    }
+
     /// « Commence bientôt » : ce qui démarre dans l'heure (gardé 5 minutes en mémoire).
     static func startingSoon(providers: [String]) async -> [Airing] {
         guard !providers.isEmpty else { return [] }

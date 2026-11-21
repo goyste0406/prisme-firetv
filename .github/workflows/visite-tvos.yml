@@ -13,7 +13,7 @@ on:
         required: false
         default: ""
       seulement:
-        description: "Partie à visiter seule (lecteur, serie, tv, nav, multi, perf, fournisseurs, fiches, tvlecteur, tvcrash, tvidle, gouts, geant, langue, reglages, dit, sauvegarde, accueil, duo, sources, envoi, finserie, finfilm, lot1, lot2), vide = visite complète"
+        description: "Partie à visiter seule (lecteur, serie, tv, nav, multi, perf, fournisseurs, fiches, tvlecteur, tvcrash, tvidle, gouts, geant, langue, reglages, dit, sauvegarde, accueil, duo, sources, envoi, finserie, finfilm, lot1, lot2, lot3), vide = visite complète"
         required: false
         default: ""
 

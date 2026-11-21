@@ -726,6 +726,8 @@ struct FocusTile<Content: View>: View {
     let label: String
     let tap: () -> Void
     var long: (() -> Void)? = nil
+    /// bouton ▶︎ de la télécommande (recherche : lire tout de suite)
+    var play: (() -> Void)? = nil
     @ViewBuilder let content: (Bool) -> Content
 
     var body: some View {
@@ -736,6 +738,7 @@ struct FocusTile<Content: View>: View {
             .focused(focus, equals: id)
             .onLongPressGesture(minimumDuration: 0.6) { (long ?? tap)() }
             .onTapGesture { tap() }
+            .onPlayPauseCommand { (play ?? tap)() }
             .accessibilityElement(children: .ignore)
             .accessibilityLabel(label)
             .accessibilityIdentifier(id)

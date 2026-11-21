@@ -564,8 +564,11 @@ struct ActorSheet: View {
     let actor: CastMember
     let kind: MediaKind
     let excluding: String
+    /// recherche (lot 3) : ses films et ses séries
+    var both = false
     @EnvironmentObject var store: ProviderStore
     @State private var list: [MediaItem] = []
+    @State private var list2: [MediaItem] = []
     @State private var done = false
     @State private var open: MediaItem?
     var body: some View {
@@ -578,11 +581,12 @@ struct ActorSheet: View {
                         VStack(alignment: .leading, spacing: 6) {
                             Text("DANS TON ABONNEMENT").font(P.font(18, .bold)).tracking(2).foregroundStyle(P.faint)
                             Text(actor.n).font(P.font(54, .bold))
-                            Text(done ? (list.isEmpty ? "Aucun autre titre avec cet acteur chez tes fournisseurs (d'après les fiches déjà téléchargées)." : "\(list.count) titre\(list.count > 1 ? "s" : "")") : "Recherche…")
+                            Text(done ? (list.isEmpty && list2.isEmpty ? "Aucun autre titre avec cet acteur chez tes fournisseurs (d'après les fiches déjà téléchargées)." : "\(list.count + list2.count) titre\(list.count + list2.count > 1 ? "s" : "")") : "Recherche…")
                                 .font(P.font(23)).foregroundStyle(P.dim)
                         }
                     }.padding(.horizontal, 120)
                     if !list.isEmpty { MediaRow(title: kind == .film ? "Ses films" : "Ses séries", items: list, open: { open = $0 }) }
+                    if !list2.isEmpty { MediaRow(title: "Ses séries", items: list2, open: { open = $0 }) }
                     Spacer()
                 }.padding(.top, 90)
             }
@@ -591,6 +595,7 @@ struct ActorSheet: View {
         }
         .task {
             list = await MediaStore.withActor(actor.n, kind: kind, pids: store.active.map(\.id), excluding: excluding)
+            if both { list2 = await MediaStore.withActor(actor.n, kind: .series, pids: store.active.map(\.id), excluding: excluding) }
             done = true
         }
     }
