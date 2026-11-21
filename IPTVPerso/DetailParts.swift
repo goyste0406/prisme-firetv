@@ -79,7 +79,9 @@ enum EpisodeLogic {
         }
         guard !seenByAll else { return false }
         let all = info.seasons.flatMap(\.episodes)
-        guard let i = all.firstIndex(of: e) else { return false }
+        // place dans la série par saison et numéro : un épisode « complété depuis une autre version » n'est pas
+        // dans la liste de cette version, il doit quand même être flouté s'il est plus loin
+        let i = all.firstIndex(of: e) ?? all.filter { ($0.season, $0.number) < (e.season, e.number) }.count
         var marks: [Int] = []
         for w in ps.watchers {
             let ent = w.id == ps.me.id ? watch.entries : WatchStore.entries(for: w.id)
