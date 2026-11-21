@@ -999,32 +999,32 @@ final class Visite: XCTestCase {
         relaunch(["-prisme.debug.tab", "search"], wait: 16)
         w(15)
         shot("R01-vide")
-        press(.down); for _ in 0..<6 { press(.left) }; at = (0, 0); w(0.5); shot("R02-clavier")
+        press(.down); w(0.5); at = (0, 0); shot("R02-clavier")
         typeWord("nolan"); w(2); shot("R03-nolan-tape")
         press(.right, 6); w(1.5); shot("R04-nolan-apercu")
         press(.down); w(1); shot("R05-nolan-2e")
         press(.playPause); w(10); shot("R06-lecture-directe", focus: false)
         back(); w(3); back(); w(3); shot("R07-retour-recherche")
         relaunch(q("inceptoin"), wait: 16); w(10); press(.down); press(.right, 7); w(1.5); shot("R10-faute")
-        relaunch(q("comedie annees 90"), wait: 16); w(8); press(.down); press(.right, 7); w(1.5); shot("R11-phrase")
-        relaunch(q("films avec omar sy"), wait: 16); w(8); press(.down); press(.right, 7); w(1.5); shot("R12-phrase-acteur")
+        relaunch(q("inceptin"), wait: 16); w(8); press(.down); press(.right, 7); w(1.5); shot("R10b-lettre-oubliee")
+        relaunch(q("comedie"), wait: 16); w(8); press(.down); press(.right, 7); w(1.5); shot("R11-phrase-genre")
+        relaunch(q("science fiction annees 2010"), wait: 16); w(8); press(.down); press(.right, 7); w(1.5); shot("R11b-phrase-decennie")
+        relaunch(q("series avec omar sy"), wait: 16); w(8); press(.down); press(.right, 7); w(1.5); shot("R12-phrase-acteur")
         relaunch(q("le match en ce moment"), wait: 16); w(8); press(.down); press(.right, 7); w(1.5); shot("R13-match")
-        relaunch(q("omar"), wait: 16); w(8); press(.down); press(.right, 7); w(1)
-        for _ in 0..<6 where !focused().contains("srf-") && !focused().contains("Tout") && !focused().contains("Acteurs") { press(.up) }
-        for _ in 0..<6 where !focused().contains("Acteurs") { press(.right) }
-        press(.select); w(1.5); shot("R14-filtre-acteurs")
-        press(.down); w(1.5); shot("R15-acteur-apercu")
+        relaunch(q("omar") + ["-prisme.debug.filt", "actor"], wait: 16); w(8); press(.down); press(.right, 7); w(1.5); shot("R14-filtre-acteurs")
         press(.select); w(4); shot("R16-acteur-fiche")
         back(); w(2)
         relaunch(q("tf1"), wait: 16); w(8); press(.down); press(.right, 7); w(1.5); shot("R17-chaine-apercu")
-        // récentes : les recherches ouvertes plus haut (nolan, omar)
+        press(.select); w(8); shot("R17b-chaine-lancee", focus: false); back(); w(3)
+        // récentes : les recherches ouvertes plus haut
         relaunch(["-prisme.debug.tab", "search"], wait: 16); w(4); press(.down); press(.right, 7); w(1); shot("R18-recentes")
         // Siri / clavier d'Apple : la touche ouvre le clavier du système, le texte revient dans la recherche
-        press(.left, 8); for _ in 0..<8 { press(.down) }
-        for _ in 0..<4 where !focused().contains("k-siri") && !focused().contains("Siri") { press(.right) }
-        shot("R19-touche-siri")
-        press(.select); w(2.5); shot("R20-clavier-apple", focus: false)
-        app.typeText("lupin"); w(2); shot("R21-texte-tape", focus: false)
+        press(.left, 8); w(0.5); at = (0, 0)
+        for _ in 0..<12 where !focused().contains("« a »") { press(.up) }
+        press(.down, 6); press(.right, 2); w(0.5); shot("R19-touche-siri")
+        press(.select); w(3); shot("R20-clavier-apple", focus: false)
+        if app.keyboards.count > 0 { app.typeText("lupin"); w(2); shot("R21-texte-tape", focus: false) }
+        else { attach("R21-clavier", "clavier d'Apple non détecté") }
         back(); w(3); shot("R22-texte-revenu")
         // gros catalogue (40 000 films, 20 000 séries, 20 000 chaînes) : temps de réponse écrit dans donnees.txt
         app.terminate()

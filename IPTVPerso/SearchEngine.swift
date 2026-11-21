@@ -16,7 +16,11 @@ enum SearchText {
         guard abs(la - lb) <= 1 else { return false }
         var i = 0
         while i < la && i < lb && a[i] == b[i] { i += 1 }
-        if la == lb { return a.dropFirst(i + 1).elementsEqual(b.dropFirst(i + 1)) }
+        if la == lb {
+            if a.dropFirst(i + 1).elementsEqual(b.dropFirst(i + 1)) { return true }
+            // deux lettres inversées (« inceptoin » → inception) : comptée comme une seule faute
+            return i + 1 < la && a[i] == b[i + 1] && a[i + 1] == b[i] && a.dropFirst(i + 2).elementsEqual(b.dropFirst(i + 2))
+        }
         if la > lb { return a.dropFirst(i + 1).elementsEqual(b.dropFirst(i)) }
         return a.dropFirst(i).elementsEqual(b.dropFirst(i + 1))
     }

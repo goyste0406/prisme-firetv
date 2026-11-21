@@ -11,7 +11,7 @@ struct SearchView: View {
     @ObservedObject var fiches = FicheService.shared
     @State private var q = Debug.arg("prisme.debug.q") ?? ""
     @State private var native = ""
-    @State private var filt = "all"
+    @State private var filt = Debug.arg("prisme.debug.filt") ?? "all"
     @State private var res = SearchIndex.Result()
     @State private var items: [String: MediaItem] = [:]
     @State private var live: [LiveStore.Airing] = []
@@ -52,7 +52,11 @@ struct SearchView: View {
         .task(id: "\(q)|\(store.catalogVersion)|\(fiches.version / 10)|\(profiles.version)") { await run() }
         .onAppear { recent = SearchRecent.list }
         .onChange(of: native) { _, t in if !t.isEmpty { q = t } }
-        .onChange(of: focus) { _, f in if let f, f.hasPrefix("k-") || f.hasPrefix("srf-") { if f != "k-siri" { native = "" } } }
+        .onChange(of: focus) { old, f in
+            if let f, f.hasPrefix("k-") || f.hasPrefix("srf-") { if f != "k-siri" { native = "" } }
+            // en descendant de la barre du haut : le clavier, sur « a » (simulateur data-default)
+            if old == nil, let f, f.hasPrefix("srf-") { focus = "k-a" }
+        }
     }
 
     // MARK: gauche : saisie, clavier, note (simulateur .sr-left)
