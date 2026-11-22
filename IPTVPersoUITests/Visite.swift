@@ -1039,10 +1039,10 @@ final class Visite: XCTestCase {
         app.launch(); w(330)   // import complet du gros catalogue
         shot("G01-gros-catalogue")
         press(.down); w(0.5)
-        // « le » : l, e (depuis « a » : l = rangée 1 col 5 ; e = rangée 0 col 4)
-        press(.down); press(.right, 5); press(.select); w(4); shot("G02-l")
-        press(.up); press(.left); press(.select); w(4); shot("G03-le")
-        press(.down, 2); press(.left, 2); press(.select); w(4); shot("G04-leo"); w(10); shot("G04b-leo-14s")
+        // « fil » : f, i, l (depuis « a » : f = rangée 0 col 5 ; i = rangée 1 col 2 ; l = rangée 1 col 5) → 40 000 « Film de test … »
+        press(.right, 5); press(.select); w(4); shot("G02-f")
+        press(.down); press(.left, 3); press(.select); w(4); shot("G03-fi")
+        press(.right, 3); press(.select); w(4); shot("G04-fil")
         press(.right, 6); w(2); shot("G05-apercu")
     }
 

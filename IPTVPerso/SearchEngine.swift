@@ -6,27 +6,66 @@ import Foundation
 // sur cette liste : pas de requête à la base, rapide même avec un très gros catalogue.
 
 enum SearchText {
+    /// un mot normalisé (lettres a-z et chiffres) sous forme d'octets : comparaisons bien plus rapides que des caractères
+    typealias Word = [UInt8]
     /// minuscules, sans accents ni ponctuation (simulateur nz)
     static func norm(_ s: String) -> String { TitleTools.fold(s.lowercased()) }
     static func words(_ s: String) -> [String] { norm(s).split(separator: " ").map(String.init) }
+    static func keys(_ s: String) -> [Word] { words(s).map { Array($0.utf8) } }
+
+    private static let noise: Set<String> = ["4k", "uhd", "2160p", "fhd", "1080p", "1080i", "hd", "720p", "sd", "multi", "vostfr", "vost", "vff", "vfq",
+                                             "vf", "vf2", "vo", "truefrench", "french", "hevc", "h265", "x265", "x264", "hdr", "hdr10", "dv", "imax", "remux"]
+    private static let lead: Set<String> = ["fr", "fra", "be", "ch", "ca", "qc", "uk", "en", "us", "es", "it", "de", "pt", "ar", "tr", "pl", "nl", "ru",
+                                            "kr", "jp", "cn", "in", "eu", "as", "af", "asia", "lat", "vod"]
+
+    /// Mots d'un nom de fournisseur sans expressions régulières (« FR| Dune (2021) 4K MULTI » → dune) :
+    /// sert à chercher tout de suite pendant que le nettoyage complet des titres se fait en arrière-plan.
+    static func quickWords(_ raw: String) -> (words: [Word], vost: Bool) {
+        let f = raw.folding(options: [.diacriticInsensitive, .caseInsensitive], locale: nil)
+        var toks: [Word] = [], cur: Word = []
+        cur.reserveCapacity(16)
+        for c in f.utf8 {
+            if c >= 97 && c <= 122 || c >= 48 && c <= 57 { cur.append(c) }
+            else if c >= 65 && c <= 90 { cur.append(c + 32) }
+            else if !cur.isEmpty { toks.append(cur); cur.removeAll(keepingCapacity: true) }
+        }
+        if !cur.isEmpty { toks.append(cur) }
+        var vost = false
+        var out: [Word] = []
+        for (i, t) in toks.enumerated() {
+            let w = String(decoding: t, as: UTF8.self)
+            if w == "vostfr" || w == "vost" { vost = true }
+            if i == 0 && toks.count > 1 && lead.contains(w) { continue }
+            if noise.contains(w) { continue }
+            if t.count == 4, let y = Int(w), y >= 1920 && y < 2050 { continue }
+            out.append(t)
+        }
+        return (out.isEmpty ? toks : out, vost)
+    }
 
     /// une lettre en trop, en moins ou différente (simulateur ed1)
-    static func ed1(_ a: [Character], _ b: [Character]) -> Bool {
+    static func ed1(_ a: Word, _ b: Word) -> Bool {
         let la = a.count, lb = b.count
         guard abs(la - lb) <= 1 else { return false }
         var i = 0
         while i < la && i < lb && a[i] == b[i] { i += 1 }
-        if la == lb {
-            if a.dropFirst(i + 1).elementsEqual(b.dropFirst(i + 1)) { return true }
-            // deux lettres inversées (« inceptoin » → inception) : comptée comme une seule faute
-            return i + 1 < la && a[i] == b[i + 1] && a[i + 1] == b[i] && a.dropFirst(i + 2).elementsEqual(b.dropFirst(i + 2))
+        func same(_ x: Int, _ y: Int) -> Bool {     // a[x...] == b[y...]
+            guard la - x == lb - y else { return false }
+            var p = x, q = y
+            while p < la { if a[p] != b[q] { return false }; p += 1; q += 1 }
+            return true
         }
-        if la > lb { return a.dropFirst(i + 1).elementsEqual(b.dropFirst(i)) }
-        return a.dropFirst(i).elementsEqual(b.dropFirst(i + 1))
+        if la == lb {
+            if i >= la || same(i + 1, i + 1) { return true }
+            // deux lettres inversées (« inceptoin » → inception) : comptée comme une seule faute
+            return i + 1 < la && a[i] == b[i + 1] && a[i + 1] == b[i] && same(i + 2, i + 2)
+        }
+        if la > lb { return same(i + 1, i) }
+        return same(i, i + 1)
     }
 
     /// distance d'édition, seulement pour des mots de longueur proche (simulateur lev)
-    static func lev(_ a: [Character], _ b: [Character]) -> Int {
+    static func lev(_ a: Word, _ b: Word) -> Int {
         if abs(a.count - b.count) > 1 { return 9 }
         var d = Array(0...b.count)
         for i in 1...max(1, a.count) where !a.isEmpty {
@@ -40,17 +79,24 @@ enum SearchText {
         return d[b.count]
     }
 
+    private static func starts(_ x: Word, _ w: Word) -> Bool {
+        guard x.count >= w.count else { return false }
+        var i = 0
+        while i < w.count { if x[i] != w[i] { return false }; i += 1 }
+        return true
+    }
+
     /// simulateur wscore : chaque mot cherché doit se retrouver (exact 3, début 2, à une lettre près 1,4)
-    static func score(_ Q: [[Character]], _ W: [[Character]]) -> (s: Double, fuz: Bool)? {
+    static func score(_ Q: [Word], _ W: [Word]) -> (s: Double, fuz: Bool)? {
         guard !Q.isEmpty else { return nil }
         var s = 0.0, fuz = false
         for w in Q {
             var b = 0.0
             for x in W {
                 if x == w { b = 3; break }
-                if x.starts(with: w) { b = max(b, 2) }
-                else if (w.count >= 4 || (Q.count > 1 && w.count >= 2 && x.count <= w.count + 1))
-                            && (ed1(w, x) || (w.count >= 4 && x.count >= w.count && ed1(w, Array(x.prefix(w.count))))) { b = max(b, 1.4) }
+                if starts(x, w) { b = max(b, 2) }
+                else if b < 1.4, (w.count >= 4 || (Q.count > 1 && w.count >= 2 && x.count <= w.count + 1))
+                            && (ed1(w, x) || (w.count >= 4 && x.count >= w.count && ed1(w, Array(x.prefix(w.count))))) { b = 1.4 }
             }
             if b == 0 { return nil }
             if b == 1.4 { fuz = true }
@@ -79,70 +125,141 @@ actor SearchIndex {
         let key: String
         let title: String
         let year: Int
-        let words: [[Character]]
+        let words: [SearchText.Word]
         var vost = false
         var genres = ""          // fiche TMDB, sans accents
         var runtime = 0
         var director = ""
-        var dirWords: [[Character]] = []
+        var dirWords: [SearchText.Word] = []
         var rating = 0.0
     }
-    struct Actor { let name: String; let photo: String; let words: [[Character]]; var titles: [(key: String, title: String, year: Int)] }
+    struct Actor { let name: String; let photo: String; let words: [SearchText.Word]; var titles: [(key: String, title: String, year: Int)] }
 
     private(set) var entries: [Entry] = []
     private(set) var actors: [Actor] = []
-    private var stamp = ""
-    private var building: (stamp: String, task: Task<([Entry], [Actor]), Never>)?
-    private var lastFicheBuild = Date.distantPast
+    private var stamp = ""              // ce que contient entries : « base|tranche de fiches » ou « base|rapide »
+    private var base: (b: String, list: [Entry], byKey: [String: Int])?   // titres nettoyés, sans les fiches
+    private var quick: (b: String, task: Task<[Entry], Never>)?
+    private var fullFor = ""            // base dont le nettoyage complet est en cours
+    private var ficheBusy = false
+    private var lastFiche = Date.distantPast
 
-    /// Reconstruit la liste si les fournisseurs, le catalogue ou les fiches ont changé.
-    /// Une seule construction à la fois (les frappes suivantes attendent la même) ;
-    /// si seules les fiches ont changé et qu'un index existe déjà, il est rafraîchi en arrière-plan
-    /// (au plus toutes les 30 s) et la recherche continue avec l'index actuel.
+    private typealias Row = (kind: MediaKind, pid: String, sid: String, name: String, year: Int, rating: Double)
+
+    /// Prépare la liste des titres pour les fournisseurs, le catalogue et les fiches donnés.
+    /// 1. Index rapide (sans expressions régulières, ~1 s pour 60 000 titres) : on peut chercher tout de suite.
+    /// 2. En arrière-plan, nettoyage complet des titres sur tous les cœurs, puis ajout des fiches TMDB.
+    /// 3. Quand seules les fiches changent : on les réapplique (au plus toutes les 30 s), sans tout refaire.
+    /// Une seule construction de chaque sorte à la fois ; la recherche n'attend jamais le nettoyage complet.
     func ensure(pids: [String], catalog: Int, fiches: Int) async {
         guard !pids.isEmpty else { return }
-        let base = pids.joined(separator: ",") + "|\(catalog)"
-        let st = base + "|\(fiches / 10)"
+        let b = pids.joined(separator: ",") + "|\(catalog)"
+        let st = b + "|\(fiches / 10)"
         if st == stamp { return }
-        let onlyFiches = !entries.isEmpty && stamp.hasPrefix(base + "|")
-        if let b = building {
-            if onlyFiches { return }                       // un rafraîchissement tourne déjà : index actuel
-            if b.stamp.hasPrefix(base + "|") { await finish(b.stamp, b.task); return }
+        if let bs = base, bs.b == b {
+            if !ficheBusy && Date().timeIntervalSince(lastFiche) >= 30 {
+                ficheBusy = true
+                let (list, byKey) = (bs.list, bs.byKey)
+                Task.detached(priority: .utility) {
+                    let (l, a) = await Self.applyFiches(list, byKey)
+                    await self.doneFiches(b, st, l, a)
+                }
+            }
+            return
         }
-        if onlyFiches && Date().timeIntervalSince(lastFicheBuild) < 30 { return }
-        let task = Task.detached(priority: onlyFiches ? .utility : .userInitiated) { await Self.build(pids: pids) }
-        building = (st, task)
-        if onlyFiches { Task { await self.finish(st, task) } } else { await finish(st, task) }
+        if fullFor != b {
+            fullFor = b
+            Task.detached(priority: .utility) {
+                let rows = await Self.rows(pids)
+                let (list, byKey) = Self.clean(rows)
+                let (l, a) = await Self.applyFiches(list, byKey)
+                await self.doneFull(b, st, list, byKey, l, a)
+            }
+        }
+        if stamp.hasPrefix(b + "|") { return }
+        let task: Task<[Entry], Never>
+        if let q = quick, q.b == b { task = q.task } else {
+            task = Task.detached(priority: .userInitiated) { Self.quickList(await Self.rows(pids)) }
+            quick = (b, task)
+        }
+        let l = await task.value
+        if quick?.b == b { quick = nil }
+        if !stamp.hasPrefix(b + "|") { entries = l; actors = []; stamp = b + "|rapide" }
     }
 
-    private func finish(_ st: String, _ task: Task<([Entry], [Actor]), Never>) async {
-        let (list, acts) = await task.value
-        guard building?.stamp == st else { return }
-        entries = list; actors = acts; stamp = st; building = nil; lastFicheBuild = Date()
+    private func doneFull(_ b: String, _ st: String, _ list: [Entry], _ byKey: [String: Int], _ l: [Entry], _ a: [Actor]) {
+        guard fullFor == b else { return }
+        fullFor = ""
+        base = (b, list, byKey); entries = l; actors = a; stamp = st; lastFiche = Date()
     }
 
-    private static func build(pids: [String]) async -> ([Entry], [Actor]) {
-        let t0 = Date()
+    private func doneFiches(_ b: String, _ st: String, _ l: [Entry], _ a: [Actor]) {
+        ficheBusy = false; lastFiche = Date()
+        guard base?.b == b else { return }
+        entries = l; actors = a; stamp = st
+    }
+
+    private static func rows(_ pids: [String]) async -> [Row] {
         let ph = "(" + pids.map { _ in "?" }.joined(separator: ",") + ")"
-        let rows: [(MediaKind, String, String, String, Int, Double)] = await Database.shared.read { db in
-            var out: [(MediaKind, String, String, String, Int, Double)] = []
+        return await Database.shared.read { db in
+            var out: [Row] = []
             for (k, t) in [(MediaKind.film, "vod"), (.series, "series")] {
                 db.query("SELECT pid,sid,name,year,rating FROM \(t) WHERE pid IN \(ph)", pids) { r in out.append((k, r.str(0), r.str(1), r.str(2), r.int(3), r.double(4))) }
             }
             return out
         }
+    }
+
+    /// index rapide : mots du nom brut, un titre par nom
+    private static func quickList(_ rows: [Row]) -> [Entry] {
+        let t0 = Date()
+        var seen: [String: Int] = [:], list: [Entry] = []
+        list.reserveCapacity(rows.count)
+        for r in rows {
+            let (w, vost) = SearchText.quickWords(r.name)
+            guard !w.isEmpty else { continue }
+            let k = r.kind.rawValue + "|" + w.map { String(decoding: $0, as: UTF8.self) }.joined(separator: " ") + "|\(r.year)"
+            if let i = seen[k] { if vost { list[i].vost = true }; continue }
+            seen[k] = list.count
+            list.append(Entry(id: r.kind.rawValue + ":" + r.pid + ":" + r.sid, kind: r.kind, key: "", title: r.name, year: r.year,
+                              words: w, vost: vost, rating: r.rating))
+        }
+        PerfLog.ev("Index de recherche rapide : \(list.count) titres · \(Int(Date().timeIntervalSince(t0) * 1000)) ms")
+        return list
+    }
+
+    /// nettoyage complet (règles du simulateur), réparti sur tous les cœurs
+    private static func clean(_ rows: [Row]) -> ([Entry], [String: Int]) {
+        let t0 = Date()
+        let n = rows.count
+        var cl = [CleanTitle](repeating: CleanTitle(title: "", year: 0, tags: []), count: n)
+        let parts = max(1, ProcessInfo.processInfo.activeProcessorCount * 4)
+        cl.withUnsafeMutableBufferPointer { buf in
+            let p = buf
+            DispatchQueue.concurrentPerform(iterations: parts) { c in
+                var i = c * n / parts
+                let e = (c + 1) * n / parts
+                while i < e { p[i] = TitleTools.clean(rows[i].name, year: rows[i].year); i += 1 }
+            }
+        }
         var byKey: [String: Int] = [:], list: [Entry] = []
-        list.reserveCapacity(rows.count / 2)
-        for (k, pid, sid, name, year, rating) in rows {
-            let c = TitleTools.clean(name, year: year)
-            let key = k.rawValue + "|" + c.key
+        list.reserveCapacity(n / 2)
+        for (r, c) in zip(rows, cl) {
+            let key = r.kind.rawValue + "|" + c.key
             let vost = c.tags.contains("VOSTFR")
             if let i = byKey[key] { if vost { list[i].vost = true }; continue }
             byKey[key] = list.count
-            list.append(Entry(id: k.rawValue + ":" + pid + ":" + sid, kind: k, key: c.key, title: c.title, year: c.year,
-                              words: SearchText.words(c.title).map(Array.init), vost: vost, rating: rating))
+            list.append(Entry(id: r.kind.rawValue + ":" + r.pid + ":" + r.sid, kind: r.kind, key: c.key, title: c.title, year: c.year,
+                              words: SearchText.keys(c.title), vost: vost, rating: r.rating))
         }
-        // fiches TMDB : genres, durée, réalisateur, acteurs
+        PerfLog.ev("Index de recherche complet : \(list.count) titres · \(Int(Date().timeIntervalSince(t0) * 1000)) ms")
+        return (list, byKey)
+    }
+
+    /// fiches TMDB : genres, durée, réalisateur, acteurs
+    private static func applyFiches(_ list0: [Entry], _ byKey: [String: Int]) async -> ([Entry], [Actor]) {
+        let t0 = Date()
+        var list = list0
         let fiches: [(String, String, String, Int, String, String, Int, Double)] = await Database.shared.read { db in
             var out: [(String, String, String, Int, String, String, Int, Double)] = []
             db.query("SELECT kind,ckey,genres,runtime,director,\"cast\",year,vote FROM fiche", []) { r in
@@ -156,19 +273,32 @@ actor SearchIndex {
             guard let i = byKey[kind + "|" + ckey] else { continue }
             list[i].genres = SearchText.norm(genres)
             list[i].runtime = runtime
-            if !director.isEmpty { list[i].director = director; list[i].dirWords = SearchText.words(director).map(Array.init) }
+            if !director.isEmpty { list[i].director = director; list[i].dirWords = SearchText.keys(director) }
             if vote > 0 { list[i].rating = vote }
             if let d = cast.data(using: .utf8), let cs = try? dec.decode([CastMember].self, from: d) {
                 for m in cs.prefix(8) where !m.n.isEmpty {
                     let n = SearchText.norm(m.n)
-                    if amap[n] == nil { amap[n] = Actor(name: m.n, photo: m.p, words: SearchText.words(m.n).map(Array.init), titles: []) }
+                    if amap[n] == nil { amap[n] = Actor(name: m.n, photo: m.p, words: SearchText.keys(m.n), titles: []) }
                     amap[n]!.titles.append((ckey, list[i].title, year > 0 ? year : list[i].year))
                 }
             }
         }
-        let ms = Int(Date().timeIntervalSince(t0) * 1000)
-        PerfLog.ev("Index de recherche : \(list.count) titres, \(amap.count) acteurs, \(fiches.count) fiches · \(ms) ms")
+        PerfLog.ev("Index de recherche, fiches : \(fiches.count) fiches, \(amap.count) acteurs · \(Int(Date().timeIntervalSince(t0) * 1000)) ms")
         return (list, Array(amap.values))
+    }
+
+    /// chaînes et programmes en cours qui répondent à la recherche (mots calculés une fois par liste)
+    private var liveSig = ""
+    private var liveWords: [([SearchText.Word], [SearchText.Word])] = []
+    func liveMatch(_ Q: [SearchText.Word], _ all: [LiveStore.Airing]) -> [Int] {
+        let sig = "\(all.count)|\(all.first?.id ?? "")|\(all.last?.id ?? "")"
+        if sig != liveSig {
+            liveWords = all.map { (SearchText.keys(ChannelTools.clean($0.ch.name)), SearchText.keys($0.p.title)) }
+            liveSig = sig
+        }
+        var out: [Int] = []
+        for (i, w) in liveWords.enumerated() where SearchText.score(Q, w.0) != nil || SearchText.score(Q, w.1) != nil { out.append(i) }
+        return out
     }
 
     struct Result {
@@ -217,7 +347,7 @@ actor SearchIndex {
     func search(_ q0: String, bed: Int, now: Int) -> Result {
         var r = Result()
         let q = q0.trimmingCharacters(in: .whitespaces)
-        let Q = SearchText.words(q).map(Array.init)
+        let Q = SearchText.keys(q)
         guard !Q.isEmpty else { return r }
         var sc: [(Int, Double, Bool)] = [], ne = 0, nf = 0
         for (i, e) in entries.enumerated() {

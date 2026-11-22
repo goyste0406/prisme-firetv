@@ -410,11 +410,13 @@ struct SearchView: View {
                 !a.match || ["sport", "foot", "match", "ligue", "rugby", "tennis"].contains { SearchText.norm(x.p.cat + " " + x.p.title).contains($0) }
             }
         } else {
-            let Q = SearchText.words(q).map(Array.init)
-            hits = all.filter { x in SearchText.score(Q, SearchText.words(ChannelTools.clean(x.ch.name)).map(Array.init)) != nil
-                || SearchText.score(Q, SearchText.words(x.p.title).map(Array.init)) != nil }
-            let titles = Set(r.films.prefix(20).compactMap { id in got.first { $0.id == id }.map { SearchText.norm($0.displayTitle) } })
-            for x in all where titles.contains(SearchText.norm(x.p.title)) && !hits.contains(x) { hits.insert(x, at: 0) }
+            hits = await SearchIndex.shared.liveMatch(SearchText.keys(q), all).map { all[$0] }
+            let byId = Dictionary(got.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
+            let titles = Set(r.films.prefix(20).compactMap { byId[$0].map { SearchText.norm($0.displayTitle) } })
+            if !titles.isEmpty {
+                var have = Set(hits.map(\.id))
+                for x in all where titles.contains(SearchText.norm(x.p.title)) && have.insert(x.id).inserted { hits.insert(x, at: 0) }
+            }
         }
         if Task.isCancelled { return }
         items = Dictionary(got.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
