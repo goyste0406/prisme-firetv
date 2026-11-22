@@ -30,6 +30,7 @@ struct SeriesDetailView: View {
     @State private var showTrailer: Trailer?
     @State private var loading = true
     @State private var showRecap: RecapPlan?
+    @State private var recapDone = false
     /// épisodes absents de la version choisie mais présents dans une autre version (« complété depuis … »)
     @State private var fills: [String: EpisodeFill] = [:]
     /// épisodes annoncés par TMDB dans les 7 prochains jours, pas encore chez le fournisseur (« à venir »)
@@ -167,7 +168,7 @@ struct SeriesDetailView: View {
     private var actions: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(spacing: 12) {
-                Button { mainAction() } label: { PlayLabel(title: mainLabel.0, sub: mainLabel.1).lineLimit(1).fixedSize() }
+                Button { startMain() } label: { PlayLabel(title: mainLabel.0, sub: mainLabel.1).lineLimit(1).fixedSize() }
                     .buttonStyle(FicheButtonStyle(prim: true, pad: 28))
                     .focused($playFocused)
                     .disabled(all.isEmpty)
@@ -650,6 +651,21 @@ struct SeriesDetailView: View {
         trailer = await TrailerStore.find(title: title, year: y, minutes: 0, tmdb: fiche?.tmdb ?? info.tmdb, tv: true)
         var it = item; it.fiche = fiche
         similar = await MediaStore.similar(of: it, genres: genres, pids: pids, limit: 60).map { SimilarItem(item: $0.0, common: $0.1) }
+    }
+
+    /// lot 5 « Résumé automatique avant de reprendre » : série laissée depuis N jours → le résumé de 60 s passe d'abord
+    private func startMain() {
+        let d = PlaybackPrefs.recapDays
+        if !recapDone, d > 0, let plan = recapPlan {
+            let last = all.compactMap { watch.entries[EpisodeLogic.key(item, $0)]?.at }.max()
+            if let l = last, Date().timeIntervalSince(l) >= Double(d) * 86400 {
+                recapDone = true
+                DataCount.write("résumé automatique : \(title)")
+                showRecap = plan
+                return
+            }
+        }
+        mainAction()
     }
 
     private var trailerPlay: (() -> Void)? {

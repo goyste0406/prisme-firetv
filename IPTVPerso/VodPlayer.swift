@@ -92,6 +92,9 @@ struct VodPlayerView: View {
             // Retour court sans panneau ouvert : sans ce gestionnaire, SwiftUI fermerait la présentation plein écran
             // (donc tout le lecteur). Les panneaux ont leur propre gestionnaire, prioritaire.
             .onExitCommand { bridge.vc?.shortBack() }
+            // lot 5 : les fiches en arrière-plan se mettent en pause (ou ralentissent) pendant la lecture
+            .onAppear { PlaybackActivity.count += 1 }
+            .onDisappear { PlaybackActivity.count = max(0, PlaybackActivity.count - 1) }
     }
 }
 
@@ -184,6 +187,8 @@ final class VodPlayerController: UIViewController, VLCMediaPlayerDelegate {
     private var playedLast: Double = -1
     private var sessionStart = Date()
     private var binge = 0
+    /// lot 5 : cadence / HDR déjà demandés pour cette vidéo
+    private var displaySet = false
     private var bingeAsked = false
     private var lastEpisodeEnd: Date?
     private var pick: FilmPick?
@@ -241,7 +246,7 @@ final class VodPlayerController: UIViewController, VLCMediaPlayerDelegate {
 
     override var preferredFocusEnvironments: [UIFocusEnvironment] { ui.interactive ? [host.view] : [catcher] }
 
-    override func viewWillDisappear(_ animated: Bool) { super.viewWillDisappear(animated); stop() }
+    override func viewWillDisappear(_ animated: Bool) { super.viewWillDisappear(animated); DisplayMatch.apply(nil, in: view); stop() }
 
     func stop() {
         stallWork?.cancel(); zapWork?.cancel()
@@ -509,6 +514,13 @@ final class VodPlayerController: UIViewController, VLCMediaPlayerDelegate {
         ui.subs = zip(si, sn).map { PlayerOption(id: $0.0.int32Value, name: $0.1) }
         ui.subCur = player.currentVideoSubTitleIndex
         applyAspect(ui.aspect)
+        // lot 5 : demande à l'Apple TV la cadence / le HDR de la vidéo (une fois par vidéo)
+        if !displaySet, player.videoSize.width > 0 {
+            displaySet = true
+            let c = DisplayMatch.criteria(player: player, title: req.versions.indices.contains(versionIndex) ? req.versions[versionIndex].label + " " + req.title : req.title)
+            DisplayMatch.apply(c, in: view)
+            if c != nil { ui.log("mode d'affichage demandé") }
+        }
         var info: [(String, String)] = []
         let sz = player.videoSize
         if sz.width > 0 { info.append(("Image", "\(Int(sz.width)) × \(Int(sz.height))")) }

@@ -64,6 +64,7 @@ struct ResumeCard: View {
     var body: some View {
         Button(action: action) { EmptyView() }
             .buttonStyle(ResumeCardStyle(r: r, corner: corner, recap: recap))
+            .homeTileMenu(r.item)
             .task(id: r.item.id + "\(r.entry.at.timeIntervalSince1970)") { recap = await ResumeRecap.make(r) }
     }
 }

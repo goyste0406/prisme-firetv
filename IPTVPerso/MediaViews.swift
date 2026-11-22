@@ -100,6 +100,11 @@ struct MediaHomeView: View {
     @State private var trailerTitle = ""
     @State private var alertTick = 0
     @State private var slidesBusy = false
+    @State private var rowsTick = 0
+    @State private var heroTP: TrailerPlayer?
+    @State private var heroCount: Int?
+    @State private var heroTrailerTitle = ""
+    @State private var heroTrailerLang = ""
     /// dernière action sur la grande affiche : pas de défilement automatique juste après (menu « OK maintenu » ouvert…)
     @State private var heroTouched = Date.distantPast
     @State private var resume: [ResumeEntry] = []
@@ -145,25 +150,10 @@ struct MediaHomeView: View {
                 // ordre du simulateur — Films : Ce soir ? · Reprendre · Top 10 · Nouveau · Parce que tu as aimé · Ma liste · Explorer · Parcourir
                 //                       Séries : Ce soir ? · Reprendre · Top 10 · Nouveau · Ma liste · Parcourir
                 tonightBand
-                if !resume.isEmpty { resumeSection }
-                if !forYou.isEmpty {
-                    // « Pour toi » (« Pour vous deux » à deux) : seulement quand des goûts sont connus (test ou historique)
-                    MediaRow(title: ps.isDuo ? "Pour vous deux" : "Pour toi",
-                             sub: ps.isDuo ? "ce qui plaît à " + ps.watchersName + " · selon vos goûts" : "selon tes goûts · le test et ce que tu regardes",
-                             items: forYou, open: { open = $0 })
+                // lot 5 : ordre des rangées et rangées masquées, par profil (OK maintenu sur une affiche : monter, descendre, masquer)
+                ForEach(rowOrder, id: \.self) { k in
+                    homeRow(k).environment(\.homeRowMenu, rowMenu(k))
                 }
-                if !snap.top.isEmpty {
-                    Top10Row(title: kind == .film ? "Top 10 du moment" : "Top 10 séries", sub: kind == .film ? "les plus populaires en France cette semaine" : nil, items: snap.top, open: { open = $0 })
-                }
-                if !snap.newest.isEmpty { newSection }
-                if kind == .film, let b = because, !becauseList.isEmpty {
-                    MediaRow(title: "Parce que tu as aimé " + b.displayTitle, items: becauseList, open: { open = $0 })
-                }
-                if !mine.isEmpty {
-                    MediaRow(title: "Ma liste", items: mine, open: { open = $0 })
-                }
-                if kind == .film && !snap.colls.isEmpty { exploreSection }
-                browseSection
                 if store.importing != nil && snap.newest.isEmpty {
                     Text("Chargement du catalogue… \(Int(store.progress * 100)) %").font(P.font(28, .semibold)).foregroundStyle(P.dim).padding(.horizontal, 120)
                 }
@@ -212,6 +202,71 @@ struct MediaHomeView: View {
         }
     }
 
+    // MARK: rangées (lot 5 : ordre et masquage par profil)
+
+    private var rowOrder: [String] {
+        let _ = rowsTick
+        let h = HiddenRows.hidden(kind)
+        return HiddenRows.order(kind).filter { !h.contains($0) }
+    }
+
+    @ViewBuilder private func homeRow(_ k: String) -> some View {
+        switch k {
+        case "reprendre": if !resume.isEmpty { resumeSection }
+        case "pourtoi":
+            if !forYou.isEmpty {
+                // « Pour toi » (« Pour vous deux » à deux) : seulement quand des goûts sont connus (test ou historique)
+                MediaRow(title: ps.isDuo ? "Pour vous deux" : "Pour toi",
+                         sub: ps.isDuo ? "ce qui plaît à " + ps.watchersName + " · selon vos goûts" : "selon tes goûts · le test et ce que tu regardes",
+                         items: forYou, open: { open = $0 })
+            }
+        case "top":
+            if !snap.top.isEmpty {
+                Top10Row(title: kind == .film ? "Top 10 du moment" : "Top 10 séries", sub: kind == .film ? "les plus populaires en France cette semaine" : nil, items: snap.top, open: { open = $0 })
+            }
+        case "new": if !snap.newest.isEmpty { newSection }
+        case "bec":
+            if kind == .film, let b = because, !becauseList.isEmpty {
+                MediaRow(title: "Parce que tu as aimé " + b.displayTitle, items: becauseList, open: { open = $0 })
+            }
+        case "liste": if !mine.isEmpty { MediaRow(title: "Ma liste", items: mine, open: { open = $0 }) }
+        case "explore": if kind == .film && !snap.colls.isEmpty { exploreSection }
+        case "browse": browseSection
+        default: EmptyView()
+        }
+    }
+
+    /// simulateur fhopt : vu / non vu, ma liste, monter / descendre la rangée, la masquer
+    private func rowMenu(_ k: String) -> HomeRowMenu {
+        HomeRowMenu { it in
+            var L: [(String, () -> Void)] = []
+            if let it {
+                if it.kind == .film {
+                    let seen = watch.watched(it.id)
+                    L.append((seen ? "Marquer comme non vu" : "✓ Marquer comme vu", {
+                        watch.setWatched([it.id], watched: !seen, title: it.displayTitle, icon: it.posterURL, item: it.id)
+                        AppToast.shared.say(seen ? "Marqué comme non vu" : "✓ Marqué comme vu")
+                    }))
+                }
+                let fav = watch.favorites.contains(it.id)
+                L.append((fav ? "Retirer de ma liste" : "＋ Ajouter à ma liste", {
+                    watch.toggleFavorite(it.id, item: it, from: "depuis l'accueil")
+                    AppToast.shared.say(fav ? "Retiré de ma liste" : "＋ Ajouté à ma liste")
+                }))
+            }
+            let vis = rowOrder
+            if let i = vis.firstIndex(of: k) {
+                if i > 0 { L.append(("↑ Monter la rangée", { HiddenRows.move(kind, k, -1); rowsTick += 1; AppToast.shared.say("Rangée montée · gardé pour " + ps.me.name) })) }
+                if i < vis.count - 1 { L.append(("↓ Descendre la rangée", { HiddenRows.move(kind, k, 1); rowsTick += 1; AppToast.shared.say("Rangée descendue · gardé pour " + ps.me.name) })) }
+            }
+            L.append(("Masquer cette rangée", {
+                HiddenRows.hide(kind, k); rowsTick += 1
+                AppToast.shared.say("Rangée masquée · Réglages › Accueil " + (kind == .film ? "Films" : "Séries") + " pour la rétablir")
+            }))
+            return L
+        }
+    }
+
     // MARK: grande affiche
 
     @ViewBuilder private var heroBlock: some View {
@@ -226,17 +281,75 @@ struct MediaHomeView: View {
                     HeroView(item: h, index: i, count: slides.count, provider: store.provider(h.pid)?.name ?? "",
                              focus: $heroFocus,
                              play: { info in play(h, info) }, info: { open = h },
-                             step: step, slide: sl, alts: wrapped(sl))
+                             step: step, slide: sl, alts: wrapped(sl), trailerLayer: trailerLayer)
                 } else {
-                    PanelHeroView(s: sl, index: i, count: slides.count, alertOn: sl.soon.map { _ = alertTick; return FilmAlerts.has($0.tmdb) } ?? false, focus: $heroFocus, primary: { primary(sl) }, alts: wrapped(sl), step: step)
+                    PanelHeroView(s: sl, index: i, count: slides.count, alertOn: sl.soon.map { _ = alertTick; return FilmAlerts.has($0.tmdb) } ?? false, focus: $heroFocus, primary: { primary(sl) }, alts: wrapped(sl), step: step, trailerLayer: trailerLayer)
                 }
             }
             .id(sl.id)
             .transition(.opacity)
             .onChange(of: heroFocus) { _, _ in heroTouched = Date() }
+            .overlay(alignment: .bottomLeading) { heroTrailerChips(sl) }
+            .task(id: "\(sl.id)|\(heroFocus)") { await heroTrailer(sl) }
         } else {
             Color.clear.frame(height: 260)
         }
+    }
+
+    // MARK: bande-annonce de la bannière (lot 5, simulateur .htrl / .hcd)
+
+    private var trailerLayer: AnyView? {
+        guard let tp = heroTP else { return nil }
+        return AnyView(VideoLayer(player: tp.player).frame(width: 1920, height: 880).clipped().opacity(tp.ready ? 1 : 0).allowsHitTesting(false))
+    }
+
+    @ViewBuilder private func heroTrailerChips(_ sl: HeroSlide) -> some View {
+        Group {
+            if let n = heroCount {
+                Text("Bande-annonce dans ").font(P.font(21)) + Text("\(n)").font(P.font(21, .bold))
+            } else if heroTP != nil {
+                let vol = ["🔇 son coupé", "🔉 son faible", "🔊 son normal"][max(0, min(2, heroVolPref))]
+                Text("▶ BANDE-ANNONCE " + heroTrailerLang + " · " + heroTrailerTitle + "   ").font(P.font(19, .bold)).tracking(1.2) + Text(vol + " · une touche pour revenir").font(P.font(19))
+            }
+        }
+        .padding(.horizontal, 20).padding(.vertical, 12)
+        .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(.ultraThinMaterial).opacity(heroCount != nil || heroTP != nil ? 1 : 0))
+        .environment(\.colorScheme, .dark)
+        .opacity(heroCount != nil || heroTP != nil ? 1 : 0)
+        .padding(.leading, 120).padding(.bottom, 150)
+        .accessibilityIdentifier("hero-trailer")
+        .allowsHitTesting(false)
+    }
+
+    private var heroVolPref: Int { UserDefaults.standard.object(forKey: "prisme.pref.heroVol") as? Int ?? 1 }
+
+    /// le titre de la diapositive (ou sa première affiche) : bande-annonce après N s sur le bouton, compte à rebours de 3
+    private func heroTrailer(_ sl: HeroSlide) async {
+        heroTP?.pause(); heroTP = nil; heroCount = nil
+        let wait = UserDefaults.standard.object(forKey: "prisme.pref.heroTrl") as? Int ?? 10
+        guard heroFocus, wait > 0, !PlaybackActivity.playing, Debug.arg("prisme.debug.bgTrailer") != "off" || Debug.arg("prisme.debug.heroTrailer") == "1" else { return }
+        let tr: (String, Int, Int, Bool)?   // titre, année, tmdb, série
+        if let so = sl.soon { tr = (so.title, so.year, so.tmdb, false) }
+        else if let it = sl.item ?? sl.next ?? sl.mosaic.first {
+            let y = (it.fiche?.year ?? 0) > 0 ? it.fiche!.year : it.clean.year
+            tr = (it.displayTitle, y, it.fiche?.tmdb ?? 0, it.kind == .series)
+        } else { tr = nil }
+        guard let t = tr else { return }
+        try? await Task.sleep(nanoseconds: UInt64(max(0, wait - 3)) * 1_000_000_000)
+        guard !Task.isCancelled, heroFocus else { return }
+        async let found = TrailerStore.find(title: t.0, year: t.1, minutes: 0, tmdb: t.2, tv: t.3)
+        for n in stride(from: 3, through: 1, by: -1) {
+            heroCount = n
+            try? await Task.sleep(nanoseconds: 1_000_000_000)
+            guard !Task.isCancelled, heroFocus else { heroCount = nil; return }
+        }
+        heroCount = nil
+        guard let trailer = await found, !Task.isCancelled, heroFocus else { return }
+        let tp = TrailerPlayer(url: trailer.url)
+        heroTrailerTitle = t.0; heroTrailerLang = trailer.lang
+        heroTP = tp
+        tp.play(volume: [0, 0.25, 1][max(0, min(2, heroVolPref))])
+        DataCount.write("bande-annonce de la bannière : " + t.0 + " (" + trailer.lang + ")")
     }
 
     /// la diapositive change de vue : la sélection reste sur son bouton blanc (sinon tvOS la renvoie à la barre)
@@ -779,6 +892,8 @@ struct HeroView: View {
     /// lot 4 : diapositive (télé, on reprend…) et choix « OK maintenu » ; sans elle, l'affiche « arrivée » d'avant
     var slide: HeroSlide? = nil
     var alts: [(String, () -> Void)] = []
+    /// lot 5 : bande-annonce qui joue derrière le texte (« Bande-annonce quand tu restes sur la bannière »)
+    var trailerLayer: AnyView? = nil
     @ObservedObject var watch = WatchStore.shared
     @State private var mi = MediaInfo()
     @State private var miFor = ""
@@ -794,6 +909,7 @@ struct HeroView: View {
             ArtView(backdrop: art, poster: item.posterURL, maxPixel: 1920, posterWidthRatio: 0.2)
                 .frame(width: 1920, height: 880).clipped()
                 .id(item.id).transition(.opacity)
+            if let t = trailerLayer { t }
             LinearGradient(colors: [P.room.opacity(0.92), P.room.opacity(0.5), .clear], startPoint: .leading, endPoint: .trailing)
             LinearGradient(colors: [.black.opacity(0.6), .clear, .clear, P.room], startPoint: .top, endPoint: .bottom)
             content
@@ -1037,6 +1153,7 @@ struct PosterButton: View {
     var body: some View {
         Button(action: action) { PosterTile(item: item, bare: bare).frame(width: width, height: width * 1.5) }
             .buttonStyle(TileStyle())
+            .homeTileMenu(item)
             .accessibilityLabel(item.displayTitle)
     }
 }

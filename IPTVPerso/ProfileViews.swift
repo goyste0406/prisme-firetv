@@ -36,7 +36,7 @@ struct ProfilesPanel: View {
             }
             Spacer(minLength: 20)
             Rectangle().fill(Color.white.opacity(0.1)).frame(height: 1.5)
-            Text(desc).font(P.font(23)).foregroundStyle(.white.opacity(0.6)).padding(.top, 22).lineLimit(2)
+            Text(desc).font(P.font(19.5)).foregroundStyle(.white.opacity(0.6)).padding(.top, 18).lineLimit(3)
         }
         .onAppear { if let e = ui.editProfile { editing = e.isEmpty ? nil : e; ui.editProfile = nil } }
         .onChange(of: ui.editProfile) { _, e in if let e { editing = e.isEmpty ? nil : e; ui.editProfile = nil } }
@@ -44,7 +44,7 @@ struct ProfilesPanel: View {
 
     private var list: some View {
         VStack(alignment: .leading, spacing: 0) {
-            Text("Profils").font(P.font(49, .bold)).padding(.bottom, 14)
+            Text("Profils").font(P.font(33, .bold)).padding(.bottom, 10)
             HStack(alignment: .top, spacing: 24) {
                 ForEach(ps.profiles) { p in
                     Button { editing = p.id } label: { tile(ProfileAvatar(p: p, size: 132), p.name, sub(p)) }
@@ -66,7 +66,7 @@ struct ProfilesPanel: View {
                 }
             }
             .padding(.vertical, 12).focusSection()
-            Text("POUR TOUS LES PROFILS").font(P.font(23, .bold)).tracking(3.2).foregroundStyle(.white.opacity(0.55))
+            Text("POUR TOUS LES PROFILS").font(P.font(16.5, .bold)).tracking(2.2).foregroundStyle(.white.opacity(0.45))
                 .padding(.leading, 24).padding(.top, 20).padding(.bottom, 10)
             Button { ps.ask.toggle() } label: {
                 SettingLine(title: "À l'ouverture de prisme", value: ps.ask ? "Demander qui regarde ›" : "Ouvrir le dernier profil utilisé ›")
@@ -80,7 +80,7 @@ struct ProfilesPanel: View {
     private func tile<V: View>(_ av: V, _ name: String, _ sub: String) -> some View {
         VStack(spacing: 10) {
             av
-            Text(name).font(P.font(28, .bold)).lineLimit(1)
+            Text(name).font(P.font(22.5, .bold)).lineLimit(1)
             SubLabel(text: sub).font(P.font(23)).foregroundStyle(.white.opacity(0.6)).lineLimit(1)
         }
         .frame(width: 195).padding(.vertical, 18)
@@ -111,8 +111,8 @@ struct ProfileDetail: View {
             HStack(spacing: 24) {
                 ProfileAvatar(p: p, size: 108)
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("PROFILS ›").font(P.font(23, .bold)).tracking(3.2).foregroundStyle(.white.opacity(0.6))
-                    (Text(p.name).font(P.font(49, .bold)) + Text(p.id == ps.current ? " · actif" : "").font(P.font(26)).foregroundColor(.white.opacity(0.75)))
+                    Text("PROFILS ›").font(P.font(16.5, .bold)).tracking(2.2).foregroundStyle(.white.opacity(0.6))
+                    (Text(p.name).font(P.font(33, .bold)) + Text(p.id == ps.current ? " · actif" : "").font(P.font(21)).foregroundColor(.white.opacity(0.75)))
                 }
             }
             .padding(.bottom, 14)
@@ -128,9 +128,9 @@ struct ProfileDetail: View {
         // (toute la ligne s'éclaire comme les autres ; le nom et le crayon à droite, sans cadre gris — comme le simulateur)
         let nf = focus == "name"
         HStack(spacing: 14) {
-            Text("Nom").font(P.font(32, .semibold))
+            Text("Nom").font(P.font(22.5, .semibold))
             Spacer()
-            Text(name).font(P.font(28)).opacity(0.75)
+            Text(name).font(P.font(19.5)).opacity(0.75)
             Image(systemName: "pencil").font(.system(size: 24, weight: .medium)).opacity(0.7)
         }
         // le vrai champ (clavier de l'Apple TV à l'appui sur OK) occupe la ligne mais reste invisible :
@@ -240,7 +240,7 @@ struct ProfileDetail: View {
         VStack(spacing: 2) {
             ForEach(idx, id: \.self) { i in
                 Button { set(i); withAnimation(.easeOut(duration: 0.2)) { open = nil }; let k = key; DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { focus = k } } label: {
-                    HStack { label(i).font(P.font(27)); Spacer(); if i == cur { Image(systemName: "checkmark").font(P.font(24, .bold)) } }
+                    HStack { label(i).font(P.font(21)); Spacer(); if i == cur { Image(systemName: "checkmark").font(P.font(20, .bold)) } }
                         .padding(.horizontal, 30).frame(height: 76)
                 }
                 .buttonStyle(SettingRowStyle(radius: 18))
@@ -265,11 +265,11 @@ struct SettingLine: View {
     var red = false
     var body: some View {
         HStack {
-            Text(title).font(P.font(32, .semibold)).foregroundStyle(red ? Color(red: 1, green: 0.42, blue: 0.42) : Color.primary)
+            Text(title).font(P.font(22.5, .semibold)).foregroundStyle(red ? Color(red: 1, green: 0.42, blue: 0.42) : Color.primary)
             Spacer(minLength: 20)
-            Group { if let valueView { valueView } else if let value { Text(value) } }.font(P.font(28)).opacity(0.7).lineLimit(1)
+            Group { if let valueView { valueView } else if let value { Text(value) } }.font(P.font(19.5)).opacity(0.7).lineLimit(1)
         }
-        .padding(.horizontal, 24).frame(height: 108)
+        .padding(.horizontal, 22).frame(height: 84)
     }
 }
 

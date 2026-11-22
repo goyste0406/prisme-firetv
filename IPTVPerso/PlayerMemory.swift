@@ -26,6 +26,8 @@ enum PlaybackPrefs {
     static var zeroSpoiler: Bool { num("spoiler").map { $0 != 0 } ?? true }
     /// « Encore un ? » après N épisodes d'affilée (simulateur : 3 ; 0 = jamais)
     static var binge: Int { num("binge").map { Int($0) } ?? 3 }
+    /// lot 5 : résumé automatique avant de reprendre une série laissée depuis N jours (simulateur : 7 ; 0 = jamais)
+    static var recapDays: Int { num("recap").map { Int($0) } ?? 7 }
     /// carte « Épisode suivant » : secondes avant la fin quand ni chapitre ni moment appris (45 s, voir le plan)
     static var cardLead: Double { num("cardlead") ?? 45 }
     /// compte à rebours de la carte épisode (simulateur : 10 s) et de « À suivre » (simulateur : 15 s)

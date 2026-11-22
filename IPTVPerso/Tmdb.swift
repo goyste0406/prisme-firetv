@@ -129,7 +129,7 @@ final class FicheService: ObservableObject {
     /// Réglages › Accueils et notes : pause demandée (jusqu'à la reprise), ou mode « Jamais » (une fiche arrive quand on l'ouvre)
     @Published var paused = false
     func start() {
-        guard task == nil, TmdbKey.value != nil, !paused, AppPrefs.ficheMode == 0 else { return }
+        guard task == nil, TmdbKey.value != nil, !paused, AppPrefs.ficheMode != 1 else { return }
         running = true
         task = Task.detached(priority: .background) { await FicheWorker().run() ; await MainActor.run { FicheService.shared.task = nil; FicheService.shared.running = false } }
     }
@@ -161,6 +161,8 @@ struct FicheWorker {
             await MainActor.run { FicheService.shared.total += todo.count }
             var i = 0
             while i < todo.count {
+                if Task.isCancelled { return }
+                await FicheGate.wait()   // lot 5 : la nuit seulement, pause pendant la lecture
                 if Task.isCancelled { return }
                 let batch = Array(todo[i..<min(todo.count, i + 24)])
                 i += batch.count
@@ -360,7 +362,8 @@ struct FicheWorker {
         let got = await Database.shared.read { db -> (Set<String>, Set<String>, [MediaItem]) in
             var have = Set<String>(), old = Set<String>(), all: [MediaItem] = []
             db.query("SELECT ckey, country IS NULL FROM fiche WHERE kind=?", [kind.rawValue]) { r in have.insert(r.str(0)); if r.int(1) == 1 { old.insert(r.str(0)) } }
-            let weekAgo = Int(Date().timeIntervalSince1970) - 7 * 86400
+            // lot 5 « Après le premier passage » : tout revérifier chaque semaine (comme avant), ou seulement les nouveautés
+            let weekAgo = (UserDefaults.standard.object(forKey: "prisme.pref.ficheAfter") as? Int ?? 1) == 0 ? 0 : Int(Date().timeIntervalSince1970) - 7 * 86400
             db.query("SELECT ckey FROM fmiss WHERE kind=? AND at>?", [kind.rawValue, weekAgo]) { r in have.insert(r.str(0)) }
             db.query("SELECT \(cols) FROM \(table) WHERE pid IN (" + pids.map { _ in "?" }.joined(separator: ",") + ") ORDER BY (year>=?) DESC, rating DESC, added DESC", pids.map { $0 as Any? } + [Calendar.current.component(.year, from: Date()) - 2]) { r in
                 all.append(MediaItem(kind: kind, pid: r.str(0), sid: r.str(1), name: r.str(2), year: r.int(3), icon: r.str(4), cid: r.str(5),

@@ -373,6 +373,7 @@ struct PanelHeroView: View {
     let primary: () -> Void
     let alts: [(String, () -> Void)]
     let step: (Int) -> Void
+    var trailerLayer: AnyView? = nil
 
     var body: some View {
         ZStack(alignment: .topLeading) {
@@ -385,6 +386,7 @@ struct PanelHeroView: View {
                 }
             }
             .frame(width: 1920, height: 880).clipped()
+            if let t = trailerLayer { t }
             LinearGradient(colors: [P.room.opacity(0.95), P.room.opacity(0.6), .clear], startPoint: .leading, endPoint: .trailing)
             LinearGradient(colors: [.black.opacity(0.6), .clear, .clear, P.room], startPoint: .top, endPoint: .bottom)
             VStack(alignment: .leading, spacing: 16) {

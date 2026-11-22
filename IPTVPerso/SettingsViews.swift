@@ -69,6 +69,8 @@ struct ProvidersSettingsView: View {
     @State private var section = Debug.settingsSection ?? "prof"
     @ObservedObject var pui = ProfileUI.shared
     @ObservedObject var fiches = FicheService.shared
+    @ObservedObject var ui = PrefUI.shared
+    @StateObject private var pm = PrefsModel()
     @FocusState private var catFocus: String?
     /// Au retour d'un écran ouvert depuis Fournisseurs (Gérer, ajout, journal), la sélection revient sur la ligne d'origine
     /// au lieu de retomber sur « Profils » (tvOS repose le focus sur le premier élément de la page).
@@ -86,30 +88,59 @@ struct ProvidersSettingsView: View {
     @State private var unlocked = false
 
     var body: some View {
+        let _ = pm.tick
         VStack(spacing: 0) {
             TopBar(claimFocus: true)
             if AppPrefs.lockSettings && !unlocked {
                 SettingsLock { unlocked = true }.focusSection()
             } else {
             HStack(alignment: .top, spacing: 34) {
-                VStack(alignment: .leading, spacing: 8) {
+                VStack(alignment: .leading, spacing: 7) {
+                    // simulateur .sa-q : « Rechercher un réglage » en haut de la colonne
+                    Button { ui.searching = true; section = "search" } label: {
+                        HStack(spacing: 14) {
+                            Image(systemName: "magnifyingglass").font(P.font(21, .semibold))
+                            Text(ui.query.isEmpty ? "Rechercher un réglage" : ui.query).font(P.font(22.5)).lineLimit(1)
+                            Spacer()
+                        }
+                        .opacity(ui.query.isEmpty ? 0.6 : 1)
+                        .padding(.horizontal, 20).frame(height: 60)
+                        .background(RoundedRectangle(cornerRadius: 15, style: .continuous).fill(Color.white.opacity(0.08)))
+                    }
+                    .buttonStyle(SideStyle(selected: section == "search"))
+                    .focused($catFocus, equals: "search")
+                    .accessibilityIdentifier("sa-q")
+                    .padding(.bottom, 10)
                     ForEach(0..<ProvidersSettingsView.cats.count, id: \.self) { i in
                         let c = ProvidersSettingsView.cats[i]
                         Button { section = c.0 } label: {
-                            Label(c.2, systemImage: c.1).font(P.font(25, .semibold)).frame(maxWidth: .infinity, alignment: .leading).padding(.horizontal, 20).frame(height: 66)
+                            HStack(spacing: 18) {
+                                Image(systemName: c.1).font(P.font(21, .semibold)).frame(width: 30)
+                                Text(c.2).font(P.font(22.5, .semibold))
+                                Spacer()
+                                if c.0 == "prov" && expiringSoon { Circle().fill(P.live).frame(width: 11, height: 11) }
+                                else if PrefCatalog.modified(c.0) { ModDot() }
+                            }
+                            .padding(.horizontal, 20).frame(height: 56)
                         }
                         .buttonStyle(SideStyle(selected: section == c.0))
                         .focused($catFocus, equals: c.0)
+                        .accessibilityIdentifier("sacat-" + c.0)
                     }
                     Spacer(minLength: 0)
                 }
-                .frame(width: 470)
+                .frame(width: 440)
                 .focusSection()
-                .onChange(of: catFocus) { f in if let f, !holdSection { section = f } }
+                .onChange(of: catFocus) { f in if let f, !holdSection, f != "search" { section = f; ui.open = nil } }
 
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 26) { panel }
-                        .padding(40).frame(maxWidth: .infinity, alignment: .leading)
+                VStack(alignment: .leading, spacing: 0) {
+                    ScrollView {
+                        VStack(alignment: .leading, spacing: 14) {
+                            if section == "search" { PrefSearchPanel(openCat: { c in section = c; catFocus = c }) } else { panel }
+                        }
+                        .padding(.horizontal, 30).padding(.vertical, 34).frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    if !["prof", "prov", "search"].contains(section) { PrefHelpFooter().padding(.horizontal, 30).padding(.bottom, 24) }
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 // sur Apple TV une zone de défilement ne coupe pas ce qui dépasse : les lignes sortaient du panneau
@@ -148,6 +179,9 @@ struct ProvidersSettingsView: View {
             if let n = Debug.manageProvider { managing = store.providers.first { $0.name == n }?.id }
         }
     }
+
+    /// un abonnement expire dans moins de 7 jours (simulateur .sa-alert)
+    private var expiringSoon: Bool { store.providers.contains { p in p.expires.map { $0.timeIntervalSinceNow < 7 * 86400 } ?? false } }
 
     private func comeBack(_ row: String) {
         holdSection = true

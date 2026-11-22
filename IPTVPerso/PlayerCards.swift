@@ -190,6 +190,8 @@ struct PlayerCardsLayer: View {
                         .background(m.cardSel == i ? Color.white : Color.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
                         .scaleEffect(m.cardSel == i ? 1.02 : 1).padding(.bottom, 18)
                 }
+                // simulateur .mfoot (lot 5 : le réglage existe maintenant)
+                Text("Réglages › Accueil Séries pour changer ce rappel").font(P.font(21)).foregroundStyle(.white.opacity(0.5)).padding(.top, -6)
             }
             .padding(.vertical, 45).padding(.horizontal, 45).frame(width: 900)
             .background(modalBG)

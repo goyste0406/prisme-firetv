@@ -20,7 +20,7 @@ struct ProvidersPanel: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            Text("Fournisseurs").font(P.font(49, .bold)).padding(.bottom, 14)
+            Text("Fournisseurs").font(P.font(33, .bold)).padding(.bottom, 10)
             row("log", SettingLine(title: "Journal des incidents", value: incidents.items.isEmpty ? "aucun ›" : "\(incidents.items.count) ›"),
                 "Heure, fournisseur, titre, cause et solution utilisée : à montrer à ton fournisseur si ça se répète.", log)
             ForEach(store.providers) { p in
@@ -28,11 +28,13 @@ struct ProvidersPanel: View {
             }
             row("add", SettingLine(title: "＋ Ajouter un fournisseur", value: "iPhone, lien ou identifiants ›"),
                 "Avec ton iPhone (code QR), en collant le lien du fournisseur ou en saisissant les identifiants. prisme vérifie l'abonnement et ne garde que les catégories françaises.", add)
-            Text("CATALOGUE").font(P.font(23, .bold)).tracking(3.2).foregroundStyle(.white.opacity(0.55))
+            Text("CATALOGUE").font(P.font(16.5, .bold)).tracking(2.2).foregroundStyle(.white.opacity(0.45))
                 .padding(.leading, 24).padding(.top, 26).padding(.bottom, 6)
             SettingLine(title: "Fournisseurs actifs", value: "\(store.active.count) / \(store.providers.count)")
             SettingLine(title: "Contenu total", value: totals.map { "\(Fmt.n($0.live)) chaînes · \(Fmt.n($0.vod)) films · \(Fmt.n($0.series)) séries" } ?? "…")
             SettingLine(title: "Titres et chaînes avec plusieurs sources", value: totals.map { "\(Fmt.n($0.grouped)) regroupés" } ?? "…")
+            // simulateur : connexions simultanées de l'abonnement (donnée du fournisseur, sinon « inconnu »)
+            SettingLine(title: "Connexions simultanées de l'abonnement", value: store.active.compactMap(\.maxConn).isEmpty ? "inconnu" : store.active.map { p in p.maxConn.map { "\($0)" + (store.active.count > 1 ? " (\(p.name))" : "") } ?? "?" }.joined(separator: " · "))
             row("class", SettingLine(title: "Classement des chaînes TV", value: "vérifier ›"),
                 "Chaque chaîne avec sa catégorie (Généraliste, Sport…), la raison de ce classement et toutes ses sources.", classify)
             row("test", SettingLine(title: "Tester mes serveurs", value: testing ? "mesure en cours…" : pings()),
@@ -43,7 +45,7 @@ struct ProvidersPanel: View {
             }
             Spacer(minLength: 20)
             Rectangle().fill(Color.white.opacity(0.1)).frame(height: 1.5)
-            Text(desc).font(P.font(23)).foregroundStyle(.white.opacity(0.6)).padding(.top, 22).lineLimit(2)
+            Text(desc).font(P.font(19.5)).foregroundStyle(.white.opacity(0.6)).padding(.top, 18).lineLimit(3)
         }
         .task(id: store.catalogVersion) { totals = await CatalogTotals.compute(pids: store.active.map(\.id)) }
         .onChange(of: restore?.1) { _, _ in
@@ -82,14 +84,14 @@ struct ProviderLine: View {
         HStack(spacing: 22) {
             Circle().fill(p.on ? p.tint : Color.gray).frame(width: 19, height: 19)
             VStack(alignment: .leading, spacing: 6) {
-                Text(p.name).font(P.font(32, .semibold))
-                Text(sub).font(P.font(23)).opacity(0.62).lineLimit(1)
+                Text(p.name).font(P.font(22.5, .semibold))
+                Text(sub).font(P.font(18)).opacity(0.62).lineLimit(1)
             }
             Spacer(minLength: 20)
             if importing { ProgressView(value: progress).frame(width: 160) }
-            Text(state).font(P.font(28)).opacity(0.7).lineLimit(1)
+            Text(state).font(P.font(19.5)).opacity(0.7).lineLimit(1)
         }
-        .padding(.horizontal, 24).frame(height: 124)
+        .padding(.horizontal, 22).frame(height: 96)
     }
     private var sub: String {
         guard p.lastImport != nil else { return "catalogue pas encore chargé" }

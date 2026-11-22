@@ -165,7 +165,10 @@ struct LiveBadge: View {
 struct Stars: View {
     let value: Double
     var body: some View {
-        HStack(spacing: 6) { Image(systemName: "star.fill"); Text(String(format: "%.1f", value)).fontWeight(.bold) }.foregroundStyle(P.star)
+        // lot 5 : Réglages › Accueils et notes › « Afficher la note TMDB »
+        if UserDefaults.standard.object(forKey: "prisme.pref.showTMDB") as? Bool ?? true {
+            HStack(spacing: 6) { Image(systemName: "star.fill"); Text(String(format: "%.1f", value)).fontWeight(.bold) }.foregroundStyle(P.star)
+        }
     }
 }
 

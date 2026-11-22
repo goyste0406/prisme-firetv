@@ -289,15 +289,18 @@ enum LiveIndex {
     @MainActor private static var running: (String, Task<[Entry], Never>)?
 
     @MainActor static func all(pids: [String], version: Int) async -> [Entry] {
+        // lot 5 : chaînes masquées (Réglages › TV en direct) retirées des listes
+        let hid = LiveMemory.shared.hidden
+        func visible(_ L: [Entry]) -> [Entry] { hid.isEmpty ? L : L.filter { hid[$0.key] == nil } }
         let mk = pids.joined(separator: ",") + "|\(version)"
-        if let m = memo, m.0 == mk { return m.1 }
+        if let m = memo, m.0 == mk { return visible(m.1) }
         guard !pids.isEmpty else { return [] }
-        if let r = running, r.0 == mk { return await r.1.value }
+        if let r = running, r.0 == mk { return visible(await r.1.value) }
         let t = Task { @MainActor in await compute(pids: pids, mk: mk) }
         running = (mk, t)
         let res = await t.value
         if running?.0 == mk { running = nil }
-        return res
+        return visible(res)
     }
 
     @MainActor private static func compute(pids: [String], mk: String) async -> [Entry] {

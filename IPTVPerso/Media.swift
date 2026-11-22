@@ -22,7 +22,8 @@ struct MediaItem: Identifiable, Hashable {
     var clean: CleanTitle { TitleTools.clean(name, year: year) }
     /// Titre affiché : celui de TMDB (en français) s'il est connu.
     var displayTitle: String { fiche?.title.isEmpty == false ? fiche!.title : clean.title }
-    var posterURL: String { (fiche?.poster.isEmpty == false) ? Fiche.img(fiche!.poster, "w500") : icon }
+    /// lot 5 « Qualité des affiches » : HD (w500, comme avant) ou légères (w342)
+    var posterURL: String { (fiche?.poster.isEmpty == false) ? Fiche.img(fiche!.poster, (UserDefaults.standard.object(forKey: "prisme.pref.posterHD") as? Bool ?? true) ? "w500" : "w342") : icon }
     var backdropURL: String { (fiche?.backdrop.isEmpty == false) ? Fiche.img(fiche!.backdrop, "w780") : "" }
     /// Image de fond plein écran : version d'origine TMDB (réduite à 1920 px au décodage, voir SharpImage).
     var backdropHD: String { (fiche?.backdrop.isEmpty == false) ? Fiche.img(fiche!.backdrop, "original") : "" }

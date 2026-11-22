@@ -24,6 +24,13 @@ struct LiveHomeView: View {
     /// sources de chaque chaîne, pour l'éventail
     /// nombre de sources par chaîne : calculé une fois par chargement de l'index (et non à chaque affichage de l'éventail)
     @State private var sourceCounts: [String: Int] = [:]
+    // lot 5 : « Depuis le début ? », choix de la source, source à mémoriser, aperçu vidéo en fond
+    @ObservedObject var mem = LiveMemory.shared
+    @StateObject private var pm = PrefsModel()
+    @State private var askStart: (list: [Channel], i: Int, a: LiveStore.Airing)?
+    @State private var askSource: (list: [Channel], i: Int, e: LiveIndex.Entry)?
+    @State private var askRemember: (key: String, c: Channel, name: String, list: [Channel], i: Int)?
+    @State private var previewCh: Channel?
 
     private var rail: [(String, String, String)] {
         var r: [(String, String, String)] = [("home", "house.fill", "Accueil"), ("guide", "tablecells", "Guide TV"), ("search", "magnifyingglass", "Rechercher"), ("replay", "clock.arrow.circlepath", "Replay")]
@@ -34,6 +41,7 @@ struct LiveHomeView: View {
     }
 
     var body: some View {
+        let _ = pm.tick
         VStack(spacing: 0) {
             TopBar(claimFocus: true)
             HStack(alignment: .top, spacing: 34) {
@@ -45,7 +53,43 @@ struct LiveHomeView: View {
             }
             .padding(.leading, 60).padding(.trailing, 40)
         }
-        .disabled(deck != nil)
+        .background {
+            // simulateur #lbgv : aperçu vidéo muet de la chaîne de l'en-tête, coupé avant chaque lecture
+            if section == "home", playing == nil, replay == nil, guide == nil, askStart == nil, askSource == nil,
+               UserDefaults.standard.object(forKey: "prisme.pref.bgv") as? Bool ?? true,
+               let c = previewCh, let u = store.provider(c.pid)?.liveURL(c) {
+                ZStack {
+                    LivePreviewVideo(url: u).opacity(0.35)
+                    LinearGradient(colors: [P.room.opacity(0.2), P.room.opacity(0.85), P.room], startPoint: .top, endPoint: .bottom)
+                }
+                .ignoresSafeArea().allowsHitTesting(false).accessibilityIdentifier("lbgv")
+            }
+        }
+        .disabled(deck != nil || askStart != nil || askSource != nil)
+        .overlay {
+            if let s = askStart {
+                LiveStartModal(a: s.a, univers: LiveIndex.entry(s.list[s.i])?.univers.label ?? "",
+                               begin: { askStart = nil; DataCount.write("depuis le début : " + s.a.p.title); replay = replayRequest(s.a) },
+                               live: { askStart = nil; go(s.list, s.i, skipStart: true) },
+                               never: { askStart = nil; AppPrefs.set("startAsk", false); AppToast.shared.say("Réglages › TV en direct pour le réactiver"); go(s.list, s.i, skipStart: true) })
+                .transition(.opacity)
+            }
+        }
+        .overlay {
+            if let s = askSource {
+                LiveSourceModal(e: s.e, pick: { c in
+                    askSource = nil
+                    var L = s.list; L[s.i] = c
+                    if mem.picked(s.e.key, c.id) { askRemember = (s.e.key, c, s.e.name, L, s.i) } else { playing = PlayRequest(list: L, index: s.i) }
+                }, close: { askSource = nil })
+                .transition(.opacity)
+            }
+        }
+        .confirmationDialog(askRemember.map { "Toujours ouvrir \($0.name) sur " + LiveSourceLabel.text($0.c) + " ?" } ?? "", isPresented: Binding(get: { askRemember != nil }, set: { if !$0, let r = askRemember { askRemember = nil; playing = PlayRequest(list: r.list, index: r.i) } }), titleVisibility: .visible) {
+            Button("Mémoriser cette source") { if let r = askRemember { mem.remember(r.key, r.c.id, name: r.name) } }
+            Button("Pas maintenant", role: .cancel) {}
+        }
+        .animation(.easeOut(duration: 0.25), value: askStart?.a.id)
         .overlay {
             if let d = deck {
                 ChannelFan(title: d.title, icon: d.icon, channels: d.channels, sources: sourceCounts, play: play, close: { deck = nil })
@@ -60,7 +104,7 @@ struct LiveHomeView: View {
         .fullScreenCover(item: $playing) { r in LivePlayerView(channels: r.list, start: r.index) }
         .fullScreenCover(item: $guide) { g in GuideView(channels: g.list, title: g.title) }
         .fullScreenCover(item: $replay) { r in VodPlayerView(request: r) }
-        .task(id: store.catalogVersion) { PerfLog.ev("TV index début v\(store.catalogVersion)"); index = await LiveIndex.all(pids: store.active.map(\.id), version: store.catalogVersion); sourceCounts = Dictionary(index.map { ($0.key, $0.sources) }, uniquingKeysWith: max); PerfLog.ev("TV index fin \(index.count)")
+        .task(id: "\(store.catalogVersion)|\(mem.hidden.count)") { PerfLog.ev("TV index début v\(store.catalogVersion)"); index = await LiveIndex.all(pids: store.active.map(\.id), version: store.catalogVersion); sourceCounts = Dictionary(index.map { ($0.key, $0.sources) }, uniquingKeysWith: max); PerfLog.ev("TV index fin \(index.count)")
             // visite de test seulement : ouvrir directement une chaîne (« TF1 », 3 sources en 720p, 1080p et 4K)
             if playing == nil, let n = Debug.arg("prisme.debug.playLive"), let e = index.first(where: { $0.name == n && $0.copies.count > 1 }) ?? index.first(where: { $0.name == n }) {
                 let (l, i) = LiveIndex.withNeighbors(e.ch); play(l, i)
@@ -79,12 +123,23 @@ struct LiveHomeView: View {
             case "fav": ChannelListView(mode: .fav, play: play, guide: openGuide)
             case "recent": ChannelListView(mode: .recent, play: play, guide: openGuide)
             case "all": AllCategoriesView(play: play, guide: openGuide)
-            default: LiveFrontView(index: index, play: play, guide: openGuide, openSection: { fromPage = true; section = $0 }, openDeck: { d in deck = d }, deckOpen: deck != nil)
+            default: LiveFrontView(index: index, play: play, guide: openGuide, openSection: { fromPage = true; section = $0 }, openDeck: { d in deck = d }, deckOpen: deck != nil,
+                                   onHead: { c in if previewCh?.id != c?.id { previewCh = c } })
             }
         }
     }
 
-    private func play(_ list: [Channel], _ i: Int) { playing = PlayRequest(list: list, index: i) }
+    private func play(_ list: [Channel], _ i: Int) { go(list, i) }
+    /// lot 5 : avant de lire, « Depuis le début ? », source mémorisée ou choix de la source (simulateur lopen)
+    private func go(_ list: [Channel], _ i: Int, skipStart: Bool = false) {
+        Task {
+            switch await LiveGate.decide(list, i, skipStart: skipStart) {
+            case .play(let L, let j): playing = PlayRequest(list: L, index: j)
+            case .askStart(let L, let j, let a): DataCount.write("depuis le début ? " + a.p.title); askStart = (L, j, a)
+            case .pickSource(let L, let j, let e): DataCount.write("choix de la source : " + e.name); askSource = (L, j, e)
+            }
+        }
+    }
     private func openGuide(_ list: [Channel], _ title: String) { guide = GuideRequest(list: list, title: title) }
 
     /// Colonne d'icônes à gauche (simulateur) : accueil, guide, recherche, un univers par icône, favoris, catégories.
@@ -143,6 +198,8 @@ struct LiveFrontView: View {
     let openSection: (String) -> Void
     var openDeck: (ChannelDeck) -> Void = { _ in }
     var deckOpen = false
+    /// lot 5 : chaîne de l'en-tête (aperçu vidéo en fond)
+    var onHead: (Channel?) -> Void = { _ in }
     @FocusState private var deckFocus: String?
     @State private var lastDeck: String?
     @EnvironmentObject var store: ProviderStore
@@ -177,7 +234,7 @@ struct LiveFrontView: View {
                         ForEach(Array(forNow.enumerated()), id: \.element.0.id) { i, x in
                             VStack(alignment: .leading, spacing: 10) {
                                 ChannelCard(ch: x.0, fav: prefs.isFavorite(x.0)) { play(forNow.map(\.0), i) }
-                                    .contextMenu { favButton(x.0); SourceButtons(ch: x.0) { c in play([c], 0) } }
+                                    .contextMenu { favButton(x.0); SourceButtons(ch: x.0) { c in play([c], 0) }; HideChannelButton(ch: x.0) }
                                 Text(x.1).font(P.font(17)).foregroundStyle(P.faint)
                             }
                         }
@@ -344,6 +401,7 @@ struct LiveFrontView: View {
     /// avant, deux boutons différents (eux-mêmes zones de focus) se remplaçaient quand les listes se rechargeaient
     /// pendant un import ; si l'un d'eux avait la sélection, tvOS plantait en recalculant les zones de focus.
     @ViewBuilder private var headBlock: some View {
+        let _ = DispatchQueue.main.async { onHead(head) }
         if head != nil || !soon.isEmpty {
             VStack(alignment: .leading, spacing: 0) {
                 Button {
@@ -500,6 +558,17 @@ struct DeckLayer: View {
 
 /// Paquet ouvert (simulateur : .lfan) : fond sombre flouté, nom de l'univers, ses chaînes en éventail, « Refermer ».
 /// Dans le menu « OK maintenu » d'une chaîne : une ligne par source (qualité · fournisseur), quand il y en a plusieurs.
+/// lot 5 : « Masquer cette chaîne » (Réglages › TV en direct › Chaînes masquées pour la réafficher)
+struct HideChannelButton: View {
+    let ch: Channel
+    var body: some View {
+        Button("Masquer cette chaîne") {
+            LiveMemory.shared.hide(ChannelTools.key(ch), name: ChannelTools.clean(ch.name))
+            AppToast.shared.say("Chaîne masquée · Réglages › TV en direct pour la réafficher")
+        }
+    }
+}
+
 struct SourceButtons: View {
     let ch: Channel
     let play: (Channel) -> Void
@@ -555,6 +624,7 @@ struct ChannelFan: View {
                                 .contextMenu {
                                     Button(prefs.isFavorite(ch) ? "Retirer des favoris" : "Ajouter aux favoris") { prefs.toggleFavorite(ch) }
                                     SourceButtons(ch: ch) { c in play([c], 0) }
+                                    HideChannelButton(ch: ch)
                                 }
                                 .focused($foc, equals: i)
                                 // entrée en éventail du simulateur (lfanin) : de la gauche, légèrement tournée, l'une après l'autre
@@ -827,6 +897,7 @@ struct ChannelGrid: View {
                                 .contextMenu {
                                     Button(prefs.isFavorite(ch) ? "Retirer des favoris" : "Ajouter aux favoris") { prefs.toggleFavorite(ch) }
                                     SourceButtons(ch: ch) { c in play([c], 0) }
+                                    HideChannelButton(ch: ch)
                                 }
                         }
                     }.padding(.vertical, 24).padding(.horizontal, 18).padding(.bottom, 60)

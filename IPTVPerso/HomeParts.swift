@@ -38,6 +38,7 @@ struct WideCard: View {
     var body: some View {
         Button(action: action) { label }
             .buttonStyle(TileStyle(radius: 22, zoom: 1.06))
+            .homeTileMenu(item)
     }
 
     private var label: some View {
@@ -124,6 +125,7 @@ struct Top10Row: View {
                                 }
                             }
                             .buttonStyle(TileStyle())
+                            .homeTileMenu(r.item)
                         }
                     }
                 }
@@ -337,6 +339,7 @@ struct CollTile: View {
             .foregroundStyle(.white)
         }
         .buttonStyle(TileStyle(radius: 22, zoom: 1.05))
+        .homeTileMenu(nil)
         .task(id: c.id) { cover = CoverPick.choose("c:" + c.id, from: c.preview) }
     }
 }
@@ -374,6 +377,7 @@ struct WordTile: View {
             .foregroundStyle(.white)
         }
         .buttonStyle(TileStyle(radius: 20, zoom: 1.06))
+        .homeTileMenu(nil)
         .task(id: key + title) {
             guard let candidates else { return }
             let list = await candidates()
@@ -483,6 +487,7 @@ struct LicenceTile: View {
             .foregroundStyle(.white)
         }
         .buttonStyle(TileStyle(radius: 20, zoom: 1.06))
+        .homeTileMenu(nil)
         .task(id: c.logo) {
             guard !c.logo.isEmpty else { return }
             let i = await ImageLoader.load(Fiche.img(c.logo, c.logoIsIcon ? "w92" : "w300"), maxPixel: 500)
