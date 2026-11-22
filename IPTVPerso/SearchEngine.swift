@@ -337,9 +337,9 @@ actor SearchIndex {
         if [" match ", " foot ", " football ", " ligue ", " sport ", " rugby "].contains(where: n.contains) { f.match = true; f.live = true }
         if n.contains(" film ") || n.contains(" films ") { f.kind = .film }
         if n.contains(" serie ") || n.contains(" series ") { f.kind = .series }
-        let qw = n.split(separator: " ").map { Array($0) }
+        let qw = n.split(separator: " ").map { Array($0.utf8) }
         for a in actors where a.words.count > 1 {
-            if a.words.allSatisfy({ w in n.contains(" " + String(w) + " ") || (w.count > 3 && qw.contains { $0.count > 3 && SearchText.lev($0, w) <= 1 }) }) { f.actor = a.name; break }
+            if a.words.allSatisfy({ w in n.contains(" " + String(decoding: w, as: UTF8.self) + " ") || (w.count > 3 && qw.contains { $0.count > 3 && SearchText.lev($0, w) <= 1 }) }) { f.actor = a.name; break }
         }
         return f.any ? f : nil
     }
