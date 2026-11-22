@@ -268,7 +268,7 @@ struct PrefOption: View {
     var body: some View {
         Button(action: action) {
             HStack(spacing: 14) {
-                Text(label).font(P.font(21, .medium))
+                Text(label).font(P.font(24, .medium))   // simulateur .sa-op : 16 px
                 if rec { SetRecBadge() }
                 Spacer()
                 if on { Image(systemName: "checkmark").font(P.font(20, .bold)) }
@@ -331,7 +331,7 @@ struct ResetButton: View {
 struct PrefGroup: View {
     let title: String
     var body: some View {
-        Text(title.uppercased()).font(P.font(16.5, .bold)).tracking(2.2).foregroundStyle(P.faint).padding(.horizontal, 22).padding(.top, 14)
+        Text(title.uppercased()).font(P.font(18, .bold)).tracking(2.5).foregroundStyle(P.faint).padding(.horizontal, 22).padding(.top, 14)
     }
 }
 

@@ -15,7 +15,7 @@ struct PrefHelpFooter: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             Divider().overlay(Color.white.opacity(0.12))
-            Text(h.text ?? "Choisis un réglage pour voir à quoi il sert.").font(P.font(19.5)).foregroundStyle(P.dim)
+            Text(h.text ?? "Choisis un réglage pour voir à quoi il sert.").font(P.font(21)).foregroundStyle(P.dim)
                 .lineLimit(3).frame(maxWidth: .infinity, minHeight: 60, alignment: .topLeading)
                 .accessibilityIdentifier("sa-desc")
         }
@@ -46,16 +46,16 @@ struct PrefRow: View {
         Button(action: action) {
             HStack(spacing: 16) {
                 if modified { ModDot() }
-                Text(title).font(P.font(22.5, .semibold)).lineLimit(2)
+                Text(title).font(P.font(27, .semibold)).lineLimit(2)
                 Spacer(minLength: 20)
                 if let toggle { Switch(on: toggle).scaleEffect(0.8) }
                 else {
-                    if !value.isEmpty { Text(value).font(P.font(19.5)).opacity(0.65).lineLimit(1) }
+                    if !value.isEmpty { Text(value).font(P.font(21)).opacity(0.65).lineLimit(1) }
                     if rec { SetRecBadge() }
                     Image(systemName: icon).font(P.font(17, .bold)).opacity(0.5)
                 }
             }
-            .padding(.horizontal, 22).frame(minHeight: 84)
+            .padding(.horizontal, 22).frame(minHeight: 98)   // simulateur : une ligne tous les 75 px (× 1,5)
         }
         .buttonStyle(PrefRowStyle())
         .focused($f)
@@ -75,10 +75,10 @@ struct PrefInfo: View {
         // informations d'un panneau (Appareil, validité de l'installation…) resteraient hors de l'écran
         Button(action: {}) {
             HStack(alignment: .center) {
-                Text(title).font(P.font(22.5, .semibold)); Spacer(minLength: 30)
-                Text(value).font(P.font(19.5)).opacity(0.65).multilineTextAlignment(.trailing)
+                Text(title).font(P.font(27, .semibold)); Spacer(minLength: 30)
+                Text(value).font(P.font(21)).opacity(0.65).multilineTextAlignment(.trailing)
             }
-            .padding(.horizontal, 22).frame(maxWidth: .infinity).frame(minHeight: 84)
+            .padding(.horizontal, 22).frame(maxWidth: .infinity).frame(minHeight: 98)
         }
         .buttonStyle(PrefRowStyle())
         .focused($f)
