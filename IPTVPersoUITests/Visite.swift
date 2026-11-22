@@ -107,6 +107,7 @@ final class Visite: XCTestCase {
         if ProcessInfo.processInfo.environment["ONLY"] == "lot1" { lot1(); return }
         if ProcessInfo.processInfo.environment["ONLY"] == "lot2" { lot2(); return }
         if ProcessInfo.processInfo.environment["ONLY"] == "lot3" { lot3(); return }
+        if ProcessInfo.processInfo.environment["ONLY"] == "lot3g" { lot3g(); return }
         if ProcessInfo.processInfo.environment["ONLY"] == "tvidle" {
             // TV en direct au lancement avec deux fournisseurs, 150 s sans aucune interaction, puis une capture
             relaunch(["-prisme.debug.demoServer2", "http://127.0.0.1:8098", "-prisme.debug.tab", "live"], wait: 150)
@@ -1026,16 +1027,23 @@ final class Visite: XCTestCase {
         if app.keyboards.count > 0 { app.typeText("lupin"); w(2); shot("R21-texte-tape", focus: false) }
         else { attach("R21-clavier", "clavier d'Apple non détecté") }
         back(); w(3); shot("R22-texte-revenu")
-        // gros catalogue (40 000 films, 20 000 séries, 20 000 chaînes) : temps de réponse écrit dans donnees.txt
+    }
+
+    /// Lot 3 : recherche sur le gros catalogue (40 000 films, 20 000 séries, 20 000 chaînes) — temps de réponse dans donnees.txt
+    func lot3g() {
+        let w = { (t: Double) in Thread.sleep(forTimeInterval: t) }
         app.terminate()
         app.launchArguments = ["-prisme.debug.demoServer", "http://127.0.0.1:8097", "-prisme.debug.tmdbKey", "demo",
                                "-prisme.debug.tmdbBase", "http://127.0.0.1:8099/tmdb/3", "-prisme.debug.imgBase", "http://127.0.0.1:8099/img",
-                               "-prisme.debug.itunesBase", "http://127.0.0.1:8099/itunes", "-prisme.debug.bgTrailer", "off",
-                               "-prisme.debug.tab", "search", "-prisme.debug.q", "film 12"]
+                               "-prisme.debug.itunesBase", "http://127.0.0.1:8099/itunes", "-prisme.debug.bgTrailer", "off", "-prisme.debug.tab", "search"]
         app.launch(); w(150)
-        shot("R30-gros-catalogue")
-        press(.down); press(.left, 6); at = (0, 0)
-        typeWord("a"); w(3); typeWord("b"); w(3); shot("R31-gros-catalogue-frappe")
+        shot("G01-gros-catalogue")
+        press(.down); w(0.5)
+        // « le » : l, e (depuis « a » : l = rangée 1 col 5 ; e = rangée 0 col 4)
+        press(.down); press(.right, 5); press(.select); w(4); shot("G02-l")
+        press(.up); press(.left); press(.select); w(4); shot("G03-le")
+        press(.down, 2); press(.left, 2); press(.select); w(4); shot("G04-leo")
+        press(.right, 6); w(2); shot("G05-apercu")
     }
 
     func finFilm() {

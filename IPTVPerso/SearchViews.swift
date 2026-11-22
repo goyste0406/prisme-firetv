@@ -187,7 +187,8 @@ struct SearchView: View {
                 HStack(spacing: 12) { Image(systemName: "sparkles"); Text("Résultats pour une orthographe proche de « \(q) »") }
                     .font(P.font(21)).foregroundStyle(Color(red: 207 / 255, green: 224 / 255, blue: 1)).padding(.vertical, 9).padding(.horizontal, 15)
             }
-            let F = res.films.compactMap { items[$0] }, S = res.series.compactMap { items[$0] }, NL = res.asked.compactMap { items[$0] }
+            // une seule ligne par œuvre (plusieurs fournisseurs ou qualités : les versions sont dans l'aperçu)
+            let F = Self.unique(res.films.compactMap { items[$0] }), S = Self.unique(res.series.compactMap { items[$0] }), NL = Self.unique(res.asked.compactMap { items[$0] })
             let askTV = res.ask?.live == true
             if filt == "all", let _ = res.ask, !res.why.isEmpty, !NL.isEmpty || (askTV && !liveHits.isEmpty) {
                 group("Ce que tu demandes : " + res.why.joined(separator: ", "), "sparkles")
@@ -208,6 +209,11 @@ struct SearchView: View {
                     .font(P.font(24)).foregroundStyle(.white.opacity(0.7)).lineSpacing(6).padding(.vertical, 24).padding(.horizontal, 15)
             }
         }
+    }
+
+    private static func unique(_ L: [MediaItem]) -> [MediaItem] {
+        var seen = Set<String>()
+        return L.filter { seen.insert($0.workKey).inserted }
     }
 
     private func nothing(_ F: [MediaItem], _ S: [MediaItem], _ NL: [MediaItem]) -> Bool {
