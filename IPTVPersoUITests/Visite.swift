@@ -109,6 +109,8 @@ final class Visite: XCTestCase {
         if ProcessInfo.processInfo.environment["ONLY"] == "lot3" { lot3(); return }
         if ProcessInfo.processInfo.environment["ONLY"] == "lot4" { lot4(); return }
         if ProcessInfo.processInfo.environment["ONLY"] == "lot4n" { lot4n(); return }
+        if ProcessInfo.processInfo.environment["ONLY"] == "lot5" { lot5(); return }
+        if ProcessInfo.processInfo.environment["ONLY"] == "lot5t" { lot5t(); return }
         if ProcessInfo.processInfo.environment["ONLY"] == "lot3g" { lot3g(); return }
         if ProcessInfo.processInfo.environment["ONLY"] == "tvidle" {
             // TV en direct au lancement avec deux fournisseurs, 150 s sans aucune interaction, puis une capture
@@ -1039,6 +1041,86 @@ final class Visite: XCTestCase {
         shot("N03-deuxieme-ouverture")
         relaunch(b + ["-prisme.debug.day", "sun", "-prisme.debug.hour", "19"], wait: 3)
         shot("N04-dimanche-soir")
+    }
+
+    /// Lot 5 : les 9 rubriques des Réglages, listes de choix, point « modifié », Rétablir, recherche d'un réglage,
+    /// rangée d'accueil masquée puis rétablie, bande-annonce de la bannière.
+    func lot5() {
+        let w = { (t: Double) in Thread.sleep(forTimeInterval: t) }
+        func hold() { remote.press(.select, forDuration: 1.2); Thread.sleep(forTimeInterval: 1) }
+        for sec in ["prof", "prov", "lang", "play", "live", "epg", "homes", "par", "data"] {
+            relaunch(["-prisme.debug.tab", "settings", "-prisme.debug.settings", sec], wait: 14)
+            shot("P-\(sec)")
+        }
+        // Lecture : descendre sur « Son de nuit », ouvrir la liste, choisir « Toujours » → point modifié + Rétablir
+        relaunch(["-prisme.debug.tab", "settings", "-prisme.debug.settings", "play"], wait: 14)
+        press(.right); w(0.5); shot("P10-play-premiere-ligne")
+        press(.down, 5); w(0.5); shot("P11-son-de-nuit")
+        press(.select); w(1); shot("P12-liste-ouverte")
+        press(.down); press(.select); w(1); shot("P13-toujours-modifie")
+        press(.up, 12); w(0.5); shot("P14-retablir")
+        press(.select); w(1.5); shot("P15-retabli")
+        // Accueils et notes : défilement complet
+        relaunch(["-prisme.debug.tab", "settings", "-prisme.debug.settings", "homes"], wait: 14)
+        press(.right)
+        for k in 1...6 { press(.down, 4); w(0.4); shot("P2\(k)-homes-\(k)") }
+        // Recherche d'un réglage : « son »
+        relaunch(["-prisme.debug.tab", "settings", "-prisme.debug.settings", "prof"], wait: 14)
+        press(.up); w(0.5); shot("P30-champ-recherche"); press(.select); w(1.5); shot("P31-clavier")
+        press(.down, 3); press(.select)            // s
+        press(.up); press(.right, 2); press(.select)  // o
+        press(.left); press(.select); w(1)            // n
+        shot("P32-resultats-son")
+        // TV : réglages
+        relaunch(["-prisme.debug.tab", "settings", "-prisme.debug.settings", "live"], wait: 14)
+        press(.right); for k in 1...3 { press(.down, 3); w(0.4); shot("P4\(k)-live-\(k)") }
+        // Sauvegarde : appareil et validité
+        relaunch(["-prisme.debug.tab", "settings", "-prisme.debug.settings", "data"], wait: 14)
+        press(.right); press(.down, 12); w(0.6); shot("P50-data-bas")
+        // Accueil Films : OK maintenu sur une affiche du Top 10 → menu ; masquer la rangée ; Réglages la montre ; Rétablir
+        relaunch(["-prisme.debug.tab", "films", "-prisme.debug.profiles", "2"], wait: 22)
+        press(.down, 3); w(1); shot("P60-rangee"); hold(); shot("P61-menu-affiche")
+        let menuItems = app.buttons.allElementsBoundByIndex.map(\.label).filter { $0.contains("rangée") || $0.contains("vu") || $0.contains("liste") }
+        attach("menu-affiche", menuItems.joined(separator: " | "))
+        press(.up, 6); w(0.3); press(.down); w(0.3)
+        // « Masquer cette rangée » est le dernier choix
+        press(.down, 6); press(.select); w(2); shot("P62-rangee-masquee")
+        relaunch(["-prisme.debug.tab", "settings", "-prisme.debug.settings", "homes", "-prisme.debug.profiles", "2"], wait: 14)
+        press(.right); press(.down, 14); w(0.6); shot("P63-reglage-rangees")
+        // bande-annonce de la bannière après 5 s
+        relaunch(["-prisme.debug.tab", "films", "-prisme.pref.heroTrl", "<integer>5</integer>", "-prisme.debug.heroTrailer", "1"], wait: 16, trailer: true)
+        w(1); shot("P70-banniere"); w(3.5); shot("P71-compte-a-rebours"); w(6); shot("P72-bande-annonce")
+        press(.down); w(1.5); shot("P73-arret")
+    }
+
+    /// Lot 5 : TV en direct — choix de la source (meilleure source désactivée), mémorisation après 3 choix, chaîne masquée,
+    /// « Depuis le début ? ».
+    func lot5t() {
+        let w = { (t: Double) in Thread.sleep(forTimeInterval: t) }
+        func hold() { remote.press(.select, forDuration: 1.2); Thread.sleep(forTimeInterval: 1) }
+        let off = ["-prisme.pref.lbest", "<false/>", "-prisme.pref.startAsk", "<false/>", "-prisme.pref.bgv", "<false/>"]
+        for k in 1...3 {
+            relaunch(["-prisme.debug.tab", "live", "-prisme.debug.playLive", "TF1"] + off, wait: 18)
+            shot("T0\(k)-choix-source")
+            press(.down); press(.select); w(4)
+            shot("T0\(k)b-apres-choix", focus: false)
+        }
+        relaunch(["-prisme.debug.tab", "settings", "-prisme.debug.settings", "live"] + off, wait: 14)
+        press(.right); press(.down, 6); w(0.5); shot("T10-sources-memorisees")
+        relaunch(["-prisme.debug.tab", "live", "-prisme.debug.playLive", "TF1"] + off, wait: 18)
+        shot("T11-source-habituelle", focus: false); back(); w(2)
+        // chaîne masquée (OK maintenu sur la 1re carte de « Pour toi, maintenant »)
+        relaunch(["-prisme.debug.tab", "live", "-prisme.pref.bgv", "<false/>"], wait: 18)
+        press(.down, 2); w(1); shot("T20-carte"); hold(); shot("T21-menu-chaine")
+        press(.down, 8); press(.select); w(2); shot("T22-chaine-masquee")
+        relaunch(["-prisme.debug.tab", "settings", "-prisme.debug.settings", "live"], wait: 14)
+        press(.right); press(.down, 8); w(0.5); shot("T23-reglage-masquees")
+        // « Depuis le début ? »
+        relaunch(["-prisme.debug.tab", "live", "-prisme.pref.bgv", "<false/>", "-prisme.debug.playLive", "France 5"], wait: 18)
+        shot("T30-depuis-le-debut")
+        // aperçu vidéo en fond
+        relaunch(["-prisme.debug.tab", "live"], wait: 20)
+        shot("T40-apercu-video")
     }
 
     func lot3() {

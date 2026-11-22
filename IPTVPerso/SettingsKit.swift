@@ -246,7 +246,7 @@ struct PrefOption: View {
         Button(action: action) {
             HStack(spacing: 14) {
                 Text(label).font(P.font(21, .medium))
-                if rec { RecBadge() }
+                if rec { SetRecBadge() }
                 Spacer()
                 if on { Image(systemName: "checkmark").font(P.font(20, .bold)) }
             }
@@ -261,7 +261,7 @@ struct PrefOption: View {
 }
 
 /// pastille « conseillé » (simulateur .sa-rec)
-struct RecBadge: View {
+struct SetRecBadge: View {
     var body: some View {
         Text("conseillé").font(P.font(15, .bold)).foregroundStyle(Color(red: 0.25, green: 0.85, blue: 0.5))
             .padding(.horizontal, 9).padding(.vertical, 3)

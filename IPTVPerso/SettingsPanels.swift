@@ -49,7 +49,7 @@ struct PrefRow: View {
                 if let toggle { Switch(on: toggle).scaleEffect(0.8) }
                 else {
                     if !value.isEmpty { Text(value).font(P.font(19.5)).opacity(0.65).lineLimit(1) }
-                    if rec { RecBadge() }
+                    if rec { SetRecBadge() }
                     Image(systemName: icon).font(P.font(17, .bold)).opacity(0.5)
                 }
             }
@@ -250,8 +250,8 @@ struct HomesPanel: View {
         }
         HStack(spacing: 16) {
             SecureField("Clé TMDB (v3)", text: $key).frame(maxWidth: 520)
-            PrefRow(title: "Enregistrer la clé", value: TmdbKey.value == nil ? "aucune clé" : "clé enregistrée", icon: "key.fill",
-                    sub: "Crée une clé gratuite sur themoviedb.org › Paramètres › API, puis tape-la ici. Elle reste sur cette Apple TV.", id: "sa-key") {
+            PrefRow(title: "Enregistrer la clé", value: TmdbKey.value == nil ? "aucune clé" : "clé enregistrée",
+                    sub: "Crée une clé gratuite sur themoviedb.org › Paramètres › API, puis tape-la ici. Elle reste sur cette Apple TV.", icon: "key.fill", id: "sa-key") {
                 TmdbKey.set(key.trimmingCharacters(in: .whitespaces)); fiches.restart()
             }
         }

@@ -122,7 +122,7 @@ struct LiveSourceModal: View {
                     Button { pick(c) } label: {
                         HStack(spacing: 16) {
                             Text(LiveSourceLabel.text(c)).font(P.font(24, .semibold))
-                            if i == 0 { RecBadge() }
+                            if i == 0 { SetRecBadge() }
                             Spacer()
                             if LiveMemory.shared.direct[e.key] == c.id { Image(systemName: "checkmark") }
                         }

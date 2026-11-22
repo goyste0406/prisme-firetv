@@ -46,7 +46,7 @@ extension View { func glass(_ r: CGFloat = 30) -> some View { modifier(Glass(rad
 
 // MARK: - Boutons (sélection : blanc plein, texte noir, léger zoom — comme dans le simulateur)
 
-private struct FocusReader<Content: View>: View {
+struct FocusReader<Content: View>: View {
     @Environment(\.isFocused) var focused
     let content: (Bool) -> Content
     var body: some View { content(focused) }
