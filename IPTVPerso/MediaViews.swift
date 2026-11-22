@@ -215,7 +215,10 @@ struct MediaHomeView: View {
     @ViewBuilder private var heroBlock: some View {
         if !slides.isEmpty {
             let i = heroIndex % slides.count, sl = slides[i]
-            let step: (Int) -> Void = { d in withAnimation(.easeInOut(duration: 0.45)) { heroIndex = (heroIndex + d + slides.count) % slides.count } }
+            let step: (Int) -> Void = { d in
+                withAnimation(.easeInOut(duration: 0.45)) { heroIndex = (heroIndex + d + slides.count) % slides.count }
+                refocusHero()
+            }
             Group {
                 if let h = sl.item {
                     HeroView(item: h, index: i, count: slides.count, provider: store.provider(h.pid)?.name ?? "",
@@ -231,6 +234,11 @@ struct MediaHomeView: View {
         } else {
             Color.clear.frame(height: 260)
         }
+    }
+
+    /// la diapositive change de vue : la sélection reste sur son bouton blanc (sinon tvOS la renvoie à la barre)
+    private func refocusHero() {
+        for t in [0.05, 0.3] { DispatchQueue.main.asyncAfter(deadline: .now() + t) { if !heroFocus { heroFocus = true } } }
     }
 
     /// bouton blanc des diapositives de collection et de « Bientôt chez toi »
@@ -562,9 +570,12 @@ struct MediaHomeView: View {
         let L = await HeroSlides.build(kind: kind, pids: pids, newest: s.newest)
         guard !Task.isCancelled else { return }
         if L.isEmpty { pickHero(s); return }
-        let cur = slides.isEmpty ? nil : slides[heroIndex % slides.count].k
+        // affichage provisoire (un seul titre) : on commence à la première diapositive ; sinon on reste sur la même sorte
+        let cur = slides.count <= 1 ? nil : slides[heroIndex % slides.count].k
+        let had = heroFocus
         slides = L
         heroIndex = cur.flatMap { k in L.firstIndex { $0.k == k } } ?? 0
+        if had { refocusHero() }
     }
 
     /// « Explorer » : collections tirées des vraies données (fiches TMDB) ; une collection n'apparaît que si elle

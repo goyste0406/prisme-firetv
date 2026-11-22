@@ -45,7 +45,8 @@ struct HeroSlide: Identifiable {
 
 @MainActor
 enum HeroSlides {
-    private static var soonMemo: (day: String, film: SoonFilm?)?
+    private static var soonMemo: (day: String, list: [[String: Any]])?
+    private static var vodMemo: [Int: String] = [:]
 
     static func build(kind: MediaKind, pids: [String], newest: [MediaItem]) async -> [HeroSlide] {
         guard !pids.isEmpty else { return [] }
@@ -273,33 +274,35 @@ enum HeroSlides {
     /// Le film au cinéma (France) le plus en vue qui n'est pas chez le fournisseur ; une fois par jour.
     static func soonFilm() async -> SoonFilm? {
         let day = Fiche.dayFormat.string(from: Date())
-        if let m = soonMemo, m.day == day { return m.film }
-        guard let key = TmdbKey.value else { return nil }
-        let api = TmdbAPI(key: key)
-        guard let res = await api.get("/movie/now_playing", [("language", "fr-FR"), ("region", "FR")])?["results"] as? [[String: Any]] else { return nil }
+        var res: [[String: Any]]
+        if let m = soonMemo, m.day == day { res = m.list } else {
+            guard let key = TmdbKey.value,
+                  let r = await TmdbAPI(key: key).get("/movie/now_playing", [("language", "fr-FR"), ("region", "FR")])?["results"] as? [[String: Any]] else { return nil }
+            res = r; soonMemo = (day, r)
+        }
+        // à chaque fois : ce que le fournisseur a déjà (ses fiches TMDB arrivent au fil de l'eau)
         let have: Set<Int> = await Database.shared.read { db in
             var s = Set<Int>()
             db.query("SELECT tmdb FROM fiche WHERE kind='film' AND tmdb>0") { r in s.insert(r.int(0)) }
             return s
         }
-        var out: SoonFilm?
         for r in res.prefix(12) {
             guard let id = r["id"] as? Int, !have.contains(id), let t = r["title"] as? String, !t.isEmpty,
-                  let rd = r["release_date"] as? String, !rd.isEmpty, let d = Fiche.dayFormat.date(from: rd), d <= Date() else { continue }
+                  let rd = r["release_date"] as? String, !rd.isEmpty, let d = Fiche.dayFormat.date(from: rd), d <= Date(),
+                  Date().timeIntervalSince(d) < 120 * 86400 else { continue }
             var s = SoonFilm(tmdb: id, title: t, year: Int(rd.prefix(4)) ?? 0, vote: (r["vote_average"] as? Double) ?? 0,
                              overview: (r["overview"] as? String) ?? "", backdrop: Fiche.img((r["backdrop_path"] as? String) ?? "", "w1280"), cinema: rd)
-            if let rel = await api.get("/movie/\(id)/release_dates") {
+            if let v = vodMemo[id] { s.vod = v } else if let key = TmdbKey.value, let rel = await TmdbAPI(key: key).get("/movie/\(id)/release_dates") {
                 for x in (rel["results"] as? [[String: Any]]) ?? [] where (x["iso_3166_1"] as? String) == "FR" {
                     for e in (x["release_dates"] as? [[String: Any]]) ?? [] where (e["type"] as? Int) == 4 {
                         if let v = e["release_date"] as? String { s.vod = String(v.prefix(10)) }
                     }
                 }
+                vodMemo[id] = s.vod
             }
-            out = s
-            break
+            return s
         }
-        soonMemo = (day, out)
-        return out
+        return nil
     }
 }
 
