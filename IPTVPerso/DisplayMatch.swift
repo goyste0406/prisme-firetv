@@ -40,7 +40,14 @@ enum DisplayMatch {
     }
 
     @MainActor static func apply(_ c: AVDisplayCriteria?, in view: UIView?) {
-        guard let m = view?.window?.avDisplayManager else { return }
+        #if targetEnvironment(simulator)
+        // le simulateur Apple TV n'a pas de vrai gestionnaire d'affichage : l'appel arrêterait l'appli
+        return
+        #else
+        guard let w = view?.window, w.responds(to: NSSelectorFromString("avDisplayManager")) else { return }
+        let m = w.avDisplayManager
+        guard m.responds(to: NSSelectorFromString("setPreferredDisplayCriteria:")) else { return }
         if m.preferredDisplayCriteria != nil || c != nil { m.preferredDisplayCriteria = c }
+        #endif
     }
 }

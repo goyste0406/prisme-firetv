@@ -1079,17 +1079,24 @@ final class Visite: XCTestCase {
         press(.right); press(.down, 12); w(0.6); shot("P50-data-bas")
         // Accueil Films : OK maintenu sur une affiche du Top 10 → menu ; masquer la rangée ; Réglages la montre ; Rétablir
         relaunch(["-prisme.debug.tab", "films", "-prisme.debug.profiles", "2"], wait: 22)
-        press(.down, 3); w(1); shot("P60-rangee"); hold(); shot("P61-menu-affiche")
-        let menuItems = app.buttons.allElementsBoundByIndex.map(\.label).filter { $0.contains("rangée") || $0.contains("vu") || $0.contains("liste") }
-        attach("menu-affiche", menuItems.joined(separator: " | "))
-        press(.up, 6); w(0.3); press(.down); w(0.3)
-        // « Masquer cette rangée » est le dernier choix
-        press(.down, 6); press(.select); w(2); shot("P62-rangee-masquee")
+        // descendre sous « Ce soir ? » jusqu'à une vraie rangée (son menu propose « Masquer cette rangée »)
+        press(.down, 4); w(1)
+        var found = false
+        for k in 0..<5 where !found {
+            shot("P60-rangee-\(k)"); hold()
+            let items = app.buttons.allElementsBoundByIndex.map(\.label)
+            if items.contains(where: { $0.contains("Masquer cette rangée") }) {
+                found = true; shot("P61-menu-affiche")
+                attach("menu-affiche", items.filter { $0.contains("rangée") || $0.contains("vu") || $0.contains("liste") }.joined(separator: " | "))
+            } else { back(); w(1); press(.down); w(1) }
+        }
+        if found { press(.down, 10); press(.select); w(2); shot("P62-rangee-masquee") }
+        else { attach("menu-affiche", "aucune rangée avec « Masquer cette rangée » trouvée") }
         relaunch(["-prisme.debug.tab", "settings", "-prisme.debug.settings", "homes", "-prisme.debug.profiles", "2"], wait: 14)
         press(.right); press(.down, 14); w(0.6); shot("P63-reglage-rangees")
         // bande-annonce de la bannière après 5 s
         relaunch(["-prisme.debug.tab", "films", "-prisme.pref.heroTrl", "<integer>5</integer>", "-prisme.debug.heroTrailer", "1"], wait: 16, trailer: true)
-        w(1); shot("P70-banniere"); w(3.5); shot("P71-compte-a-rebours"); w(6); shot("P72-bande-annonce")
+        press(.down); w(1); shot("P70-banniere"); w(3.5); shot("P71-compte-a-rebours"); w(6); shot("P72-bande-annonce")
         press(.down); w(1.5); shot("P73-arret")
     }
 

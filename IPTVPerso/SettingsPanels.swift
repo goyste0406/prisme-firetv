@@ -88,6 +88,8 @@ struct PrefHeader: View {
                 Spacer()
                 if let cat { ResetButton(cat: cat) }
             }
+            // en montant depuis la première ligne, la sélection va sur « Rétablir » (et non sur la barre du haut)
+            .focusSection()
             if let sub { Text(sub).font(P.font(19.5)).foregroundStyle(P.dim) }
         }
     }

@@ -20,7 +20,9 @@ struct PrefSpec: Identifiable {
     let labels: [String]
     let def: AnyHashable
     var rec: AnyHashable? = nil
-    var toggle: Bool { values.count == 2 && values.allSatisfy { $0 is Bool } }
+    /// interrupteur (oui / non) ; une valeur à deux choix nommés (« Légères / HD ») reste une liste
+    var asList = false
+    var toggle: Bool { !asList && values.count == 2 && values.allSatisfy { type(of: $0.base) == Bool.self } }
 
     @MainActor var storageKey: String { at == .app ? "prisme.pref." + key : ProfileStore.shared.key(key) }
     @MainActor var current: AnyHashable {
@@ -125,7 +127,7 @@ enum PrefCatalog {
         PrefSpec(id: "fichePlay", cat: "homes", group: "Fiches en arrière-plan", title: "Pendant la lecture",
                  desc: "Pour ne pas gêner la vidéo.", key: "fichePlay", values: [0, 1], labels: ["Mettre en pause", "Continuer lentement"], def: 0),
         PrefSpec(id: "posterHD", cat: "homes", group: "Fiches en arrière-plan", title: "Qualité des affiches",
-                 desc: "Légères : ≈ 60 Mo pour 1 000 fiches. HD : ≈ 160 Mo pour 1 000 fiches.", key: "posterHD", values: tf, labels: ["Légères", "HD"], def: true),
+                 desc: "Légères : ≈ 60 Mo pour 1 000 fiches. HD : ≈ 160 Mo pour 1 000 fiches.", key: "posterHD", values: tf, labels: ["Légères", "HD"], def: true, asList: true),
         // Accueil Films
         PrefSpec(id: "heroTrl", cat: "homes", group: "Accueil Films", title: "Bande-annonce quand tu restes sur la bannière",
                  desc: "La bande-annonce du titre de la grande affiche démarre si tu restes dessus, avec un compte à rebours ; une touche pour revenir.",
