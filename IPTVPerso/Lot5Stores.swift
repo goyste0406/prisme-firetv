@@ -91,11 +91,17 @@ final class LiveMemory: ObservableObject {
         picks[key] = p; save()
         return p[src] == 3 && direct[key] == nil
     }
+    /// nom affiché des chaînes mémorisées (la liste des chaînes n'est pas encore chargée quand on ouvre les Réglages)
+    var directName: [String: String] {
+        get { ud.dictionary(forKey: "prisme.live.directNames") as? [String: String] ?? [:] }
+        set { ud.set(newValue, forKey: "prisme.live.directNames") }
+    }
     func remember(_ key: String, _ src: String, name: String) {
+        directName[key] = name
         direct[key] = src; save()
         DataCount.write("source mémorisée : \(name) → \(src)")
     }
-    func forget(_ key: String) { direct.removeValue(forKey: key); picks.removeValue(forKey: key); save() }
+    func forget(_ key: String) { direct.removeValue(forKey: key); picks.removeValue(forKey: key); directName[key] = nil; save() }
     func hide(_ key: String, name: String) { hidden[key] = name; save(); DataCount.write("chaîne masquée : " + name) }
     func show(_ key: String) { hidden.removeValue(forKey: key); save() }
     func isHidden(_ key: String) -> Bool { hidden[key] != nil }

@@ -185,7 +185,7 @@ struct LivePanel: View {
             Text("prisme te proposera de mémoriser une source après 3 choix identiques").font(P.font(18)).foregroundStyle(P.faint).padding(.horizontal, 22).padding(.top, -14)
         } else {
             ForEach(mem.direct.keys.sorted(), id: \.self) { k in
-                let name = LiveIndex.byKey[k]?.name ?? k.components(separatedBy: "|").last ?? k
+                let name = LiveIndex.byKey[k]?.name ?? mem.directName[k] ?? k.components(separatedBy: "|").last?.uppercased() ?? k
                 let c = LiveIndex.byKey[k]?.copies.first { $0.id == mem.direct[k] }
                 PrefRow(title: name, value: "Oublier", sub: "Ouvre directement " + (c.map { LiveSourceLabel.text($0) } ?? "la source choisie") + ". OK pour l'oublier.", id: "sa-lf-" + name) {
                     mem.forget(k); AppToast.shared.say("Source oubliée : " + name)
