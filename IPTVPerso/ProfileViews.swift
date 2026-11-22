@@ -44,7 +44,7 @@ struct ProfilesPanel: View {
 
     private var list: some View {
         VStack(alignment: .leading, spacing: 0) {
-            Text("Profils").font(P.font(33, .bold)).padding(.bottom, 10)
+            Text("Profils").font(P.font(39, .bold)).padding(.bottom, 10)
             HStack(alignment: .top, spacing: 24) {
                 ForEach(ps.profiles) { p in
                     Button { editing = p.id } label: { tile(ProfileAvatar(p: p, size: 132), p.name, sub(p)) }
@@ -265,11 +265,11 @@ struct SettingLine: View {
     var red = false
     var body: some View {
         HStack {
-            Text(title).font(P.font(22.5, .semibold)).foregroundStyle(red ? Color(red: 1, green: 0.42, blue: 0.42) : Color.primary)
+            Text(title).font(P.font(27, .semibold)).foregroundStyle(red ? Color(red: 1, green: 0.42, blue: 0.42) : Color.primary)
             Spacer(minLength: 20)
-            Group { if let valueView { valueView } else if let value { Text(value) } }.font(P.font(19.5)).opacity(0.7).lineLimit(1)
+            Group { if let valueView { valueView } else if let value { Text(value) } }.font(P.font(21)).opacity(0.7).lineLimit(1)
         }
-        .padding(.horizontal, 22).frame(height: 84)
+        .padding(.horizontal, 22).frame(height: 98)   // mêmes lignes que les autres rubriques (simulateur)
     }
 }
 
