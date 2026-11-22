@@ -295,9 +295,17 @@ struct CatalogImporter {
         }
     }
 
+    /// Année dans le nom du fournisseur : un nombre de 4 chiffres isolé (pas « 32099 »), plausible (jusqu'à l'an prochain) ;
+    /// entre parenthèses ou crochets en priorité, sinon le dernier (« Blade Runner 2049 (2017) » → 2017).
+    private static let yearRx = try! NSRegularExpression(pattern: #"(?<![0-9])(19[0-9]{2}|20[0-9]{2})(?![0-9])"#)
+    private static let maxYear = Calendar.current.component(.year, from: Date()) + 1
     static func year(in name: String) -> Int {
-        guard let r = name.range(of: #"(19|20)\d{2}"#, options: .regularExpression) else { return 0 }
-        return Int(name[r]) ?? 0
+        let ms = yearRx.matches(in: name, range: NSRange(name.startIndex..., in: name)).compactMap { m -> (Int, Bool)? in
+            guard let r = Range(m.range, in: name), let y = Int(name[r]), y >= 1900, y <= maxYear else { return nil }
+            let before = r.lowerBound > name.startIndex ? name[name.index(before: r.lowerBound)] : " "
+            return (y, before == "(" || before == "[")
+        }
+        return (ms.last { $0.1 } ?? ms.last)?.0 ?? 0
     }
 }
 
