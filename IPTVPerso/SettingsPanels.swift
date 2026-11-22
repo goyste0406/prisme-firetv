@@ -95,7 +95,7 @@ struct PrefHeader: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(alignment: .center) {
-                Text(title).font(P.font(33, .bold))
+                Text(title).font(P.font(39, .bold))   // simulateur .sa-det h2 : 26 px
                 Spacer()
                 if let cat { ResetButton(cat: cat) }
             }
