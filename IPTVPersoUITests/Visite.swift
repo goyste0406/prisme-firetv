@@ -1055,10 +1055,12 @@ final class Visite: XCTestCase {
         // Lecture : descendre sur « Son de nuit », ouvrir la liste, choisir « Toujours » → point modifié + Rétablir
         relaunch(["-prisme.debug.tab", "settings", "-prisme.debug.settings", "play"], wait: 14)
         press(.right); w(0.5); shot("P10-play-premiere-ligne")
-        press(.down, 5); w(0.5); shot("P11-son-de-nuit")
+        for _ in 0..<8 where !focused().contains("Son de nuit") { press(.down) }
+        w(0.5); shot("P11-son-de-nuit")
         press(.select); w(1); shot("P12-liste-ouverte")
         press(.down); press(.select); w(1); shot("P13-toujours-modifie")
-        press(.up, 12); w(0.5); shot("P14-retablir")
+        for _ in 0..<12 where !focused().contains("Rétablir") { press(.up) }
+        w(0.5); shot("P14-retablir")
         press(.select); w(1.5); shot("P15-retabli")
         // Accueils et notes : défilement complet
         relaunch(["-prisme.debug.tab", "settings", "-prisme.debug.settings", "homes"], wait: 14)
@@ -1084,11 +1086,12 @@ final class Visite: XCTestCase {
         var found = false
         for k in 0..<5 where !found {
             shot("P60-rangee-\(k)"); hold()
-            let items = app.buttons.allElementsBoundByIndex.map(\.label)
-            if items.contains(where: { $0.contains("Masquer cette rangée") }) {
+            let any = app.descendants(matching: .any)
+            if any.matching(NSPredicate(format: "label CONTAINS 'Masquer cette rangée'")).count > 0 {
                 found = true; shot("P61-menu-affiche")
-                attach("menu-affiche", items.filter { $0.contains("rangée") || $0.contains("vu") || $0.contains("liste") }.joined(separator: " | "))
-            } else { back(); w(1); press(.down); w(1) }
+                let items = any.matching(NSPredicate(format: "label CONTAINS 'rangée' OR label CONTAINS ' vu' OR label CONTAINS 'liste'")).allElementsBoundByIndex.map(\.label)
+                attach("menu-affiche", items.joined(separator: " | "))
+            } else { shot("P60-rangee-\(k)-maintenu"); back(); w(1); press(.down); w(1) }
         }
         if found { press(.down, 10); press(.select); w(2); shot("P62-rangee-masquee") }
         else { attach("menu-affiche", "aucune rangée avec « Masquer cette rangée » trouvée") }

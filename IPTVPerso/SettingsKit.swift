@@ -51,6 +51,8 @@ struct PrefSpec: Identifiable {
 final class PrefUI: ObservableObject {
     static let shared = PrefUI()
     @Published var open: String?
+    /// ligne qui doit reprendre la sélection après un choix dans sa liste
+    @Published var back: String?
     @Published var query = ""
     @Published var searching = false
 }
@@ -160,21 +162,26 @@ enum PrefCatalog {
         DataCount.write("réglages conseillés rétablis : " + cat)
     }
     /// recherche (sans accents, mots dans le désordre, une faute de frappe tolérée par mot)
+    /// comme le simulateur : l'expression entière, au début d'un mot (mot entier si moins de 4 lettres) ;
+    /// 2 points si elle est dans le titre ou le début de l'explication, 1 point ailleurs
     static func search(_ q: String) -> [(cat: String, spec: PrefSpec?, title: String, desc: String)] {
-        let Q = SearchText.keys(q)
-        guard !Q.isEmpty else { return [] }
-        var out: [(String, PrefSpec?, String, String, Double)] = []
+        let strip = { (t: String) in t.folding(options: [.diacriticInsensitive, .caseInsensitive], locale: Locale(identifier: "fr_FR")).lowercased() }
+        let k = strip(q).trimmingCharacters(in: .whitespaces)
+        guard !k.isEmpty, let re = try? NSRegularExpression(pattern: "(^|[^a-z0-9])" + NSRegularExpression.escapedPattern(for: k) + (k.count < 4 ? "(?![a-z])" : "")) else { return [] }
+        let hit = { (t: String) -> Bool in let x = strip(t); return re.firstMatch(in: x, range: NSRange(x.startIndex..., in: x)) != nil }
+        var out: [(String, PrefSpec?, String, String, Int)] = []
         for s in all {
-            let a = SearchText.score(Q, SearchText.keys(s.title))?.s ?? 0
-            let b = SearchText.score(Q, SearchText.keys(s.title + " " + s.desc + " " + s.labels.joined(separator: " ") + " " + catName(s.cat)))?.s ?? 0
-            let m = max(a * 1.5, b)
+            let t = s.title + " " + s.desc + " " + s.labels.joined(separator: " ")
+            let m = hit(String(t.prefix(60))) ? 2 : hit(t + " " + catName(s.cat)) ? 1 : 0
             if m > 0 { out.append((s.cat, s, s.title, s.desc, m)) }
         }
         for x in extraRows {
-            let m = SearchText.score(Q, SearchText.keys(x.1 + " " + x.2 + " " + catName(x.0)))?.s ?? 0
+            let t = x.1 + " " + x.2
+            let m = hit(String(t.prefix(60))) ? 2 : hit(t + " " + catName(x.0)) ? 1 : 0
             if m > 0 { out.append((x.0, nil, x.1, x.2, m)) }
         }
-        return out.sorted { $0.4 > $1.4 }.prefix(24).map { ($0.0, $0.1, $0.2, $0.3) }
+        // tri stable : à score égal, l'ordre des rubriques
+        return out.enumerated().sorted { ($0.element.4, -$0.offset) > ($1.element.4, -$1.offset) }.prefix(24).map { ($0.element.0, $0.element.1, $0.element.2, $0.element.3) }
     }
     /// lignes qui ne sont pas des choix (ouvrent leur rubrique)
     static let extraRows: [(String, String, String)] = [
@@ -218,14 +225,17 @@ struct SpecRow: View {
                 }
             } else {
                 PrefRow(title: spec.title, value: spec.labels[spec.index], rec: spec.rec != nil && spec.current == spec.rec,
-                        sub: spec.desc, icon: open ? "chevron.down" : "chevron.right", modified: spec.modified, id: "sa-" + spec.id) {
+                        sub: spec.desc, icon: open ? "chevron.down" : "chevron.right", modified: spec.modified, id: "sa-" + spec.id,
+                        regain: ui.back == spec.id) {
                     withAnimation(.easeOut(duration: 0.2)) { ui.open = open ? nil : spec.id }
                 }
                 if open {
                     ForEach(0..<spec.values.count, id: \.self) { i in
                         PrefOption(label: spec.labels[i], on: spec.index == i, rec: spec.rec == spec.values[i], sub: spec.desc, id: "sa-o-\(spec.id)-\(i)", grab: spec.index == i) {
                             spec.set(spec.values[i]); after?(spec.values[i])
+                            ui.back = spec.id
                             withAnimation(.easeOut(duration: 0.2)) { ui.open = nil }
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { if ui.back == spec.id { ui.back = nil } }
                         }
                     }
                 }

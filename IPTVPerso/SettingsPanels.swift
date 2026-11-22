@@ -38,6 +38,8 @@ struct PrefRow: View {
     var id = ""
     /// la ligne prend la sélection dès qu'elle apparaît (confirmation qui vient de s'afficher)
     var grab = false
+    /// la ligne reprend la sélection quand ceci passe à vrai (liste de choix refermée après un choix)
+    var regain = false
     let action: () -> Void
     @FocusState private var f: Bool
     var body: some View {
@@ -60,6 +62,7 @@ struct PrefRow: View {
         .accessibilityIdentifier(id.isEmpty ? title : id)
         .onChange(of: f) { _, on in if on { PrefHelp.shared.text = sub } }
         .onAppear { if grab { DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { f = true } } }
+        .onChange(of: regain) { _, on in if on { f = true } }
     }
 }
 
@@ -68,12 +71,20 @@ struct PrefInfo: View {
     let title: String
     let value: String
     var body: some View {
-        HStack(alignment: .center) {
-            Text(title).font(P.font(22.5, .semibold)); Spacer(minLength: 30)
-            Text(value).font(P.font(19.5)).opacity(0.65).multilineTextAlignment(.trailing)
+        // sélectionnable (sans action) : sur Apple TV, le défilement suit la sélection ; sinon les dernières
+        // informations d'un panneau (Appareil, validité de l'installation…) resteraient hors de l'écran
+        Button(action: {}) {
+            HStack(alignment: .center) {
+                Text(title).font(P.font(22.5, .semibold)); Spacer(minLength: 30)
+                Text(value).font(P.font(19.5)).opacity(0.65).multilineTextAlignment(.trailing)
+            }
+            .padding(.horizontal, 22).frame(maxWidth: .infinity).frame(minHeight: 84)
         }
-        .padding(.horizontal, 22).frame(maxWidth: .infinity).frame(minHeight: 84)
+        .buttonStyle(PrefRowStyle())
+        .focused($f)
+        .onChange(of: f) { _, on in if on { PrefHelp.shared.text = nil } }
     }
+    @FocusState private var f: Bool
 }
 
 struct PrefHeader: View {
