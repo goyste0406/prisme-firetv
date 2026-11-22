@@ -180,6 +180,17 @@ enum PrefCatalog {
             let m = hit(String(t.prefix(60))) ? 2 : hit(t + " " + catName(x.0)) ? 1 : 0
             if m > 0 { out.append((x.0, nil, x.1, x.2, m)) }
         }
+        // aucune correspondance exacte : on tolère une faute de frappe (« sous-titrse », « lnague »)
+        if out.isEmpty {
+            let Q = SearchText.keys(q)
+            for s in all {
+                let m = SearchText.score(Q, SearchText.keys(s.title + " " + s.desc + " " + catName(s.cat)))?.s ?? 0
+                if m > 0 { out.append((s.cat, s, s.title, s.desc, 1)) }
+            }
+            for x in extraRows where (SearchText.score(Q, SearchText.keys(x.1 + " " + x.2 + " " + catName(x.0)))?.s ?? 0) > 0 {
+                out.append((x.0, nil, x.1, x.2, 1))
+            }
+        }
         // tri stable : à score égal, l'ordre des rubriques
         return out.enumerated().sorted { ($0.element.4, -$0.offset) > ($1.element.4, -$1.offset) }.prefix(24).map { ($0.element.0, $0.element.1, $0.element.2, $0.element.3) }
     }
