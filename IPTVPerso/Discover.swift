@@ -48,7 +48,7 @@ enum DiscoverClock {
                 d = cal.date(from: c) ?? d
             } else if let w = wd {
                 // le prochain jour voulu (même heure), hors décembre
-                var c = cal.dateComponents([.year, .hour, .minute], from: d); c.month = 11; c.day = 16   // lundi 16 novembre 2026
+                var c = cal.dateComponents([.year, .hour, .minute], from: d); c.month = 11; c.day = 9   // lundi 9 novembre 2026
                 let base = cal.date(from: c) ?? d
                 d = cal.date(byAdding: .day, value: (w + 5) % 7, to: base) ?? d
             }
@@ -114,7 +114,10 @@ enum TVReminders {
     }
     private static func save(_ L: [R]) { if let d = try? JSONEncoder().encode(L) { UserDefaults.standard.set(d, forKey: key) } }
     static func has(_ chID: String, _ start: Int) -> Bool { all.contains { $0.chID == chID && $0.start == start } }
-    static func add(_ r: R) {
+    static func add(_ r0: R) {
+        var r = r0
+        // simulateur de test seulement : le rappel arrive 25 s plus tard
+        if Debug.demoServer != nil, Debug.arg("prisme.debug.remindNow") == "1" { r.start = Int(Date().timeIntervalSince1970) + 25 }
         var L = all.filter { $0 != r }
         L.append(r); save(L)
         DataCount.write("rappel TV : \(r.title) · \(r.chName) · \(r.start)")
@@ -159,6 +162,13 @@ enum NightBanner {
     @MainActor
     static func message(pids: [String]) async -> (text: String, parts: [String])? {
         let pid = ProfileStore.shared.me.id
+        // simulateur de test seulement : dernière visite il y a N jours, alertes de départ
+        if Debug.demoServer != nil, Debug.arg("prisme.debug.lastVisit") != nil, !UserDefaults.standard.bool(forKey: "prisme.debug.night.done") {
+            UserDefaults.standard.set(true, forKey: "prisme.debug.night.done")
+            if let d = Debug.arg("prisme.debug.lastVisit").flatMap(Double.init) { NightLog.setVisit(pid, Date().addingTimeInterval(-d * 86400)) }
+            if let fa = Debug.arg("prisme.debug.filmAlert"), let i = fa.firstIndex(of: ":"), let id = Int(fa[..<i]) { FilmAlerts.toggle(id, title: String(fa[fa.index(after: i)...])) }
+            if let sa = Debug.arg("prisme.debug.seriesAlert") { SeriesAlerts.add(sa, 3, 6) }
+        }
         let now = DiscoverClock.now
         let today = Fiche.dayFormat.string(from: now)
         let last = NightLog.lastVisit(pid)

@@ -1145,9 +1145,6 @@ struct CategoryGridView: View {
         .background(PrismeBackground())
         .ignoresSafeArea()
         .navigationDestination(item: $open) { it in DetailView(item: it) }
-        .navigationDestination(item: $openPlay) { it in DetailView(item: it, autoPlay: true) }
-        .fullScreenCover(item: $liveLaunch) { l in LivePlayerView(channels: [l.ch], start: 0) }
-        .fullScreenCover(item: $trailer) { t in TrailerScreen(trailer: t, title: trailerTitle, playFilm: nil) }
         .task { await more() }
     }
 

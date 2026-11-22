@@ -107,6 +107,8 @@ final class Visite: XCTestCase {
         if ProcessInfo.processInfo.environment["ONLY"] == "lot1" { lot1(); return }
         if ProcessInfo.processInfo.environment["ONLY"] == "lot2" { lot2(); return }
         if ProcessInfo.processInfo.environment["ONLY"] == "lot3" { lot3(); return }
+        if ProcessInfo.processInfo.environment["ONLY"] == "lot4" { lot4(); return }
+        if ProcessInfo.processInfo.environment["ONLY"] == "lot4n" { lot4n(); return }
         if ProcessInfo.processInfo.environment["ONLY"] == "lot3g" { lot3g(); return }
         if ProcessInfo.processInfo.environment["ONLY"] == "tvidle" {
             // TV en direct au lancement avec deux fournisseurs, 150 s sans aucune interaction, puis une capture
@@ -983,6 +985,62 @@ final class Visite: XCTestCase {
     }
 
     /// Lot 3 : recherche (clavier PRISME, fautes, phrases, filtres, aperçu, récentes, Siri / clavier d'Apple, gros catalogue)
+    /// Lot 4 : grande affiche en diapositives (films et séries), « Le moment » selon le jour, télé du soir, bientôt chez toi.
+    func lot4() {
+        let w = { (t: Double) in Thread.sleep(forTimeInterval: t) }
+        func hold() { remote.press(.select, forDuration: 1.2); Thread.sleep(forTimeInterval: 1) }
+        let base4 = ["-prisme.debug.profiles", "2", "-prisme.debug.tab", "films"]
+        // dimanche après-midi : arrivée, le moment (dimanche en famille), à l'honneur, télé, bientôt
+        relaunch(base4 + ["-prisme.debug.day", "sun", "-prisme.debug.hour", "14"], wait: 16)
+        w(25)   // fiches TMDB du faux serveur, puis diapositives
+        relaunch(base4 + ["-prisme.debug.day", "sun", "-prisme.debug.hour", "14"], wait: 20)
+        shot("H01-films-1")
+        for i in 2...6 { press(.right); w(1.5); shot("H0\(i)-films-\(i)") }
+        // le moment : OK maintenu, puis « Voir la collection »
+        relaunch(base4 + ["-prisme.debug.day", "sun", "-prisme.debug.hour", "14"], wait: 20)
+        press(.right); w(1.5); hold(); shot("H10-moment-ok-maintenu"); back(); w(1)
+        press(.select); w(3); shot("H11-moment-collection"); back(); w(1.5); shot("H12-retour-accueil")
+        press(.down); w(1); shot("H13-descente-ce-soir"); press(.up); w(1); shot("H14-remonte-affiche")
+        press(.up); w(1); shot("H15-barre")
+        // autres jours : semaine, vendredi (à deux), décembre
+        for (d, n) in [("mon", "H20-moment-semaine"), ("fri", "H21-moment-vendredi"), ("dec", "H22-moment-decembre")] {
+            relaunch(base4 + ["-prisme.debug.day", d, "-prisme.debug.hour", "14"], wait: 20)
+            press(.right); w(1.5); shot(n)
+        }
+        // vendredi : « Passer en mode à deux » (OK maintenu, 2e choix)
+        relaunch(base4 + ["-prisme.debug.day", "fri", "-prisme.debug.hour", "14"], wait: 20)
+        press(.right); w(1.5); hold(); press(.down); w(0.5); shot("H23-vendredi-menu"); press(.select); w(2); shot("H24-mode-a-deux")
+        // le soir : la télé d'abord ; rappel
+        relaunch(base4 + ["-prisme.debug.day", "mon", "-prisme.debug.hour", "20", "-prisme.debug.remindNow", "1"], wait: 20)
+        shot("H30-soir-tele")
+        hold(); shot("H31-tele-ok-maintenu"); press(.select); w(2); shot("H32-rappel-programme")
+        w(40); shot("H33-rappel-arrive")
+        press(.select); w(8); shot("H34-chaine-lancee", focus: false); back(); w(2)
+        // bientôt chez toi : Préviens-moi
+        relaunch(base4 + ["-prisme.debug.day", "sun", "-prisme.debug.hour", "14"], wait: 20)
+        press(.left); w(1.5); shot("H40-bientot"); press(.select); w(1.5); shot("H41-alerte-activee")
+        // séries
+        relaunch(["-prisme.debug.profiles", "2", "-prisme.debug.tab", "series", "-prisme.debug.day", "sat", "-prisme.debug.hour", "14"], wait: 20)
+        shot("S01-series-1")
+        for i in 2...5 { press(.right); w(1.5); shot("S0\(i)-series-\(i)") }
+        relaunch(["-prisme.debug.profiles", "2", "-prisme.debug.tab", "series", "-prisme.debug.day", "tue", "-prisme.debug.hour", "14"], wait: 20)
+        press(.right); w(1.5); shot("S10-series-semaine")
+    }
+
+    /// Lot 4 : bandeau « Cette nuit » (dernière visite il y a 3 jours, alertes), puis une 2e ouverture (rien), puis le dimanche soir.
+    func lot4n() {
+        let w = { (t: Double) in Thread.sleep(forTimeInterval: t) }
+        let b = ["-prisme.debug.profiles", "2", "-prisme.debug.tab", "films", "-prisme.debug.mylist", "1"]
+        relaunch(b, wait: 30)   // catalogue et fiches (Dune doit avoir sa fiche TMDB)
+        relaunch(b + ["-prisme.debug.lastVisit", "3", "-prisme.debug.filmAlert", "1000:Dune", "-prisme.debug.seriesAlert", "series:demo:2001", "-prisme.debug.day", "mon", "-prisme.debug.hour", "10"], wait: 2.5)
+        shot("N01-cette-nuit")
+        w(8); shot("N02-efface")
+        relaunch(b + ["-prisme.debug.day", "mon", "-prisme.debug.hour", "10"], wait: 3)
+        shot("N03-deuxieme-ouverture")
+        relaunch(b + ["-prisme.debug.day", "sun", "-prisme.debug.hour", "19"], wait: 3)
+        shot("N04-dimanche-soir")
+    }
+
     func lot3() {
         let w = { (t: Double) in Thread.sleep(forTimeInterval: t) }
         let grid = ["abcdef", "ghijkl", "mnopqr", "stuvwx", "yz1234", "567890"].map { Array($0) }

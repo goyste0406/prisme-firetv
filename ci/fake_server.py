@@ -487,7 +487,9 @@ def tv(i):
     return {"id": s, "name": t, "original_name": t, "overview": f"{t} : résumé TMDB de la série.", "poster_path": tmdb_path("p", f"s{s}"),
             "backdrop_path": tmdb_path("b", f"s{s}"), "genres": [{"name": x} for x in g], "episode_run_time": [rt], "vote_average": v,
             "first_air_date": f"{y}-01-01", "adult": False, "origin_country": ["FR" if i in (0, 1, 2, 7, 9) else "US"],
-            "created_by": [{"name": "Créateur " + t}], "networks": [], "images": {"logos": [{"iso_639_1": "fr", "file_path": tmdb_path("g", f"s{s}")}]},
+            "created_by": [{"name": "Créateur " + t}], "networks": [{"id": n[0], "name": n[1], "logo_path": tmdb_path("g", f"co{n[0]}")} for n in NETWORKS.get(i, [])],
+            # lot 4 : séries terminées (« Séries à finir ce week-end »)
+            "status": "Ended" if i in (0, 4, 5, 6, 7, 8, 9, 10) else "Returning Series", "images": {"logos": [{"iso_639_1": "fr", "file_path": tmdb_path("g", f"s{s}")}]},
             "aggregate_credits": {"cast": [{"name": a, "roles": [{"character": c}], "profile_path": tmdb_path("r", a.replace(" ", "_"))} for a, c in CAST[2:8]]},
             "watch/providers": providers_for(t),
             # Lupin : un 6e épisode de la saison 3 annoncé dans 3 jours (« à venir »)
@@ -495,6 +497,14 @@ def tv(i):
             "last_episode_to_air": {"air_date": day(-10) if i in (1, 11, 12, 14) else f"{y + ns - 1}-05-01"}, "number_of_seasons": ns,
             "popularity": 150.0 if i in (1, 11) else (900.0 if i >= 12 else round(v * 5, 1)),
             "original_language": OLANG.get(t, "fr" if i in (0, 1, 2, 6, 8) else "en")}
+
+# lot 4 : chaînes d'origine (« À l'honneur » des séries)
+NETWORKS = {1: [(213, "Netflix")], 3: [(213, "Netflix")], 10: [(213, "Netflix")], 11: [(213, "Netflix")], 12: [(213, "Netflix")],
+            0: [(285, "Canal+")], 6: [(285, "Canal+")], 8: [(285, "Canal+")], 5: [(49, "HBO")], 9: [(174, "AMC")]}
+# lot 4 : « Bientôt chez toi » — au cinéma en France et absent du fournisseur (le premier est chez le fournisseur : à écarter)
+NOW_PLAYING = [{"id": 1000, "title": "Dune", "release_date": "2021-09-15"},
+               {"id": 9001, "title": "Le Dernier Phare", "release_date": None, "overview": "Une gardienne de phare isolée reçoit des messages d'un navire disparu depuis trente ans.",
+                "vote_average": 7.4, "backdrop_path": "/b/m9001.png"}]
 
 def day(n):
     return time.strftime("%Y-%m-%d", time.localtime(NOW + n * DAY))
@@ -556,6 +566,13 @@ def tmdb(path, q):
         parts = [{"id": fid(i), "title": f[0], "release_date": f"{f[1]}-03-01", "poster_path": tmdb_path("p", f"m{fid(i)}")} for i, f in enumerate(FILMS) if f[5] and f[5][0] == cid]
         if cid == 502: parts.append({"id": 9999, "title": "Spider-Man : Beyond", "release_date": "", "poster_path": ""})
         return {"name": next((f[5][1] for f in FILMS if f[5] and f[5][0] == cid), "Saga"), "parts": parts}
+    if path == "/movie/now_playing":
+        L = [dict(x) for x in NOW_PLAYING]
+        for x in L:
+            if x["release_date"] is None: x["release_date"] = day(-18)
+        return {"results": L}
+    if path == "/movie/9001/release_dates":
+        return {"results": [{"iso_3166_1": "FR", "release_dates": [{"type": 3, "release_date": day(-18) + "T00:00:00.000Z"}, {"type": 4, "release_date": day(110) + "T00:00:00.000Z"}]}]}
     if path == "/movie/popular":
         order = [3, 0, 4, 5, 2, 15, 17, 18, 24, 12, 6, 22]
         return {"results": [{"id": fid(i)} for i in order]} if (q.get("page") or ["1"])[0] == "1" else {"results": []}
