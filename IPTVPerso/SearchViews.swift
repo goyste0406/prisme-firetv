@@ -379,9 +379,9 @@ struct SearchView: View {
             ready = false
             res = SearchIndex.Result()
             if trend.isEmpty {
-                async let tf = TrendStore.top(.film, pids: pids)
-                async let ts = TrendStore.top(.series, pids: pids)
-                let (a, b) = await (tf, ts)
+                // l'une après l'autre : TrendStore garde un cache partagé qui ne supporte pas deux appels simultanés
+                let a = await TrendStore.top(.film, pids: pids)
+                let b = await TrendStore.top(.series, pids: pids)
                 var t: [MediaItem] = []
                 for i in 0..<6 { if i < a.count { t.append(a[i].item) }; if i < b.count { t.append(b[i].item) } }
                 trend = Array(t.prefix(6))

@@ -167,6 +167,8 @@ struct MoveBadge: View {
 enum TrendStore {
     struct Ranked: Identifiable { let item: MediaItem; let rank: Int; let move: String?; var id: String { item.id } }
     private static var memo: [String: (Date, [Int])] = [:]
+    /// la page Recherche et les accueils peuvent demander les tendances en même temps : accès au cache protégé
+    private static let memoLock = NSLock()
 
     static func top(_ k: MediaKind, pids: [String]) async -> [Ranked] {
         guard let key = TmdbKey.value, !pids.isEmpty else { return [] }
@@ -199,7 +201,7 @@ enum TrendStore {
 
     private static func popular(_ k: MediaKind, key: String) async -> [Int] {
         let mk = k.rawValue
-        if let m = memo[mk], Date().timeIntervalSince(m.0) < 6 * 3600 { return m.1 }
+        if let m = memoLock.withLock({ memo[mk] }), Date().timeIntervalSince(m.0) < 6 * 3600 { return m.1 }
         let api = TmdbAPI(key: key)
         var ids: [Int] = []
         for page in 1...3 {
@@ -209,7 +211,7 @@ enum TrendStore {
             guard let d = await api.get(path, q), let res = d["results"] as? [[String: Any]] else { break }
             ids += res.filter { ($0["adult"] as? Bool) != true }.compactMap { $0["id"] as? Int }
         }
-        if !ids.isEmpty { memo[mk] = (Date(), ids) }
+        if !ids.isEmpty { memoLock.withLock { memo[mk] = (Date(), ids) } }
         return ids
     }
 }
