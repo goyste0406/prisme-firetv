@@ -50,7 +50,7 @@ struct PrefRow: View {
                 Spacer(minLength: 20)
                 if let toggle { Switch(on: toggle).scaleEffect(0.8) }
                 else {
-                    if !value.isEmpty { Text(value).font(P.font(21)).opacity(0.65).lineLimit(1) }
+                    if !value.isEmpty { Text(value).font(P.font(22.5)).opacity(0.65).lineLimit(1) }
                     if rec { SetRecBadge() }
                     Image(systemName: icon).font(P.font(17, .bold)).opacity(0.5)
                 }
@@ -76,7 +76,7 @@ struct PrefInfo: View {
         Button(action: {}) {
             HStack(alignment: .center) {
                 Text(title).font(P.font(27, .semibold)); Spacer(minLength: 30)
-                Text(value).font(P.font(21)).opacity(0.65).multilineTextAlignment(.trailing)
+                Text(value).font(P.font(22.5)).opacity(0.65).multilineTextAlignment(.trailing)
             }
             .padding(.horizontal, 22).frame(maxWidth: .infinity).frame(minHeight: 98)
         }

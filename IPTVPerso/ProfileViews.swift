@@ -267,7 +267,7 @@ struct SettingLine: View {
         HStack {
             Text(title).font(P.font(27, .semibold)).foregroundStyle(red ? Color(red: 1, green: 0.42, blue: 0.42) : Color.primary)
             Spacer(minLength: 20)
-            Group { if let valueView { valueView } else if let value { Text(value) } }.font(P.font(21)).opacity(0.7).lineLimit(1)
+            Group { if let valueView { valueView } else if let value { Text(value) } }.font(P.font(22.5)).opacity(0.7).lineLimit(1)
         }
         .padding(.horizontal, 22).frame(height: 98)   // mêmes lignes que les autres rubriques (simulateur)
     }

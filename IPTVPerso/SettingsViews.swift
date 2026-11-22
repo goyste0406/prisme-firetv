@@ -101,11 +101,11 @@ struct ProvidersSettingsView: View {
                     Button { ui.searching = true; section = "search" } label: {
                         HStack(spacing: 14) {
                             Image(systemName: "magnifyingglass").font(P.font(22, .semibold))
-                            Text(ui.query.isEmpty ? "Rechercher un réglage" : ui.query).font(P.font(24, .medium)).lineLimit(1)
+                            Text(ui.query.isEmpty ? "Rechercher un réglage" : ui.query).font(P.font(27, .medium)).lineLimit(1)
                             Spacer()
                         }
                         .opacity(ui.query.isEmpty ? 0.6 : 1)
-                        .padding(.horizontal, 24).frame(height: 66)
+                        .padding(.horizontal, 24).frame(height: 76)
                         .background(RoundedRectangle(cornerRadius: 15, style: .continuous).fill(Color.white.opacity(0.08)))
                     }
                     .buttonStyle(SideStyle(selected: section == "search"))
