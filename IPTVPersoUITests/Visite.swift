@@ -1111,6 +1111,7 @@ final class Visite: XCTestCase {
             shot("T0\(k)-choix-source")
             press(.down); press(.select); w(4)
             shot("T0\(k)b-apres-choix", focus: false)
+            if k == 3 { press(.select); w(3); shot("T03c-source-memorisee", focus: false) }
         }
         relaunch(["-prisme.debug.tab", "settings", "-prisme.debug.settings", "live"] + off, wait: 14)
         press(.right); press(.down, 6); w(0.5); shot("T10-sources-memorisees")
@@ -1123,7 +1124,7 @@ final class Visite: XCTestCase {
         relaunch(["-prisme.debug.tab", "settings", "-prisme.debug.settings", "live"], wait: 14)
         press(.right); press(.down, 8); w(0.5); shot("T23-reglage-masquees")
         // « Depuis le début ? »
-        relaunch(["-prisme.debug.tab", "live", "-prisme.pref.bgv", "<false/>", "-prisme.debug.playLive", "France 5"], wait: 18)
+        relaunch(["-prisme.debug.tab", "live", "-prisme.pref.bgv", "<false/>", "-prisme.debug.playLive", "M6"], wait: 18)
         shot("T30-depuis-le-debut")
         // aperçu vidéo en fond
         relaunch(["-prisme.debug.tab", "live"], wait: 20)
