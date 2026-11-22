@@ -13,6 +13,7 @@ struct SearchView: View {
     @State private var native = ""
     @State private var filt = Debug.arg("prisme.debug.filt") ?? "all"
     @State private var res = SearchIndex.Result()
+    @State private var idxVer = 0          // index complet arrivé : relance la recherche affichée
     @State private var items: [String: MediaItem] = [:]
     @State private var live: [LiveStore.Airing] = []
     @State private var liveHits: [LiveStore.Airing] = []
@@ -50,7 +51,11 @@ struct SearchView: View {
         .sheet(item: $actor) { a in ActorSheet(actor: a, kind: .film, excluding: "", both: true) }
         .fullScreenCover(item: $watchLive) { l in LivePlayerView(channels: [l.ch], start: 0) }
         // les fiches qui arrivent ne relancent pas la recherche en cours (l'index se rafraîchit en arrière-plan)
-        .task(id: "\(q)|\(store.catalogVersion)|\(profiles.version)") { await run() }
+        .task(id: "\(q)|\(store.catalogVersion)|\(profiles.version)|\(idxVer)") { await run() }
+        // gros catalogue : quand l'index complet (genres, acteurs) remplace l'index rapide, la recherche affichée est relancée
+        .onReceive(NotificationCenter.default.publisher(for: SearchIndex.changed)) { _ in
+            if !q.trimmingCharacters(in: .whitespaces).isEmpty { idxVer += 1 }
+        }
         .onAppear { recent = SearchRecent.list }
         .onChange(of: native) { _, t in if !t.isEmpty { q = t } }
         .onChange(of: focus) { old, f in

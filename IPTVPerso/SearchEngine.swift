@@ -140,7 +140,9 @@ actor SearchIndex {
     private var stamp = ""              // ce que contient entries : « base|tranche de fiches » ou « base|rapide »
     private var base: (b: String, list: [Entry], byKey: [String: Int])?   // titres nettoyés, sans les fiches
     private var quick: (b: String, task: Task<[Entry], Never>)?
-    private var fullFor = ""            // base dont le nettoyage complet est en cours
+    private var full: (b: String, task: Task<Void, Never>)?   // nettoyage complet en cours
+    /// envoyé quand l'index complet (titres nettoyés + fiches) remplace l'index rapide : la page relance la recherche affichée
+    static let changed = Notification.Name("prisme.searchIndexChanged")
     private var ficheBusy = false
     private var lastFiche = Date.distantPast
 
@@ -167,14 +169,14 @@ actor SearchIndex {
             }
             return
         }
-        if fullFor != b {
-            fullFor = b
-            Task.detached(priority: .utility) {
+        if full?.b != b {
+            let t = Task.detached(priority: .utility) {
                 let rows = await Self.rows(pids)
                 let (list, byKey) = Self.clean(rows)
                 let (l, a) = await Self.applyFiches(list, byKey)
                 await self.doneFull(b, st, list, byKey, l, a)
             }
+            full = (b, t)
         }
         if stamp.hasPrefix(b + "|") { return }
         let task: Task<[Entry], Never>
@@ -184,13 +186,17 @@ actor SearchIndex {
         }
         let l = await task.value
         if quick?.b == b { quick = nil }
+        // petit catalogue : le nettoyage complet ne prend qu'un instant, on l'attend (genres, acteurs, phrases dès la 1re lettre)
+        if l.count < 8000, let f = full, f.b == b { await f.task.value; if stamp.hasPrefix(b + "|") { return } }
         if !stamp.hasPrefix(b + "|") { entries = l; actors = []; stamp = b + "|rapide" }
     }
 
     private func doneFull(_ b: String, _ st: String, _ list: [Entry], _ byKey: [String: Int], _ l: [Entry], _ a: [Actor]) {
-        guard fullFor == b else { return }
-        fullFor = ""
+        guard full?.b == b else { return }
+        full = nil
+        let wasQuick = stamp == b + "|rapide"
         base = (b, list, byKey); entries = l; actors = a; stamp = st; lastFiche = Date()
+        if wasQuick { Task { @MainActor in NotificationCenter.default.post(name: Self.changed, object: nil) } }
     }
 
     private func doneFiches(_ b: String, _ st: String, _ l: [Entry], _ a: [Actor]) {
