@@ -49,7 +49,8 @@ struct SearchView: View {
         .navigationDestination(item: $openPlay) { it in DetailView(item: it, autoPlay: true) }
         .sheet(item: $actor) { a in ActorSheet(actor: a, kind: .film, excluding: "", both: true) }
         .fullScreenCover(item: $watchLive) { l in LivePlayerView(channels: [l.ch], start: 0) }
-        .task(id: "\(q)|\(store.catalogVersion)|\(fiches.version / 10)|\(profiles.version)") { await run() }
+        // les fiches qui arrivent ne relancent pas la recherche en cours (l'index se rafraîchit en arrière-plan)
+        .task(id: "\(q)|\(store.catalogVersion)|\(profiles.version)") { await run() }
         .onAppear { recent = SearchRecent.list }
         .onChange(of: native) { _, t in if !t.isEmpty { q = t } }
         .onChange(of: focus) { old, f in
@@ -378,6 +379,9 @@ struct SearchView: View {
         if q.trimmingCharacters(in: .whitespaces).isEmpty {
             ready = false
             res = SearchIndex.Result()
+            // l'index se prépare pendant que la page est vide : la première lettre ne l'attend pas
+            let (cv, fv) = (store.catalogVersion, fiches.version)
+            Task.detached(priority: .utility) { await SearchIndex.shared.ensure(pids: pids, catalog: cv, fiches: fv) }
             if trend.isEmpty {
                 // l'une après l'autre : TrendStore garde un cache partagé qui ne supporte pas deux appels simultanés
                 let a = await TrendStore.top(.film, pids: pids)

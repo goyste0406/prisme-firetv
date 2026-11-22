@@ -1042,7 +1042,7 @@ final class Visite: XCTestCase {
         // « le » : l, e (depuis « a » : l = rangée 1 col 5 ; e = rangée 0 col 4)
         press(.down); press(.right, 5); press(.select); w(4); shot("G02-l")
         press(.up); press(.left); press(.select); w(4); shot("G03-le")
-        press(.down, 2); press(.left, 2); press(.select); w(4); shot("G04-leo")
+        press(.down, 2); press(.left, 2); press(.select); w(4); shot("G04-leo"); w(10); shot("G04b-leo-14s")
         press(.right, 6); w(2); shot("G05-apercu")
     }
 

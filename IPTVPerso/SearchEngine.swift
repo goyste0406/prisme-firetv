@@ -92,11 +92,37 @@ actor SearchIndex {
     private(set) var entries: [Entry] = []
     private(set) var actors: [Actor] = []
     private var stamp = ""
+    private var building: (stamp: String, task: Task<([Entry], [Actor]), Never>)?
+    private var lastFicheBuild = Date.distantPast
 
-    /// reconstruit la liste si les fournisseurs, le catalogue ou les fiches ont changé
+    /// Reconstruit la liste si les fournisseurs, le catalogue ou les fiches ont changé.
+    /// Une seule construction à la fois (les frappes suivantes attendent la même) ;
+    /// si seules les fiches ont changé et qu'un index existe déjà, il est rafraîchi en arrière-plan
+    /// (au plus toutes les 30 s) et la recherche continue avec l'index actuel.
     func ensure(pids: [String], catalog: Int, fiches: Int) async {
-        let st = pids.joined(separator: ",") + "|\(catalog)|\(fiches / 10)"
-        guard st != stamp, !pids.isEmpty else { return }
+        guard !pids.isEmpty else { return }
+        let base = pids.joined(separator: ",") + "|\(catalog)"
+        let st = base + "|\(fiches / 10)"
+        if st == stamp { return }
+        let onlyFiches = !entries.isEmpty && stamp.hasPrefix(base + "|")
+        if let b = building {
+            if onlyFiches { return }                       // un rafraîchissement tourne déjà : index actuel
+            if b.stamp.hasPrefix(base + "|") { await finish(b.stamp, b.task); return }
+        }
+        if onlyFiches && Date().timeIntervalSince(lastFicheBuild) < 30 { return }
+        let task = Task.detached(priority: onlyFiches ? .utility : .userInitiated) { await Self.build(pids: pids) }
+        building = (st, task)
+        if onlyFiches { Task { await self.finish(st, task) } } else { await finish(st, task) }
+    }
+
+    private func finish(_ st: String, _ task: Task<([Entry], [Actor]), Never>) async {
+        let (list, acts) = await task.value
+        guard building?.stamp == st else { return }
+        entries = list; actors = acts; stamp = st; building = nil; lastFicheBuild = Date()
+    }
+
+    private static func build(pids: [String]) async -> ([Entry], [Actor]) {
+        let t0 = Date()
         let ph = "(" + pids.map { _ in "?" }.joined(separator: ",") + ")"
         let rows: [(MediaKind, String, String, String, Int, Double)] = await Database.shared.read { db in
             var out: [(MediaKind, String, String, String, Int, Double)] = []
@@ -125,13 +151,14 @@ actor SearchIndex {
             return out
         }
         var amap: [String: Actor] = [:]
+        let dec = JSONDecoder()
         for (kind, ckey, genres, runtime, director, cast, year, vote) in fiches {
             guard let i = byKey[kind + "|" + ckey] else { continue }
             list[i].genres = SearchText.norm(genres)
             list[i].runtime = runtime
             if !director.isEmpty { list[i].director = director; list[i].dirWords = SearchText.words(director).map(Array.init) }
             if vote > 0 { list[i].rating = vote }
-            if let d = cast.data(using: .utf8), let cs = try? JSONDecoder().decode([CastMember].self, from: d) {
+            if let d = cast.data(using: .utf8), let cs = try? dec.decode([CastMember].self, from: d) {
                 for m in cs.prefix(8) where !m.n.isEmpty {
                     let n = SearchText.norm(m.n)
                     if amap[n] == nil { amap[n] = Actor(name: m.n, photo: m.p, words: SearchText.words(m.n).map(Array.init), titles: []) }
@@ -139,9 +166,9 @@ actor SearchIndex {
                 }
             }
         }
-        entries = list
-        actors = Array(amap.values)
-        stamp = st
+        let ms = Int(Date().timeIntervalSince(t0) * 1000)
+        PerfLog.ev("Index de recherche : \(list.count) titres, \(amap.count) acteurs, \(fiches.count) fiches · \(ms) ms")
+        return (list, Array(amap.values))
     }
 
     struct Result {
