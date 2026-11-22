@@ -212,6 +212,17 @@ enum MediaStore {
         }
     }
 
+    /// Nombre de titres (sans dédoublonnage des versions) : bandeau « Cette nuit » (lot 4)
+    static func count(_ k: MediaKind, pids: [String], where cond: String, args: [Any?] = []) async -> Int {
+        guard !pids.isEmpty else { return 0 }
+        let sql = "SELECT COUNT(DISTINCT name) FROM \(table(k)) WHERE pid IN \(inList(pids)) AND \(cond)"
+        return await Database.shared.read { db in
+            var n = 0
+            db.query(sql, pids + args) { r in n = r.int(0) }
+            return n
+        }
+    }
+
     /// Titres choisis d'après leur fiche TMDB (collections « Moins de 2 h », « ★ 8 et plus », une saga…).
     /// `extra` : valeurs des « ? » de `order`
     static func ficheList(_ k: MediaKind, pids: [String], cond: String, args: [Any?] = [], order: String, limit: Int, extra: [Any?] = []) async -> [MediaItem] {

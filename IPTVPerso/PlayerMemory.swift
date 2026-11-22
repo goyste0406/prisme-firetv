@@ -172,6 +172,15 @@ enum WatchJournal {
         if Debug.demoServer != nil { await MainActor.run { DataCount.write("journal [\(profile)] : séances de \(item) retirées") } }
     }
 
+    /// temps regardé (secondes) depuis une date : bandeau du dimanche (lot 4)
+    static func seconds(profile: String, since: Date) async -> Int {
+        await Database.shared.read { db in
+            var n = 0
+            db.query("SELECT COALESCE(SUM(seconds),0) FROM journal WHERE profile=? AND at>=?", [profile, Int(since.timeIntervalSince1970)]) { r in n = r.int(0) }
+            return n
+        }
+    }
+
     static func sessions(profile: String, since: Date) async -> [Session] {
         await Database.shared.read { db in
             var out: [Session] = []

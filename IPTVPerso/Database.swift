@@ -130,6 +130,12 @@ final class Database: @unchecked Sendable {
             exec("CREATE INDEX IF NOT EXISTS journal_p ON journal(profile,at)")
             exec("PRAGMA user_version=11")
         }
+        if v < 12 {
+            // 1.8 (lot 4) : état TMDB d'une série (terminée ou non), pour « Séries à finir ce week-end ». Colonne ajoutée,
+            // remplie en arrière-plan ; rien d'autre ne change.
+            exec("ALTER TABLE fiche ADD COLUMN status TEXT")
+            exec("PRAGMA user_version=12")
+        }
     }
 
     // MARK: Requêtes

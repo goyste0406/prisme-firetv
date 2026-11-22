@@ -293,6 +293,24 @@ actor SearchIndex {
         return (list, Array(amap.values))
     }
 
+    /// Titres exacts (lettres et chiffres, sans espaces) → identifiant, pour « Ce soir à la télé » (lot 4).
+    /// Seulement avec l'index complet (titres nettoyés) ; vide tant qu'il se prépare.
+    private var exactMemo: (stamp: String, kind: MediaKind, map: [String: String])?
+    func exactTitles(_ kind: MediaKind) -> [String: String] {
+        guard base != nil, !stamp.hasSuffix("|rapide") else { return [:] }
+        if let m = exactMemo, m.stamp == stamp, m.kind == kind { return m.map }
+        var map: [String: (String, Double)] = [:]
+        for e in entries where e.kind == kind {
+            let w = TitleTools.fold(e.title).replacingOccurrences(of: " ", with: "")
+            guard w.count >= 3 else { continue }
+            if let o = map[w], o.1 >= e.rating { continue }
+            map[w] = (e.id, e.rating)
+        }
+        let out = map.mapValues(\.0)
+        exactMemo = (stamp, kind, out)
+        return out
+    }
+
     /// chaînes et programmes en cours qui répondent à la recherche (mots calculés une fois par liste)
     private var liveSig = ""
     private var liveWords: [([SearchText.Word], [SearchText.Word])] = []

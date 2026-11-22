@@ -652,6 +652,7 @@ struct MineView: View {
                                  minutes: minutes, isNew: isNew, info: meta[id], two: two, prog: prog, started: started || prog > 0))
         }
         entries = out; gone = lost
+        MineGoneLog.note(lost.map { ($0.id, $0.title) })   // lot 4 : leur retour sera annoncé par « Cette nuit »
         week = await MineWeekData.load(profile: pid)
         loaded = true
         DataCount.write("ma liste [\(pid)] : \(out.count) titres, \(lost.count) plus disponibles · envies " + MineMood.all.map { m in "\(m.id)=\(out.filter { $0.moods.contains(m.id) }.count)" }.joined(separator: " ")

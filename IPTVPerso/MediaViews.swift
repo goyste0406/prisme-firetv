@@ -93,7 +93,13 @@ struct MediaHomeView: View {
     @ObservedObject var watch = WatchStore.shared
     @ObservedObject var fiches = FicheService.shared
     @State private var snap = HomeSnap()
-    @State private var hero: [MediaItem] = []
+    @State private var slides: [HeroSlide] = []
+    @State private var openPlay: MediaItem?
+    @State private var liveLaunch: LiveLaunch?
+    @State private var trailer: Trailer?
+    @State private var trailerTitle = ""
+    @State private var alertTick = 0
+    @State private var slidesBusy = false
     @State private var resume: [ResumeEntry] = []
     @State private var mine: [MediaItem] = []
     @State private var open: MediaItem?
@@ -167,6 +173,9 @@ struct MediaHomeView: View {
         // à l'ouverture de la page, et en descendant depuis la barre : la grande affiche et son bouton
         .defaultFocus($heroFocus, true)
         .navigationDestination(item: $open) { it in DetailView(item: it) }
+        .navigationDestination(item: $openPlay) { it in DetailView(item: it, autoPlay: true) }
+        .fullScreenCover(item: $liveLaunch) { l in LivePlayerView(channels: [l.ch], start: 0) }
+        .fullScreenCover(item: $trailer) { t in TrailerScreen(trailer: t, title: trailerTitle, playFilm: nil) }
         .navigationDestination(item: $openCat) { c in CategoryGridView(kind: kind, cat: c) }
         .navigationDestination(item: $openColl) { c in
             CollectionGridView(kicker: (kind == .film ? "FILMS · " : "SÉRIES · ") + c.kind.uppercased(), title: c.name, why: c.why, loader: c.loader)
@@ -196,7 +205,7 @@ struct MediaHomeView: View {
             // la grande affiche change toutes les 8 s, sauf quand son bouton est sélectionné
             while !Task.isCancelled {
                 try? await Task.sleep(nanoseconds: 8_000_000_000)
-                if hero.count > 1 && !heroFocus { withAnimation(.easeInOut(duration: 0.7)) { heroIndex += 1 } }
+                if slides.count > 1 && !heroFocus { withAnimation(.easeInOut(duration: 0.7)) { heroIndex += 1 } }
             }
         }
     }
@@ -204,14 +213,76 @@ struct MediaHomeView: View {
     // MARK: grande affiche
 
     @ViewBuilder private var heroBlock: some View {
-        if !hero.isEmpty {
-            let h = hero[heroIndex % hero.count]
-            HeroView(item: h, index: heroIndex % hero.count, count: hero.count, provider: store.provider(h.pid)?.name ?? "",
-                     focus: $heroFocus,
-                     play: { info in play(h, info) }, info: { open = h },
-                     step: { d in withAnimation(.easeInOut(duration: 0.45)) { heroIndex = (heroIndex + d + hero.count) % hero.count } })
+        if !slides.isEmpty {
+            let i = heroIndex % slides.count, sl = slides[i]
+            let step: (Int) -> Void = { d in withAnimation(.easeInOut(duration: 0.45)) { heroIndex = (heroIndex + d + slides.count) % slides.count } }
+            Group {
+                if let h = sl.item {
+                    HeroView(item: h, index: i, count: slides.count, provider: store.provider(h.pid)?.name ?? "",
+                             focus: $heroFocus,
+                             play: { info in play(h, info) }, info: { open = h },
+                             step: step, slide: sl, alts: alts(sl))
+                } else {
+                    PanelHeroView(s: sl, index: i, count: slides.count, alertOn: sl.soon.map { _ = alertTick; return FilmAlerts.has($0.tmdb) } ?? false, focus: $heroFocus, primary: { primary(sl) }, alts: alts(sl), step: step)
+                }
+            }
+            .id(sl.id)
+            .transition(.opacity)
         } else {
             Color.clear.frame(height: 260)
+        }
+    }
+
+    /// bouton blanc des diapositives de collection et de « Bientôt chez toi »
+    private func primary(_ sl: HeroSlide) {
+        if let so = sl.soon {
+            let on = FilmAlerts.toggle(so.tmdb, title: so.title)
+            AppToast.shared.say(on ? "🔔 Tu seras prévenu dès qu'il arrive chez ton fournisseur" : "Alerte retirée")
+            alertTick += 1   // rafraîchit le libellé
+        } else if let nx = sl.next { openPlay = nx }
+        else if let c = sl.coll { openColl = c }
+    }
+
+    /// choix « OK maintenu » de chaque diapositive (simulateur : les boutons après le premier)
+    private func alts(_ sl: HeroSlide) -> [(String, () -> Void)] {
+        switch sl.k {
+        case .arr: return []
+        case .rep: return [("Voir la fiche", { if let it = sl.item { open = it } })]
+        case .tv:
+            guard let a = sl.airing, let it = sl.item else { return [] }
+            let live = a.p.start <= Int(Date().timeIntervalSince1970)
+            let ch = ChannelTools.clean(a.ch.name)
+            let first: (String, () -> Void) = live
+                ? ("📺 Regarder sur " + ch, { liveLaunch = LiveLaunch(ch: a.ch) })
+                : ("📺 Me rappeler à " + Fmt.hm(a.p.startDate), {
+                    TVReminders.add(.init(chID: a.ch.id, chName: ch, start: a.p.start, title: a.p.title))
+                    AppToast.shared.say("⏰ Rappel programmé : " + ch + ", " + Fmt.hm(a.p.startDate))
+                })
+            return [first, ("Voir la fiche", { open = it })]
+        case .mom:
+            var L: [(String, () -> Void)] = [(kind == .film ? "🎲 Un au hasard" : "🎲 Une au hasard", {
+                guard let f = sl.pool.randomElement() else { return }
+                AppToast.shared.say("🎲 " + f.displayTitle)
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { open = f }
+            })]
+            if sl.duo, let (a, b) = HeroSlides.duoPair() {
+                L.append((ps.isDuo ? "👥 Mode à deux activé" : "👥 Passer en mode à deux", {
+                    if ps.isDuo { ps.endDuo() } else { ps.useDuo(a.id, b.id) }
+                    AppToast.shared.say(ps.isDuo ? "👥 Mode à deux : " + ps.watchersName : "Mode à deux terminé")
+                }))
+            }
+            return L
+        case .hon:
+            guard let c = sl.coll else { return [] }
+            return [(sl.collLabel, { openColl = c })]
+        case .soon:
+            guard let so = sl.soon else { return [] }
+            return [("▶ Bande-annonce", {
+                Task {
+                    if let t = await TrailerStore.find(title: so.title, year: so.year, minutes: 0, tmdb: so.tmdb, tv: false) { trailerTitle = so.title; trailer = t }
+                    else { AppToast.shared.say("Pas de bande-annonce trouvée pour « \(so.title) »") }
+                }
+            })]
         }
     }
 
@@ -444,6 +515,7 @@ struct MediaHomeView: View {
         snap = s
         pickHero(s)
         let t1 = Date(), q1 = Database.queryCount
+        Task { await buildSlides(s) }   // la grande affiche se complète sans retarder les rangées
         await loadResume()
         s.colls = await collections(k, p)
         let tg = Date(), qg = Database.queryCount
@@ -474,10 +546,25 @@ struct MediaHomeView: View {
         return (Date().timeIntervalSince(t), Database.queryCount - q)
     }
 
+    /// affichage immédiat : l'ajout le plus récent, en attendant les diapositives (lot 4)
     private func pickHero(_ s: HomeSnap) {
+        guard slides.isEmpty else { return }
         let withArt = s.newest.filter { !$0.backdropURL.isEmpty }
-        let base = withArt.count >= 3 ? withArt : (s.newest.isEmpty ? s.tonight : s.newest)
-        hero = Array(base.filter { !$0.posterURL.isEmpty || !$0.backdropURL.isEmpty }.prefix(6))
+        if let a = withArt.first ?? s.newest.first ?? s.tonight.first { slides = [HeroSlide(k: .arr, item: a, tag: "✦ L'ARRIVÉE DE LA SEMAINE")] }
+    }
+
+    /// Diapositives du simulateur : télé, arrivée, le moment, à l'honneur, bientôt chez toi.
+    private func buildSlides(_ s: HomeSnap) async {
+        guard !slidesBusy else { return }
+        slidesBusy = true
+        defer { slidesBusy = false }
+        await SearchIndex.shared.ensure(pids: pids, catalog: store.catalogVersion, fiches: fiches.version)
+        let L = await HeroSlides.build(kind: kind, pids: pids, newest: s.newest)
+        guard !Task.isCancelled else { return }
+        if L.isEmpty { pickHero(s); return }
+        let cur = slides.isEmpty ? nil : slides[heroIndex % slides.count].k
+        slides = L
+        heroIndex = cur.flatMap { k in L.firstIndex { $0.k == k } } ?? 0
     }
 
     /// « Explorer » : collections tirées des vraies données (fiches TMDB) ; une collection n'apparaît que si elle
@@ -669,6 +756,9 @@ struct HeroView: View {
     let play: (MediaInfo) -> Void
     let info: () -> Void
     let step: (Int) -> Void
+    /// lot 4 : diapositive (télé, on reprend…) et choix « OK maintenu » ; sans elle, l'affiche « arrivée » d'avant
+    var slide: HeroSlide? = nil
+    var alts: [(String, () -> Void)] = []
     @ObservedObject var watch = WatchStore.shared
     @State private var mi = MediaInfo()
     @State private var miFor = ""
@@ -715,11 +805,17 @@ struct HeroView: View {
         let c = item.clean
         let f = item.fiche
         return VStack(alignment: .leading, spacing: 16) {
-            Kicker(text: (agoDays ?? 99) <= 7 ? "L'arrivée de la semaine" : (item.kind == .film ? "Nouveau dans prisme" : "Nouvelle série"))
+            if let sl = slide, sl.k != .arr { SlideTag(text: sl.tag, k: sl.k) }
+            else { Kicker(text: (agoDays ?? 99) <= 7 ? "L'arrivée de la semaine" : (item.kind == .film ? "Nouveau dans prisme" : "Nouvelle série")) }
             Text(item.displayTitle).font(P.font(item.kind == .series ? 84 : 72, item.kind == .series ? .heavy : .bold)).lineLimit(2).minimumScaleFactor(0.7).frame(maxWidth: 1150, alignment: .leading)
             HStack(spacing: 18) {
-                if !provider.isEmpty { Pill(text: provider, bg: P.chip.opacity(0.45), stroke: P.chip) }
-                if let a = agoText(item.added) { Text(a) }
+                if let a = slide?.airing {
+                    Pill(text: ChannelTools.clean(a.ch.name), bg: Color(red: 31 / 255, green: 95 / 255, blue: 214 / 255).opacity(0.45), stroke: Color(red: 0.4, green: 0.6, blue: 1))
+                    Text(airWhen(a))
+                } else {
+                    if !provider.isEmpty { Pill(text: provider, bg: P.chip.opacity(0.45), stroke: P.chip) }
+                    if slide?.k != .rep, let a = agoText(item.added) { Text(a) }
+                }
                 let y = (f?.year ?? 0) > 0 ? f!.year : c.year
                 if y > 0 && item.kind == .film { Text(String(y)) }
                 if item.kind == .film, minutes > 0 { Text(runtimeText(minutes)) }
@@ -729,23 +825,60 @@ struct HeroView: View {
                 if !c.tags.isEmpty { Pill(text: c.tags.joined(separator: " · "), bg: .clear) }
             }
             .font(P.font(25, .medium)).foregroundStyle(P.dim)
-            Text(subLine).font(P.font(25)).foregroundStyle(.white.opacity(0.8)).lineLimit(2).frame(maxWidth: 980, alignment: .leading)
-            Button { play(details) } label: { PlayLabel(title: playTitle, sub: playSub) }
+            subView.font(P.font(25)).foregroundStyle(.white.opacity(0.8)).lineLimit(2).frame(maxWidth: 980, alignment: .leading)
+            Button { play(details) } label: { PlayLabel(title: slide?.airing != nil ? "Sans pub, maintenant" : playTitle, sub: slide?.airing != nil ? tvSub : playSub) }
                 .buttonStyle(PrimaryStyle())
                 .focused(focus)
                 .contextMenu {
-                    Button { info() } label: { Label("Voir la fiche", systemImage: "info.circle") }
-                    Button { watch.toggleFavorite(item.id, item: item, from: "depuis l'accueil") } label: {
-                        Label(watch.favorites.contains(item.id) ? "Retirer de ma liste" : "Ajouter à ma liste", systemImage: watch.favorites.contains(item.id) ? "checkmark" : "plus")
+                    if !alts.isEmpty {
+                        ForEach(0..<alts.count, id: \.self) { i in Button(alts[i].0) { alts[i].1() } }
+                    } else {
+                        Button { info() } label: { Label("Voir la fiche", systemImage: "info.circle") }
+                        Button { watch.toggleFavorite(item.id, item: item, from: "depuis l'accueil") } label: {
+                            Label(watch.favorites.contains(item.id) ? "Retirer de ma liste" : "Ajouter à ma liste", systemImage: watch.favorites.contains(item.id) ? "checkmark" : "plus")
+                        }
                     }
                 }
+                .accessibilityIdentifier("hero-b0")
                 .onMoveCommand { d in
                     if d == .left { step(-1) } else if d == .right { step(1) }
                 }
                 .padding(.top, 8)
-            Text("OK maintenu : voir la fiche · " + (watch.favorites.contains(item.id) ? "retirer de ma liste" : "ajouter à ma liste") + (count > 1 ? " · ‹ › autre titre" : ""))
+            Text(alts.isEmpty ? "OK maintenu : voir la fiche · " + (watch.favorites.contains(item.id) ? "retirer de ma liste" : "ajouter à ma liste") + (count > 1 ? " · ‹ › autre titre" : "")
+                              : "OK maintenu : " + alts.map(\.0).joined(separator: " · ") + (count > 1 ? " · ‹ › autre affiche" : ""))
                 .font(P.font(19)).foregroundStyle(P.faint)
         }
+    }
+
+    /// « en direct · depuis 20:45 », « ce soir 21:00 », « cette nuit 00:30 »
+    private func airWhen(_ a: LiveStore.Airing) -> String {
+        let now = Int(Date().timeIntervalSince1970)
+        if a.p.start <= now { return item.kind == .series ? "en direct" : "en direct · depuis " + Fmt.hm(a.p.startDate) }
+        let h = Calendar.current.component(.hour, from: a.p.startDate)
+        let sameDay = Calendar.current.isDate(a.p.startDate, inSameDayAs: Date())
+        return (sameDay && h >= 5 ? "ce soir " : "cette nuit ") + Fmt.hm(a.p.startDate)
+    }
+
+    /// simulateur : « À regarder en direct, ou dès maintenant sans pub chez ton fournisseur. »
+    private var subView: Text {
+        if let a = slide?.airing {
+            if item.kind == .series {
+                return Text("À la télé " + (a.p.start <= Int(Date().timeIntervalSince1970) ? "en ce moment" : airWhen(a)) + ", ou dès maintenant sans pub, à ton rythme")
+            }
+            return Text("À regarder en direct, ou dès maintenant ") + Text("sans pub").bold() + Text(" chez ton fournisseur.")
+        }
+        return Text(subLine)
+    }
+
+    private var tvSub: String? {
+        if item.kind == .series {
+            let m = item.fiche?.runtime ?? 0
+            return ("S1 · É1" + (m > 0 ? " · " + runtimeText(m) : "")).uppercased()
+        }
+        let q = item.clean.tags.joined(separator: " · ")
+        let end = minutes > 0 ? "FIN " + Fmt.hm(Date().addingTimeInterval(Double(minutes * 60))) : ""
+        let s = [q.isEmpty ? "CHEZ TON FOURNISSEUR" : q.uppercased(), end].filter { !$0.isEmpty }.joined(separator: " · ")
+        return s
     }
 
     private var seasonLine: String {
@@ -1012,6 +1145,9 @@ struct CategoryGridView: View {
         .background(PrismeBackground())
         .ignoresSafeArea()
         .navigationDestination(item: $open) { it in DetailView(item: it) }
+        .navigationDestination(item: $openPlay) { it in DetailView(item: it, autoPlay: true) }
+        .fullScreenCover(item: $liveLaunch) { l in LivePlayerView(channels: [l.ch], start: 0) }
+        .fullScreenCover(item: $trailer) { t in TrailerScreen(trailer: t, title: trailerTitle, playFilm: nil) }
         .task { await more() }
     }
 

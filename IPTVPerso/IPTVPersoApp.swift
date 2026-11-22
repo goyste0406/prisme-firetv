@@ -42,6 +42,11 @@ struct MainTabView: View {
     @State private var resumeOpen: MediaItem?
     @State private var asked = false
     @State private var diag = ""
+    /// lot 4 : bandeau « Cette nuit » et rappels TV
+    @State private var night: String?
+    @State private var reminder: TVReminders.R?
+    @State private var reminderLive: LiveLaunch?
+    @FocusState private var reminderFocus: Bool
 
     var body: some View {
         NavigationStack {
@@ -95,6 +100,54 @@ struct MainTabView: View {
                 TasteTestView(pid: t, close: { pui.taste = nil }).focusSection().transition(.opacity)
             }
         }
+        .overlay(alignment: .top) {
+            // simulateur .mn-night : pilule en haut au centre, 6,5 s, puis s'efface
+            if let n = night { NightPill(text: n).padding(.top, 126).transition(.opacity).allowsHitTesting(false) }
+        }
+        .overlay { AppToastView() }
+        .overlay(alignment: .bottom) {
+            // rappel TV arrivé à son heure (prisme ouvert) : le lancer ou fermer
+            if let r = reminder {
+                HStack(spacing: 24) {
+                    Text("⏰ " + r.title + " · " + r.chName + " · " + Fmt.hm(Date(timeIntervalSince1970: TimeInterval(r.start)))).font(P.font(27, .semibold)).lineLimit(1)
+                    Button { openReminder(r) } label: { Text("▶ Regarder").font(P.font(25, .semibold)) }
+                        .buttonStyle(PrimaryStyle()).focused($reminderFocus).accessibilityIdentifier("rappel-regarder")
+                    Button { reminder = nil } label: { Text("Fermer").font(P.font(25, .semibold)) }
+                        .accessibilityIdentifier("rappel-fermer")
+                }
+                .padding(.horizontal, 36).padding(.vertical, 22)
+                .background(RoundedRectangle(cornerRadius: 24, style: .continuous).fill(.ultraThinMaterial)
+                    .overlay(RoundedRectangle(cornerRadius: 24, style: .continuous).stroke(Color.white.opacity(0.12), lineWidth: 1.5)))
+                .environment(\.colorScheme, .dark)
+                .padding(.bottom, 60)
+                .focusSection()
+                .onExitCommand { reminder = nil }
+                .accessibilityIdentifier("rappel-tv")
+                .transition(.opacity)
+            }
+        }
+        .fullScreenCover(item: $reminderLive) { l in LivePlayerView(channels: [l.ch], start: 0) }
+        .task(id: "\(profiles.current)|\(pui.launch)") {
+            // « Cette nuit » : une fois par jour et par profil, après le choix du profil
+            guard !pui.launch, !store.providers.isEmpty else { return }
+            try? await Task.sleep(nanoseconds: 1_200_000_000)
+            guard !Task.isCancelled, let m = await NightBanner.message(pids: store.active.map(\.id)) else { return }
+            DataCount.write("cette nuit : " + m.text)
+            withAnimation(.easeOut(duration: 0.4)) { night = m.text }
+            try? await Task.sleep(nanoseconds: 6_500_000_000)
+            withAnimation(.easeOut(duration: 0.7)) { night = nil }
+        }
+        .task(id: profiles.current) {
+            // rappels TV : vérifiés toutes les 20 s (et au lancement, pour un rappel manqué)
+            while !Task.isCancelled {
+                if reminder == nil, let r = TVReminders.due().first {
+                    DataCount.write("rappel TV affiché : " + r.title)
+                    withAnimation { reminder = r }
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { reminderFocus = true }
+                }
+                try? await Task.sleep(nanoseconds: 20_000_000_000)
+            }
+        }
         .animation(.easeOut(duration: 0.2), value: pui.picker)
         .animation(.easeOut(duration: 0.3), value: pui.launch)
         .animation(.easeOut(duration: 0.3), value: pui.taste)
@@ -125,6 +178,16 @@ struct MainTabView: View {
                 }
                 try? await Task.sleep(nanoseconds: 1_000_000_000)
             }
+        }
+    }
+}
+
+extension MainTabView {
+    fileprivate func openReminder(_ r: TVReminders.R) {
+        reminder = nil
+        Task {
+            if let ch = await LiveIndex.resolve(ids: [r.chID]).first { reminderLive = LiveLaunch(ch: ch) }
+            else { AppToast.shared.say("Cette chaîne n'est plus chez ton fournisseur") }
         }
     }
 }

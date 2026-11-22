@@ -65,6 +65,10 @@ struct Fiche: Hashable {
     var pop = 0.0
     /// langue d'origine TMDB (« fr », « en », « ja »…), '' inconnue
     var olang = ""
+    /// 1.8 lot 4 — état TMDB d'une série (« Ended », « Canceled », « Returning Series »…), '' inconnu ou film
+    var status = ""
+    /// série terminée (TMDB : « Ended » ou « Canceled ») — jamais deviné : inconnu = pas terminée
+    var ended: Bool { status == "Ended" || status == "Canceled" }
     /// date de sortie la plus récente connue (cinéma, VOD, nouvelle saison) ; nil si aucune : jamais présenté comme récent
     var latestRelease: Date? {
         [relFR, relVOD, lastAir].compactMap { $0.isEmpty ? nil : Fiche.dayFormat.date(from: $0) }.filter { $0 <= Date() }.max()
@@ -89,12 +93,12 @@ enum FicheStore {
         return Fiche(tmdb: r.int(0), title: r.str(1), overview: r.str(2), poster: r.str(3), backdrop: r.str(4), genres: r.str(5),
                      runtime: r.int(6), vote: r.double(7), year: r.int(8), coll: r.int(9), collName: r.str(12), cast: cast, wp: wp,
                      pid: r.str(13), sid: r.str(14), country: r.str(15), director: r.str(16), logo: r.str(17), companies: r.str(18), cert: r.str(19), keywords: r.str(20),
-                     relFR: r.str(21), relVOD: r.str(22), lastAir: r.str(23), nextEp: r.str(24), seasons: r.int(25), pop: r.double(26), olang: r.str(27))
+                     relFR: r.str(21), relVOD: r.str(22), lastAir: r.str(23), nextEp: r.str(24), seasons: r.int(25), pop: r.double(26), olang: r.str(27), status: r.str(28))
     }
     /// « cast » est un mot réservé de SQLite (CAST) : sans guillemets, la lecture des fiches échouait toujours
     /// (elles étaient bien téléchargées et enregistrées, mais jamais relues → fiches, saga, « Où le regarder » vides).
-    static let cols = "tmdb,title,overview,poster,backdrop,genres,runtime,vote,year,coll,\"cast\",wp,collname,pid,sid,country,director,logo,companies,cert,keywords,relfr,relvod,lastair,nextep,seasons,pop,olang"
-    static let ncols = 28
+    static let cols = "tmdb,title,overview,poster,backdrop,genres,runtime,vote,year,coll,\"cast\",wp,collname,pid,sid,country,director,logo,companies,cert,keywords,relfr,relvod,lastair,nextep,seasons,pop,olang,status"
+    static let ncols = 29
 
     /// Fiches de plusieurs titres d'un coup (clé = titre propre + année).
     static func byKeys(_ kind: MediaKind, _ keys: [String]) -> [String: Fiche] {
@@ -257,7 +261,7 @@ struct FicheWorker {
         for kind in [MediaKind.film, .series] {
             let todo: [(String, Int)] = await Database.shared.read { db in
                 var out: [(String, Int)] = []
-                db.query("SELECT ckey, tmdb FROM fiche WHERE kind=? AND (pop IS NULL OR olang IS NULL) AND tmdb>0 ORDER BY vote DESC", [kind.rawValue]) { r in out.append((r.str(0), r.int(1))) }
+                db.query("SELECT ckey, tmdb FROM fiche WHERE kind=? AND (pop IS NULL OR olang IS NULL OR (kind='series' AND status IS NULL)) AND tmdb>0 ORDER BY vote DESC", [kind.rawValue]) { r in out.append((r.str(0), r.int(1))) }
                 return out
             }
             var i = 0
@@ -282,7 +286,7 @@ struct FicheWorker {
                 }
                 await Database.shared.read { db in
                     db.exec("BEGIN")
-                    for r in rows { db.run("UPDATE fiche SET relfr=?, relvod=?, lastair=?, nextep=?, seasons=?, pop=?, olang=? WHERE kind=? AND ckey=?", r) }
+                    for r in rows { db.run("UPDATE fiche SET relfr=?, relvod=?, lastair=?, nextep=?, seasons=?, pop=?, olang=?, status=? WHERE kind=? AND ckey=?", r) }
                     db.exec("COMMIT")
                 }
                 if !rows.isEmpty { await MainActor.run { FicheService.shared.version += 1 } }
@@ -444,7 +448,7 @@ struct FicheWorker {
         if tv {
             let next = ((d["next_episode_to_air"] as? [String: Any])?["air_date"] as? String) ?? ""
             let last = ((d["last_episode_to_air"] as? [String: Any])?["air_date"] as? String) ?? ((d["last_air_date"] as? String) ?? "")
-            return ["", "", last, next, (d["number_of_seasons"] as? Int) ?? 0, pop, (d["original_language"] as? String) ?? ""]
+            return ["", "", last, next, (d["number_of_seasons"] as? Int) ?? 0, pop, (d["original_language"] as? String) ?? "", (d["status"] as? String) ?? ""]
         }
         var theatre: [String] = [], digital: [String] = []
         for r in ((d["release_dates"] as? [String: Any])?["results"] as? [[String: Any]]) ?? [] where (r["iso_3166_1"] as? String) == "FR" {
@@ -459,7 +463,7 @@ struct FicheWorker {
         }
         // sans date française : la sortie mondiale de TMDB (champ release_date) tient lieu de sortie cinéma
         let world = (d["release_date"] as? String) ?? ""
-        return [theatre.min() ?? (world.count == 10 ? world : ""), digital.min() ?? "", "", "", 0, pop, (d["original_language"] as? String) ?? ""]
+        return [theatre.min() ?? (world.count == 10 ? world : ""), digital.min() ?? "", "", "", 0, pop, (d["original_language"] as? String) ?? "", ""]
     }
 }
 
