@@ -398,7 +398,9 @@ struct SearchView: View {
         let t0 = Date()
         await SearchIndex.shared.ensure(pids: pids, catalog: store.catalogVersion, fiches: fiches.version)
         let now = MineLogic.eveningNow()
+        let t1 = Date()
         let r = await SearchIndex.shared.search(q, bed: profiles.bedMinutes, now: now)
+        let msEngine = Int(Date().timeIntervalSince(t1) * 1000)
         if Task.isCancelled { return }
         let ids = Array(Set(r.films + r.series + r.asked))
         let got = await MediaStore.items(ids: ids)
@@ -422,7 +424,7 @@ struct SearchView: View {
         items = Dictionary(got.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
         res = r; liveHits = hits; ready = true
         let ms = Int(Date().timeIntervalSince(t0) * 1000)
-        PerfLog.ev("Recherche « \(q) » : \(ms) ms · \(r.films.count) films, \(r.series.count) séries, \(hits.count) TV")
+        PerfLog.ev("Recherche « \(q) » : \(ms) ms (moteur \(msEngine) ms) · \(r.films.count) films, \(r.series.count) séries, \(hits.count) TV")
         DataCount.write("recherche « \(q) » : \(r.films.count) films, \(r.series.count) séries, \(hits.count) TV, \(r.actors.count) acteurs"
                         + (r.fuzzy ? ", orthographe proche" : "") + (r.why.isEmpty ? "" : ", phrase : " + r.why.joined(separator: ", ") + " (\(r.asked.count))") + " · \(ms) ms")
     }

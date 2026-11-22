@@ -349,27 +349,35 @@ actor SearchIndex {
         let q = q0.trimmingCharacters(in: .whitespaces)
         let Q = SearchText.keys(q)
         guard !Q.isEmpty else { return r }
-        var sc: [(Int, Double, Bool)] = [], ne = 0, nf = 0
-        for (i, e) in entries.enumerated() {
+        // on ne garde que les 40 meilleurs films et les 40 meilleures séries (pas de tri de toute la liste)
+        typealias Cand = (m: Double, y: Int, r: Double, i: Int)
+        func better(_ a: Cand, _ b: Cand) -> Bool { a.m != b.m ? a.m > b.m : (a.y != b.y ? a.y > b.y : a.r > b.r) }
+        func push(_ t: inout [Cand], _ c: Cand) {
+            if t.count == 40 { if !better(c, t[39]) { return }; t.removeLast() }
+            t.insert(c, at: t.firstIndex { better(c, $0) } ?? t.count)
+        }
+        var topF: [Cand] = [], topS: [Cand] = [], best = 0.0, ne = 0, nf = 0
+        let ents = entries
+        for i in ents.indices {
+            let e = ents[i]
             let a = SearchText.score(Q, e.words)
             let b = e.dirWords.isEmpty ? nil : SearchText.score(Q, e.dirWords)
             let m = max(a?.s ?? 0, (b?.s ?? 0) * 0.7)
             guard m > 0 else { continue }
             let fz = (a != nil && a!.fuz && a!.s == m) || (a == nil && b!.fuz)
-            sc.append((i, m, fz))
             if fz { nf += 1 } else { ne += 1 }
+            best = max(best, m)
+            if e.kind == .film { push(&topF, (m, e.year, e.rating, i)) } else { push(&topS, (m, e.year, e.rating, i)) }
         }
-        sc.sort { x, y in x.1 != y.1 ? x.1 > y.1 : (entries[x.0].year, entries[x.0].rating) > (entries[y.0].year, entries[y.0].rating) }
-        for (i, _, _) in sc {
-            let e = entries[i]
-            if e.kind == .film { if r.films.count < 40 { r.films.append(e.id) } } else if r.series.count < 40 { r.series.append(e.id) }
-        }
+        r.films = topF.map { ents[$0.i].id }
+        r.series = topS.map { ents[$0.i].id }
+        let titleHits = ne + nf
         var A: [(Actor, Double, Bool)] = []
         for a in actors { if let s = SearchText.score(Q, a.words), s.s >= 1.4 { A.append((a, s.s, s.fuz)); if s.fuz { nf += 1 } else { ne += 1 } } }
         r.actors = A.sorted { $0.1 != $1.1 ? $0.1 > $1.1 : $0.0.titles.count > $1.0.titles.count }.prefix(12).map(\.0)
         r.fuzzy = nf > 0 && ne == 0
         // phrase : seulement si les titres ne répondent pas déjà très bien (simulateur)
-        if let f = parse(q), sc.isEmpty || (sc.first?.1 ?? 0) < 2.5 || !f.genres.isEmpty || f.decade != nil || f.short || f.live || f.tonight || f.kids {
+        if let f = parse(q), titleHits == 0 || best < 2.5 || !f.genres.isEmpty || f.decade != nil || f.short || f.live || f.tonight || f.kids {
             r.ask = f
             if !f.live {
                 var L = entries
