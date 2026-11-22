@@ -100,6 +100,8 @@ struct MediaHomeView: View {
     @State private var trailerTitle = ""
     @State private var alertTick = 0
     @State private var slidesBusy = false
+    /// dernière action sur la grande affiche : pas de défilement automatique juste après (menu « OK maintenu » ouvert…)
+    @State private var heroTouched = Date.distantPast
     @State private var resume: [ResumeEntry] = []
     @State private var mine: [MediaItem] = []
     @State private var open: MediaItem?
@@ -205,7 +207,7 @@ struct MediaHomeView: View {
             // la grande affiche change toutes les 8 s, sauf quand son bouton est sélectionné
             while !Task.isCancelled {
                 try? await Task.sleep(nanoseconds: 8_000_000_000)
-                if slides.count > 1 && !heroFocus { withAnimation(.easeInOut(duration: 0.7)) { heroIndex += 1 } }
+                if slides.count > 1 && !heroFocus && Date().timeIntervalSince(heroTouched) > 12 { withAnimation(.easeInOut(duration: 0.7)) { heroIndex += 1 } }
             }
         }
     }
@@ -224,13 +226,14 @@ struct MediaHomeView: View {
                     HeroView(item: h, index: i, count: slides.count, provider: store.provider(h.pid)?.name ?? "",
                              focus: $heroFocus,
                              play: { info in play(h, info) }, info: { open = h },
-                             step: step, slide: sl, alts: alts(sl))
+                             step: step, slide: sl, alts: wrapped(sl))
                 } else {
-                    PanelHeroView(s: sl, index: i, count: slides.count, alertOn: sl.soon.map { _ = alertTick; return FilmAlerts.has($0.tmdb) } ?? false, focus: $heroFocus, primary: { primary(sl) }, alts: alts(sl), step: step)
+                    PanelHeroView(s: sl, index: i, count: slides.count, alertOn: sl.soon.map { _ = alertTick; return FilmAlerts.has($0.tmdb) } ?? false, focus: $heroFocus, primary: { primary(sl) }, alts: wrapped(sl), step: step)
                 }
             }
             .id(sl.id)
             .transition(.opacity)
+            .onChange(of: heroFocus) { _, _ in heroTouched = Date() }
         } else {
             Color.clear.frame(height: 260)
         }
@@ -238,6 +241,7 @@ struct MediaHomeView: View {
 
     /// la diapositive change de vue : la sélection reste sur son bouton blanc (sinon tvOS la renvoie à la barre)
     private func refocusHero() {
+        heroTouched = Date()
         for t in [0.05, 0.3] { DispatchQueue.main.asyncAfter(deadline: .now() + t) { if !heroFocus { heroFocus = true } } }
     }
 
@@ -249,6 +253,11 @@ struct MediaHomeView: View {
             alertTick += 1   // rafraîchit le libellé
         } else if let nx = sl.next { openPlay = nx }
         else if let c = sl.coll { openColl = c }
+    }
+
+    /// après un choix « OK maintenu », la sélection revient sur le bouton blanc (tvOS la laisse sinon sur la barre)
+    private func wrapped(_ sl: HeroSlide) -> [(String, () -> Void)] {
+        alts(sl).map { a in (a.0, { heroTouched = Date(); a.1(); refocusHero() }) }
     }
 
     /// choix « OK maintenu » de chaque diapositive (simulateur : les boutons après le premier)

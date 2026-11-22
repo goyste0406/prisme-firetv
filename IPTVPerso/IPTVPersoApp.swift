@@ -102,7 +102,8 @@ struct MainTabView: View {
         }
         .overlay(alignment: .top) {
             // simulateur .mn-night : pilule en haut au centre, 6,5 s, puis s'efface
-            if let n = night { NightPill(text: n).padding(.top, 126).transition(.opacity).allowsHitTesting(false) }
+            // (top 84 du simulateur × 1,5 = 126, mesuré depuis le haut de l'écran, sans la marge de sécurité tvOS)
+            if let n = night { NightPill(text: n).padding(.top, 126).frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top).ignoresSafeArea().transition(.opacity).allowsHitTesting(false) }
         }
         .overlay { AppToastView() }
         .overlay(alignment: .bottom) {
