@@ -1036,7 +1036,7 @@ final class Visite: XCTestCase {
         app.launchArguments = ["-prisme.debug.demoServer", "http://127.0.0.1:8097", "-prisme.debug.tmdbKey", "demo",
                                "-prisme.debug.tmdbBase", "http://127.0.0.1:8099/tmdb/3", "-prisme.debug.imgBase", "http://127.0.0.1:8099/img",
                                "-prisme.debug.itunesBase", "http://127.0.0.1:8099/itunes", "-prisme.debug.bgTrailer", "off", "-prisme.debug.tab", "search"]
-        app.launch(); w(150)
+        app.launch(); w(330)   // import complet du gros catalogue
         shot("G01-gros-catalogue")
         press(.down); w(0.5)
         // « le » : l, e (depuis « a » : l = rangée 1 col 5 ; e = rangée 0 col 4)

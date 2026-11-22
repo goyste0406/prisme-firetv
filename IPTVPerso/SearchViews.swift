@@ -416,6 +416,7 @@ struct SearchView: View {
         items = Dictionary(got.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
         res = r; liveHits = hits; ready = true
         let ms = Int(Date().timeIntervalSince(t0) * 1000)
+        PerfLog.ev("Recherche « \(q) » : \(ms) ms · \(r.films.count) films, \(r.series.count) séries, \(hits.count) TV")
         DataCount.write("recherche « \(q) » : \(r.films.count) films, \(r.series.count) séries, \(hits.count) TV, \(r.actors.count) acteurs"
                         + (r.fuzzy ? ", orthographe proche" : "") + (r.why.isEmpty ? "" : ", phrase : " + r.why.joined(separator: ", ") + " (\(r.asked.count))") + " · \(ms) ms")
     }
