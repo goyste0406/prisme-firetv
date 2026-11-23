@@ -112,6 +112,8 @@ final class Visite: XCTestCase {
         if ProcessInfo.processInfo.environment["ONLY"] == "lot5" { lot5(); return }
         if ProcessInfo.processInfo.environment["ONLY"] == "lot5t" { lot5t(); return }
         if ProcessInfo.processInfo.environment["ONLY"] == "lot6" { lot6(); return }
+        if ProcessInfo.processInfo.environment["ONLY"] == "audit" { audit(); return }
+        if ProcessInfo.processInfo.environment["ONLY"] == "auditg" { auditg(); return }
         if ProcessInfo.processInfo.environment["ONLY"] == "lot3g" { lot3g(); return }
         if ProcessInfo.processInfo.environment["ONLY"] == "tvidle" {
             // TV en direct au lancement avec deux fournisseurs, 150 s sans aucune interaction, puis une capture
@@ -1177,6 +1179,52 @@ final class Visite: XCTestCase {
         remote.press(.select); w(14); shot("S55-ok-reprise", focus: false)
         remote.press(.home); w(4); remote.press(.up); w(2); remote.press(.right); remote.press(.right); w(1)
         remote.press(.select); w(14); shot("S56-ok-proposition")
+    }
+
+    /// Audit 1.8 (253), sans modifier l'appli : Replay de la TV (lecture), guide, lignes Explorer / Parcourir pendant
+    /// le remplissage des fiches.
+    func audit() {
+        let w = { (t: Double) in Thread.sleep(forTimeInterval: t) }
+        // 1. accueil Films pendant le remplissage des fiches : Explorer et Parcourir restent-ils ?
+        relaunch(["-prisme.debug.tab", "films"], wait: 10)
+        for _ in 0..<12 { press(.down); w(0.4) }
+        for i in 0..<12 {
+            let ex = app.staticTexts["Explorer"].exists, pa = app.staticTexts["Parcourir"].exists
+            log += "   A\(i) Explorer=\(ex) Parcourir=\(pa) focus=\(focused())\n"
+            attach(String(format: "A%02d", i), "Explorer=\(ex) Parcourir=\(pa) · \(focused())")
+            if i % 3 == 0 { shot(String(format: "A%02d-bas-accueil", i)) } else { w(3) }
+        }
+        // 2. Replay : écran, puis lecture d'un programme passé
+        relaunch(["-prisme.debug.tab", "live", "-prisme.debug.live", "replay"], wait: 16)
+        shot("R01-replay")
+        press(.down); press(.down); shot("R02-replay-bas")
+        press(.select); w(10); shot("R03-replay-lecture", focus: false)
+        w(10); shot("R04-replay-lecture-20s", focus: false)
+        back(); back(); w(2)
+    }
+
+    /// Audit 1.8 (253) : page Replay avec un très gros catalogue (20 000 chaînes) — blocage ?
+    func auditg() {
+        let w = { (t: Double) in Thread.sleep(forTimeInterval: t) }
+        app.terminate()
+        let common = ["-prisme.debug.demoServer", "http://127.0.0.1:8097", "-prisme.debug.tmdbKey", "demo",
+                      "-prisme.debug.tmdbBase", "http://127.0.0.1:8099/tmdb/3", "-prisme.debug.imgBase", "http://127.0.0.1:8099/img",
+                      "-prisme.debug.itunesBase", "http://127.0.0.1:8099/itunes", "-prisme.debug.bgTrailer", "off"]
+        app.launchArguments = common + ["-prisme.debug.tab", "live"]
+        app.launch(); w(330)   // import complet du gros catalogue
+        shot("G01-tv-gros-catalogue")
+        app.terminate()
+        app.launchArguments = common + ["-prisme.debug.tab", "live", "-prisme.debug.live", "replay"]
+        let t0 = Date()
+        app.launch()
+        for s in [5.0, 15, 30, 60, 120] {
+            let el = Date().timeIntervalSince(t0)
+            if s > el { w(s - el) }
+            shot(String(format: "G%03.0f-replay-apres-%03.0fs", s, s))
+            let before = focused(); press(.down); w(1.5); let after = focused()
+            attach(String(format: "G%03.0f", s), "avant=\(before) · après bas=\(after)")
+            log += "   G\(Int(s)) s : avant=\(before) après=\(after)\n"
+        }
     }
 
     func lot3() {
