@@ -11,6 +11,8 @@ enum DiagLog {
     nonisolated(unsafe) private static var screenName = "lancement"
     nonisolated(unsafe) private static var lastPong = Date()
     nonisolated(unsafe) private static var hangStart: Date?
+    /// état de l'appli, tenu à jour sur le fil principal (UIApplication ne se lit pas depuis le fil de surveillance)
+    nonisolated(unsafe) private static var active = true
     private static let runningKey = "prisme.diag.running"
     private static let lastScreenKey = "prisme.diag.screen"
 
@@ -59,6 +61,8 @@ enum DiagLog {
         NotificationCenter.default.addObserver(forName: UIApplication.didEnterBackgroundNotification, object: nil, queue: .main) { _ in
             UserDefaults.standard.set(false, forKey: runningKey)
         }
+        NotificationCenter.default.addObserver(forName: UIApplication.didBecomeActiveNotification, object: nil, queue: .main) { _ in active = true; lastPong = Date() }
+        NotificationCenter.default.addObserver(forName: UIApplication.willResignActiveNotification, object: nil, queue: .main) { _ in active = false }
         NotificationCenter.default.addObserver(forName: UIApplication.willEnterForegroundNotification, object: nil, queue: .main) { _ in
             UserDefaults.standard.set(true, forKey: runningKey); lastPong = Date()
         }
@@ -78,7 +82,7 @@ enum DiagLog {
                 } else if let h = hangStart {
                     let dur = Date().timeIntervalSince(h)
                     hangStart = nil
-                    if UIApplication.shared.applicationState == .active || dur < 60 {
+                    if active || dur < 60 {
                         add(String(format: "blocage de l'interface : %.1f s · écran : %@", dur, screenName))
                     }
                 }

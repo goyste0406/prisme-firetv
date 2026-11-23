@@ -22,9 +22,32 @@ enum ProgramArt {
         let mk = "\(ch.epg)|\(ch.name)|\(p.start)|\(p.title)" as NSString
         if let m = memo.object(forKey: mk) { return m.length == 0 ? nil : m as String }
         var found = await XmltvFr.shared.image(ch: ch, p: p)
+        if found == nil { found = await catalogImage(p) }
         if found == nil { found = await TmdbProgram.shared.image(p) }
         memo.setObject((found ?? "") as NSString, forKey: mk)
         return found
+    }
+}
+
+extension ProgramArt {
+    /// 253 : le programme est un film ou une série de ton catalogue (même titre exactement, une seule œuvre possible) :
+    /// on reprend l'image de sa fiche. Marche aussi quand le guide ne donne pas de genre. Jamais pour les journaux,
+    /// le sport, la météo ou les magazines, ni pour un titre trop court ou partagé par plusieurs œuvres.
+    static func catalogImage(_ p: Program) async -> String? {
+        let c = TitleTools.fold(p.cat)
+        if c.range(of: #"journal|info|meteo|sport|magazine|jeu|debat|talk|divertissement|emission"#, options: .regularExpression) != nil { return nil }
+        let t = TitleTools.fold(TmdbProgram.core(p.title))
+        guard t.count >= 4 else { return nil }
+        let lo = t + "|", hi = t + "}"   // toutes les années de ce titre (clé « titre|année »)
+        let hits: [(Int, String)] = await Database.shared.read { db in
+            var out: [(Int, String)] = []
+            db.query("SELECT tmdb, backdrop FROM fiche WHERE kind IN ('film','series') AND ckey>=? AND ckey<? AND backdrop<>'' LIMIT 6", [lo, hi]) { r in
+                out.append((r.int(0), r.str(1)))
+            }
+            return out
+        }
+        guard let first = hits.first, Set(hits.map(\.0)).count == 1 else { return nil }
+        return Fiche.img(first.1, "w780")
     }
 }
 

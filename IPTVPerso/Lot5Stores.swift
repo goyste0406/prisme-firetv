@@ -101,7 +101,8 @@ struct TileActionsHost: View {
                     Text(ta.title.uppercased()).font(P.font(20, .bold)).tracking(2).foregroundStyle(.white.opacity(0.6)).lineLimit(1).padding(.bottom, 6)
                     ForEach(0..<ta.acts.count, id: \.self) { i in
                         Button { let a = ta.acts[i].1; ta.close(); a() } label: {
-                            Text(ta.acts[i].0).font(P.font(26, .semibold)).frame(maxWidth: .infinity, alignment: .leading)
+                            Text(ta.acts[i].0).font(P.font(27, .semibold)).frame(maxWidth: .infinity, alignment: .leading)
+                                .padding(.horizontal, 22).frame(minHeight: 72)
                         }
                         .buttonStyle(PrefRowStyle()).focused($f, equals: i)
                     }

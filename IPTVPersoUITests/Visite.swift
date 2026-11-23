@@ -1204,14 +1204,14 @@ final class Visite: XCTestCase {
         relaunch(["-prisme.debug.tab", "films"], wait: 22)
         press(.down, 2); shot("B01-affiche")
         remote.press(.playPause); w(1.5); shot("B02-panneau")
-        attach("B02", app.otherElements["prisme.tileActions"].exists ? "panneau ouvert" : "(panneau absent)")
+        attach("B02", focused().contains("J'aime") ? "panneau ouvert" : "(panneau absent) " + focused())
         press(.select); w(1.5); shot("B03-jaime-toast")
         remote.press(.playPause); w(1.5); shot("B04-panneau-coche")
         press(.menu); w(1); shot("B05-ferme")
         // rangée avec menu « OK maintenu » (Reprendre) : ⏯ donne le même menu, J'aime en tête
         downUntil(["Reprendre", "Inception", "reste"], max: 4, prefix: "B06")
         remote.press(.playPause); w(1.5); shot("B07-panneau-reprendre")
-        attach("B07", app.otherElements["prisme.tileActions"].exists ? "panneau ouvert" : "(panneau absent)")
+        attach("B07", focused().contains("J'aime") ? "panneau ouvert" : "(panneau absent) " + focused())
         press(.menu); w(1)
         // C. Explorer / Parcourir : présents avant et après l'ouverture d'une fiche
         relaunch(["-prisme.debug.tab", "films"], wait: 22)
@@ -1245,6 +1245,13 @@ final class Visite: XCTestCase {
     func c253tv() {
         let w = { (t: Double) in Thread.sleep(forTimeInterval: t) }
         relaunch(["-prisme.debug.tab", "live", "-prisme.debug.playLive", "M6"], wait: 18)
+        shot("G00-choix-debut")
+        // M6 a le replay : prisme demande « Depuis le début » ou « Rejoindre le direct » → le direct
+        if focused().contains("Ne plus demander") || focused().contains("début") {
+            press(.up); for _ in 0..<3 { if focused().contains("Rejoindre") { break }; press(.right) }
+            press(.select); w(8)
+        }
+        shot("G00b-direct", focus: false)
         press(.down); w(1.5); shot("G01-panneau", focus: true)
         var found = false
         for i in 1...40 { press(.down); if focused().contains("Guide TV") { found = true; break }; if i % 10 == 0 { shot("G02-bas-\(i)") } }

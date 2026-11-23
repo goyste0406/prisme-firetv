@@ -466,6 +466,8 @@ struct MediaHomeView: View {
                                 .frame(width: 220, height: 330)
                         }
                         .buttonStyle(TileStyle()).accessibilityLabel(it.displayTitle)
+                        // 253 : ⏯ = J'aime / Je n'aime pas (toutes télécommandes Apple, sans appui long)
+                        .onPlayPauseCommand { TileActions.shared.open(title: it.displayTitle, acts: TileActions.rating(it)) }
                     }
                 }
             })
