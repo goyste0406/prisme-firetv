@@ -1155,7 +1155,7 @@ final class Visite: XCTestCase {
         relaunch(["-prisme.debug.shelf", "1", "-prisme.debug.profiles", "2", "-prisme.debug.second", "1"], wait: 24)
         shot("S20-lea-12-ans"); note("S20")
         // code parental + Steven sans limite : rien de personnel sur l'écran d'accueil
-        relaunch(["-prisme.debug.shelf", "1", "-prisme.debug.profiles", "2", "-prisme.pref.code", "1234"], wait: 24)
+        relaunch(["-prisme.debug.shelf", "1", "-prisme.debug.profiles", "2", "-prisme.debug.second", "0", "-prisme.pref.code", "1234"], wait: 24)
         shot("S30-code-parental"); note("S30")
         // liens des cartes : fiche, puis reprise directe
         relaunch(["-prisme.debug.link", "prisme://open?id=film%3Ademo%3A1006&p=p1"], wait: 20)
@@ -1167,13 +1167,16 @@ final class Visite: XCTestCase {
         // écran d'accueil de l'Apple TV : PRISME doit être dans la rangée du haut pour que l'Apple TV montre sa rangée
         relaunch(["-prisme.debug.shelf", "1"], wait: 24)
         remote.press(.home); w(5); shot("S50-accueil-tvos", focus: false)
-        remote.press(.select, forDuration: 2.5); w(2); shot("S51-maintenu", focus: false)
-        remote.press(.select); w(2); shot("S52-deplacer", focus: false)
-        for _ in 0..<4 { remote.press(.up); w(0.8) }
-        shot("S53-monte", focus: false)
-        remote.press(.select); w(3); shot("S54-pose", focus: false)
-        remote.press(.down); w(1); remote.press(.up); w(4); shot("S55-top-shelf", focus: false)
-        remote.press(.right); w(3); shot("S56-top-shelf-droite", focus: false)
+        // PRISME est déjà dans la rangée du haut du simulateur (Réglages, PRISME, outil de test) : on le sélectionne
+        remote.press(.right); w(8); shot("S51-prisme-selectionne", focus: false)
+        remote.press(.up); w(3); shot("S52-top-shelf-carte-1", focus: false)
+        remote.press(.right); w(2); shot("S53-top-shelf-carte-2", focus: false)
+        remote.press(.right); remote.press(.right); w(2); shot("S54-top-shelf-carte-4", focus: false)
+        // OK sur la 1re carte (reprise d'Inception) : l'Apple TV ouvre PRISME par le lien de la carte
+        remote.press(.left); remote.press(.left); remote.press(.left); w(1)
+        remote.press(.select); w(14); shot("S55-ok-reprise", focus: false)
+        remote.press(.home); w(4); remote.press(.up); w(2); remote.press(.right); remote.press(.right); w(1)
+        remote.press(.select); w(14); shot("S56-ok-proposition")
     }
 
     func lot3() {

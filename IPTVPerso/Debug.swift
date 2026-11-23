@@ -160,6 +160,7 @@ extension Debug {
             }
         }
         // profil actif = le deuxième profil (Léa) dès l'ouverture
+        if arg("prisme.debug.second") == "0", ProfileStore.shared.current != "p1" { ProfileStore.shared.use("p1") }
         if arg("prisme.debug.second") == "1", let b = ProfileStore.shared.profiles.first(where: { $0.id != "p1" }) { ProfileStore.shared.use(b.id) }
         // « 6 » : le maximum de profils, pour vérifier les listes et le défilement
         if profiles == "6", ProfileStore.shared.profiles.count == 2 {
