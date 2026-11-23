@@ -4,7 +4,7 @@ on:
   push:
     branches: [appletv]
     # seulement quand l'appli elle-même change (pas le simulateur)
-    paths: ["IPTVPerso/**", "project.yml", "Podfile", ".github/workflows/**"]
+    paths: ["IPTVPerso/**", "TopShelf/**", "Shared/**", "project.yml", "Podfile", ".github/workflows/**"]
   workflow_dispatch:
     inputs:
       machine:
@@ -56,15 +56,33 @@ jobs:
           # Apparition ajoute lui-même le suffixe d'équipe (.5Q7T95F5D3) : on doit livrer exactement com.steven.iptvperso
           if [ "$BID" != "com.steven.iptvperso" ]; then echo "::error::Bundle ID inattendu ($BID) : compilation arrêtée"; exit 1; fi
           if [ "$PLAT" != "AppleTVOS" ]; then echo "::error::Plateforme inattendue ($PLAT) : compilation arrêtée"; exit 1; fi
+          # lot 6 : module Top Shelf (identifiant dérivé de celui de PRISME, même version et même build)
+          EXT="$APP/PlugIns/PrismeTopShelf.appex"
+          [ -d "$EXT" ] || { echo "::error::module Top Shelf absent"; exit 1; }
+          EBID=$($PB -c "Print CFBundleIdentifier" "$EXT/Info.plist"); EVER=$($PB -c "Print CFBundleShortVersionString" "$EXT/Info.plist"); EBLD=$($PB -c "Print CFBundleVersion" "$EXT/Info.plist")
+          echo "Module Top Shelf : $EBID · $EVER · $EBLD"
+          if [ "$EBID" != "com.steven.iptvperso.TopShelf" ] || [ "$EVER" != "$VER" ] || [ "$EBLD" != "$BLD" ]; then echo "::error::module Top Shelf incohérent"; exit 1; fi
           { echo "BID=$BID"; echo "VER=$VER"; echo "BLD=$BLD"; echo "PLAT=$PLAT"; } >> "$GITHUB_ENV"
 
-      - name: Fabriquer le fichier .ipa
+      - name: Fabriquer les fichiers .ipa
         run: |
           APP=build/Build/Products/Release-appletvos/IPTVPerso.app
           ls "$APP/Frameworks"
-          mkdir -p Payload && cp -R "$APP" Payload/
+          # 1. IPA de secours : exactement comme avant le lot 6 (sans module Top Shelf, sans signature)
+          rm -rf Payload && mkdir -p Payload && cp -R "$APP" Payload/
+          rm -rf Payload/IPTVPerso.app/PlugIns
+          zip -qry prisme-AppleTV-sans-TopShelf.ipa Payload
+          # 2. IPA avec le module Top Shelf : signature locale (ad hoc) qui porte seulement la demande de boîte partagée,
+          #    pour qu'Apparition la reprenne en signant avec ton compte. Le Bundle ID ne change pas.
+          rm -rf Payload && mkdir -p Payload && cp -R "$APP" Payload/
+          A=Payload/IPTVPerso.app
+          for f in "$A"/Frameworks/*.framework "$A"/Frameworks/*.dylib; do [ -e "$f" ] && codesign -f -s - "$f"; done
+          codesign -f -s - --entitlements TopShelf/TopShelf.entitlements "$A/PlugIns/PrismeTopShelf.appex"
+          codesign -f -s - --entitlements IPTVPerso/IPTVPerso.entitlements "$A"
+          codesign -d --entitlements - "$A" 2>/dev/null | grep -A3 application-groups
+          codesign -d --entitlements - "$A/PlugIns/PrismeTopShelf.appex" 2>/dev/null | grep -A3 application-groups
           zip -qry prisme-AppleTV.ipa Payload
-          ls -lh prisme-AppleTV.ipa
+          ls -lh prisme-AppleTV.ipa prisme-AppleTV-sans-TopShelf.ipa
 
       - name: Publier la dernière version (Releases)
         env:
@@ -75,10 +93,10 @@ jobs:
           Plateforme : tvOS ($PLAT)
           À installer avec Apparition (Apple ID gratuit), à rafraîchir tous les 7 jours."
           if gh release view appletv-latest >/dev/null 2>&1; then
-            gh release upload appletv-latest prisme-AppleTV.ipa --clobber
+            gh release upload appletv-latest prisme-AppleTV.ipa prisme-AppleTV-sans-TopShelf.ipa --clobber
             gh release edit appletv-latest --notes "$NOTE"
           else
-            gh release create appletv-latest prisme-AppleTV.ipa --target appletv --prerelease \
+            gh release create appletv-latest prisme-AppleTV.ipa prisme-AppleTV-sans-TopShelf.ipa --target appletv --prerelease \
               --title "prisme pour Apple TV" --notes "$NOTE"
           fi
 

@@ -5,7 +5,7 @@ name: Visite de l'appli dans le simulateur Apple TV
 on:
   push:
     branches: [appletv]
-    paths: ["IPTVPerso/**", "IPTVPersoUITests/**", "ci/**", "project.yml", "Podfile", ".github/workflows/visite-tvos.yml"]
+    paths: ["IPTVPerso/**", "TopShelf/**", "Shared/**", "IPTVPersoUITests/**", "ci/**", "project.yml", "Podfile", ".github/workflows/visite-tvos.yml"]
   workflow_dispatch:
     inputs:
       machine:
@@ -13,7 +13,7 @@ on:
         required: false
         default: ""
       seulement:
-        description: "Partie à visiter seule (lecteur, serie, tv, nav, multi, perf, fournisseurs, fiches, tvlecteur, tvcrash, tvidle, gouts, geant, langue, reglages, dit, sauvegarde, accueil, duo, sources, envoi, finserie, finfilm, lot1, lot2, lot3, lot3g, lot4, lot4n, lot5, lot5t), vide = visite complète"
+        description: "Partie à visiter seule (lecteur, serie, tv, nav, multi, perf, fournisseurs, fiches, tvlecteur, tvcrash, tvidle, gouts, geant, langue, reglages, dit, sauvegarde, accueil, duo, sources, envoi, finserie, finfilm, lot1, lot2, lot3, lot3g, lot4, lot4n, lot5, lot5t, lot6), vide = visite complète"
         required: false
         default: ""
 
@@ -78,7 +78,8 @@ jobs:
           set -o pipefail
           TEST_RUNNER_SHOTS="$PWD/shots" TEST_RUNNER_ONLY="${{ inputs.seulement }}" xcodebuild -workspace IPTVPerso.xcworkspace -scheme IPTVPerso -configuration ${{ inputs.seulement == 'lot3g' && 'Release' || 'Debug' }} \
             -destination "id=$UDID" -derivedDataPath build-sim -resultBundlePath visite.xcresult \
-            CODE_SIGNING_ALLOWED=NO ENABLE_TESTABILITY=YES test 2>&1 | tee test.log | grep -E "error:|Test Case|passed|failed|TEST (SUCCEEDED|FAILED)" || true
+            CODE_SIGNING_ALLOWED=${{ inputs.seulement == 'lot6' && 'YES' || 'NO' }} CODE_SIGN_IDENTITY=- CODE_SIGN_STYLE=Manual DEVELOPMENT_TEAM= \
+            ENABLE_TESTABILITY=YES test 2>&1 | tee test.log | grep -E "error:|Test Case|passed|failed|TEST (SUCCEEDED|FAILED)" || true
           ls -la shots | head -80 || true
 
       - name: Captures (publiées dans la release « visite-latest »)
@@ -99,6 +100,9 @@ jobs:
           [ -n "$C" ] && cp "$C/Documents/classement-tv.txt" jpg/ 2>/dev/null || true
           [ -n "$C" ] && cp "$C/Documents/mesures.txt" jpg/ 2>/dev/null || true
           [ -n "$C" ] && cp "$C/Documents/donnees.txt" jpg/ 2>/dev/null || true
+          # lot 6 : ce que l'appli a écrit pour le module Top Shelf (boîte partagée)
+          G=$(xcrun simctl get_app_container "$UDID" com.steven.iptvperso group.com.steven.iptvperso 2>/dev/null || true)
+          if [ -n "$G" ] && [ -d "$G/TopShelf" ]; then for f in "$G"/TopShelf/*; do cp "$f" "jpg/topshelf-$(basename "$f")"; done; fi
           grep -E "error:|Test Case|passed|failed" test.log > jpg/test-resume.txt 2>/dev/null || true
           # rapports de plantage de l'appli dans le simulateur (s'il y en a), pour trouver la ligne en cause
           for f in ~/Library/Logs/DiagnosticReports/IPTVPerso*.ips ~/Library/Logs/DiagnosticReports/prisme*.ips; do [ -f "$f" ] && head -c 3000000 "$f" > "jpg/plantage-$(basename "$f" .ips).txt"; done 2>/dev/null || true

@@ -8,7 +8,10 @@ targets:
   IPTVPerso:
     type: application
     platform: tvOS
-    sources: [IPTVPerso]
+    sources: [IPTVPerso, Shared]
+    # lot 6 : module Top Shelf rangé dans PRISME (PlugIns/)
+    dependencies:
+      - target: PrismeTopShelf
     info:
       path: IPTVPerso/Info.plist
       properties:
@@ -27,14 +30,45 @@ targets:
         NSLocalNetworkUsageDescription: "prisme reçoit sur ton Wi-Fi le lien ou les identifiants envoyés depuis ton iPhone, et échange ta sauvegarde avec ton iPhone ou tes autres Apple TV."
         # synchronisation entre Apple TV (1.7.1) : une Apple TV « en réception » est visible des autres sur le Wi-Fi
         NSBonjourServices: [_prisme._tcp]
+        # lot 6 : OK sur une carte du Top Shelf ouvre le bon titre dans PRISME (prisme://play… / prisme://open…)
+        CFBundleURLTypes:
+          - CFBundleURLName: com.steven.iptvperso
+            CFBundleURLSchemes: [prisme]
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.steven.iptvperso
+        # lot 6 : icône et image Top Shelf fixe (Assets.xcassets), boîte partagée avec le module Top Shelf
+        ASSETCATALOG_COMPILER_APPICON_NAME: "App Icon & Top Shelf Image"
+        CODE_SIGN_ENTITLEMENTS: IPTVPerso/IPTVPerso.entitlements
         MARKETING_VERSION: "1.8"
         CURRENT_PROJECT_VERSION: "1"
         CODE_SIGN_STYLE: Automatic
         SWIFT_VERSION: "5.0"
         GENERATE_INFOPLIST_FILE: NO
+  PrismeTopShelf:
+    # lot 6 : module Top Shelf (haut de l'écran d'accueil de l'Apple TV). Il relit seulement les cartes préparées par PRISME.
+    type: app-extension
+    platform: tvOS
+    sources: [TopShelf, Shared]
+    info:
+      path: TopShelf/Info.plist
+      properties:
+        CFBundleDisplayName: prisme
+        CFBundleShortVersionString: "$(MARKETING_VERSION)"
+        CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.tv-top-shelf
+          NSExtensionPrincipalClass: "$(PRODUCT_MODULE_NAME).ContentProvider"
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.steven.iptvperso.TopShelf
+        MARKETING_VERSION: "1.8"
+        CURRENT_PROJECT_VERSION: "1"
+        CODE_SIGN_STYLE: Automatic
+        CODE_SIGN_ENTITLEMENTS: TopShelf/TopShelf.entitlements
+        SWIFT_VERSION: "5.0"
+        GENERATE_INFOPLIST_FILE: NO
+        APPLICATION_EXTENSION_API_ONLY: YES
   IPTVPersoTests:
     # tests unitaires (noms de chaînes, doublons, qualités) : compilation en ligne seulement, jamais dans l'IPA
     type: bundle.unit-test

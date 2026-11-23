@@ -111,6 +111,7 @@ final class Visite: XCTestCase {
         if ProcessInfo.processInfo.environment["ONLY"] == "lot4n" { lot4n(); return }
         if ProcessInfo.processInfo.environment["ONLY"] == "lot5" { lot5(); return }
         if ProcessInfo.processInfo.environment["ONLY"] == "lot5t" { lot5t(); return }
+        if ProcessInfo.processInfo.environment["ONLY"] == "lot6" { lot6(); return }
         if ProcessInfo.processInfo.environment["ONLY"] == "lot3g" { lot3g(); return }
         if ProcessInfo.processInfo.environment["ONLY"] == "tvidle" {
             // TV en direct au lancement avec deux fournisseurs, 150 s sans aucune interaction, puis une capture
@@ -1132,6 +1133,47 @@ final class Visite: XCTestCase {
         // aperçu vidéo en fond
         relaunch(["-prisme.debug.tab", "live"], wait: 20)
         shot("T40-apercu-video")
+    }
+
+    /// Lot 6 : Top Shelf. Rangée préparée pour chaque cas, telle que le module la relit (aperçu de test),
+    /// liens prisme:// et essai sur l'écran d'accueil de l'Apple TV.
+    func lot6() {
+        let w = { (t: Double) in Thread.sleep(forTimeInterval: t) }
+        func note(_ n: String) {
+            let e = app.staticTexts["prisme.shelf"]
+            attach(n, e.exists ? e.label : "(aperçu absent)")
+            log += "   " + n + " : " + (e.exists ? e.label : "(aperçu absent)") + "\n"
+        }
+        // Steven : historique de test (Inception en cours, Dune vu en entier, Lupin S2 É3 en cours)
+        relaunch(["-prisme.debug.shelf", "1", "-prisme.debug.tab", "films"], wait: 24)
+        shot("S01-rangee-steven"); note("S01")
+        press(.right); press(.right); shot("S02-rangee-droite")
+        // à deux (Steven + Léa, goûts différents)
+        relaunch(["-prisme.debug.shelf", "1", "-prisme.debug.profiles", "2", "-prisme.debug.duo", "1", "-prisme.debug.tastes", "1"], wait: 26)
+        shot("S10-a-deux"); note("S10")
+        // Léa (12 ans max)
+        relaunch(["-prisme.debug.shelf", "1", "-prisme.debug.profiles", "2", "-prisme.debug.second", "1"], wait: 24)
+        shot("S20-lea-12-ans"); note("S20")
+        // code parental + Steven sans limite : rien de personnel sur l'écran d'accueil
+        relaunch(["-prisme.debug.shelf", "1", "-prisme.debug.profiles", "2", "-prisme.pref.code", "1234"], wait: 24)
+        shot("S30-code-parental"); note("S30")
+        // liens des cartes : fiche, puis reprise directe
+        relaunch(["-prisme.debug.link", "prisme://open?id=film%3Ademo%3A1006&p=p1"], wait: 20)
+        shot("S40-lien-fiche")
+        relaunch(["-prisme.debug.link", "prisme://play?id=film%3Ademo%3A1006&p=p1"], wait: 22)
+        shot("S41-lien-lecture", focus: false)
+        relaunch(["-prisme.debug.link", "prisme://play?id=series%3Ademo%3A2001&p=p1"], wait: 24)
+        shot("S42-lien-episode", focus: false)
+        // écran d'accueil de l'Apple TV : PRISME doit être dans la rangée du haut pour que l'Apple TV montre sa rangée
+        relaunch(["-prisme.debug.shelf", "1"], wait: 24)
+        remote.press(.home); w(5); shot("S50-accueil-tvos", focus: false)
+        remote.press(.select, forDuration: 2.5); w(2); shot("S51-maintenu", focus: false)
+        remote.press(.select); w(2); shot("S52-deplacer", focus: false)
+        for _ in 0..<4 { remote.press(.up); w(0.8) }
+        shot("S53-monte", focus: false)
+        remote.press(.select); w(3); shot("S54-pose", focus: false)
+        remote.press(.down); w(1); remote.press(.up); w(4); shot("S55-top-shelf", focus: false)
+        remote.press(.right); w(3); shot("S56-top-shelf-droite", focus: false)
     }
 
     func lot3() {

@@ -47,6 +47,11 @@ struct MainTabView: View {
     @State private var reminder: TVReminders.R?
     @State private var reminderLive: LiveLaunch?
     @FocusState private var reminderFocus: Bool
+    /// lot 6 : titre ouvert depuis une carte du Top Shelf (prisme://play… ou prisme://open…)
+    @State private var linkOpen: LinkOpen?
+    @State private var linked = false
+    @State private var shelfPreview = false
+    @Environment(\.scenePhase) private var phase
 
     var body: some View {
         NavigationStack {
@@ -75,7 +80,15 @@ struct MainTabView: View {
             .ignoresSafeArea()
             .navigationDestination(item: $debugOpen) { it in DetailView(item: it) }
             .navigationDestination(item: $resumeOpen) { it in DetailView(item: it) }
+            .navigationDestination(item: $linkOpen) { o in DetailView(item: o.item, autoPlay: o.play) }
         }
+        .onOpenURL { openLink($0) }
+        // lot 6 : la rangée du Top Shelf suit le profil, le catalogue et ce que tu regardes
+        .onChange(of: profiles.version) { _, _ in TopShelfPublisher.schedule() }
+        .onChange(of: profiles.current) { _, _ in TopShelfPublisher.schedule() }
+        .onChange(of: store.catalogVersion) { _, _ in TopShelfPublisher.schedule(after: 20) }
+        .onChange(of: phase) { _, p in if p == .background { TopShelfPublisher.schedule(after: 0) } }
+        .overlay { if shelfPreview { ShelfPreviewScreen(close: { shelfPreview = false }) } }
         // fenêtres au-dessus de TOUT, y compris d'une fiche ouverte (la pastille de profil de la fiche ouvre la fenêtre)
         .disabled(pui.picker || pui.launch || pui.taste != nil)
         .overlay {
@@ -161,10 +174,21 @@ struct MainTabView: View {
             // puis vérifié une seconde fois si la première tentative n'a pas pris
             for delay in [0.8, 2.0] {
                 DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
-                    let want = profiles.ask && profiles.profiles.count > 1 && Debug.open == nil && Debug.tab == nil
+                    let want = profiles.ask && profiles.profiles.count > 1 && Debug.open == nil && Debug.tab == nil && !linked && !Debug.shelf && Debug.link == nil
                     if want && !pui.launch && !pui.shownAtLaunch { pui.launch = true }
                     diag = "ask=\(profiles.ask) profils=\(profiles.profiles.count) voulu=\(want) affiché=\(pui.launch) t=\(delay)"
                 }
+            }
+        }
+        .task {
+            // lot 6 : première rangée du Top Shelf une fois le catalogue lu (test : tout de suite, avec l'aperçu)
+            if let l = Debug.link, let u = URL(string: l) { try? await Task.sleep(nanoseconds: 2_000_000_000); openLink(u) }
+            if Debug.shelf {
+                try? await Task.sleep(nanoseconds: 12_000_000_000)
+                await TopShelfPublisher.publish()
+                shelfPreview = true
+            } else {
+                TopShelfPublisher.schedule(after: 25)
             }
         }
         .task {
@@ -183,7 +207,40 @@ struct MainTabView: View {
     }
 }
 
+/// lot 6 : titre demandé par une carte du Top Shelf
+struct LinkOpen: Identifiable, Hashable {
+    let item: MediaItem
+    let play: Bool
+    var id: String { item.id + (play ? "|play" : "") }
+}
+
 extension MainTabView {
+    /// prisme://play?id=…&p=… (reprise directe) ou prisme://open?id=…&p=… (fiche), comme le simulateur (fxhplay / fxhopen)
+    fileprivate func openLink(_ url: URL) {
+        guard url.scheme == "prisme", let c = URLComponents(url: url, resolvingAgainstBaseURL: false),
+              let id = c.queryItems?.first(where: { $0.name == "id" })?.value else { return }
+        let play = c.host == "play"
+        linked = true
+        pui.launch = false; pui.shownAtLaunch = true; shelfPreview = false
+        // la carte a été préparée pour ce profil : on le reprend (« À deux » garde le profil actif)
+        if let p = c.queryItems?.first(where: { $0.name == "p" })?.value, p != "duo", p != profiles.current,
+           profiles.profiles.contains(where: { $0.id == p }) { profiles.use(p) }
+        PerfLog.ev("Top Shelf : lien " + url.absoluteString)
+        Task {
+            var it: MediaItem? = nil
+            for _ in 0..<30 {   // au lancement, le catalogue peut mettre quelques secondes à être lisible
+                it = await MediaStore.items(ids: [id]).first
+                if it != nil { break }
+                try? await Task.sleep(nanoseconds: 700_000_000)
+            }
+            guard let it else { AppToast.shared.say("Ce titre n'est plus chez ton fournisseur"); return }
+            nav.tab = it.kind == .film ? .films : .series
+            debugOpen = nil; resumeOpen = nil; linkOpen = nil
+            try? await Task.sleep(nanoseconds: 500_000_000)
+            linkOpen = LinkOpen(item: it, play: play)
+        }
+    }
+
     fileprivate func openReminder(_ r: TVReminders.R) {
         reminder = nil
         Task {

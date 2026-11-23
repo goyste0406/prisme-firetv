@@ -94,7 +94,7 @@ struct VodPlayerView: View {
             .onExitCommand { bridge.vc?.shortBack() }
             // lot 5 : les fiches en arrière-plan se mettent en pause (ou ralentissent) pendant la lecture
             .onAppear { PlaybackActivity.count += 1 }
-            .onDisappear { PlaybackActivity.count = max(0, PlaybackActivity.count - 1) }
+            .onDisappear { PlaybackActivity.count = max(0, PlaybackActivity.count - 1); TopShelfPublisher.schedule() }
     }
 }
 

@@ -34,6 +34,10 @@ enum Debug {
     /// 2e faux fournisseur (« Soleil ») et fournisseur injoignable (« Étoile ») : tests multi-fournisseurs
     static var demoServer2: String? { arg("prisme.debug.demoServer2") }
     static var demoDown: String? { arg("prisme.debug.demoDown") }
+    /// lot 6 : prépare tout de suite la rangée du Top Shelf et l'affiche par-dessus l'appli (comparaison avec le simulateur)
+    static var shelf: Bool { arg("prisme.debug.shelf") == "1" }
+    /// lot 6 : lien de carte du Top Shelf ouvert au lancement (« prisme://play?id=… »)
+    static var link: String? { arg("prisme.debug.link") }
 }
 
 /// Simulateur de test seulement : comptage des données personnelles (profils, Ma liste, historique, favoris TV),
