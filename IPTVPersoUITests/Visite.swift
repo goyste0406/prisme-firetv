@@ -113,6 +113,7 @@ final class Visite: XCTestCase {
         if ProcessInfo.processInfo.environment["ONLY"] == "lot5t" { lot5t(); return }
         if ProcessInfo.processInfo.environment["ONLY"] == "lot6" { lot6(); return }
         if ProcessInfo.processInfo.environment["ONLY"] == "c253" { c253(); return }
+        if ProcessInfo.processInfo.environment["ONLY"] == "c253tv" { c253tv(); return }
         if ProcessInfo.processInfo.environment["ONLY"] == "lot3g" { lot3g(); return }
         if ProcessInfo.processInfo.environment["ONLY"] == "tvidle" {
             // TV en direct au lancement avec deux fournisseurs, 150 s sans aucune interaction, puis une capture
@@ -1247,9 +1248,9 @@ final class Visite: XCTestCase {
         relaunch(["-prisme.debug.tab", "live", "-prisme.debug.playLive", "M6"], wait: 18)
         shot("G00-choix-debut")
         // M6 a le replay : prisme demande « Depuis le début » ou « Rejoindre le direct » → le direct
-        if focused().contains("Ne plus demander") || focused().contains("début") {
-            press(.up); for _ in 0..<3 { if focused().contains("Rejoindre") { break }; press(.right) }
-            press(.select); w(8)
+        for i in 0..<5 {
+            if focused().contains("Rejoindre") { press(.select); w(8); break }
+            if i == 0 && focused().contains("Ne plus demander") { press(.up) } else { press(.right) }
         }
         shot("G00b-direct", focus: false)
         press(.down); w(1.5); shot("G01-panneau", focus: true)

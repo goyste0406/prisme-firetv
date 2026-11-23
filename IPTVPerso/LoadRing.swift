@@ -94,7 +94,8 @@ struct LoadRingButton: View {
                         .stroke(ring.mode == .done ? Color(hex: "#22c55e") : Color(hex: f ? "#0a84ff" : "#7dd3fc"), style: StrokeStyle(lineWidth: 4.5, lineCap: .round))
                         .rotationEffect(.degrees(-90))
                         .animation(.easeOut(duration: 0.6), value: fraction)
-                    Text(label).font(P.font(label.count > 2 ? 16 : 19, .heavy)).monospacedDigit()
+                    // simulateur .fcn : 13 px pour ⏸ / ✓, 11 px pour un pourcentage (× 1,5 sur la TV)
+                    Text(label).font(P.font(label.first?.isNumber == true ? 16.5 : 19.5, .heavy)).monospacedDigit()
                         .foregroundStyle(f ? Color.black : Color.white)
                 }
                 .frame(width: 54, height: 54)
