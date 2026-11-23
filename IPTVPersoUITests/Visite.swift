@@ -1187,10 +1187,13 @@ final class Visite: XCTestCase {
             for i in 0..<max { if focused().contains(t) { return true }; press(.right); if i % 2 == 1 { shot("\(prefix)-\(i)") } }
             return focused().contains(t)
         }
-        // A. anneau de chargement : premier lancement, les fiches TMDB se téléchargent
+        // A. anneau de chargement : premier lancement (les fiches du petit catalogue finissent souvent en moins de 2 s :
+        // pas d'anneau), puis état forcé pour comparer l'anneau et son détail au simulateur
         app.terminate(); app.launchArguments = base + ["-prisme.debug.tab", "films"]; app.launch()
         w(6); shot("A01-anneau-3s")
         w(4); shot("A02-anneau-7s")
+        for d in ["running", "paused", "done"] { relaunch(["-prisme.debug.tab", "films", "-prisme.debug.ring", d], wait: 14); shot("A02-\(d)") }
+        relaunch(["-prisme.debug.tab", "films", "-prisme.debug.ring", "running"], wait: 14)
         let ring = app.descendants(matching: .any).matching(NSPredicate(format: "label BEGINSWITH 'Chargement'")).firstMatch
         attach("A03-anneau", ring.exists ? ring.label : "(absent)")
         press(.up, 3); shot("A04-barre")
@@ -1205,6 +1208,11 @@ final class Visite: XCTestCase {
         press(.select); w(1.5); shot("B03-jaime-toast")
         remote.press(.playPause); w(1.5); shot("B04-panneau-coche")
         press(.menu); w(1); shot("B05-ferme")
+        // rangée avec menu « OK maintenu » (Reprendre) : ⏯ donne le même menu, J'aime en tête
+        downUntil(["Reprendre", "Inception", "reste"], max: 4, prefix: "B06")
+        remote.press(.playPause); w(1.5); shot("B07-panneau-reprendre")
+        attach("B07", app.otherElements["prisme.tileActions"].exists ? "panneau ouvert" : "(panneau absent)")
+        press(.menu); w(1)
         // C. Explorer / Parcourir : présents avant et après l'ouverture d'une fiche
         relaunch(["-prisme.debug.tab", "films"], wait: 22)
         downUntil(["Explorer", "Parcourir", "Action", "Science"], max: 14, prefix: "C01")
@@ -1226,7 +1234,10 @@ final class Visite: XCTestCase {
         else { attach("E12", "bouton version non atteint : " + focused()) }
         // F. bande-annonce YouTube : QR code (série sans bande-annonce Apple)
         attach("F00", app.buttons["trailer-qr-button"].exists ? "bouton QR présent" : "(bouton QR absent)")
-        if rightUntil("QR", prefix: "F01") { press(.select); w(2); shot("F02-qr"); back(); shot("F03-retour") }
+        relaunch(["-prisme.debug.open", "series:demo:2001"], wait: 24)
+        press(.down); shot("F00-boutons")
+        if rightUntil("QR", max: 8, prefix: "F01") { press(.select); w(2); shot("F02-qr"); back(); shot("F03-retour") }
+        else { attach("F01", "bouton QR non atteint : " + focused()) }
         c253tv()
     }
 

@@ -60,6 +60,9 @@ struct HomeTileMenuMod: ViewModifier {
             content
                 .contextMenu { ForEach(0..<acts.count, id: \.self) { i in Button(acts[i].0) { acts[i].1() } } }
                 .onPlayPauseCommand { TileActions.shared.open(title: item?.displayTitle ?? "", acts: TileActions.rating(item) + m.build(item)) }
+        } else if let item {
+            // rangée sans menu « OK maintenu » (« Ce soir ? »…) : ⏯ donne quand même J'aime / Je n'aime pas
+            content.onPlayPauseCommand { TileActions.shared.open(title: item.displayTitle, acts: TileActions.rating(item)) }
         } else { content }
     }
 }

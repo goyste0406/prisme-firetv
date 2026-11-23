@@ -28,6 +28,16 @@ final class LoadRing: ObservableObject {
     }
 
     private func tick() {
+        // simulateur de test seulement : état forcé pour les captures (« running », « paused », « done »)
+        if let d = Debug.arg("prisme.debug.ring") {
+            let m: Mode = d == "paused" ? .paused(42) : d == "done" ? .done : .running(42)
+            if mode != m {
+                lines = [("Sources", 100, 100, Color(hex: "#f47a7a")), ("Films", 21, 50, Color(hex: "#7dd3fc")), ("Séries", 0, 30, Color(hex: "#a78bfa"))]
+                status = d == "paused" ? "en pause pendant la lecture" : d == "done" ? "à jour · 80 fiches" : "21 / 80"
+                mode = m
+            }
+            return
+        }
         let st = ProviderStore.shared, f = FicheService.shared
         let importing = st.importing != nil
         let fiches = f.running && f.total > 0 && f.done < f.total
