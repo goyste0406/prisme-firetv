@@ -218,6 +218,8 @@ final class Nav: ObservableObject {
     /// demande en cours : la barre la satisfait dès qu'elle est à l'écran (sur Films, Séries, Ma liste et Recherche
     /// la barre défile avec la page ; hors de l'écran, tvOS refuse d'y poser la sélection, il faut d'abord remonter)
     var wantBar = false
+    /// 253 : rubrique des Réglages à ouvrir (anneau de chargement → « Accueils et notes », où se règlent les fiches)
+    var openSettings: String?
     /// numéro de la dernière tentative : seule la plus récente peut clore la demande (la barre peut réapparaître tard)
     var barTry = 0
     func goToBar() { wantBar = true; backToBar += 1 }
@@ -260,6 +262,8 @@ struct TopBar: View {
                 tab(.films, "Films"); tab(.series, "Séries"); tab(.live, "TV en direct"); tab(.mine, "Ma liste")
                 icon(.search, "magnifyingglass"); icon(.settings, "gearshape.fill")
                 TopBarProfile()
+                // 253 : anneau de chargement du simulateur (.fcring), juste après l'avatar
+                LoadRingButton()
             }
             .padding(9)
             .glass(40)
@@ -278,7 +282,7 @@ struct TopBar: View {
             HStack(alignment: .top) {
                 Brand().padding(.top, 22)
                 Spacer()
-                VStack(alignment: .trailing, spacing: 8) { Clock().padding(.top, 16); ImportBadge() }
+                VStack(alignment: .trailing, spacing: 8) { Clock().padding(.top, 16) }   // 253 : l'avancement de l'import est dans l'anneau
             }
             .padding(.horizontal, 84)
             .frame(maxWidth: .infinity)

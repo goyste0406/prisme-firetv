@@ -117,6 +117,8 @@ enum TrackLang {
 
 /// Notes de fin de film (👍 / 👎), par profil. Elles comptent dans les goûts comme un « j'aime » du test
 /// (TasteStore les lit), mais restent à part : refaire le test ne les efface pas.
+extension Notification.Name { static let prismeRated = Notification.Name("prisme.rated") }
+
 enum FilmRatings {
     struct Rated: Codable { var v: Int; var genres: [String]; var kw: [Int]; var dir: String; var cast: [String]; var title: String }
     static func key(_ pid: String) -> String { ProfileStore.storageKey("prisme.rated", for: pid) }
@@ -138,6 +140,32 @@ enum FilmRatings {
         HomeCacheReset.run(); TasteStore.shared.invalidate(pid)
         DataCount.write("note [\(pid)] : \(it.displayTitle) \(v > 0 ? "👍" : "👎")")
     }
+    /// 253 : retire la note (deuxième appui sur le même bouton J'aime / Je n'aime pas)
+    @MainActor static func clear(_ it: MediaItem, pid p0: String? = nil) {
+        let pid = p0 ?? ProfileStore.shared.me.id
+        var m = all(pid)
+        guard m.removeValue(forKey: it.workKey) != nil else { return }
+        if let d = try? JSONEncoder().encode(m) { UserDefaults.standard.set(d, forKey: key(pid)) }
+        HomeCacheReset.run(); TasteStore.shared.invalidate(pid)
+        DataCount.write("note retirée [\(pid)] : \(it.displayTitle)")
+    }
+    /// 253 : J'aime (+1) / Je n'aime pas (-1) depuis un accueil ou une fiche ; le même choix une deuxième fois l'annule
+    @MainActor static func toggle(_ it: MediaItem, _ v: Int) {
+        if value(it.workKey, pid: ProfileStore.shared.me.id) == v {
+            clear(it); AppToast.shared.say("Note retirée")
+            NotificationCenter.default.post(name: .prismeRated, object: nil)
+            return
+        }
+        // la note retient les genres, le réalisateur et les acteurs : on reprend la fiche TMDB si l'affiche ne l'a pas
+        Task { @MainActor in
+            var x = it
+            if x.fiche == nil { let k = x.kind, key = x.clean.key; x.fiche = await Database.shared.read { _ in FicheStore.byKeys(k, [key])[key] } }
+            rate(x, v)
+            AppToast.shared.say(v > 0 ? "♡ J'aime · pour " + ProfileStore.shared.me.name : "Je n'aime pas · pour " + ProfileStore.shared.me.name)
+            NotificationCenter.default.post(name: .prismeRated, object: nil)
+        }
+    }
+
     static func skip(_ work: String, pid: String) {
         var s = Set(UserDefaults.standard.stringArray(forKey: skipKey(pid)) ?? [])
         s.insert(work)

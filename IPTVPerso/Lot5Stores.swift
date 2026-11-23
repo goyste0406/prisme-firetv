@@ -55,9 +55,65 @@ struct HomeTileMenuMod: ViewModifier {
     let item: MediaItem?
     func body(content: Content) -> some View {
         if let m = menu {
-            let acts = m.build(item)
-            content.contextMenu { ForEach(0..<acts.count, id: \.self) { i in Button(acts[i].0) { acts[i].1() } } }
+            let acts = TileActions.rating(item) + m.build(item)
+            // OK maintenu (télécommandes Siri) et, 253, bouton ⏯ : le même menu, dans un panneau prisme
+            content
+                .contextMenu { ForEach(0..<acts.count, id: \.self) { i in Button(acts[i].0) { acts[i].1() } } }
+                .onPlayPauseCommand { TileActions.shared.open(title: item?.displayTitle ?? "", acts: TileActions.rating(item) + m.build(item)) }
         } else { content }
+    }
+}
+
+/// 253 : panneau d'actions d'une affiche (⏯), pour les télécommandes où l'appui long n'est pas fiable.
+@MainActor
+final class TileActions: ObservableObject {
+    static let shared = TileActions()
+    @Published private(set) var title = ""
+    @Published private(set) var acts: [(String, () -> Void)] = []
+    @Published private(set) var shown = false
+    func open(title: String, acts: [(String, () -> Void)]) {
+        guard !acts.isEmpty else { return }
+        self.title = title; self.acts = acts; shown = true
+    }
+    func close() { shown = false }
+
+    /// J'aime / Je n'aime pas en tête (✓ sur le choix actif ; le même choix une deuxième fois l'annule)
+    static func rating(_ it: MediaItem?) -> [(String, () -> Void)] {
+        guard let it, it.kind == .film || it.kind == .series, !ProfileStore.shared.isGuest else { return [] }
+        let v = FilmRatings.value(it.workKey, pid: ProfileStore.shared.me.id)
+        return [((v == 1 ? "✓ " : "") + "♡ J'aime", { FilmRatings.toggle(it, 1) }),
+                ((v == -1 ? "✓ " : "") + "Je n'aime pas", { FilmRatings.toggle(it, -1) })]
+    }
+}
+
+/// Panneau (maquette validée : verre sombre, titre en petites capitales, une ligne par action).
+struct TileActionsHost: View {
+    @ObservedObject var ta = TileActions.shared
+    @FocusState private var f: Int?
+    var body: some View {
+        if ta.shown {
+            ZStack {
+                Color.black.opacity(0.45).ignoresSafeArea()
+                VStack(alignment: .leading, spacing: 10) {
+                    Text(ta.title.uppercased()).font(P.font(20, .bold)).tracking(2).foregroundStyle(.white.opacity(0.6)).lineLimit(1).padding(.bottom, 6)
+                    ForEach(0..<ta.acts.count, id: \.self) { i in
+                        Button { let a = ta.acts[i].1; ta.close(); a() } label: {
+                            Text(ta.acts[i].0).font(P.font(26, .semibold)).frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                        .buttonStyle(PrefRowStyle()).focused($f, equals: i)
+                    }
+                }
+                .padding(.horizontal, 36).padding(.vertical, 32)
+                .frame(width: 620)
+                .background(Color(red: 36 / 255, green: 37 / 255, blue: 48 / 255).opacity(0.92), in: RoundedRectangle(cornerRadius: 36, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: 36, style: .continuous).stroke(Color.white.opacity(0.16), lineWidth: 1.5))
+                .focusSection()
+            }
+            .onExitCommand { ta.close() }
+            .onAppear { DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { f = 0 } }
+            .transition(.opacity)
+            .accessibilityIdentifier("prisme.tileActions")
+        }
     }
 }
 extension View {
@@ -115,6 +171,8 @@ enum PlaybackActivity {
 
 /// Fiches en arrière-plan : « La nuit seulement » (1 h – 7 h) et « Pendant la lecture » (pause ou lentement).
 enum FicheGate {
+    /// 253 : « Pendant la lecture : mettre en pause » (réglage par défaut) — l'anneau affiche alors ⏸
+    static var pausesForPlayback: Bool { (UserDefaults.standard.object(forKey: "prisme.pref.fichePlay") as? Int ?? 0) != 1 }
     static func wait() async {
         while !Task.isCancelled {
             let mode = UserDefaults.standard.object(forKey: "prisme.pref.ficheMode") as? Int ?? 0

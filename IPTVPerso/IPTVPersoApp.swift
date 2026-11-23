@@ -38,6 +38,7 @@ struct MainTabView: View {
     @ObservedObject var nav = Nav.shared
     @ObservedObject var profiles = ProfileStore.shared
     @ObservedObject var pui = ProfileUI.shared
+    @ObservedObject var tileActs = TileActions.shared
     @State private var debugOpen: MediaItem?
     @State private var resumeOpen: MediaItem?
     @State private var asked = false
@@ -62,6 +63,10 @@ struct MainTabView: View {
             .onChange(of: store.catalogVersion) { _, _ in TopShelfPublisher.schedule(after: 20) }
             .onChange(of: phase) { _, p in if p == .background { TopShelfPublisher.schedule(after: 0) } }
             .overlay { if shelfPreview { ShelfPreviewScreen(close: { shelfPreview = false }) } }
+            // 253 : actions d'une affiche (⏯) : J'aime, Je n'aime pas, Ma liste…
+            .overlay { TileActionsHost() }
+            // 253 : détail de l'anneau de chargement (simulateur .fcpopw : 48 px du bord droit, 96 px du haut)
+            .overlay(alignment: .topTrailing) { RingPopupHost().padding(.trailing, 72).padding(.top, 144).allowsHitTesting(false).ignoresSafeArea() }
     }
 
     private var mainBody: some View {
@@ -94,7 +99,7 @@ struct MainTabView: View {
             .navigationDestination(item: $linkOpen) { o in DetailView(item: o.item, autoPlay: o.play) }
         }
         // fenêtres au-dessus de TOUT, y compris d'une fiche ouverte (la pastille de profil de la fiche ouvre la fenêtre)
-        .disabled(pui.picker || pui.launch || pui.taste != nil)
+        .disabled(pui.picker || pui.launch || pui.taste != nil || tileActs.shown)
         .overlay {
             if pui.picker {
                 ProfilePickerModal(close: { pui.picker = false }, manage: { pui.picker = false; nav.tab = .settings; if pui.editProfile == nil { pui.editProfile = "" } })

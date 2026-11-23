@@ -28,6 +28,8 @@ struct SeriesDetailView: View {
     @State private var live: LiveLaunch?
     @State private var trailer: Trailer?
     @State private var showTrailer: Trailer?
+    @State private var ytTrailer: YouTubeTrailer?
+    @State private var showQR: YouTubeTrailer?
     @State private var loading = true
     @State private var showRecap: RecapPlan?
     @State private var recapDone = false
@@ -77,6 +79,7 @@ struct SeriesDetailView: View {
             }
         }
         .scrollClipDisabled()
+        .disabled(pickVersion)
         .background {
             let hasBd = fiche?.backdrop.isEmpty == false
             ZStack {
@@ -91,6 +94,7 @@ struct SeriesDetailView: View {
         .fullScreenCover(item: $playing) { r in VodPlayerView(request: r) }
         .fullScreenCover(item: $live) { l in LivePlayerView(channels: [l.ch], start: 0) }
         .fullScreenCover(item: $showTrailer) { t in TrailerScreen(trailer: t, title: title, playFilm: trailerPlay, playTitle: "Regarder la série") }
+        .fullScreenCover(item: $showQR) { t in TrailerQRScreen(trailer: t, title: title, backdrop: item.backdropHD, playFilm: trailerPlay, playTitle: "Regarder la série") }
         .fullScreenCover(item: $showRecap) { plan in
             RecapScreen(plan: plan, backdrop: (fiche?.backdrop.isEmpty == false) ? Fiche.img(fiche!.backdrop, "original") : info.backdrop, poster: item.posterURL) { mainAction() }
         }
@@ -100,13 +104,21 @@ struct SeriesDetailView: View {
         }
         .sheet(isPresented: $showSyn) { SynopsisSheet(kicker: "SÉRIE", title: title, text: plot.isEmpty ? "Pas de résumé chez le fournisseur." : plot) }
         .sheet(item: $actor) { a in ActorSheet(actor: a, kind: .series, excluding: item.clean.key) }
-        .confirmationDialog("Choisir la version", isPresented: $pickVersion) {
-            ForEach(versions) { v in Button(versionLabel(v)) {
-                chosen = v; Task { info = await InfoLoader.load(v) }
-                // 1.8 : la version choisie est retenue pour cette série (elle passe avant la préférence générale du profil)
-                var m = SeriesMemory.load(item.id); m.version = v.pid + "|" + v.clean.tags.joined(separator: " "); m.save(item.id)
-            } }
+        // 253 : même fenêtre des sources que les films (badges de langue et de qualité, fournisseur)
+        .overlay {
+            if pickVersion {
+                VersionsModal(title: title, versions: versions, current: cur, label: { versionRow($0) },
+                              pick: { v in
+                                  chosen = v; pickVersion = false; Task { info = await InfoLoader.load(v) }
+                                  // 1.8 : la version choisie est retenue pour cette série (elle passe avant la préférence générale du profil)
+                                  var m = SeriesMemory.load(item.id); m.version = v.pid + "|" + v.clean.tags.joined(separator: " "); m.save(item.id)
+                                  DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { playFocused = true }
+                              },
+                              close: { pickVersion = false; DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { playFocused = true } })
+                    .transition(.opacity.combined(with: .scale(scale: 0.97)))
+            }
         }
+        .animation(.easeOut(duration: 0.2), value: pickVersion)
         .alert(launchMsg ?? "", isPresented: Binding(get: { launchMsg != nil }, set: { if !$0 { launchMsg = nil } })) { Button("OK") {} }
     }
 
@@ -182,6 +194,8 @@ struct SeriesDetailView: View {
                 Button { watch.toggleFavorite(item.id, item: item, from: "depuis sa fiche") } label: {
                     Image(systemName: watch.favorites.contains(item.id) ? "checkmark" : "plus").font(P.font(32, .bold))
                 }.buttonStyle(FicheButtonStyle(square: true))
+                // 253 : J'aime / Je n'aime pas (comptent dans les goûts du profil, comme pour les films)
+                RateButtons(item: item)
                 Button { if versions.count > 1 { pickVersion = true } else { launchMsg = "Une seule version chez ton fournisseur" } } label: {
                     VStack(alignment: .leading, spacing: 1) {
                         Text(versionShort(cur)).font(P.font(32, .heavy))
@@ -191,6 +205,12 @@ struct SeriesDetailView: View {
                 if let t = trailer {
                     Button { showTrailer = t } label: { Image(systemName: "film").font(P.font(30, .semibold)) }
                         .buttonStyle(FicheButtonStyle(square: true))
+                }
+                else if let y = ytTrailer {
+                    // 253 : bande-annonce seulement sur YouTube → QR code à scanner avec l'iPhone
+                    Button { showQR = y } label: { Image(systemName: "qrcode").font(P.font(30, .semibold)) }
+                        .buttonStyle(FicheButtonStyle(square: true))
+                        .accessibilityIdentifier("trailer-qr-button")
                 }
             }.focusSection()
         }
@@ -649,6 +669,7 @@ struct SeriesDetailView: View {
         airings = await LiveStore.airings(title: title, providers: pids)
         let y = (fiche?.year ?? 0) > 0 ? fiche!.year : (item.clean.year > 0 ? item.clean.year : info.year)
         trailer = await TrailerStore.find(title: title, year: y, minutes: 0, tmdb: fiche?.tmdb ?? info.tmdb, tv: true)
+        if trailer == nil { ytTrailer = await YouTubeTrailerStore.find(tmdb: fiche?.tmdb ?? info.tmdb, tv: true, provider: info.trailer) }
         var it = item; it.fiche = fiche
         similar = await MediaStore.similar(of: it, genres: genres, pids: pids, limit: 60).map { SimilarItem(item: $0.0, common: $0.1) }
     }
@@ -683,17 +704,23 @@ struct SeriesDetailView: View {
         playing = EpisodeLogic.request(item, title: title, info: info, provider: p, episode: e, from: from, fiche: fiche, version: versionShort(cur))
     }
 
-    private func versionShort(_ v: MediaItem) -> String {
+    private func versionShort(_ v: MediaItem) -> String { SourceLang.short(v) }
+
+    /// Ligne de la fenêtre des sources : uniquement ce que dit le nom chez le fournisseur.
+    private func versionRow(_ v: MediaItem) -> VersionsModal.Row {
         let t = v.clean.tags
-        let lang = t.first { ["VF", "MULTI", "VOSTFR"].contains($0) } ?? "VF"
-        let q = t.first { ["4K", "1080p"].contains($0) } ?? "HD"
-        return lang + " · " + q
+        let q = t.first { ["4K", "1080p", "720p", "SD"].contains($0) } ?? ""
+        let raw = v.name.uppercased()
+        let words = Set(raw.components(separatedBy: CharacterSet.alphanumerics.union(CharacterSet(charactersIn: "."))
+            .inverted))
+        let names = ["HDR": "HDR", "DV": "Dolby Vision", "HEVC": "HEVC", "ATMOS": "Dolby Atmos", "5.1": "Son 5.1"]
+        let extra = ["HDR", "DV", "HEVC", "ATMOS", "5.1"].filter { words.contains($0) }.compactMap { names[$0] }
+        return .init(quality: q, provider: store.provider(v.pid)?.name ?? "Fournisseur", raw: v.name,
+                     audio: extra.isEmpty ? [] : [extra.joined(separator: " · ")], isDefault: v.id == (versions.first?.id ?? ""))
     }
 
     private func versionLabel(_ v: MediaItem) -> String {
-        let t = v.clean.tags
-        let prov = store.provider(v.pid)?.name ?? ""
-        return ([t.isEmpty ? "Version standard" : t.joined(separator: " · ")] + (Set(versions.map(\.pid)).count > 1 ? [prov] : [])).joined(separator: " · ")
+        SourceLang.label(v, provider: Set(versions.map(\.pid)).count > 1 ? store.provider(v.pid)?.name : nil)
     }
 }
 

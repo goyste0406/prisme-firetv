@@ -170,6 +170,12 @@ struct ProvidersSettingsView: View {
         .onChange(of: showLog) { _, now in if !now { comeBack("log") } }
         .onChange(of: showClass) { _, now in if !now { comeBack("class") } }
         .onAppear {
+            // 253 : ouverte depuis l'anneau de chargement de la barre du haut
+            if let s = Nav.shared.openSettings {
+                Nav.shared.openSettings = nil
+                section = s
+                for d in [0.4, 1.0] { DispatchQueue.main.asyncAfter(deadline: .now() + d) { if catFocus != s { catFocus = s } } }
+            }
             if let s = Debug.settingsSection {
                 // simulateur de test : le focus peut arriver plus tard sur la colonne ; on insiste quelques fois
                 for d in [0.6, 1.5, 3.0, 5.0] { DispatchQueue.main.asyncAfter(deadline: .now() + d) { if catFocus != s { catFocus = s; section = s } } }

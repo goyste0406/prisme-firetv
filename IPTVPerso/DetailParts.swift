@@ -235,8 +235,93 @@ struct FicheButtonStyle: ButtonStyle {
 
 /// Fenêtre « Choisis la version » du simulateur : liste des sources (qualité, fournisseur, nom exact, langues).
 /// OK lit la source ; Menu ferme. Rien d'inventé : les langues et qualités viennent du nom chez le fournisseur.
+/// 253 : langue d'une source, lue uniquement dans ce qu'écrit le fournisseur (nom de la source, puis nom de sa catégorie).
+/// Rien de trouvé → nil : on n'affiche alors aucune langue (jamais « VF » par défaut).
+enum SourceLang {
+    private static func words(_ s: String) -> Set<String> {
+        let f = s.folding(options: [.diacriticInsensitive, .caseInsensitive], locale: nil).uppercased()
+        return Set(f.components(separatedBy: CharacterSet.alphanumerics.inverted).filter { !$0.isEmpty })
+    }
+    private static func read(_ s: String) -> String? {
+        let w = words(s)
+        if w.isEmpty { return nil }
+        if w.contains("MULTI") || w.contains("MULTILANG") || w.contains("MULTIAUDIO") { return "MULTI" }
+        if !w.isDisjoint(with: ["VOSTFR", "VOST", "STFR", "SUBFRENCH", "VOSTF"]) { return "VOSTFR" }
+        if w.contains("VFF") || w.contains("TRUEFRENCH") { return "VFF" }
+        if w.contains("VFQ") || w.contains("QUEBEC") || w.contains("QUEBECOIS") { return "VFQ" }
+        if w.contains("VQ") { return "VQ" }
+        if w.contains("VF") || w.contains("VFI") || w.contains("FRENCH") { return "VF" }
+        if w.contains("VO") { return "VO" }
+        return nil
+    }
+    /// Code de langue (VFF, VFQ, VF, VQ, VOSTFR, VO, MULTI) ou nil si le fournisseur ne dit rien.
+    static func detect(raw: String, category: String? = nil) -> String? {
+        read(raw) ?? category.flatMap { read($0) }
+    }
+    /// Explication en clair, affichée sous le badge.
+    static func name(_ code: String) -> String {
+        switch code {
+        case "VFF": return "Français (France)"
+        case "VFQ": return "Français (Québec)"
+        case "VQ": return "Version québécoise"
+        case "VF": return "Français"
+        case "VOSTFR": return "VO sous-titrée français"
+        case "VO": return "Version originale"
+        case "MULTI": return "Plusieurs langues"
+        default: return code
+        }
+    }
+    static func color(_ code: String) -> Color {
+        switch code {
+        case "VFF", "VF": return Color(red: 0.49, green: 0.83, blue: 0.99)      // bleu ciel (prisme)
+        case "VFQ", "VQ": return Color(red: 0.65, green: 0.55, blue: 0.98)      // violet
+        case "VOSTFR": return Color(red: 0.98, green: 0.75, blue: 0.36)         // ambre
+        case "VO": return Color(red: 0.96, green: 0.55, blue: 0.62)             // rose
+        default: return Color(red: 0.43, green: 0.91, blue: 0.72)               // MULTI : vert d'eau
+        }
+    }
+    /// Résumé court d'une version (« VFF · 4K », ou « 4K » seul si la langue n'est pas écrite).
+    static func short(_ v: MediaItem) -> String {
+        let t = v.clean.tags
+        let q = t.first { ["4K", "1080p"].contains($0) } ?? "HD"
+        return ([detect(raw: v.name)].compactMap { $0 } + [q]).joined(separator: " · ")
+    }
+    /// Libellé d'une version pour les listes (lecteur) : langue écrite, qualité, fournisseur si plusieurs.
+    static func label(_ v: MediaItem, provider: String?) -> String {
+        let q = v.clean.tags.filter { ["4K", "1080p"].contains($0) }
+        let parts = [detect(raw: v.name)].compactMap { $0 } + q
+        return ([parts.isEmpty ? "Version standard" : parts.joined(separator: " · ")] + [provider].compactMap { $0 }).joined(separator: " · ")
+    }
+    /// Noms des catégories des sources (pid:cid → nom), pour les sources dont le nom ne dit rien.
+    static func categories(_ items: [MediaItem]) async -> [String: String] {
+        let pairs = Array(Set(items.map { $0.pid + ":" + $0.cid }))
+        guard !pairs.isEmpty, let k = items.first?.kind else { return [:] }
+        let type = k == .film ? "vod" : "series"
+        let pids = Array(Set(items.map(\.pid)))
+        let ph = pids.map { _ in "?" }.joined(separator: ",")
+        return await Database.shared.read { db in
+            var out: [String: String] = [:]
+            db.query("SELECT pid,cid,name FROM category WHERE type='\(type)' AND pid IN (\(ph))", pids.map { $0 as Any? }) { r in
+                let key = r.str(0) + ":" + r.str(1)
+                if pairs.contains(key) { out[key] = r.str(2) }
+            }
+            return out
+        }
+    }
+}
+
+/// Badge de langue de la fenêtre des sources.
+struct LangBadge: View {
+    let code: String
+    var body: some View {
+        Text(code).font(P.font(26, .heavy)).tracking(0.5).foregroundStyle(.black)
+            .padding(.horizontal, 20).frame(height: 56)
+            .background(SourceLang.color(code), in: RoundedRectangle(cornerRadius: 15, style: .continuous))
+    }
+}
+
 struct VersionsModal: View {
-    struct Row { let quality: String; let provider: String; let raw: String; let audio: [String]; let isDefault: Bool }
+    struct Row { let quality: String; let provider: String; let raw: String; let audio: [String]; let isDefault: Bool; var lang: String? = nil }
     let title: String
     let versions: [MediaItem]
     let current: MediaItem
@@ -244,6 +329,7 @@ struct VersionsModal: View {
     let pick: (MediaItem) -> Void
     let close: () -> Void
     @FocusState private var focus: String?
+    @State private var cats: [String: String] = [:]
 
     var body: some View {
         ZStack {
@@ -255,7 +341,7 @@ struct VersionsModal: View {
                 ScrollView {
                     VStack(spacing: 11) {
                         ForEach(versions) { v in
-                            Button { pick(v) } label: { row(label(v)) }
+                            Button { pick(v) } label: { row(label(v), cat: cats[v.pid + ":" + v.cid]) }
                                 .buttonStyle(SourceRowStyle())
                                 .focused($focus, equals: v.id)
                         }
@@ -274,20 +360,28 @@ struct VersionsModal: View {
             .focusSection()
         }
         .defaultFocus($focus, current.id)
+        .task { cats = await SourceLang.categories(versions) }
         .onAppear { DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { focus = versions.contains(where: { $0.id == current.id }) ? current.id : versions.first?.id } }
         .onExitCommand { close() }
     }
 
-    private func row(_ r: Row) -> some View {
-        HStack(spacing: 30) {
-            QualityBadge(q: r.quality).frame(width: 172, alignment: .leading)
+    private func row(_ r: Row, cat: String?) -> some View {
+        // 253 : la langue d'abord (nom de la source, sinon sa catégorie), puis la qualité ; rien d'inventé
+        let lang = r.lang ?? SourceLang.detect(raw: r.raw, category: cat)
+        let fromCat = r.lang == nil && SourceLang.detect(raw: r.raw) == nil && lang != nil
+        let audio = (lang.map { [SourceLang.name($0) + (fromCat ? " (catégorie)" : "")] } ?? []) + r.audio
+        return HStack(spacing: 30) {
+            HStack(spacing: 12) {
+                if let l = lang { LangBadge(code: l) }
+                QualityBadge(q: r.quality)
+            }.frame(width: 300, alignment: .leading)
             VStack(alignment: .leading, spacing: 6) {
                 (Text(r.provider).font(P.font(36, .semibold)) + Text(r.isDefault ? " · par défaut" : "").font(P.font(26, .medium)).foregroundColor(.secondary))
                 Text(r.raw).font(P.font(26)).opacity(0.6).lineLimit(1).truncationMode(.middle)
             }
             Spacer(minLength: 10)
             VStack(alignment: .trailing, spacing: 4) {
-                ForEach(r.audio, id: \.self) { Text($0) }
+                ForEach(audio, id: \.self) { Text($0) }
             }.font(P.font(24)).opacity(0.6).frame(maxWidth: 420, alignment: .trailing)
         }
         .padding(.horizontal, 34).padding(.vertical, 26)
@@ -552,3 +646,24 @@ struct SynopsisSheet: View {
 
 /// Lancer une chaîne depuis « À la TV ».
 struct LiveLaunch: Identifiable { let id = UUID(); let ch: Channel }
+
+
+/// 253 : boutons J'aime / Je n'aime pas d'une fiche (cœur et pouce, plein quand le choix est actif ; un deuxième
+/// appui l'annule). Même note que « Tu as aimé ? » et que le panneau ⏯ des accueils.
+struct RateButtons: View {
+    let item: MediaItem
+    @State private var v: Int?
+    var body: some View {
+        Group {
+            Button { FilmRatings.toggle(item, 1) } label: { Image(systemName: v == 1 ? "heart.fill" : "heart").font(P.font(30, .bold)) }
+                .buttonStyle(FicheButtonStyle(square: true))
+                .accessibilityLabel(v == 1 ? "J'aime, choisi" : "J'aime")
+            Button { FilmRatings.toggle(item, -1) } label: { Image(systemName: v == -1 ? "hand.thumbsdown.fill" : "hand.thumbsdown").font(P.font(29, .bold)) }
+                .buttonStyle(FicheButtonStyle(square: true))
+                .accessibilityLabel(v == -1 ? "Je n'aime pas, choisi" : "Je n'aime pas")
+        }
+        .onAppear { refresh() }
+        .onReceive(NotificationCenter.default.publisher(for: .prismeRated)) { _ in refresh() }
+    }
+    private func refresh() { v = FilmRatings.value(item.workKey, pid: ProfileStore.shared.me.id) }
+}

@@ -97,6 +97,7 @@ struct MediaHomeView: View {
     @State private var openPlay: MediaItem?
     @State private var liveLaunch: LiveLaunch?
     @State private var trailer: Trailer?
+    @State private var ytTrailer: YouTubeTrailer?
     @State private var trailerTitle = ""
     @State private var alertTick = 0
     @State private var slidesBusy = false
@@ -168,6 +169,7 @@ struct MediaHomeView: View {
         .navigationDestination(item: $openPlay) { it in DetailView(item: it, autoPlay: true) }
         .fullScreenCover(item: $liveLaunch) { l in LivePlayerView(channels: [l.ch], start: 0) }
         .fullScreenCover(item: $trailer) { t in TrailerScreen(trailer: t, title: trailerTitle, playFilm: nil) }
+        .fullScreenCover(item: $ytTrailer) { t in TrailerQRScreen(trailer: t, title: trailerTitle, backdrop: "", playFilm: nil) }
         .navigationDestination(item: $openCat) { c in CategoryGridView(kind: kind, cat: c) }
         .navigationDestination(item: $openColl) { c in
             CollectionGridView(kicker: (kind == .film ? "FILMS · " : "SÉRIES · ") + c.kind.uppercased(), title: c.name, why: c.why, loader: c.loader)
@@ -309,7 +311,7 @@ struct MediaHomeView: View {
                 Text("Bande-annonce dans ").font(P.font(21)) + Text("\(n)").font(P.font(21, .bold))
             } else if heroTP != nil {
                 let vol = ["🔇 son coupé", "🔉 son faible", "🔊 son normal"][max(0, min(2, heroVolPref))]
-                Text("▶ BANDE-ANNONCE " + heroTrailerLang + " · " + heroTrailerTitle + "   ").font(P.font(19, .bold)).tracking(1.2) + Text(vol + " · une touche pour revenir").font(P.font(19))
+                Text("▶ BANDE-ANNONCE " + (heroTrailerLang.isEmpty ? "" : heroTrailerLang + " · ") + heroTrailerTitle + "   ").font(P.font(19, .bold)).tracking(1.2) + Text(vol + " · une touche pour revenir").font(P.font(19))
             }
         }
         .padding(.horizontal, 20).padding(.vertical, 12)
@@ -410,6 +412,8 @@ struct MediaHomeView: View {
             return [("▶ Bande-annonce", {
                 Task {
                     if let t = await TrailerStore.find(title: so.title, year: so.year, minutes: 0, tmdb: so.tmdb, tv: false) { trailerTitle = so.title; trailer = t }
+                    // 253 : sinon, bande-annonce YouTube en QR code (rien ne s'ouvre sur l'Apple TV)
+                    else if let y = await YouTubeTrailerStore.find(tmdb: so.tmdb, tv: false) { trailerTitle = so.title; ytTrailer = y }
                     else { AppToast.shared.say("Pas de bande-annonce trouvée pour « \(so.title) »") }
                 }
             })]
@@ -609,7 +613,10 @@ struct MediaHomeView: View {
         if let c = cached { snap = c; pickHero(c) }
         let k = kind, p = pids
         let twoWeeks = Int(Date().timeIntervalSince1970) - 14 * 86400
-        var s = cached ?? HomeSnap()
+        // 253 : on repart de l'accueil déjà affiché (et non d'un accueil vide). Pendant le téléchargement des fiches,
+        // l'accueil se recalcule toutes les 25 fiches : repartir de zéro faisait disparaître Explorer et Parcourir
+        // (calculés en dernier) jusqu'à la fin du calcul, ou pour de bon si le calcul suivant l'interrompait.
+        var s = cached ?? snap
         var n = await MediaStore.list(k, pids: p, where: "added > ?", args: [twoWeeks], order: "added DESC", limit: 40)
         if n.isEmpty { n = await MediaStore.list(k, pids: p, order: "added DESC", limit: 20) }
         s.newest = n

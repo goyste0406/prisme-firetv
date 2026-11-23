@@ -29,6 +29,8 @@ struct FilmDetailView: View {
     @State private var live: LiveLaunch?
     @State private var trailer: Trailer?
     @State private var showTrailer: Trailer?
+    @State private var ytTrailer: YouTubeTrailer?
+    @State private var showQR: YouTubeTrailer?
     @State private var loaded = false
     @State private var why: [WhyReason] = []
     @State private var splitOpen = false
@@ -138,6 +140,7 @@ struct FilmDetailView: View {
         .fullScreenCover(item: $playing) { r in VodPlayerView(request: r) }
         .fullScreenCover(item: $live) { l in LivePlayerView(channels: [l.ch], start: 0) }
         .fullScreenCover(item: $showTrailer) { t in TrailerScreen(trailer: t, title: title, playFilm: trailerPlay) }
+        .fullScreenCover(item: $showQR) { t in TrailerQRScreen(trailer: t, title: title, backdrop: item.backdropHD, playFilm: trailerPlay) }
         .sheet(isPresented: $showSyn) { SynopsisSheet(kicker: "RÉSUMÉ", title: title, text: plot) }
         .sheet(item: $actor) { a in ActorSheet(actor: a, kind: .film, excluding: item.clean.key) }
         .alert(launchMsg ?? "", isPresented: Binding(get: { launchMsg != nil }, set: { if !$0 { launchMsg = nil } })) { Button("OK") {} }
@@ -236,6 +239,8 @@ struct FilmDetailView: View {
             Button { watch.toggleFavorite(item.id, item: item, from: "depuis sa fiche") } label: {
                 Image(systemName: watch.favorites.contains(item.id) ? "checkmark" : "plus").font(P.font(32, .bold))
             }.buttonStyle(FicheButtonStyle(square: true)).opacity(peek ? 0.22 : 1)
+            // 253 : J'aime / Je n'aime pas (même note que « Tu as aimé ? » en fin de film, prise en compte par les goûts)
+            RateButtons(item: item).opacity(peek ? 0.22 : 1)
             Button { if versions.count > 1 { pickVersion = true } else { launchMsg = "Une seule version chez ton fournisseur" } } label: {
                 VStack(alignment: .leading, spacing: 1) {
                     Text(versionShort(cur)).font(P.font(32, .bold))
@@ -248,6 +253,11 @@ struct FilmDetailView: View {
                 Button { showTrailer = t } label: { Image(systemName: "film").font(P.font(30, .semibold)) }
                     .buttonStyle(FicheButtonStyle(square: true, pulse: peek))
                     .focused($trailerFocused)
+            } else if let y = ytTrailer {
+                // 253 : bande-annonce seulement sur YouTube → QR code à scanner avec l'iPhone
+                Button { showQR = y } label: { Image(systemName: "qrcode").font(P.font(30, .semibold)) }
+                    .buttonStyle(FicheButtonStyle(square: true))
+                    .accessibilityIdentifier("trailer-qr-button")
             }
         }
     }
@@ -462,6 +472,7 @@ struct FilmDetailView: View {
         airings = air
         trailer = await TrailerStore.find(title: title, year: year, minutes: minutes, tmdb: fiche?.tmdb ?? i1.tmdb, tv: false)
         if let t = trailer, Debug.bgTrailer { bg.arm(t.url) }
+        if trailer == nil { ytTrailer = await YouTubeTrailerStore.find(tmdb: fiche?.tmdb ?? i1.tmdb, tv: false) }
         var exclude = Set<Int>()
         if let f = fiche, f.coll > 0 {
             let (n, parts) = await SagaStore.parts(f.coll)
@@ -489,17 +500,10 @@ struct FilmDetailView: View {
         fits = out
     }
 
-    private func versionShort(_ v: MediaItem) -> String {
-        let t = v.clean.tags
-        let lang = t.first { ["VF", "MULTI", "VOSTFR"].contains($0) } ?? "VF"
-        let q = t.first { ["4K", "1080p"].contains($0) } ?? "HD"
-        return lang + " · " + q
-    }
+    private func versionShort(_ v: MediaItem) -> String { SourceLang.short(v) }
 
     private func versionLabel(_ v: MediaItem) -> String {
-        let t = v.clean.tags
-        let prov = store.provider(v.pid)?.name ?? ""
-        return ([t.isEmpty ? "Version standard" : t.joined(separator: " · ")] + (Set(versions.map(\.pid)).count > 1 ? [prov] : [])).joined(separator: " · ")
+        SourceLang.label(v, provider: Set(versions.map(\.pid)).count > 1 ? store.provider(v.pid)?.name : nil)
     }
 
     private var trailerPlay: (() -> Void)? { { play(from: resumeAt ?? 0) } }
@@ -527,14 +531,9 @@ struct FilmDetailView: View {
     private func versionInfo(_ v: MediaItem) -> VersionsModal.Row {
         let t = v.clean.tags
         let q = t.first { ["4K", "1080p", "720p", "SD"].contains($0) } ?? (t.contains("HD") ? "HD" : "")
+        // 253 : la langue est désormais un badge (SourceLang, lu dans le nom puis la catégorie)
         var lang: [String] = []
         let raw = v.name.uppercased()
-        if raw.contains("VFF") || raw.contains("TRUEFRENCH") { lang.append("Français (France) · VFF") }
-        else if raw.contains("VFQ") { lang.append("Français (Québec) · VFQ") }
-        else if t.contains("VF") { lang.append("Français · VF") }
-        if t.contains("MULTI") { lang.append("Plusieurs langues · MULTI") }
-        if t.contains("VOSTFR") { lang.append("VO sous-titrée français") }
-        if t.contains("VO") { lang.append("Version originale") }
         // détails techniques présents dans le nom (HDR, Dolby Vision…) : affichés pour distinguer deux sources de même qualité
         let names = ["HDR": "HDR", "DV": "Dolby Vision", "HEVC": "HEVC", "ATMOS": "Dolby Atmos", "5.1": "Son 5.1"]
         let words = Set(raw.components(separatedBy: CharacterSet.alphanumerics.union(CharacterSet(charactersIn: ".")).inverted))

@@ -1,5 +1,6 @@
 import SwiftUI
 import AVFoundation
+import CoreImage
 
 // MARK: - Bandes-annonces lues dans PRISME
 //
@@ -17,7 +18,9 @@ struct Trailer: Identifiable, Hashable {
 
 enum TrailerStore {
     private static var memo: [String: Trailer?] = [:]
-    private static let saved = "prisme.trailers.v1"
+    // 253 : v2 — les titres absents de l'ancienne recherche (France puis États-Unis) sont recherchés à nouveau
+    // avec les nouvelles sources (titre original en France, Canada) ; simple cache, aucune donnée personnelle
+    private static let saved = "prisme.trailers.v2"
 
     /// Bande-annonce d'un film (ou d'une série quand l'iTunes Store en propose une).
     static func find(title: String, year: Int, minutes: Int, tmdb: Int, tv: Bool) async -> Trailer? {
@@ -25,7 +28,7 @@ enum TrailerStore {
         if let m = memo[mk] { return m }
         if let d = UserDefaults.standard.dictionary(forKey: saved)?[mk] as? [String: String] {
             if d["u"] == "" { memo[mk] = .some(nil); return nil }
-            if let u = d["u"].flatMap(URL.init(string:)) { let t = Trailer(url: u, lang: d["l"] ?? "VO"); memo[mk] = t; return t }
+            if let u = d["u"].flatMap(URL.init(string:)) { let t = Trailer(url: u, lang: d["l"] ?? ""); memo[mk] = t; return t }
         }
         var out: Trailer? = nil
         let titles = [title]
@@ -37,7 +40,10 @@ enum TrailerStore {
                 for k in ["title", "name", "original_title", "original_name"] { if let t = d[k] as? String, !t.isEmpty, !titlesEN.contains(t) { titlesEN.append(t) } }
             }
         }
-        for t in titles where out == nil { if let u = await search(t, year: year, minutes: minutes, country: "fr", tv: tv) { out = Trailer(url: u, lang: "VF") } }
+        // 253 : plus de sources — store français avec le titre français puis le titre original, store canadien
+        // (langue non précisée : on ne l'affiche pas), puis store américain (VO)
+        for t in titles + titlesEN where out == nil { if let u = await search(t, year: year, minutes: minutes, country: "fr", tv: tv) { out = Trailer(url: u, lang: "VF") } }
+        for t in titles + titlesEN where out == nil { if let u = await search(t, year: year, minutes: minutes, country: "ca", tv: tv) { out = Trailer(url: u, lang: "") } }
         for t in titlesEN + titles where out == nil { if let u = await search(t, year: year, minutes: minutes, country: "us", tv: tv) { out = Trailer(url: u, lang: "VO") } }
         memo[mk] = out
         var all = UserDefaults.standard.dictionary(forKey: saved) ?? [:]
@@ -75,6 +81,125 @@ enum TrailerStore {
             if best == nil || score > best!.1 { best = (u, score) }
         }
         return best?.0
+    }
+}
+
+// MARK: - Bande-annonce YouTube (secours) : QR code seulement
+//
+// Quand aucune bande-annonce Apple n'existe, PRISME peut connaître la bande-annonce YouTube officielle (TMDB, ou le
+// fournisseur pour les séries). La lire dans l'app est interdit par YouTube, et l'ouvrir lancerait l'app YouTube
+// à l'écran (Steven ne le veut pas) : on affiche donc un QR code à scanner avec l'iPhone.
+
+struct YouTubeTrailer: Identifiable, Hashable {
+    let key: String
+    /// « VF » (vidéo française chez TMDB), « VO », ou "" (inconnue, fournisseur)
+    let lang: String
+    var id: String { key }
+    var url: URL { URL(string: "https://www.youtube.com/watch?v=" + key)! }
+}
+
+enum YouTubeTrailerStore {
+    private static var memo: [String: YouTubeTrailer?] = [:]
+    private static let saved = "prisme.yttrailers.v1"
+    private static let keyRx = try! NSRegularExpression(pattern: #"^[A-Za-z0-9_-]{11}$"#)
+
+    static func find(tmdb: Int, tv: Bool, provider: String = "") async -> YouTubeTrailer? {
+        let mk = (tv ? "t:" : "m:") + String(tmdb) + "|" + provider
+        if let m = memo[mk] { return m }
+        if let d = UserDefaults.standard.dictionary(forKey: saved)?[mk] as? [String: String] {
+            let t = (d["k"] ?? "").isEmpty ? nil : YouTubeTrailer(key: d["k"]!, lang: d["l"] ?? "")
+            memo[mk] = .some(t); return t
+        }
+        var out: YouTubeTrailer? = nil
+        if tmdb > 0, let key = TmdbKey.value {
+            let api = TmdbAPI(key: key)
+            for (lang, label) in [("fr-FR", "VF"), ("en-US", "VO")] where out == nil {
+                guard let d = await api.get((tv ? "/tv/" : "/movie/") + String(tmdb) + "/videos", [("language", lang)]),
+                      let res = d["results"] as? [[String: Any]] else { continue }
+                let yt = res.filter { ($0["site"] as? String) == "YouTube" && valid($0["key"] as? String) }
+                let pick = yt.first { ($0["type"] as? String) == "Trailer" && ($0["official"] as? Bool ?? false) }
+                    ?? yt.first { ($0["type"] as? String) == "Trailer" } ?? yt.first { ($0["type"] as? String) == "Teaser" }
+                if let p = pick, let k = p["key"] as? String { out = YouTubeTrailer(key: k, lang: (p["iso_639_1"] as? String) == "fr" ? "VF" : label) }
+            }
+        }
+        // fournisseur (séries) : l'identifiant YouTube qu'il donne, langue inconnue
+        if out == nil {
+            let k = provider.components(separatedBy: CharacterSet(charactersIn: "=/")).last ?? ""
+            if valid(k) { out = YouTubeTrailer(key: k, lang: "") }
+        }
+        memo[mk] = out
+        var all = UserDefaults.standard.dictionary(forKey: saved) ?? [:]
+        if all.count > 3000 { all.removeAll() }
+        all[mk] = ["k": out?.key ?? "", "l": out?.lang ?? ""]
+        UserDefaults.standard.set(all, forKey: saved)
+        return out
+    }
+
+    private static func valid(_ k: String?) -> Bool {
+        guard let k else { return false }
+        return keyRx.firstMatch(in: k, range: NSRange(k.startIndex..., in: k)) != nil
+    }
+}
+
+/// QR code net (Core Image, agrandi sans flou).
+struct QRCodeImage: View {
+    let text: String
+    var body: some View {
+        if let img = Self.make(text) {
+            Image(decorative: img, scale: 1).interpolation(.none).resizable().aspectRatio(1, contentMode: .fit)
+        } else { Color.white }
+    }
+    static func make(_ s: String) -> CGImage? {
+        guard let f = CIFilter(name: "CIQRCodeGenerator") else { return nil }
+        f.setValue(Data(s.utf8), forKey: "inputMessage")
+        f.setValue("M", forKey: "inputCorrectionLevel")
+        guard let out = f.outputImage else { return nil }
+        return CIContext().createCGImage(out, from: out.extent)
+    }
+}
+
+/// Écran de la bande-annonce YouTube : QR code à scanner avec l'iPhone (rien ne s'ouvre sur l'Apple TV).
+struct TrailerQRScreen: View {
+    let trailer: YouTubeTrailer
+    let title: String
+    let backdrop: String
+    let playFilm: (() -> Void)?
+    var playTitle = "Regarder le film"
+    @Environment(\.dismiss) private var dismiss
+    @FocusState private var first: Bool
+
+    var body: some View {
+        ZStack {
+            Color.black
+            if !backdrop.isEmpty { SharpImage(url: backdrop).opacity(0.35).blur(radius: 30) }
+            LinearGradient(colors: [.black.opacity(0.3), .black.opacity(0.85)], startPoint: .top, endPoint: .bottom)
+            HStack(spacing: 80) {
+                QRCodeImage(text: trailer.url.absoluteString)
+                    .padding(28).frame(width: 470, height: 470)
+                    .background(Color.white, in: RoundedRectangle(cornerRadius: 36, style: .continuous))
+                    .shadow(color: .black.opacity(0.5), radius: 40, y: 20)
+                VStack(alignment: .leading, spacing: 22) {
+                    Text("BANDE-ANNONCE" + (trailer.lang.isEmpty ? "" : " " + trailer.lang)).font(P.font(24, .bold)).tracking(3.4).foregroundStyle(.white.opacity(0.7))
+                    Text(title).font(P.font(60, .bold)).lineLimit(2).minimumScaleFactor(0.6)
+                    Text("Scanne ce code avec l'appareil photo de ton iPhone : la bande-annonce s'ouvre sur ton téléphone.")
+                        .font(P.font(30)).foregroundStyle(P.dim).fixedSize(horizontal: false, vertical: true)
+                    Text("Cette bande-annonce est sur YouTube, qui ne peut pas être lu dans PRISME.")
+                        .font(P.font(23)).foregroundStyle(P.dim.opacity(0.8)).fixedSize(horizontal: false, vertical: true)
+                    if let playFilm {
+                        Button { dismiss(); DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { playFilm() } } label: { PlayLabel(title: playTitle) }
+                            .buttonStyle(PrimaryStyle()).focused($first).padding(.top, 20)
+                    } else {
+                        Button { dismiss() } label: { Text("Fermer").font(P.font(30, .semibold)).padding(.horizontal, 40) }
+                            .buttonStyle(PrimaryStyle()).focused($first).padding(.top, 20)
+                    }
+                }.frame(width: 860, alignment: .leading)
+            }
+            .padding(70)
+            .glass(52)
+        }
+        .ignoresSafeArea()
+        .defaultFocus($first, true)
+        .accessibilityIdentifier("trailer-qr")
     }
 }
 
@@ -136,7 +261,7 @@ struct TrailerChip: View {
     @State private var anim = false
     var body: some View {
         HStack(spacing: 12) {
-            Text(lang + " · " + (loud ? "🔊 OK pour le plein écran" : "🔈 son faible")).font(P.font(23, .semibold))
+            Text((lang.isEmpty ? "" : lang + " · ") + (loud ? "🔊 OK pour le plein écran" : "🔈 son faible")).font(P.font(23, .semibold))
             HStack(alignment: .bottom, spacing: 4) {
                 ForEach(0..<3) { i in
                     RoundedRectangle(cornerRadius: 2).fill(loud || i == 0 ? Color.white : Color.white.opacity(0.3))
@@ -173,11 +298,13 @@ struct TrailerScreen: View {
             VideoLayer(player: tp.player, fill: false)
             if !tp.ready { ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity) }
             LinearGradient(colors: [.black.opacity(0.45), .clear, .clear, .black.opacity(0.7)], startPoint: .top, endPoint: .bottom).allowsHitTesting(false)
-            Text("BANDE-ANNONCE " + trailer.lang + " · " + title)
+            Text("BANDE-ANNONCE " + (trailer.lang.isEmpty ? "" : trailer.lang + " · ") + title)
                 .font(P.font(24, .semibold)).padding(.horizontal, 24).padding(.vertical, 14).glass(22)
                 .padding(.leading, 105).padding(.top, 70)
             VStack(alignment: .trailing, spacing: 16) {
-                Text(trailer.lang == "VF" ? "Bande-annonce officielle de l'iTunes Store, en version française" : "Pas de version française sur l'iTunes Store : bande-annonce en version originale")
+                Text(trailer.lang == "VF" ? "Bande-annonce officielle de l'iTunes Store, en version française"
+                     : trailer.lang == "VO" ? "Pas de version française sur l'iTunes Store : bande-annonce en version originale"
+                     : "Bande-annonce officielle de l'iTunes Store (Canada)")
                     .font(P.font(21)).foregroundStyle(P.dim)
                 if let playFilm {
                     Button { dismiss(); DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { playFilm() } } label: { PlayLabel(title: playTitle) }.buttonStyle(PrimaryStyle()).focused($first)

@@ -121,6 +121,9 @@ final class FicheService: ObservableObject {
     static let shared = FicheService()
     @Published var done = 0
     @Published var total = 0
+    /// 253 : avancement par sorte (« film », « series »), pour le détail de l'anneau de chargement
+    @Published var kindDone: [String: Int] = [:]
+    @Published var kindTotal: [String: Int] = [:]
     @Published var running = false
     @Published var version = 0          // change quand de nouvelles fiches arrivent (les écrans se mettent à jour)
     @Published var lastError: String?
@@ -130,6 +133,8 @@ final class FicheService: ObservableObject {
     @Published var paused = false
     func start() {
         guard task == nil, TmdbKey.value != nil, !paused, AppPrefs.ficheMode != 1 else { return }
+        // 253 : chaque passage repart de zéro (l'anneau de chargement montre l'avancement de ce passage)
+        done = 0; total = 0; kindDone = [:]; kindTotal = [:]
         running = true
         task = Task.detached(priority: .background) { await FicheWorker().run() ; await MainActor.run { FicheService.shared.task = nil; FicheService.shared.running = false } }
     }
@@ -158,7 +163,7 @@ struct FicheWorker {
         await MainActor.run { FicheService.shared.lastError = nil }
         for kind in [MediaKind.film, .series] {
             let todo = await candidates(kind)
-            await MainActor.run { FicheService.shared.total += todo.count }
+            await MainActor.run { FicheService.shared.total += todo.count; FicheService.shared.kindTotal[kind.rawValue, default: 0] += todo.count }
             var i = 0
             while i < todo.count {
                 if Task.isCancelled { return }
@@ -181,7 +186,7 @@ struct FicheWorker {
                     db.insertMany("INSERT OR REPLACE INTO fmiss VALUES(?,?,?)", misses)
                 }
                 let n = batch.count
-                await MainActor.run { FicheService.shared.done += n; FicheService.shared.version += 1; PerfLog.ev("Fiches +\(n) v\(FicheService.shared.version)") }
+                await MainActor.run { FicheService.shared.done += n; FicheService.shared.kindDone[kind.rawValue, default: 0] += n; FicheService.shared.version += 1; PerfLog.ev("Fiches +\(n) v\(FicheService.shared.version)") }
             }
         }
         await fillCerts(api)
