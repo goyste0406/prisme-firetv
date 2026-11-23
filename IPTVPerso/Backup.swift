@@ -152,6 +152,15 @@ final class BackupLink: ObservableObject {
                 DataCount.write("fichier refusé (\(body.count) octets)")
                 data = Data(BackupLink.page("Fichier refusé", "Ce fichier n'est pas une sauvegarde de prisme.", form: false).utf8)
             }
+        } else if path.hasSuffix("/prisme-chaines.txt") {
+            // 253 : noms des chaînes et de leurs catégories, tels que les donne le fournisseur (pour régler le
+            // regroupement des chaînes en double : Ligue 1+, beIN, Canal+ Sport…) — sans adresse ni mot de passe
+            Task {
+                let d = Data(await BackupLink.channelList().utf8)
+                let h = "HTTP/1.1 200 OK\r\nContent-Type: text/plain; charset=utf-8\r\nContent-Length: \(d.count)\r\nContent-Disposition: attachment; filename=\"prisme-chaines.txt\"\r\nConnection: close\r\nCache-Control: no-store\r\n\r\n"
+                c.send(content: Data(h.utf8) + d, completion: .contentProcessed { _ in c.cancel() })
+            }
+            return
         } else if path.hasSuffix("/prisme-journal.txt") {
             // 253 : journal de diagnostic (écrans, blocages, fermetures inattendues) — sans mot de passe
             data = Data(DiagLog.text.utf8); type = "text/plain; charset=utf-8"
@@ -167,6 +176,24 @@ final class BackupLink: ObservableObject {
         c.send(content: Data(headStr.utf8) + data, completion: .contentProcessed { _ in c.cancel() })
     }
 
+    /// fournisseur · catégorie · nom · clé de regroupement (deux chaînes de même clé sont regroupées)
+    static func channelList() async -> String {
+        let names = Dictionary(ProviderStore.shared.providers.map { ($0.id, $0.name) }, uniquingKeysWith: { a, _ in a })
+        let rows: [(String, String, String)] = await Database.shared.read { db in
+            var cats: [String: String] = [:]
+            db.query("SELECT pid,cid,name FROM category WHERE type='live'", []) { r in cats[r.str(0) + ":" + r.str(1)] = r.str(2) }
+            var L: [(String, String, String)] = []
+            db.query("SELECT pid,cid,name FROM live ORDER BY pid,cid,num", []) { r in L.append((r.str(0), cats[r.str(0) + ":" + r.str(1)] ?? "?", r.str(2))) }
+            return L
+        }
+        var out = "Chaînes de prisme (fournisseur · catégorie · nom de la chaîne · regroupée sous)\n\n"
+        for (pid, cat, name) in rows {
+            let ch = Channel(pid: pid, sid: "", name: name, num: 0, icon: "", cid: "", epg: "", archive: 0)
+            out += (names[pid] ?? pid) + " · " + cat + " · " + name + " · " + ChannelTools.key(ch) + "\n"
+        }
+        return out
+    }
+
     nonisolated static func page(_ title: String, _ msg: String, form: Bool) -> String {
         let css = """
         body{margin:0;background:#f2f2f7;color:#111;font-family:-apple-system,system-ui,sans-serif}
@@ -180,6 +207,8 @@ final class BackupLink: ObservableObject {
         return head + """
         <div class=card><b>Garder une copie sur l'iPhone</b><p>Profils, Ma liste, reprises, goûts, réglages et fournisseurs (avec leurs mots de passe : range ce fichier en lieu sûr, par exemple dans Fichiers › Sur mon iPhone).</p>
         <a class=go href="prisme-sauvegarde.json" download>Télécharger la sauvegarde</a></div>
+        <div class=card><b>Liste des chaînes</b><p>Noms des chaînes et de leurs catégories chez tes fournisseurs (sans adresse ni mot de passe), pour régler le regroupement des chaînes en double.</p>
+        <a class=go href="prisme-chaines.txt" download>Télécharger la liste</a></div>
         <div class=card><b>Journal de diagnostic</b><p>Écrans ouverts, blocages et fermetures inattendues de prisme (sans mot de passe). Utile pour comprendre un problème.</p>
         <a class=go href="prisme-journal.txt" download>Télécharger le journal</a></div>
         <div class=card><b>Restaurer une sauvegarde</b><p>Choisis un fichier « prisme-sauvegarde… .json ». La TV te demandera de confirmer : ses données actuelles seront remplacées (une copie est gardée pour annuler).</p>
