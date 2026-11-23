@@ -1260,14 +1260,16 @@ final class Visite: XCTestCase {
             shot("G03-ligne-guide"); press(.select); w(2); shot("G04-guide")
             press(.down); shot("G05-a-venir"); press(.select); w(1); shot("G06-rappel")
             press(.up, 3); shot("G07-passe"); press(.select); w(10); shot("G08-replay", focus: false)
-            remote.press(.menu); w(1.5); remote.press(.menu); w(5); shot("G09-retour-direct", focus: false)
+            // un seul Retour (sans panneau ouvert, Retour quitte la vidéo) : on doit retrouver M6 en direct
+            remote.press(.menu); w(6); shot("G09-retour-direct", focus: false)
         } else { attach("G03", "Guide TV non atteint : " + focused()) }
         // page Replay (le faux fournisseur sert maintenant les adresses de replay)
         relaunch(["-prisme.debug.tab", "live", "-prisme.debug.live", "replay"], wait: 18)
         shot("H01-replay")
         press(.down); shot("H02-bas"); press(.select); w(10); shot("H03-lecture", focus: false)
-        remote.press(.menu); w(1.5); remote.press(.menu); w(4); shot("H04-retour", focus: false)
-        w(20); shot("H05-encore-replay-30s")
+        remote.press(.menu); w(4); shot("H04-retour")
+        w(30); shot("H05-encore-replay-30s")
+        remote.press(.menu); w(3); shot("H06-retour-accueil-tv")
     }
 
     func lot3() {
