@@ -54,6 +54,17 @@ struct MainTabView: View {
     @Environment(\.scenePhase) private var phase
 
     var body: some View {
+        mainBody
+            .onOpenURL { openLink($0) }
+            // lot 6 : la rangée du Top Shelf suit le profil, le catalogue et ce que tu regardes
+            .onChange(of: profiles.version) { _, _ in TopShelfPublisher.schedule() }
+            .onChange(of: profiles.current) { _, _ in TopShelfPublisher.schedule() }
+            .onChange(of: store.catalogVersion) { _, _ in TopShelfPublisher.schedule(after: 20) }
+            .onChange(of: phase) { _, p in if p == .background { TopShelfPublisher.schedule(after: 0) } }
+            .overlay { if shelfPreview { ShelfPreviewScreen(close: { shelfPreview = false }) } }
+    }
+
+    private var mainBody: some View {
         NavigationStack {
             ZStack(alignment: .top) {
                 PrismeBackground()
@@ -82,13 +93,6 @@ struct MainTabView: View {
             .navigationDestination(item: $resumeOpen) { it in DetailView(item: it) }
             .navigationDestination(item: $linkOpen) { o in DetailView(item: o.item, autoPlay: o.play) }
         }
-        .onOpenURL { openLink($0) }
-        // lot 6 : la rangée du Top Shelf suit le profil, le catalogue et ce que tu regardes
-        .onChange(of: profiles.version) { _, _ in TopShelfPublisher.schedule() }
-        .onChange(of: profiles.current) { _, _ in TopShelfPublisher.schedule() }
-        .onChange(of: store.catalogVersion) { _, _ in TopShelfPublisher.schedule(after: 20) }
-        .onChange(of: phase) { _, p in if p == .background { TopShelfPublisher.schedule(after: 0) } }
-        .overlay { if shelfPreview { ShelfPreviewScreen(close: { shelfPreview = false }) } }
         // fenêtres au-dessus de TOUT, y compris d'une fiche ouverte (la pastille de profil de la fiche ouvre la fenêtre)
         .disabled(pui.picker || pui.launch || pui.taste != nil)
         .overlay {
