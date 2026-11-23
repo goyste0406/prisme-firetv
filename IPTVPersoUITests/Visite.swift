@@ -112,6 +112,7 @@ final class Visite: XCTestCase {
         if ProcessInfo.processInfo.environment["ONLY"] == "lot5" { lot5(); return }
         if ProcessInfo.processInfo.environment["ONLY"] == "lot5t" { lot5t(); return }
         if ProcessInfo.processInfo.environment["ONLY"] == "lot6" { lot6(); return }
+        if ProcessInfo.processInfo.environment["ONLY"] == "c253" { c253(); return }
         if ProcessInfo.processInfo.environment["ONLY"] == "lot3g" { lot3g(); return }
         if ProcessInfo.processInfo.environment["ONLY"] == "tvidle" {
             // TV en direct au lancement avec deux fournisseurs, 150 s sans aucune interaction, puis une capture
@@ -1177,6 +1178,55 @@ final class Visite: XCTestCase {
         remote.press(.select); w(14); shot("S55-ok-reprise", focus: false)
         remote.press(.home); w(4); remote.press(.up); w(2); remote.press(.right); remote.press(.right); w(1)
         remote.press(.select); w(14); shot("S56-ok-proposition")
+    }
+
+    /// 253 — anneau de chargement, panneau ⏯ des accueils, J'aime sur les fiches, langues des sources, QR YouTube, Explorer.
+    func c253() {
+        let w = { (t: Double) in Thread.sleep(forTimeInterval: t) }
+        func rightUntil(_ t: String, max: Int = 8, prefix: String) -> Bool {
+            for i in 0..<max { if focused().contains(t) { return true }; press(.right); if i % 2 == 1 { shot("\(prefix)-\(i)") } }
+            return focused().contains(t)
+        }
+        // A. anneau de chargement : premier lancement, les fiches TMDB se téléchargent
+        app.terminate(); app.launchArguments = base + ["-prisme.debug.tab", "films"]; app.launch()
+        w(6); shot("A01-anneau-3s")
+        w(4); shot("A02-anneau-7s")
+        let ring = app.descendants(matching: .any).matching(NSPredicate(format: "label BEGINSWITH 'Chargement'")).firstMatch
+        attach("A03-anneau", ring.exists ? ring.label : "(absent)")
+        press(.up, 3); shot("A04-barre")
+        if rightUntil("Chargement", max: 9, prefix: "A05") { shot("A06-anneau-selectionne"); w(2); shot("A07-popup") ; press(.select); w(3); shot("A08-ok-reglages-accueils") }
+        else { attach("A06", "anneau non atteint : " + focused()) }
+        w(40); shot("A09-plus-tard")
+        // B. panneau ⏯ sur une affiche de l'accueil Films (J'aime / Je n'aime pas sans appui long)
+        relaunch(["-prisme.debug.tab", "films"], wait: 22)
+        press(.down, 2); shot("B01-affiche")
+        remote.press(.playPause); w(1.5); shot("B02-panneau")
+        attach("B02", app.otherElements["prisme.tileActions"].exists ? "panneau ouvert" : "(panneau absent)")
+        press(.select); w(1.5); shot("B03-jaime-toast")
+        remote.press(.playPause); w(1.5); shot("B04-panneau-coche")
+        press(.menu); w(1); shot("B05-ferme")
+        // C. Explorer / Parcourir : présents avant et après l'ouverture d'une fiche
+        relaunch(["-prisme.debug.tab", "films"], wait: 22)
+        downUntil(["Explorer", "Parcourir", "Action", "Science"], max: 14, prefix: "C01")
+        press(.select); w(5); shot("C02-fiche"); back(); w(3); shot("C03-retour")
+        press(.down); shot("C04-bas"); press(.up, 2); shot("C05-haut")
+        // D. J'aime sur la fiche film (Inception)
+        relaunch(["-prisme.debug.open", "film:demo:1006"], wait: 20)
+        shot("D01-fiche")
+        if rightUntil("J'aime", prefix: "D02") { press(.select); w(1.5); shot("D03-jaime"); press(.right); press(.select); w(1.5); shot("D04-jaime-pas"); press(.select); w(1.5); shot("D05-retire") }
+        else { attach("D02", "J'aime non atteint : " + focused()) }
+        // E. fenêtre des sources : Mission: Impossible (25 sources), puis Lupin (série, 2 versions)
+        relaunch(["-prisme.debug.open", "film:demo:1027"], wait: 24)
+        shot("E01-fiche-mi")
+        if rightUntil("VERSION", prefix: "E02") || rightUntil("version", prefix: "E02b") { press(.select); w(1.5); shot("E03-sources"); press(.down, 5); shot("E04-sources-bas"); press(.down, 6); shot("E05-sources-bas2"); back(); shot("E06-retour") }
+        relaunch(["-prisme.debug.open", "series:demo:2001"], wait: 24)
+        shot("E10-fiche-lupin")
+        press(.down); shot("E11-bas")
+        if rightUntil("VERSION", prefix: "E12") || rightUntil("version", prefix: "E12b") { press(.select); w(1.5); shot("E13-sources-lupin"); press(.down); press(.select); w(3); shot("E14-version-choisie") }
+        else { attach("E12", "bouton version non atteint : " + focused()) }
+        // F. bande-annonce YouTube : QR code (série sans bande-annonce Apple)
+        attach("F00", app.buttons["trailer-qr-button"].exists ? "bouton QR présent" : "(bouton QR absent)")
+        if rightUntil("QR", prefix: "F01") { press(.select); w(2); shot("F02-qr"); back(); shot("F03-retour") }
     }
 
     func lot3() {

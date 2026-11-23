@@ -257,7 +257,7 @@ struct FilmDetailView: View {
                 // 253 : bande-annonce seulement sur YouTube → QR code à scanner avec l'iPhone
                 Button { showQR = y } label: { Image(systemName: "qrcode").font(P.font(30, .semibold)) }
                     .buttonStyle(FicheButtonStyle(square: true))
-                    .accessibilityIdentifier("trailer-qr-button")
+                    .accessibilityIdentifier("trailer-qr-button").accessibilityLabel("Bande-annonce QR")
             }
         }
     }
