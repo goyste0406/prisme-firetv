@@ -132,7 +132,7 @@ struct FilmDetailView: View {
         .task(id: item.id) { await load() }
         // changement de profil, mode « Vous deux » ou nouvelles réponses au test : les « goûts » se recalculent
         .task(id: "\(profiles.version)|\(tasteStore.version)") { if loaded { await loadFits() } }
-        .onAppear { DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { if !pickVersion { playFocused = true } } }
+        .onAppear { DiagLog.screen("fiche film « \(item.clean.title) »"); DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { if !pickVersion { playFocused = true } } }
         .onDisappear { bg.stop() }
         .onChange(of: peek) { _, p in bg.loud(p) }
         .onChange(of: playing?.id) { _, p in if p != nil { bg.stop() } }

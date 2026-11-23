@@ -101,6 +101,7 @@ struct LiveHomeView: View {
         // Retour depuis une catégorie (Info, Sport…) ou une autre rubrique de la colonne : revenir à l'accueil
         // de la TV en direct, au lieu de quitter prisme (seulement depuis l'accueil, Retour garde son effet habituel)
         .onExitCommand(perform: section == "home" ? nil : { fromPage = false; section = "home" })
+        .onChange(of: section) { _, s in DiagLog.screen("TV · " + s) }
         .fullScreenCover(item: $playing) { r in LivePlayerView(channels: r.list, start: r.index) }
         .fullScreenCover(item: $guide) { g in GuideView(channels: g.list, title: g.title) }
         .fullScreenCover(item: $replay) { r in VodPlayerView(request: r) }

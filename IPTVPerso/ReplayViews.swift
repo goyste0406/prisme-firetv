@@ -65,7 +65,10 @@ extension Provider {
         f.timeZone = tz.flatMap(TimeZone.init(identifier:)) ?? .current
         f.dateFormat = "yyyy-MM-dd:HH-mm"
         let minutes = max(1, (p.stop - p.start + 59) / 60)
-        return URL(string: "\(account.baseURL)/timeshift/\(u)/\(pw)/\(minutes)/\(f.string(from: p.startDate))/\(ch.sid).ts")
+        // 253 : les horaires du guide incluent le « Décalage horaire de l'EPG » choisi dans les réglages (pour
+        // l'affichage) ; le serveur, lui, attend l'heure réelle de diffusion → on retire ce décalage
+        let start = Date(timeIntervalSince1970: TimeInterval(p.start - AppPrefs.epgShift * 3600))
+        return URL(string: "\(account.baseURL)/timeshift/\(u)/\(pw)/\(minutes)/\(f.string(from: start))/\(ch.sid).ts")
     }
 }
 
@@ -99,8 +102,10 @@ struct ReplayView: View {
     @State private var archived = 0
     @State private var loaded = false
     @State private var msg: String?
-
-    private func univers(_ c: Channel) -> Univers? { index.first { ChannelTools.key($0.ch) == ChannelTools.key(c) }?.univers }
+    /// 253 : rangées calculées une seule fois, hors du fil principal. Avant, chaque affichage recalculait le nom
+    /// normalisé de toutes les chaînes de l'index (des millions de fois avec un gros catalogue) : l'écran se figeait
+    /// ~30 s et l'appui sur Retour mémorisé pendant ce temps renvoyait à l'accueil du Direct.
+    @State private var groups: [(String, [LiveStore.Airing])] = []
 
     var body: some View {
         ScrollView {
@@ -118,7 +123,8 @@ struct ReplayView: View {
                         row(restart, badge: "↺ DÉBUT") { a in "commencé à " + Fmt.hm(a.p.startDate) + " · " + runtimeText(max(1, (a.p.stop - a.p.start) / 60)) }
                     }
                     ForEach(groups, id: \.0) { g in
-                        SectionTitle(title: g.0, sub: "\(g.1.count) · \(Set(g.1.map { ChannelTools.key($0.ch) }).count) chaîne\(Set(g.1.map { ChannelTools.key($0.ch) }).count > 1 ? "s" : "") avec replay").padding(.leading, 18)
+                        let n = Set(g.1.map { $0.ch.epg.isEmpty ? $0.ch.id : $0.ch.epg }).count
+                        SectionTitle(title: g.0, sub: "\(g.1.count) · \(n) chaîne\(n > 1 ? "s" : "") avec replay").padding(.leading, 18)
                         row(Array(g.1.prefix(30)), badge: "REPLAY") { a in a.aired }
                     }
                 }
@@ -132,19 +138,40 @@ struct ReplayView: View {
             async let a = LiveStore.archiveChannels(providers: pids)
             async let b = LiveStore.replays(providers: pids)
             async let c = LiveStore.restartable(providers: pids)
-            (archived, past, restart) = await (a, b, c)
+            let (na, nb, nc) = await (a, b, c)
+            PerfLog.ev("Replay requêtes \(nb.count) + \(nc.count)")
+            let g = await Self.makeGroups(nb, index: index)
+            PerfLog.ev("Replay rangées \(g.count)")
+            (archived, past, restart, groups) = (na, nb, nc, g)
             loaded = true
         }
     }
 
     /// Une rangée par univers (dans l'ordre des univers), « Autres chaînes » à la fin.
-    private var groups: [(String, [LiveStore.Airing])] {
-        var by: [String: [LiveStore.Airing]] = [:]
-        for a in past { by[univers(a.ch)?.label ?? "Autres chaînes", default: []].append(a) }
-        var out: [(String, [LiveStore.Airing])] = []
-        for u in Univers.allCases { if let l = by[u.label] { out.append((u.label, l)) } }
-        if let l = by["Autres chaînes"] { out.append(("Autres chaînes", l)) }
-        return out
+    /// Univers d'une chaîne : table construite une fois (copies de l'index → univers), nom normalisé calculé
+    /// seulement pour les chaînes des programmes affichés.
+    nonisolated private static func makeGroups(_ past: [LiveStore.Airing], index: [LiveIndex.Entry]) async -> [(String, [LiveStore.Airing])] {
+        await Task.detached(priority: .userInitiated) {
+            var byID: [String: Univers] = [:], byKey: [String: Univers] = [:]
+            for e in index {
+                byKey[e.key] = e.univers
+                for c in e.copies { byID[c.id] = e.univers }
+            }
+            var memo: [String: Univers?] = [:]
+            func univers(_ c: Channel) -> Univers? {
+                if let u = byID[c.id] { return u }
+                if let m = memo[c.id] { return m }
+                let u = byKey[ChannelTools.key(c)]
+                memo[c.id] = u
+                return u
+            }
+            var by: [String: [LiveStore.Airing]] = [:]
+            for a in past { by[univers(a.ch)?.label ?? "Autres chaînes", default: []].append(a) }
+            var out: [(String, [LiveStore.Airing])] = []
+            for u in Univers.allCases { if let l = by[u.label] { out.append((u.label, l)) } }
+            if let l = by["Autres chaînes"] { out.append(("Autres chaînes", l)) }
+            return out
+        }.value
     }
 
     private func go(_ a: LiveStore.Airing) {

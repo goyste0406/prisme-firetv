@@ -51,6 +51,21 @@ final class PlayerUI: ObservableObject {
     @Published var liveStart: Date?
     @Published var liveStop: Date?
     var zapTo: (Int, Bool) -> Void = { _, _ in }
+    /// 253 : « Guide TV » du lecteur (simulateur guideHtml) — programmes de la chaîne, replay des programmes passés
+    /// (si la chaîne a une archive), rappel des programmes à venir
+    struct GuideRow: Identifiable, Equatable {
+        let id: Int            // début (secondes)
+        let time: String
+        let title: String
+        let sub: String
+        let state: Int         // -1 passé, 0 en cours, 1 à venir
+        let replay: Bool
+        var reminded: Bool
+    }
+    @Published var guide: [GuideRow] = []
+    @Published var guideLoaded = false
+    var loadGuide: () -> Void = {}
+    var guidePick: (Int) -> Void = { _ in }
     // 1.8 phase 1 : cartes de fin de lecture (PlayerCards.swift)
     enum Card: Equatable { case none, intro, episode, film, post, encore, rate, season }
     @Published var card: Card = .none
@@ -140,6 +155,7 @@ final class PlayerUI: ObservableObject {
         switch k {
         case "audio": return ("waveform", "Audio", audio.first { $0.id == audioCur }?.name ?? (audio.isEmpty ? "Piste unique" : "—"))
         case "subs": return ("captions.bubble", "Sous-titres", subCur < 0 ? "Désactivés" : (subs.first { $0.id == subCur }?.name ?? "—"))
+        case "guide": return ("list.bullet.rectangle", "Guide TV", "Programmes du jour")
         case "version" where live: return ("antenna.radiowaves.left.and.right", "Source", versions.indices.contains(versionCur) ? versions[versionCur] + (versions.count > 1 ? " · \(versions.count) dispo" : "") : "Source unique")
         case "version": return ("square.stack.3d.up", "Version", versions.indices.contains(versionCur) ? versions[versionCur] + " · \(versions.count) dispo" : "Version unique")
         case "image": return ("viewfinder", "Image", PlayerUI.aspects.first { $0.0 == aspect }?.1 ?? "Auto")
@@ -217,6 +233,8 @@ struct PlayerOverlay: View {
         .animation(.easeOut(duration: 0.3), value: m.toast)
         .onReceive(clock) { now = $0 }
         .onChange(of: m.panel) { old, p in placeFocus(p, from: old) }
+        // le guide arrive après l'ouverture de sa liste : la sélection va alors sur le programme en cours
+        .onChange(of: m.guideLoaded) { _, l in if l, m.panel == .sub("guide"), focus == nil || !(focus ?? "").hasPrefix("g") { focus = guideFocus } }
         .onChange(of: m.options) { _, o in if o { focus = "said" } }
         .task { try? await Task.sleep(nanoseconds: 6_000_000_000); withAnimation(.easeOut(duration: 0.6)) { m.hintVisible = false } }
         .onChange(of: m.sleepLeft == nil) { _, none in if !none { focus = "sleep-yes" } }
@@ -484,7 +502,44 @@ struct PlayerOverlay: View {
             // passer sur une chaîne ne lance rien : seul OK change de chaîne (simulateur « OK pour regarder »)
         }
         Divider().overlay(Color.white.opacity(0.15)).padding(.vertical, 10)
-        ForEach(["version", "audio", "subs", "image", "night"], id: \.self) { k in row(k) }
+        ForEach(["guide", "version", "audio", "subs", "image", "night"], id: \.self) { k in row(k) }
+    }
+
+    /// 253 : Guide TV de la chaîne (simulateur : heure, titre, genre · horaires, « EN COURS » ; passé grisé)
+    @ViewBuilder private var guideList: some View {
+        if !m.guideLoaded {
+            ProgressView().frame(maxWidth: .infinity, minHeight: 200)
+        } else if m.guide.isEmpty {
+            Text("Programme non communiqué pour cette chaîne.").font(P.font(24)).foregroundStyle(.white.opacity(0.7)).padding(.vertical, 8)
+        }
+        ForEach(m.guide) { g in
+            Button { m.touch(); m.guidePick(g.id) } label: {
+                HStack(spacing: 16) {
+                    Text(g.time).font(P.font(22, .bold)).monospacedDigit().frame(width: 78, alignment: .leading)
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(g.title).font(P.font(23, .semibold)).lineLimit(1)
+                        Text(g.sub).font(P.font(18)).opacity(0.7).lineLimit(1)
+                    }
+                    Spacer(minLength: 8)
+                    guideBadge(g)
+                }
+                .padding(.horizontal, 18).padding(.vertical, 13).frame(maxWidth: .infinity, alignment: .leading)
+                .opacity(g.state < 0 && !g.replay ? 0.55 : 1)
+            }
+            .buttonStyle(PlayerRowStyle(current: g.state == 0))
+            .focused($focus, equals: "g\(g.id)")
+        }
+        Text("OK sur un programme passé : replay · à venir : rappel · Retour fermer")
+            .font(P.font(20)).foregroundStyle(.white.opacity(0.6)).padding(.top, 10).fixedSize(horizontal: false, vertical: true)
+    }
+
+    @ViewBuilder private func guideBadge(_ g: PlayerUI.GuideRow) -> some View {
+        let (t, c): (String, Color) = g.state == 0 ? ("EN COURS", Color(red: 0.9, green: 0.28, blue: 0.3))
+            : g.state < 0 ? (g.replay ? ("REPLAY", ReplayBadge.purple) : ("TERMINÉ", Color.white.opacity(0.18)))
+            : (g.reminded ? ("🔔 RAPPEL", Color.white.opacity(0.18)) : ("À VENIR", Color.white.opacity(0.18)))
+        Text(t).font(P.font(16, .heavy)).tracking(1).foregroundStyle(.white)
+            .padding(.horizontal, 10).padding(.vertical, 5)
+            .background(c, in: RoundedRectangle(cornerRadius: 7, style: .continuous))
     }
 
     @ViewBuilder private var vodList: some View {
@@ -525,6 +580,8 @@ struct PlayerOverlay: View {
 
     @ViewBuilder private func subList(_ k: String) -> some View {
         switch k {
+        case "guide":
+            guideList
         case "audio":
             if m.audio.isEmpty { Text("Une seule piste audio dans ce fichier.").font(P.font(24)).foregroundStyle(.white.opacity(0.7)) }
             ForEach(m.audio) { o in choice(o.name, on: o.id == m.audioCur, key: "a\(o.id)") { m.setAudio(o.id); m.panel = .full } }
@@ -554,6 +611,7 @@ struct PlayerOverlay: View {
         let l = m.label(k)
         return rowButton(icon: l.icon, title: l.title, value: l.value, key: k) {
             m.used(k)
+            if k == "guide" { m.loadGuide() }
             if k == "bedstop" { m.setBedStop(!m.bedStop) } else if k == "stopafter" { m.setStopAfter(!m.stopAfter) } else { m.panel = .sub(k) }
         }
     }
@@ -613,11 +671,17 @@ struct PlayerOverlay: View {
                 case "version": focus = "v\(m.versionCur)"
                 case "image": focus = "i" + m.aspect
                 case "night": focus = "n" + m.night
+                case "guide": focus = guideFocus
                 default: focus = "info-back"
                 }
             case .none: focus = nil
             }
         }
+    }
+
+    /// le programme en cours (sinon le premier à venir)
+    private var guideFocus: String? {
+        (m.guide.first { $0.state == 0 } ?? m.guide.first { $0.state > 0 } ?? m.guide.last).map { "g\($0.id)" }
     }
 
     // MARK: « Tu regardes toujours ? » et messages

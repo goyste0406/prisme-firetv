@@ -705,6 +705,12 @@ class H(http.server.BaseHTTPRequestHandler):
         # 1.8 phase 1 : films de 9 min pour la fin de film (saga, scène après le générique, recommandation)
         m2 = re.match(r"^/movie/[^/]+/[^/]+/(\d+)\.\w+$", p)
         if m2 and int(m2.group(1)) in (fid(12), fid(13), fid(14), fid(20)): return self.send_file(MEDIA + "/film-fin.mkv")
+        # 253 : replay Xtream (timeshift) — /timeshift/<u>/<pw>/<minutes>/<AAAA-MM-JJ:HH-MM>/<id>.ts : un fichier
+        # vidéo seekable (on vérifie dans le journal l'heure demandée, sans le décalage d'affichage de l'EPG)
+        m = re.match(r"^/timeshift/[^/]+/[^/]+/(\d+)/(\d{4}-\d\d-\d\d:\d\d-\d\d)/(\d+)\.\w+$", p)
+        if m:
+            print(f"TIMESHIFT minutes={m.group(1)} debut={m.group(2)} chaine={m.group(3)}", flush=True)
+            return self.send_file(MEDIA + "/film-sous-titres.mkv")
         m = re.match(r"^/live/[^/]+/[^/]+/(\d+)\.\w+$", p)
         if m and PROFILE in ("main", "second"):
             i = int(m.group(1)) - 300

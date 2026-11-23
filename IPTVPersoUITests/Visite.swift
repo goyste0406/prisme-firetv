@@ -1227,6 +1227,28 @@ final class Visite: XCTestCase {
         // F. bande-annonce YouTube : QR code (série sans bande-annonce Apple)
         attach("F00", app.buttons["trailer-qr-button"].exists ? "bouton QR présent" : "(bouton QR absent)")
         if rightUntil("QR", prefix: "F01") { press(.select); w(2); shot("F02-qr"); back(); shot("F03-retour") }
+        c253tv()
+    }
+
+    /// 253 — TV : Guide TV du lecteur (replay d'un programme passé, rappel d'un programme à venir), page Replay.
+    func c253tv() {
+        let w = { (t: Double) in Thread.sleep(forTimeInterval: t) }
+        relaunch(["-prisme.debug.tab", "live", "-prisme.debug.playLive", "M6"], wait: 18)
+        press(.down); w(1.5); shot("G01-panneau", focus: true)
+        var found = false
+        for i in 1...40 { press(.down); if focused().contains("Guide TV") { found = true; break }; if i % 10 == 0 { shot("G02-bas-\(i)") } }
+        if found {
+            shot("G03-ligne-guide"); press(.select); w(2); shot("G04-guide")
+            press(.down); shot("G05-a-venir"); press(.select); w(1); shot("G06-rappel")
+            press(.up, 3); shot("G07-passe"); press(.select); w(10); shot("G08-replay", focus: false)
+            remote.press(.menu); w(1.5); remote.press(.menu); w(5); shot("G09-retour-direct", focus: false)
+        } else { attach("G03", "Guide TV non atteint : " + focused()) }
+        // page Replay (le faux fournisseur sert maintenant les adresses de replay)
+        relaunch(["-prisme.debug.tab", "live", "-prisme.debug.live", "replay"], wait: 18)
+        shot("H01-replay")
+        press(.down); shot("H02-bas"); press(.select); w(10); shot("H03-lecture", focus: false)
+        remote.press(.menu); w(1.5); remote.press(.menu); w(4); shot("H04-retour", focus: false)
+        w(20); shot("H05-encore-replay-30s")
     }
 
     func lot3() {

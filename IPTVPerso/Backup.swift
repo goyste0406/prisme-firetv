@@ -152,6 +152,10 @@ final class BackupLink: ObservableObject {
                 DataCount.write("fichier refusé (\(body.count) octets)")
                 data = Data(BackupLink.page("Fichier refusé", "Ce fichier n'est pas une sauvegarde de prisme.", form: false).utf8)
             }
+        } else if path.hasSuffix("/prisme-journal.txt") {
+            // 253 : journal de diagnostic (écrans, blocages, fermetures inattendues) — sans mot de passe
+            data = Data(DiagLog.text.utf8); type = "text/plain; charset=utf-8"
+            extra = "Content-Disposition: attachment; filename=\"prisme-journal.txt\"\r\n"
         } else if path.hasSuffix("/prisme-sauvegarde.json") {
             data = Backup.export(); type = "application/json"
             extra = "Content-Disposition: attachment; filename=\"prisme-sauvegarde-\(Fmt.date(Date()).replacingOccurrences(of: " ", with: "-")).json\"\r\n"
@@ -176,6 +180,8 @@ final class BackupLink: ObservableObject {
         return head + """
         <div class=card><b>Garder une copie sur l'iPhone</b><p>Profils, Ma liste, reprises, goûts, réglages et fournisseurs (avec leurs mots de passe : range ce fichier en lieu sûr, par exemple dans Fichiers › Sur mon iPhone).</p>
         <a class=go href="prisme-sauvegarde.json" download>Télécharger la sauvegarde</a></div>
+        <div class=card><b>Journal de diagnostic</b><p>Écrans ouverts, blocages et fermetures inattendues de prisme (sans mot de passe). Utile pour comprendre un problème.</p>
+        <a class=go href="prisme-journal.txt" download>Télécharger le journal</a></div>
         <div class=card><b>Restaurer une sauvegarde</b><p>Choisis un fichier « prisme-sauvegarde… .json ». La TV te demandera de confirmer : ses données actuelles seront remplacées (une copie est gardée pour annuler).</p>
         <input type=file id=f accept=".json,application/json"><button class=go id=b>Envoyer à la TV</button><p id=m></p></div></div>
         <script>b.onclick=async()=>{const x=f.files[0];if(!x){m.textContent='Choisis d\\'abord un fichier.';return}

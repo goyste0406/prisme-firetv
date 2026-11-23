@@ -122,6 +122,7 @@ enum TVReminders {
         L.append(r); save(L)
         DataCount.write("rappel TV : \(r.title) · \(r.chName) · \(r.start)")
     }
+    static func remove(_ r: R) { save(all.filter { !($0.chID == r.chID && $0.start == r.start) }) }
     /// rappels arrivés à leur heure (retirés de la liste) ; ceux de plus de 3 h sont oubliés sans message
     static func due(now: Int = Int(Date().timeIntervalSince1970)) -> [R] {
         let L = all

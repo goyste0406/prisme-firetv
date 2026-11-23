@@ -68,6 +68,17 @@ enum ShelfShared {
         return try? JSONDecoder().decode(Feed.self, from: d)
     }
 
+    /// 253 : battement du module Top Shelf — écrit chaque fois que l'Apple TV lui demande la rangée
+    /// (seulement si la boîte partagée existe : sans elle, le module n'a nulle part où écrire)
+    struct Pulse: Codable { var at: Date; var cards: Int; var group: String }
+    static func writePulse(_ p: Pulse, to dir: URL) {
+        if let d = try? JSONEncoder().encode(p) { try? d.write(to: dir.appendingPathComponent("pulse.json"), options: .atomic) }
+    }
+    static func readPulse(from dir: URL? = folder) -> Pulse? {
+        guard let dir, let d = try? Data(contentsOf: dir.appendingPathComponent("pulse.json")) else { return nil }
+        return try? JSONDecoder().decode(Pulse.self, from: d)
+    }
+
     static func write(_ f: Feed, to dir: URL) {
         guard let d = try? JSONEncoder().encode(f) else { return }
         try? d.write(to: dir.appendingPathComponent("feed.json"), options: .atomic)

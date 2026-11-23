@@ -93,7 +93,7 @@ struct VodPlayerView: View {
             // (donc tout le lecteur). Les panneaux ont leur propre gestionnaire, prioritaire.
             .onExitCommand { bridge.vc?.shortBack() }
             // lot 5 : les fiches en arrière-plan se mettent en pause (ou ralentissent) pendant la lecture
-            .onAppear { PlaybackActivity.count += 1 }
+            .onAppear { PlaybackActivity.count += 1; DiagLog.screen(request.live.isEmpty ? "lecteur · " + request.title : "lecteur TV") }
             .onDisappear { PlaybackActivity.count = max(0, PlaybackActivity.count - 1); TopShelfPublisher.schedule() }
     }
 }
@@ -292,6 +292,8 @@ final class VodPlayerController: UIViewController, VLCMediaPlayerDelegate {
             ui.live = true
             ui.setVersion = { [weak self] i in self?.switchSource(i) }
             ui.zapTo = { [weak self] i, now in self?.zap(to: i, now: now) }
+            ui.loadGuide = { [weak self] in self?.loadGuide() }
+            ui.guidePick = { [weak self] id in self?.guidePick(id) }
             loadLive()
         }
         ui.stillWatching = { [weak self] in self?.endSleepAsk(pause: false) }
@@ -672,6 +674,73 @@ final class VodPlayerController: UIViewController, VLCMediaPlayerDelegate {
             self.ui.channels = rows
             self.ui.recent = self.recent.filter { $0 != idx && list.indices.contains($0) }.prefix(4).map { ($0, ChannelTools.clean(list[$0].name)) }
         }
+    }
+
+    // MARK: 253 — Guide TV du lecteur : replay des programmes passés, rappel des programmes à venir
+
+    private var guideProgs: [Program] = []
+    /// copie de la chaîne qui a une archive (replay) chez un fournisseur — la copie jouée n'en a pas toujours
+    private var archiveCopy: Channel? {
+        if sources.indices.contains(sourceIndex), sources[sourceIndex].archive > 0 { return sources[sourceIndex] }
+        return sources.first { $0.archive > 0 } ?? (liveChannel.archive > 0 ? liveChannel : nil)
+    }
+
+    private func loadGuide() {
+        let ch = sources.indices.contains(sourceIndex) && !sources[sourceIndex].epg.isEmpty ? sources[sourceIndex] : liveChannel
+        let idx = liveIndex
+        ui.guideLoaded = false
+        Task { @MainActor in
+            let now = Date()
+            let L = await LiveStore.programs(ch, from: now.addingTimeInterval(-4 * 3600), hours: 16)
+            guard self.liveIndex == idx else { return }
+            self.guideProgs = L
+            let n = Int(now.timeIntervalSince1970)
+            let arch = self.archiveCopy
+            self.ui.guide = L.map { p in
+                let state = p.stop <= n ? -1 : p.start > n ? 1 : 0
+                let replay = state < 0 && arch.map { p.start >= n - $0.archive * 86400 } == true
+                let genre = p.cat.isEmpty ? "" : p.cat + " · "
+                return PlayerUI.GuideRow(id: p.start, time: Fmt.hm(p.startDate), title: p.title,
+                                         sub: genre + Fmt.hm(p.startDate) + " – " + Fmt.hm(p.stopDate), state: state, replay: replay,
+                                         reminded: state > 0 && TVReminders.has(self.liveChannel.id, p.start))
+            }
+            self.ui.guideLoaded = true
+        }
+    }
+
+    private func guidePick(_ start: Int) {
+        guard let p = guideProgs.first(where: { $0.start == start }) else { return }
+        let n = Int(Date().timeIntervalSince1970)
+        let name = ChannelTools.clean(liveChannel.name)
+        if p.stop <= n {
+            // replay : la copie de la chaîne qui a une archive, lue dans le lecteur des films (avance, retour)
+            guard let arch = archiveCopy else { toast("Pas de replay sur cette chaîne chez ton fournisseur"); return }
+            guard let r = replayRequest(LiveStore.Airing(ch: arch, p: p)) else { toast("« \(p.title) » n'est plus dans l'archive de la chaîne"); return }
+            openReplay(r)
+        } else if p.start > n {
+            let r = TVReminders.R(chID: liveChannel.id, chName: name, start: p.start, title: p.title)
+            if TVReminders.has(r.chID, r.start) {
+                TVReminders.remove(r); toast("Rappel retiré : " + p.title)
+            } else {
+                TVReminders.add(r); toast("Rappel programmé : " + p.title + " à " + Fmt.hm(p.startDate))
+            }
+            if let i = ui.guide.firstIndex(where: { $0.id == start }) { ui.guide[i].reminded = TVReminders.has(r.chID, r.start) }
+        } else {
+            toast(p.title + " : en cours sur " + name)
+        }
+    }
+
+    /// Replay depuis le direct : le direct s'arrête (une seule connexion), le replay s'ouvre par-dessus ;
+    /// en le fermant, on retrouve la chaîne en direct.
+    private func openReplay(_ r: VodRequest) {
+        ui.panel = .none
+        if player.state != .stopped { player.stop() }
+        DataCount.write("replay depuis le guide du lecteur : " + r.title)
+        let vc = VodPlayerController(request: r, onClose: { [weak self] in
+            self?.dismiss(animated: true) { self?.start() }
+        })
+        vc.modalPresentationStyle = .fullScreen
+        present(vc, animated: true)
     }
 
     /// Zapping : la chaîne affichée change tout de suite ; le flux suit (aussitôt à l'appui sur OK, 1 s après

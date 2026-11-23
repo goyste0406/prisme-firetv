@@ -95,6 +95,8 @@ jobs:
           cp shots/focus.txt jpg/ 2>/dev/null || true
           cp shots/*.txt jpg/ 2>/dev/null || true
           cp receiver.log jpg/ 2>/dev/null || true
+          # 253 : adresses de replay demandées au faux fournisseur (heure de début, durée)
+          grep TIMESHIFT fake*.log > jpg/timeshift.txt 2>/dev/null || true
           # classement de la TV en direct écrit par l'appli (simulateur de test seulement)
           C=$(xcrun simctl get_app_container "$UDID" com.steven.iptvperso data 2>/dev/null || true)
           [ -n "$C" ] && cp "$C/Documents/classement-tv.txt" jpg/ 2>/dev/null || true

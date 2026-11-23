@@ -430,6 +430,8 @@ struct DataPanel: View {
         PrefInfo(title: "Vidéo", value: DeviceInfo.video)
         PrefInfo(title: "Audio", value: DeviceInfo.audio)
         PrefInfo(title: "Fournisseurs · profils", value: "\(store.providers.count) · \(ProfileStore.shared.profiles.count)")
+        // 253 : pourquoi la rangée du haut de l'écran d'accueil montre (ou non) les cartes de prisme
+        PrefInfo(title: "Rangée de l'écran d'accueil", value: ShelfDiag.text)
         }
             .task(id: store.catalogVersion) { dbSize = await Database.shared.read { $0.fileSize } }
             .onChange(of: show) { _, s in
@@ -465,5 +467,23 @@ struct DataPanel: View {
             }
         }
         .padding(.horizontal, 22)
+    }
+}
+
+/// 253 : diagnostic de la rangée Top Shelf (ce que l'appli sait vérifier elle-même, sans rien supposer).
+enum ShelfDiag {
+    static var text: String {
+        let groups = ShelfShared.signedGroups()
+        guard let g = ShelfShared.groupID, let dir = ShelfShared.folder else {
+            return groups.isEmpty && Bundle.main.url(forResource: "embedded", withExtension: "mobileprovision") != nil
+                ? "boîte partagée refusée par la signature : l'Apple TV ne montre que l'image fixe"
+                : "boîte partagée indisponible (\(groups.isEmpty ? "aucun groupe signé" : groups.joined(separator: ", "))) : image fixe seulement"
+        }
+        let feed = ShelfShared.read(from: dir)
+        var parts = ["boîte « \(g) » accordée", "\(feed?.items.count ?? 0) carte(s)"]
+        if let f = feed { parts.append("préparées le " + Fmt.day(f.at) + " à " + Fmt.hm(f.at)) }
+        if let p = ShelfShared.readPulse(from: dir) { parts.append("module appelé le " + Fmt.day(p.at) + " à " + Fmt.hm(p.at)) }
+        else { parts.append("module jamais appelé") }
+        return parts.joined(separator: " · ")
     }
 }

@@ -210,7 +210,7 @@ final class Nav: ObservableObject {
     @Published var tab: AppTab = {
         // Réglages › TV en direct : « Ouvrir prisme sur la TV en direct »
         AppPrefs.openOnLive ? .live : AppTab(rawValue: UserDefaults.standard.string(forKey: "prisme.tab") ?? "") ?? .films
-    }() { didSet { UserDefaults.standard.set(tab.rawValue, forKey: "prisme.tab") } }
+    }() { didSet { UserDefaults.standard.set(tab.rawValue, forKey: "prisme.tab"); DiagLog.screen("onglet " + tab.rawValue) } }
     /// la sélection est dans la barre du haut (Retour y quitte prisme ; ailleurs, Retour y ramène d'abord)
     @Published var barFocused = false
     /// demande de ramener la sélection sur l'onglet de la barre du haut (Retour depuis le contenu d'une page)

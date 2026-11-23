@@ -99,6 +99,7 @@ struct SeriesDetailView: View {
             RecapScreen(plan: plan, backdrop: (fiche?.backdrop.isEmpty == false) ? Fiche.img(fiche!.backdrop, "original") : info.backdrop, poster: item.posterURL) { mainAction() }
         }
         .onAppear {
+            DiagLog.screen("fiche série « \(item.clean.title) »")
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { playFocused = true }
             DataCount.write("fiche série « \(title) » : " + profiles.watchersName)
         }

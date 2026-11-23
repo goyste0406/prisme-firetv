@@ -5,7 +5,10 @@ import TVServices
 /// l'Apple TV affiche l'image fixe de PRISME.
 final class ContentProvider: TVTopShelfContentProvider {
     override func loadTopShelfContent() async -> TVTopShelfContent? {
-        guard let dir = ShelfShared.folder, let feed = ShelfShared.read(from: dir), !feed.items.isEmpty else { return nil }
+        guard let dir = ShelfShared.folder else { return nil }
+        let feed = ShelfShared.read(from: dir)
+        ShelfShared.writePulse(.init(at: Date(), cards: feed?.items.count ?? 0, group: ShelfShared.groupID ?? ""), to: dir)
+        guard let feed, !feed.items.isEmpty else { return nil }
         let items: [TVTopShelfSectionedItem] = feed.items.compactMap { x in
             let img = dir.appendingPathComponent(x.image)
             guard FileManager.default.fileExists(atPath: img.path), let play = URL(string: x.play), let open = URL(string: x.open) else { return nil }
