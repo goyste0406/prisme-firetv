@@ -196,7 +196,7 @@ struct ReplayView: View {
                 HStack(spacing: 14) {
                     Text("REPLAY").font(P.font(18, .heavy)).foregroundStyle(.white).padding(.horizontal, 12).padding(.vertical, 6)
                         .background(ReplayBadge.purple, in: RoundedRectangle(cornerRadius: 8))
-                    Text((ChannelTools.clean(a.ch.name) + (univers(a.ch).map { " · " + $0.label } ?? "")).uppercased()).font(P.font(20, .bold)).tracking(1.5).opacity(0.75)
+                    Text((ChannelTools.clean(a.ch.name) + (groups.first { $0.0 != "Autres chaînes" && $0.1.contains(a) }.map { " · " + $0.0 } ?? "")).uppercased()).font(P.font(20, .bold)).tracking(1.5).opacity(0.75)
                 }
                 Text(a.p.title).font(P.font(54, .bold)).lineLimit(1)
                 HStack(spacing: 12) {
