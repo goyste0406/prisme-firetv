@@ -618,7 +618,9 @@ final class Visite: XCTestCase {
         // TF1 : trois sources (720p, 1080p, 4K, deux fournisseurs) — changer de qualité sans changer de chaîne ni fermer le panneau
         relaunch(["-prisme.debug.demoServer2", "http://127.0.0.1:8098", "-prisme.debug.tab", "live", "-prisme.debug.playLive", "TF1"], wait: 90)
         Thread.sleep(forTimeInterval: 8); shot("TQ0-tf1", focus: false)
-        press(.down); Thread.sleep(forTimeInterval: 1.5); press(.down, 70); press(.up, 4); Thread.sleep(forTimeInterval: 1.5)
+        press(.down); Thread.sleep(forTimeInterval: 1.5); press(.down, 70); press(.up, 3); Thread.sleep(forTimeInterval: 1.5)
+        // 253 : la ligne « Guide TV » est au-dessus de « Source » : on remonte jusqu'à « Source »
+        for _ in 0..<3 { if focused().contains("Source") { break }; press(.up) }
         press(.select); Thread.sleep(forTimeInterval: 1.5); shot("TQ1-tf1-sources", focus: false)
         for k in 1...2 { press(.down); press(.select); Thread.sleep(forTimeInterval: 8); shot("TQ2-tf1-qualite-\(k)", focus: false) }
         press(.up, 2); press(.up); Thread.sleep(forTimeInterval: 1); shot("TQ3-tf1-haut", focus: false)
